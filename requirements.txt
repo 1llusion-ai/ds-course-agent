@@ -1,0 +1,13 @@
+requests #requests是 Python 社区中最流行、最易用的选择 HTTP 库
+tavily-python #Tavily API 客户端
+openai #OpenAI API 客户端
+langchain
+langchain-ollama
+chromadb
+langchain_community
+jq
+pypdf
+langchain_openai
+langchain-chroma
+chromadb
+streamlit

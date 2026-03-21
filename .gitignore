@@ -1,0 +1,17 @@
+# 向量数据库
+chroma_db/
+
+# 聊天历史
+chat_history/
+
+# VSCode配置
+.vscode/
+
+# Python缓存
+__pycache__/
+*.pyc
+
+# 日志/数据库
+*.log
+*.db
+*.sqlite3
