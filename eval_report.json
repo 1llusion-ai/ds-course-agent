@@ -1,0 +1,573 @@
+{
+  "timestamp": "2026-04-06T01:04:41.358081",
+  "total_samples": 30,
+  "passed": 0,
+  "pass_rate": 0.0,
+  "avg_keyword_coverage": 0.020000000000000004,
+  "source_citation_rate": 0.0,
+  "results": [
+    {
+      "id": "001",
+      "question": "什么是数据科学？请简要介绍其定义和核心内容。",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "数据科学",
+        "跨学科",
+        "统计学",
+        "计算机",
+        "分析"
+      ],
+      "found_keywords": [
+        "数据科学"
+      ],
+      "keyword_coverage": 0.2,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "002",
+      "question": "数据科学的主要应用领域有哪些？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "应用",
+        "商业",
+        "医疗",
+        "金融",
+        "推荐"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "003",
+      "question": "数据挖掘的定义是什么？它包含哪些主要任务？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "数据挖掘",
+        "模式",
+        "发现",
+        "知识",
+        "分类",
+        "聚类"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "004",
+      "question": "机器学习和数据科学有什么关系？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "机器学习",
+        "数据科学",
+        "算法",
+        "模型",
+        "预测"
+      ],
+      "found_keywords": [
+        "数据科学"
+      ],
+      "keyword_coverage": 0.2,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "005",
+      "question": "什么是大数据的4V特征？请分别解释。",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "Volume",
+        "Velocity",
+        "Variety",
+        "Value",
+        "大量",
+        "高速",
+        "多样",
+        "价值"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "006",
+      "question": "数据清洗的目的是什么？常见的数据质量问题有哪些？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "数据清洗",
+        "质量",
+        "缺失",
+        "异常",
+        "重复",
+        "一致性"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "007",
+      "question": "什么是数据可视化？它有什么作用？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "可视化",
+        "图表",
+        "展示",
+        "直观",
+        "洞察"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "008",
+      "question": "解释什么是回归分析？它适用于什么场景？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "回归",
+        "预测",
+        "连续",
+        "变量",
+        "关系"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "009",
+      "question": "分类和聚类有什么区别？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "分类",
+        "聚类",
+        "监督",
+        "无监督",
+        "标签"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "010",
+      "question": "什么是特征工程？为什么它很重要？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "特征",
+        "工程",
+        "提取",
+        "选择",
+        "转换",
+        "模型"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "011",
+      "question": "数据科学项目的一般流程是什么？",
+      "category": "学习方法",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "流程",
+        "收集",
+        "清洗",
+        "分析",
+        "建模",
+        "部署"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "012",
+      "question": "如何学习数据科学？有什么建议？",
+      "category": "学习方法",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "学习",
+        "编程",
+        "统计",
+        "实践",
+        "项目",
+        "Python"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "013",
+      "question": "数据科学家需要掌握哪些技能？",
+      "category": "学习方法",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "技能",
+        "编程",
+        "统计",
+        "机器学习",
+        "沟通",
+        "Python"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "014",
+      "question": "推荐一些数据科学的学习资源？",
+      "category": "学习方法",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "资源",
+        "课程",
+        "书籍",
+        "网站",
+        "实践"
+      ],
+      "found_keywords": [
+        "课程"
+      ],
+      "keyword_coverage": 0.2,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "015",
+      "question": "Python在数据科学中有什么优势？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "Python",
+        "库",
+        "易学",
+        "社区",
+        "Pandas",
+        "NumPy"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "016",
+      "question": "什么是监督学习？举例说明。",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "监督学习",
+        "标签",
+        "训练",
+        "分类",
+        "回归"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "017",
+      "question": "什么是无监督学习？它有哪些应用？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "无监督",
+        "聚类",
+        "降维",
+        "标签",
+        "发现"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "018",
+      "question": "什么是过拟合？如何防止过拟合？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "过拟合",
+        "泛化",
+        "训练",
+        "正则化",
+        "交叉验证"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "019",
+      "question": "什么是交叉验证？为什么需要交叉验证？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "交叉验证",
+        "验证",
+        "模型",
+        "评估",
+        "K折"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "020",
+      "question": "数据预处理包括哪些步骤？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "预处理",
+        "清洗",
+        "转换",
+        "标准化",
+        "归一化",
+        "编码"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "021",
+      "question": "什么是特征选择？有哪些方法？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "特征选择",
+        "相关性",
+        "重要性",
+        "降维",
+        "过滤",
+        "包装"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "022",
+      "question": "解释什么是决策树？它如何工作？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "决策树",
+        "节点",
+        "分支",
+        "分类",
+        "规则",
+        "分裂"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "023",
+      "question": "什么是随机森林？它有什么优点？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "随机森林",
+        "集成",
+        "决策树",
+        "投票",
+        "准确"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "024",
+      "question": "神经网络的基本原理是什么？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "神经网络",
+        "神经元",
+        "权重",
+        "激活",
+        "层",
+        "反向传播"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "025",
+      "question": "什么是深度学习？它与传统机器学习有什么区别？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "深度学习",
+        "神经网络",
+        "多层",
+        "特征",
+        "自动"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "026",
+      "question": "数据科学中常用的Python库有哪些？",
+      "category": "学习方法",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "NumPy",
+        "Pandas",
+        "Matplotlib",
+        "Scikit-learn",
+        "TensorFlow"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "027",
+      "question": "如何评估分类模型的性能？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "准确率",
+        "精确率",
+        "召回率",
+        "F1",
+        "混淆矩阵",
+        "ROC"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "028",
+      "question": "什么是降维？有哪些常用的降维方法？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "降维",
+        "PCA",
+        "特征",
+        "维度",
+        "压缩",
+        "可视化"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "029",
+      "question": "数据伦理在数据科学中为什么重要？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "伦理",
+        "隐私",
+        "偏见",
+        "公平",
+        "责任"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "030",
+      "question": "什么是自然语言处理？它在数据科学中的应用？",
+      "category": "概念答疑",
+      "response": "抱歉，在《数据科学导论》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助",
+      "expected_keywords": [
+        "自然语言处理",
+        "NLP",
+        "文本",
+        "情感",
+        "分类",
+        "生成"
+      ],
+      "found_keywords": [],
+      "keyword_coverage": 0.0,
+      "has_source": false,
+      "passed": false,
+      "error": null
+    }
+  ]
+}

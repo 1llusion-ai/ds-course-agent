@@ -1,0 +1,599 @@
+{
+  "filename": "数据科学导论(案例版)_第4章.pdf",
+  "total_chunks": 30,
+  "semantic_chunks": 26,
+  "struct_chunks": 1,
+  "shadow_chunks": 3,
+  "avg_chunk_size": 1249.5333333333333,
+  "quality_report": {
+    "chapter": 4,
+    "total_chunks": 30,
+    "semantic_count": 26,
+    "struct_count": 1,
+    "shadow_count": 3,
+    "issues": [
+      {
+        "type": "exercise_not_marked",
+        "pages": [
+          24
+        ],
+        "preview": "4.3.4 图像的边缘信息提取要使用 OpenCV 库提取图像边缘信息，可以使用 Canny边缘检测"
+      }
+    ],
+    "section_coverage": {
+      "4.1": 15,
+      "2.3": 1,
+      "4.2": 5,
+      "4.3": 4
+    },
+    "subsection_coverage": {
+      "4.1.1": 2,
+      "4.1.2": 6,
+      "4.1.3": 4,
+      "4.1.4": 1,
+      "4.1.5": 1,
+      "4.1.6": 2,
+      "4.2.1": 3,
+      "4.2.2": 1,
+      "4.2.3": 1,
+      "4.3.1": 1,
+      "4.3.2": 1,
+      "4.3.3": 1,
+      "4.3.4": 1
+    },
+    "size_distribution": {
+      "min": 505,
+      "max": 2864,
+      "avg": 1173.6538461538462
+    },
+    "exercise_marked": 0
+  },
+  "chunks": [
+    {
+      "content": "第4章数据分析章节导航了解数据分析常用的库 Pandas，能够读取关系型数据，使用统计、组合、排序、拼接等方法处理数据。了解机器学习与时间序列预测库 scikit-learn。了解图像处理库 OpenCV。本章知识导图\n4.1 数据分析基础\n4.1.1 读取与创建数据进行数据建模前，首先要读取数据。常见的数据存储格式有 JSON(JavaScript object notation,JS 对象简谱）、CSV(comma separated values，逗号分隔值）、XLSX 等。CSV 数据存储格式中每行保存的内容用空格作为分隔符，行与行之间用换行符隔开，CSV 数据可以用常见的表格处理软件打开，视图内容与 XLSX、XLS 格式的文件一样，但是与实际的数据结构有很大差别。使用 CSV 数据存储格式是因为这种类型的数据制作与保存较为方便，仅使用文本编辑器就可以快速编辑。下面是使用 CSV 格式存储电影名称和评分数据的示例。西线无战事 8.6\n名侦探柯南：万圣节的新娘 7.9\n危笑 6.3\n类似地，还有TSV数据格式，这种类型的数据是用制表符分隔数据，常见于问答系统的标注文件。本质上讲，各种类型的数据交换格式只是为了更加方便地处理数据，使用最基本的TXT文件也可以存储与读取文件。1.读取数据在 Python 语言中，Pandas 库用于处理关系型数据。使用 Pandas 库一般都是从导入库开始的，代码如下：读取文件",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          1
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "读取与创建数据",
+        "subsection_number": "4.1.1",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "在如表4-1所示的问答对中可以看到，第一列数据是问题，第二列数据是回答，类似这样按行和列划分的数据，可以简单地将其理解为关系型数据。人们通常把关系型数据存储到数据库中。在数据科学建模时，人们通常先把关系型数据导出为 CSV 或 XLSX文件。表4-1关系型数据：问答对表4-1\n关系型数据：问答对编号问题答案1三国演义的作者是谁？罗贯中2兔子的英文是什么？Rabbit3点灯是谁发明的爱迪生编号问题答案\n1\n三国演义的作者是谁？罗贯中\n2\n兔子的英文是什么？Rabbit\n3\n点灯是谁发明的爱迪生读取 CSV 文件可以使用read_csv(）函数，读取 XLSX文件可以使用read_excel(）函数，代码如下：import pandas as pd # 导入 pandas 库 book=pd.read_csv(\"book.csv\") # 使用 read_csv(）函数读取 CSV 文件 student=pd.read_excel(\"student.xlsx\")\nread_csv(）函数包含很多参数。例如，可以指定index_col参数，将 CSV 文件中的某一列作为索引，设置index_col=\"某一字段\"，这样读取数据时不会再创建新的索引；又如，date_parser参数可以将读取的数据转化为时间格式，这个方法在计算与时间相关的数据时特别重要。刚开始使用 Pandas库读取数据时，只需指定数据文件所在目录，其余参数使用默认值即可。读取数据后，可以使用shape属性查看读取的数据表的维度。book.shape # 注意这是一个属性，不带括号还可以使用head(）方法查看数据表的前5行，或使用tail(）方法查看数据表的后5行。book.head() # head(）方法可接受一个参数 n,n 表示显示的行数，默认为 5 book.tail() # head(）和 tail(）都是方法，需要带括号\n2.创建数据如果要创建新的数据表，可以使用以下代码实现：import pandas as pd qa=pd.DataFrame({'question':['今天的天气','兔子的英文怎么说'],'answer':['晴','rabbit']})\n这里使用了 Pandas库的十分重要的一种数据类型：DataFrame。DataFrame是一个数据表，DataFrame中的每一个条目都是一列，条目的名字就是列名。上面的代码中，创建了一个 DataFrame类型的数据表，表中包含两列数据，第一列是问题，第二列是答案。",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          2
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "读取与创建数据",
+        "subsection_number": "4.1.1",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "另一种常用的数据类型是Series，表示数据序列。DataFrame是数据表，Series是数据序列，注意不要混淆两种数据类型，这两种数据类型包含的方法是不同的。可以直接传入一个列表来构造一个Series对象，代码如下：pd.Series([1,2,3,4,5])\nSeries数据序列本质上是 DataFrame数据表中的一列。4.1.2 索引与选择\n1.获取单个数据列在处理数据时，往往需要选取某一列、某一行的数据，或按照某种要求进行数据筛选，Pandas库为此提供了十分便捷的选择功能。Pandas索引数据 4.1.2节~4.1.6节使用的数据是某网站上用户对一个影片的评论信息，包含用户的昵称、所在地、粉丝数量，以及评论的发布时间、内容、来源等。首先读取数据文件并输出前5行数据，代码如下：# 读取数据 squid=pd.read_csv(\"Squid_Game_Netflix_Twitter_Data.csv\") squid.head()\nsquid数据表的前5行数据如图4-1所示，数据表中包含 user_name、user_location、user_description等字段。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verifieddate0the_ûndër-ratêdniggáhNaN@ManUtd die hard2019-09-0619:24:57+00:0058110358922False2021-10-0612:05:38+00:001Best uncleon planetearthNaNNaN2013-05-0819:35:26+00:007417308432False2021-10-0612:05:22+00:002marcieNaNanimal crossing.chicken nuggets.baby yoda.s2009-02-2110:31:30+00:00562119762732False2021-10-0612:05:22+00:003YoMo.MdpAny pronounsWhere the heck isthe karma\\nI'mgoing on my s2021-02-1413:21:22+00:0032771341False2021-10-0612:05:04+00:004LauraReactionsFranceI talk and I makereactions videosabout shows2018-12-1920:38:28+00:003301522278False2021-10-0612:05:00+00:00\nuser_name\nuser_location\nuser_description\nuser_created\nuser_followers\nuser_friends\nuser_favourites\nuser_verified\ndate\n0\nthe_ûndër-ratêdniggáh\nNaN\n@ManUtd die hard\n2019-09-0619:24:57+00:00\n581\n1035\n8922\nFalse\n2021-10-0612:05:38+00:00\n1\nBest uncleon planetearth\nNaN\nNaN\n2013-05-0819:35:26+00:00\n741\n730\n8432\nFalse\n2021-10-0612:05:22+00:00\n2\nmarcie\nNaN\nanimal crossing.chicken nuggets.baby yoda.s\n2009-02-2110:31:30+00:00\n562\n1197\n62732\nFalse\n2021-10-0612:05:22+00:00\n3\nYoMo.Mdp\nAny pronouns\nWhere the heck isthe karma\\nI'mgoing on my s\n2021-02-1413:21:22+00:00\n3\n277\n1341\nFalse\n2021-10-0612:05:04+00:00\n4\nLauraReactions\nFrance\nI talk and I makereactions videosabout shows\n2018-12-1920:38:28+00:00\n330\n152\n2278\nFalse\n2021-10-0612:05:00+00:00\n图4-1 squid数据表的前5行数据如果需要获取数据表中某列的数据，可以直接将字段名作为数据表对象的属性来获取",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          3
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "索引与选择",
+        "subsection_number": "4.1.2",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "数据。例如，squid数据表包含user_name字段，通过访问squid.user_name即可获取该列数据。输出结果如下：0 the_ûnder-ratèd niggáh 1 Best uncle on planet earth 2 marcie 3 YoMo.Mdp 4 Laura Reactions......29995 Lu Xu(Lou Shoe/徐露） 29996 See Ya,Sucker 29997 maddy earley 29998 29999 White Thunder Name:user_name,Length:30000,dtype:object\n另一种数据索引的方式是以字典的方式，Python语言有字典类型的数据，DataFrame 类型的数据可以用键值对的方式索引，如squid[\"user_name\"]，该方法与第一种索引方法的结果相同。上述两种获取列数据的方法，从语法上来看没有任何差别，在实际的数据科学编程中也经常看到两种方法的使用，但是以字典的方式进行索引的方法可以获取一些名称比较复杂的字段，如名称中带有空格的字段。例如，username字段，user与name之间用空格分隔，如果使用第一种方法，squid.username是无法获取该字段的，只能使用第二种方法 squid[\"username\"]。使用squid[\"user_name\"】获取的是所有的用户名，如果仅需获取第一个用户名，则可以在其后增加一个索引序号，代码如下：squid[\"user_name\"][0]\n输出结果如下：'the _ûndër- ratèd niggáh'\nPandas库中数据索引的方式与 Python语言中索引列表或字符串的方式相同。2.获取多个数据列在数据处理的过程中，在原始表格过大的情况下，需要裁剪出数据表中的某些列，可以使用 [】以字典的方式获取数据。例如，要同时获取 squid 数据表中的 user_name和 user_location字段，代码如下：squid[[\"user_name\",\"user_location\"]] # 注意此处使用了两个方括号",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          4
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "索引与选择",
+        "subsection_number": "4.1.2",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "输出结果如下：user_nameuser_location0the_under-ratedniggahNaN1Best uncle on planet earthNaN2marcieNaN3YoMo.MdpAny pronouns4Laura ReactionsFrance29995Lu Xu(Lou Shoe/徐露）Halifax,Nova Scotia29996See Ya,Sucker72429997maddy earleyNaN2999829999White ThunderSomewhere30000 rows×2 columns\nuser_name\nuser_location\n0\nthe_under-ratedniggah\nNaN\n1\nBest uncle on planet earth\nNaN\n2\nmarcie\nNaN\n3\nYoMo.Mdp\nAny pronouns\n4\nLaura Reactions\nFrance\n29995\nLu Xu(Lou Shoe/徐露）\nHalifax,Nova Scotia\n29996\nSee Ya,Sucker\n724\n29997\nmaddy earley\nNaN\n29998\n29999\nWhite Thunder\nSomewhere\n30000 rows×2 columns\n需要注意的是，上述语句使squid数据表接收一个列表作为输入，返回多列数据组成的 DataFrame数据表，因此数据的获取形式变为【[]]，看上去有些特殊，如果仅使用【】会报错，提示 KeyError:('user_ name','user_location')，即没有这个键，因为程序将（\"user_name\",\"user_location\"）看成一个键。3.基于索引选择数据基于索引选择数据使用iloc属性，格式为iloc[n]，想选择数据的第几行，就将n设置为该行的索引序号。例如，选择user_description列的第4行数据，代码如下：squid[\"user_description\"].iloc[3]\n输出结果如下：\"Where the heck is the karma\\ nI'm going on my school grave brb\\ n# Technosupport\"iloc属性默认是按行进行数据筛选，如果要选择某一列的数据，会相对麻烦一些，代码如下：squid.iloc[:,3] # 选择第 4 列数据输出结果如下：0 2019-09-06 19:24:57+00:00 1 2013-05-08 19:35:26+00:00 2 2009-02-21 10:31:30+00:00 3 2021-02-14 13:21:22+00:00 4 2018-12-19 20:38:28+00:00......",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          5
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "索引与选择",
+        "subsection_number": "4.1.2",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "29995 2015-07-24 13:42:51+00:00 29996 2014-02-06 04:14:20+00:00 29997 2014-11-27 04:32:52+00:00 29998 2021-03-04 11:54:39+00:00 29999 2013-09-05 18:32:49+00:00 Name:user_created,Length:30000,dtype:object\n使用上述方法的结果与使用squid[\"user_created\"】方法的结果相同。在上述方法中，注意到使用了冒号（:)，该符号也属于 Python语法，表示所有内容，当冒号与其他数值一起使用时，表示选择一定范围内的数据。例如，选择 user_name列的第1、2、3行数据，代码如下：squid.iloc[:3,0]\n输出结果如下：0 the_ûndër- ratèd niggáh\n1 Best uncle on planet earth\n2 marcie\nName:user_name,dtype:object\n在Python语言中，负数代表从结尾开始索引，这在 Pandas库中同样适用。选择整个数据表的最后5行数据的代码如下：squid.iloc[- 5:]\n输出结果如图4-2所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verifieddate29995Lu Xu(LouShoe/徐露）Halifax,NovaScotiaJournalist@the_logic |Podcaster@CKDU881FM|2015-07-2413:42:51+00:003098692887False2021-10-1001:43:40+00:0029996See Ya,Sucker724NaN2014-02-0604:14:20+00:00105136971False2021-10-1001:43:25+00:0029997maddyearleyNaNstay alive,friend.It's worth it.2014-11-2704:32:52+00:00441193135False2021-10-1001:42:40+00:0029998S\"AhsenEroglu\"Alperen Duymazowns me ♡DICBAR | Ilhan♡\\n2021-03-0411:54:39+00:0047915344597False2021-10-1001:42:32+00:0029999WhiteThunderSomewhereRoyal captain ofthe Faire Army,Novelist,art2013-09-0518:32:49+00:0021441435False2021-10-1001:42:30+00:00\nuser_name\nuser_location\nuser_description\nuser_created\nuser_followers\nuser_friends\nuser_favourites\nuser_verified\ndate\n29995\nLu Xu(LouShoe/徐露）\nHalifax,NovaScotia\nJournalist@the_logic |Podcaster@CKDU881FM|\n2015-07-2413:42:51+00:00\n309\n869\n2887\nFalse\n2021-10-1001:43:40+00:00\n29996\nSee Ya,Sucker\n724\nNaN\n2014-02-0604:14:20+00:00\n105\n136\n971\nFalse\n2021-10-1001:43:25+00:00\n29997\nmaddyearley\nNaN\nstay alive,friend.It's worth it.2014-11-2704:32:52+00:00\n44\n119\n3135\nFalse\n2021-10-1001:42:40+00:00\n29998\nS\"AhsenEroglu\"Alperen Duymazowns me ♡DICBAR | Ilhan♡\\n\n2021-03-0411:54:39+00:00\n479\n153\n44597\nFalse\n2021-10-1001:42:32+00:00\n29999\nWhiteThunder\nSomewhere\nRoyal captain ofthe Faire Army,Novelist,art\n2013-09-0518:32:49+00:00\n21\n44\n1435\nFalse\n2021-10-1001:42:30+00:00\n图4-2 使用iloc(）方法选择整个数据表的最后5行数据的输出结果",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          6
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "索引与选择",
+        "subsection_number": "4.1.2",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "4.基于标签选择数据基于标签选择数据使用loc属性，如选择user_name列的第2行数据，代码如下：squid.loc[1,'user_name']\n输出结果如下：'Best uncle on planet earth'\nsquid.loc[1,'user_name'】的第一个参数为1，这里的1表示数据表的行标签，如果 1出现在iloc属性中，则表示索引序号。loc属性常常与iloc属性混淆。在使用iloc属性时，忽略了数据表的标签，也就是字段名和行名，直接将数据表当成一个矩阵，通过元素所在的行和列进行选择。通常情况下，在选择列数据时，每列都带有字段名，因此使用loc属性。5.条件筛选在 Pandas库中，可以使用条件语句对数据进行筛选，类似于 SQL 中 SELECT A FROM B WHERECONDITION 语句的功能，但使用 Pandas库的条件语句要方便得多。例如，需要筛选用户位置在法国的用户信息，首先需要设置筛选条件，判断用户是否在法国，代码如下：squid[\"user_location\"]==\"France\"输出结果如下：0 False 1 False 2 False 3 False 4 True......29995 False 29996 False 29997 False 29998 False 29999 False Name:user_location,Length:30000,dtype:bool\n可以看到，输出结果是一系列布尔值，当布尔值为 True时，表示当前行满足筛选条件，当布尔值为 False时，表示当前行不满足筛选条件。然后根据输出结果，使用loc(）方法筛选出布尔值为 True的数据，代码如下：squid.loc[squid[\"user_location\"]==\"France\"]",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          7
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "索引与选择",
+        "subsection_number": "4.1.2",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verified4LauraReactionsFranceI talk and I makereactions videosabout shows2018-12-1920:38:28+00:003301522278False1539LauraReactionsFranceI talk and I makereactions videosabout shows2018-12-1920:38:28+00:003301522278False6022Nath L.FranceLe mondeappartient à ceuxqui rêventtrop!#lt2010-07-2520:14:08+00:001351114624404False7074AlcmèneFrance#CastMember à@DisneylandParisdepuis 2006:F2009-06-1708:45:58+00:007031998638False7568Sach'imiFranceGraphisteFreelance in#ILLUSTRATION#MOTION\\n2019-07-0212:49:16+00:0016152197False\nuser_name\nuser_location\nuser_description\nuser_created\nuser_followers\nuser_friends\nuser_favourites\nuser_verified\n4\nLauraReactions\nFrance\nI talk and I makereactions videosabout shows\n2018-12-1920:38:28+00:00\n330\n152\n2278\nFalse\n1539\nLauraReactions\nFrance\nI talk and I makereactions videosabout shows\n2018-12-1920:38:28+00:00\n330\n152\n2278\nFalse\n6022\nNath L.France\nLe mondeappartient à ceuxqui rêventtrop!#lt\n2010-07-2520:14:08+00:00\n1351\n1146\n24404\nFalse\n7074\nAlcmène\nFrance\n#CastMember à@DisneylandParisdepuis 2006:F\n2009-06-1708:45:58+00:00\n703\n199\n8638\nFalse\n7568\nSach'imi\nFrance\nGraphisteFreelance in#ILLUSTRATION#MOTION\\n\n2019-07-0212:49:16+00:00\n16\n152\n197\nFalse\n图4-3 使用loc(）方法筛选的输出结果包含多个筛选条件的筛选方法也经常用到，多个筛选条件之间使用\"与\"\"或\"\"非\"关联。例如，想要筛选出用户位置在法国，且粉丝数量大于100的用户，代码如下：squid.loc[(squid[\"user_location\"]==\"France\")&(squid[\"user_followers\"]>100)]\n使用多个条件筛选的输出结果如图4-4所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verified4LauraReactionsFranceI talk and I makereactions videosabout shows2018-12-1920:38:28+00:003301522278False1539LauraReactionsFranceI talk and I makereactions videosabout shows2018-12-1920:38:28+00:003301522278False6022Nath L.FranceLe mondeappartient à ceuxqui rêventtrop!#lt2010-07-2520:14:08+00:001351114624404False7074AlcmèneFrance#CastMember à@DisneylandParisdepuis 2006:F2009-06-1708:45:58+00:007031998638False10081SUSSUCREFranceCréateur de contenu | #TeamOL2013-07-1010:22:12+00:002760741445626False\nuser_name\nuser_location\nuser_description\nuser_created\nuser_followers\nuser_friends\nuser_favourites\nuser_verified\n4\nLauraReactions\nFrance\nI talk and I makereactions videosabout shows\n2018-12-1920:38:28+00:00\n330\n152\n2278\nFalse\n1539\nLauraReactions\nFrance\nI talk and I makereactions videosabout shows\n2018-12-1920:38:28+00:00\n330\n152\n2278\nFalse\n6022\nNath L.France\nLe mondeappartient à ceuxqui rêventtrop!#lt\n2010-07-2520:14:08+00:00\n1351\n1146\n24404\nFalse\n7074\nAlcmène\nFrance\n#CastMember à@DisneylandParisdepuis 2006:F\n2009-06-1708:45:58+00:00\n703\n199\n8638\nFalse\n10081\nSUSSUCRE\nFrance\nCréateur de contenu | #TeamOL\n2013-07-1010:22:12+00:00\n27607\n414\n45626\nFalse\n图4-4 使用多个条件筛选的输出结果在代码中，& 表示\"与\",|表示\"或\",~表示\"非\"。Pandas库中还内置了很多选择器，如果筛选条件是某个字段的值为一个列表中的任一元素，可以使用isin(）方法。例如，筛选用户位置在德国、法国或美国的用户，代码如下：",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          8
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "索引与选择",
+        "subsection_number": "4.1.2",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "squid[squid[\"user_location\"].isin(['France','Germany','United States'])]\n使用isin(）方法筛选的输出结果如图4-5所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verified4LauraReactionsFranceI talk and I makereactions videosabout shows2018-12-1920:38:28+00:003301522278False26EarlyGameGermanyOwn Your Game2019-11-1314:56:55+00:0049381153963False47MyMasqueBar- Self-Care isthe Best CareUnited StatesWe areeverythingmasks.Tag#MyMasqueBarto b2013-09-2615:47:33+00:00561700900False111BusinessbeaUnited StatesE | Educational business content.2021-06-0112:41:49+00:0013831754False382Cuban Spice(The 6th SpiceGirl) @cuUnited StatesI do be thepreediestpreediest girl,Ido be2009-04-2414:11:19+00:00317196920403False\nuser_name\nuser_location\nuser_description\nuser_created\nuser_followers\nuser_friends\nuser_favourites\nuser_verified\n4\nLauraReactions\nFrance\nI talk and I makereactions videosabout shows\n2018-12-1920:38:28+00:00\n330\n152\n2278\nFalse\n26\nEarlyGame\nGermany\nOwn Your Game\n2019-11-1314:56:55+00:00\n49381\n153\n963\nFalse\n47\nMyMasqueBar- Self-Care isthe Best Care\nUnited States\nWe areeverythingmasks.Tag#MyMasqueBarto b\n2013-09-2615:47:33+00:00\n561\n700\n900\nFalse\n111\nBusinessbea\nUnited States\nE | Educational business content.2021-06-0112:41:49+00:00\n138\n317\n54\nFalse\n382\nCuban Spice(The 6th SpiceGirl) @cu\nUnited States\nI do be thepreediestpreediest girl,Ido be\n2009-04-2414:11:19+00:00\n317\n1969\n20403\nFalse\n图4-5 使用isin(）方法筛选的输出结果\n4.1.3 统计与映射\n1.基本统计方法\nPandas库中有很多统计方法供用户使用，使用这些方法能够快速获得数据的统计信息，如平均值、方差、标准差等统计量。例如，想要获取用户粉丝数的平均值、最大值、最小值等，可以使用describe(）方法，代码如下：常用统计方法\nsquid[\"user_followers\"].describe()\n输出结果如下：count 3.000000e+04 mean 1.565457e+04 std 2.525806e+05 min 0.000000e+00 25% 7.400000e+01 50% 3.190000e+02 75% 1.171000e+03 max 1.684642e+07 Name:user_followers,dtype:float64",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          9
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "统计与映射",
+        "subsection_number": "4.1.3",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "可以看到，describe(）方法给出了用户粉丝数的平均值、标准差、最小值、上四分位数、下四分位数等统计量，通过该方法可以对数据的分布有初步认识。如果要单独查看某个统计量，可以直接调用计算该统计量的方法，如计算平均值的代码如下：squid[\"user_followers\"].mean()\n另一个较为有用的统计方法是info()，该方法能够输出每列数据的非空值的数量、数据类型，以及整个数据表的内存占用信息等。在数据建模时，一般要求输入特征不能为空，可以使用info(）方法查看，代码如下：squid.info()\n输出结果如下：<class'pandas.core.frame.DataFrame'> RangeIndex:30000 entries,0 to 29999 Data columns(total 12 columns):# Column Non- Null Count Dtype --- ------ -------------- ----- 0 user_name 29999 non- null object 1 user_location 21378 non- null object 2 user_description 28186 non- null object 3 user_created 30000 non- null object 4 user_followers 30000 non- null int64 5 user_friends 30000 non- null int64 6 user_favourites 30000 non- null int64 7 user_verified 30000 non- null bool 8 date 30000 non- null object 9 text 30000 non- null object 10 source 30000 non- null object 11 is_retweet 30000 non- null bool dtypes:bool(2),int64(3),object(7) memory usage:2.3+MB\n注意：仅能对 DataFrame对象使用info(）方法，不能对Series对象使用该方法。unique(）方法用于查看某一列数据中有多少个不同的数据。例如，查看用户发布评论所使用的设备有哪些，代码如下：squid[\"source\"].unique()\n输出结果如下：",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          10
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据科学的基本流程",
+        "section_number": "2.3",
+        "subsection": "统计与映射",
+        "subsection_number": "4.1.3",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "array(['Twitter for Android','Twitter Web App','Twitter for iPhone','Buffer','Twitter for iPad','PromoRepublic','TweetDeck','Instagram','Sprout Social','Hootsuite Inc.','Tweetbot for iOS','dlvr.it','Meltwater Social','Twitter for Mac',...,dtype=object)\nvalue_counts(）方法的作用是统计某个特征字段的不同取值的个数，该方法常用于性别统计、星座统计等。例如，对用户发布评论所使用的设备进行统计，代码如下：squid[\"source\"].value_counts()\n输出结果如下：Twitter for iPhone13919Twitter for Android8851Twitter Web App5251Twitter for iPad690TweetDeck354TheWrap1Xbox One Social1Oktopost1TwitPane for Android1BizToc1Name:source,Length:133,dtype:int64\nTwitter for iPhone\n13919\nTwitter for Android\n8851\nTwitter Web App\n5251\nTwitter for iPad\n690\nTweetDeck\n354\nTheWrap\n1\nXbox One Social\n1\nOktopost\n1\nTwitPane for Android\n1\nBizToc\n1\nName:source,Length:133,dtype:int64\n2.映射在进行数据分析时，往往会对数据进行一定程度的修改，以方便后续的建模和分析，例如，将性别为男的数据映射为0，将性别为女的数据映射为1。又如，对学生的成绩进行打分，将90 分以上的数据映射为 A，将80~90分的数据映射为B等。上述操作意味着要对数据表中的数据进行批量化处理，使用Python语言中的for循环可以实现上述操作，但太过烦琐。批量化处理意味着对所有数据进行相同的操作，在Pandas库中有专门的方法，这就是本节介绍的映射方法。apply(）方法是 Pandas库中功能十分强大的映射方法，该方法能够按照某一条件对某列数据进行映射。例如，根据 user_verified字段，创建新的字段verified，若 user_verified 字段为 False，则设置为0，否则设置为1，代码如下：def check_verify(entry):if entry[\"user_verified\"]is False:return 0 else:return 1 squid[\"verified\"]=squid.apply(check_verify,axis=1) squid[\"verified\"].value_counts()",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          11
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "统计与映射",
+        "subsection_number": "4.1.3",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "输出结果如下：0 28987 1 1013\nName:verified,dtype:int64\n分析上述代码，首先定义了check_verify(）函数，该函数接收一条数据作为输入，当该条数据中user_verified字段为 False时，返回0，否则返回1。然后，squid.apply(）方法调用了这个函数，并将结果赋值给新的列squid[\"verified\"]。调用时check_verify不能带括号，如果带上括号就是将函数的返回结果作为输入，发送给apply(）方法。此外，squid.apply(check_verify,axis=1）中参数axis的取值是0或者1,0代表按照每列进行计算，1代表按照每行进行计算，此处是每次取一行数据，然后判断指定字段是 True还是 False，因此参数axis需要设置为1。4.1.4 组合与排序\n1.组合\n4.1.3节中，使用 value_counts(）方法获得了对单列数据的频次统计，还可以使用 groupby(）方法实现上述功能，代码如下：squid.groupby(\"source\").source.count()\n输出结果如下：15 Minute Fun 2 AT Auto Tweet 1 Agorapulse app 6 Apphi 1 Bearguin 2......sankoffoncor 1 tshell- bash 1 tweetpancake 1 twitterproject122 1 www.keengamer.com 1 Name:source,Length:133,dtype:int64\ngroupby(）方法的功能与SQL中的聚合操作一致，都是对某一字段进行聚合统计，在上述代码中，根据source对用户进行分组，然后获取每组用户的source字段的数据，再使用count(）方法统计其出现的次数。也可以使用其他的聚合方法，如统计每种设备上粉丝数最多的用户的粉丝数，可以使用 max(）方法，代码如下：",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          12
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "统计与映射",
+        "subsection_number": "4.1.3",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "squid.groupby(\"source\").user_followers.max()\n输出结果如下：15 Minute Fun 269 AT Auto Tweet 361 Agorapulse app 1585950 Apphi 8645 Bearguin 8070......sankoffoncor 7 tshell- bash 3814 tweetpancake 63 twitterproject122 16 www.keengamer.com 10408 Name:user_followers,Length:133,dtype:int64\n2.排序对数据进行聚合统计后，得到的统计数据没有按照大小顺序排列，使用sort_values() 方法可以对数据排序，代码如下：max_followers=squid.groupby(\"source\").user_followers.max() max_followers.sort_values()\n输出结果如下：source recurpost.com 1 EveryoneSocial 1 Microsoft Azure Logic Apps 1 sankoffoncor 7 Outfy Inc 14......TweetDeck 8237104 Sprinklr 9066758 Twitter Web App 9207638 Buffer 16845024 Twitter Media Studio 16846417 Name:user_followers,Length:133,dtype:int64\nsort_values(）方法默认将数据从小到大排序，若要从大到小排序，可以设置参数 ascending=False。此外，如果按照多个字段排序，可以将这些字段名称组成列表，使用by",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          13
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "组合与排序",
+        "subsection_number": "4.1.4",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "参数传入列表，代码如下：squid.sort_values(by=[\"user_followers\",\"user_favourites\"])\nsort_values(）方法的输出结果如图4-6所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verified282George.Athens,NYSarcasm is myhome.2021-10-0517:04:50+00:00010False349ToDisenyoNaNDesign,Marketing,Innovation2021-02-1910:23:21+00:000140False616IBADOMetro Manila,PhilippinesSelling locallymanufacturedbrand newclothes2021-10-0608:34:24+00:00000False867PixelQuackNFTOpenSeaNFT Creator,check out mycollectionsavailabl2021-10-0608:55:46+00:00000False1150IBADOMetro Manila,PhilippinesSelling locallymanufacturedbrand newclothes2021-10-0608:34:24+00:00000False\nuser_name\nuser_location\nuser_description\nuser_created\nuser_followers\nuser_friends\nuser_favourites\nuser_verified\n282\nGeorge.Athens,NY\nSarcasm is myhome.2021-10-0517:04:50+00:00\n0\n1\n0\nFalse\n349\nToDisenyo\nNaN\nDesign,Marketing,Innovation\n2021-02-1910:23:21+00:00\n0\n14\n0\nFalse\n616\nIBADO\nMetro Manila,Philippines\nSelling locallymanufacturedbrand newclothes\n2021-10-0608:34:24+00:00\n0\n0\n0\nFalse\n867\nPixelQuackNFT\nOpenSea\nNFT Creator,check out mycollectionsavailabl\n2021-10-0608:55:46+00:00\n0\n0\n0\nFalse\n1150\nIBADO\nMetro Manila,Philippines\nSelling locallymanufacturedbrand newclothes\n2021-10-0608:34:24+00:00\n0\n0\n0\nFalse\n图4-6 sort_values(）方法的输出结果\n4.1.5 数据类型与缺失值\nPandas库中的数据有多种类型，使用dtypes属性可以获取 DataFrame数据表中每一列的数据类型，代码如下：squid.dtypes\n输出结果如下：user_name object user_location object user_description object user_created object user_followers int64 user_friends int64 user_favourites int64 user_verified bool date object text object source object",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          14
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "数据类型与缺失值",
+        "subsection_number": "4.1.5",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "is_retweet bool verified int64 dtype:object\n此外，如果查看Series对象的数据类型，则需要使用Series.dtype属性。使用astype(）方法，可以更改数据类型，在处理包含相同字段的多个数据表时，常常会遇到不同表中同一字段名的数据类型不一致的问题。可以使用astype(）方法修改数据的类型。这种修改方法会对一个数据表中的某一列进行批量转换，而非对单个数值进行转换。例如，将user_followers字段的数据类型改为int32，代码如下：squid[\"user_followers_32\"]=squid[\"user_followers\"].astype(\"int32\") squid[\"user_followers_32\"].dtype\n输出结果如下：dtype('int32')\n在Pandas库中，可以很方便地查看与处理空值，isnull(）方法用于查看数据是否存在空值，fillna(）方法常用于填充缺失值。例如，查看用户所在位置为空的数据，并将空值填充为 Unknown，代码如下：unknown_loc =squid[squid[\"user_location\"].isnull()][\"user_location\"] unknown_loc.fillna('Unknown')\n输出结果如下：0 Unknown 1 Unknown 2 Unknown 6 Unknown 8 Unknown......29981 Unknown 29986 Unknown 29987 Unknown 29990 Unknown 29997 Unknown Name:user_location,Length:8622,dtype:object\n4.1.6 数据拼接在处理数据时，数据可能来自多个数据源。为了将多个数据源的数据拼接起来，可以",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          15
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "数据拼接",
+        "subsection_number": "4.1.6",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "使用pd.concat(）函数，代码如下：df1=squid.iloc[0:2,:] df2=squid.iloc[5:7,:] pd.concat([df1,df2])\n数据拼接的输出结果如图4-7所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verifieddate0the_ûndër-ratêdniggáhNaN@ManUtd die hard \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\2019-09-0619:24:57+00:0058110358922False2021-10-0612:05:38+00:001Best uncleon planetearthNaNNaN2013-05-0819:35:26+00:007417308432False2021-10-0612:05:22+00:005Peyman @@@UnitedKingdomOfficial @KardiaChain$KAIAmbassador\\nMarketi2018-01-2712:07:31+00:005463186265False2021-10-0612:04:54+00:006Aeriaaaa♡NaNFujoshi / Thai BL-obsessed/Alwaysdistracted2021-06-0114:08:10+00:0014110518False2021-10-0612:04:45+00:00\nuser_name\nuser_location\nuser_description\nuser_created\nuser_followers\nuser_friends\nuser_favourites\nuser_verified\ndate\n0\nthe_ûndër-ratêdniggáh\nNaN\n@ManUtd die hard \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n2019-09-0619:24:57+00:00\n581\n1035\n8922\nFalse\n2021-10-0612:05:38+00:00\n1\nBest uncleon planetearth\nNaN\nNaN\n2013-05-0819:35:26+00:00\n741\n730\n8432\nFalse\n2021-10-0612:05:22+00:00\n5\nPeyman @@@\nUnitedKingdom\nOfficial @KardiaChain$KAIAmbassador\\nMarketi\n2018-01-2712:07:31+00:00\n546\n318\n6265\nFalse\n2021-10-0612:04:54+00:00\n6\nAeriaaaa♡\nNaN\nFujoshi / Thai BL-obsessed/Alwaysdistracted\n2021-06-0114:08:10+00:00\n14\n110\n518\nFalse\n2021-10-0612:04:45+00:00\n图4-7 数据拼接的输出结果第一列的标签是0、1、5、6，分别对应源数据的第1行、第2行、第6行、第7行数据。也就是说，组合之后的结果会保留原来的编号，不会重新编号。如果设置参数ignore_ index为 True，则拼接后的结果会重新编号，代码如下：df1=squid.iloc[0:2,:] df2=squid.iloc[5:7,:] pd.concat([df1,df2],ignore_index=True)\n输出结果如图4-8所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verified0the_ûndër-ratèdniggáhNaN@ManUtd die hard2019-09-0619:24:57+00:0058110358922False 1L1Best uncleon planetearthNaNNaN2013-05-0819:35:26+00:007417308432False 1L2Peyman@@@UnitedKingdomOfficial @KardiaChain$KAIAmbassador\\nMarketi2018-01-2712:07:31+00:005463186265False 1L3Aeriaaaa♡NaNFujoshi / Thai BL-obsessed / Alwaysdistracted2021-06-0114:08:10+00:0014110518False 1l.user_name\nuser_location\nuser_description\nuser_created\nuser_followers\nuser_friends\nuser_favourites\nuser_verified\n0\nthe_ûndër-ratèdniggáh\nNaN\n@ManUtd die hard\n2019-09-0619:24:57+00:00\n581\n1035\n8922\nFalse 1\nL\n1\nBest uncleon planetearth\nNaN\nNaN\n2013-05-0819:35:26+00:00\n741\n730\n8432\nFalse 1\nL\n2\nPeyman@@@\nUnitedKingdom\nOfficial @KardiaChain$KAIAmbassador\\nMarketi\n2018-01-2712:07:31+00:00\n546\n318\n6265\nFalse 1\nL\n3\nAeriaaaa♡\nNaN\nFujoshi / Thai BL-obsessed / Alwaysdistracted\n2021-06-0114:08:10+00:00\n14\n110\n518\nFalse 1\nl.图4-8 数据拼接后重新编号的输出结果",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          16
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "数据分析基础",
+        "section_number": "4.1",
+        "subsection": "数据拼接",
+        "subsection_number": "4.1.6",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "数据分析基础总结：本节主要介绍了数据科学工具库Pandas的基本使用，Pandas库主要用于操作关系型数据，使用Pandas库可以很方便地从持久化存储格式中读取数据，如数据库、CSV文件、TXT文件等。Pandas库内置了很多计算工具，方便用户进行数据分析。在数据工程中，往往会先使用Pandas库读取数据，对数据做预处理，如对数据进行统计分析，再对部分数据进行映射、聚合、填充缺失值等操作，方便后续将数据输入模型进行训练。除了阅读本书学习 Pandas库外，推荐有英文阅读基础的读者查找 Pandas库的官方文档，阅读更详细的函数说明。例如，pd.concat(）函数的默认参数还包括axis、join、levels 等，每个参数在官方文档中都有十分详细的说明，阅读官方文档能够快速提升使用 Pandas 库的熟练程度。4.2 机器学习库scikit-learn\n本节介绍 Python语言的机器学习库scikit-learn。scikit-learn库是开源数据科学建模工具，主要用于构建分类模型、回归模型和聚类模型。当数据特征较多，模型无法拟合数据时，可以使用scikit-learn库做数据降维，以降低数据冗余度，scikit-learn库还可用于数据预处理和机器学习模型融合。4.2.1 构建分类模型分类任务是数据科学分析建模中的一种有监督学习的任务，常见的分类任务如基于图像的猫狗分类、垃圾邮件分类、人脸识别等。基于scikit-learn库可以对关系型数据构建分类模型，一般流程如下：(1）使用 Pandas库等工具读取关系型数据，进行数据探索、缺失值填充；(2）使用scikit-learn库对数据特征进行归一化；(3）使用scikit-learn库将读取的数据拆分为训练集和测试集，其中训练集用于模型拟合数据，测试集用于验证模型的泛化性。下面以鸢尾花数据集为例，使用支持向量机（supportvectormachine,SVM）算法，构建一个分类模型。鸢尾花数据集是一份经典的机器学习数据集，常被用于分类问题的研究和算法性能评估。鸢尾花数据集包含3个不同种类的鸢尾花：山鸢尾（iris-setosa)、变色鸢尾（iris-versicolor）和维吉尼亚鸢尾 (iris-virginica)。每个样本包含 4 个特征：花萼长度 (sepallength)、花萼宽度（sepalwidth)、花瓣长度（petallength）和花瓣宽度（petalwidth)。该数据集常用于初学者了解机器学习算法的基本概念和流程，也常被用来作为算法性能比较和验证的基准数据集。下面的代码使用 Matplotlib库和scikit-learn库可视化鸢尾花数据集，输出结果如图4-9所示。import matplotlib.pyplot as plt\nfrom sklearn import datasets\n# 加载鸢尾花数据集\niris=datasets.load_iris()",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          17
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "机器学习库 scikit-learn",
+        "section_number": "4.2",
+        "subsection": "构建分类模型",
+        "subsection_number": "4.2.1",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "X=iris.data y=iris.target # 可视化数据集中的前两个特征 plt.scatter(X[:,0],X[:,1],c=y,cmap='viridis') plt.xlabel('Sepal length') plt.ylabel('Sepal width') plt.title('Iris Dataset') plt.show()\n图4-9 鸢尾花数据集中花萼长度和花萼宽度的分布首先导入scikit-learn库和 NumPy库，代码如下：import numpy as np from sklearn import datasets from sklearn.model_selection import train_test_split from sklearn.preprocessing import StandardScaler from sklearn.svm import SVC from sklearn.metrics import accuracy_score\n然后加载鸢尾花数据集，使用train_test_split(）函数将数据拆分为训练集和测试集，创建一个StandardScaler类型的对象，分别使用其fit_transform(）方法和transform(）方法将训练集和测试集的数据标准化，以确保每个特征的均值为0、标准差为1，代码如下：# 加载鸢尾花数据集 iris=datasets.load_iris() X=iris.data y=iris.target",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          18
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "机器学习库 scikit-learn",
+        "section_number": "4.2",
+        "subsection": "构建分类模型",
+        "subsection_number": "4.2.1",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "# 将数据集分成训练集和测试集 X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.2,random_ state=42) # 标准化数据\nscaler=StandardScaler() X_train=scaler.fit_transform(X_train)\nX_test=scaler.transform(X_test)\n创建一个SVM 分类器，即SVC类型的对象，并使用训练集数据进行训练。最后使用测试集数据进行预测，并计算分类器的准确率（accuracy)，代码如下：svm=SVC(kernel='linear',C=1,random_state=42) # 使用训练集数据进行训练 svm.fit(X_train,y_train) # 对测试集数据进行预测 y_pred=svm.predict(X_test) # 计算分类器的准确率 accuracy=accuracy_score(y_test,y_pred) print(\"Accuracy:\",accuracy)\n4.2.2 构建回归模型机器学习中的回归任务是指预测连续值的预测性建模问题，其目标是为输入变量和连续输出变量之间建立一个函数关系。回归任务通常用于预测数值型数据，如房价、股票价格、销售额等。回归任务与分类任务都是机器学习中的常见任务，但它们的目标不同。分类任务的目标是根据输入变量确定样本属于哪个类别，而回归任务的目标是预测输入变量和输出变量之间的函数关系。以下是一个使用scikit-learn库进行回归任务的简单示例。这个示例中将使用加州房价数据集，该数据集是一个经典的数据集，通常用于回归问题的分析。import numpy as np from sklearn.model_selection import train_test_split from sklearn.linear_model import LinearRegression from sklearn.metrics import mean_squared_error from sklearn.datasets import fetch_california_housing # 获取加州房价数据集 housing= fetch_california_housing() X= housing.data y= housing.target",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          19
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "机器学习库 scikit-learn",
+        "section_number": "4.2",
+        "subsection": "构建回归模型",
+        "subsection_number": "4.2.2",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "# 将数据集分成训练集和测试集 X_train,X _ test,y _ train,y _ test = train _ test _ split (X,y,test _ size = 0.2,random_state= 42) # 创建线性回归模型 regressor= LinearRegression() # 使用训练数据对模型进行训练 regressor.fit(X_train,y_train) # 对测试数据进行预测 y_ pred= regressor.predict(X_test) # 计算模型的均方误差 mse= mean_squared_error(y_test,y_pred) print(\"Mean squared error:\",mse)\n4.2.3 构建聚类模型构建聚类模型使用的是聚类算法。聚类算法是机器学习中的一种无监督学习方法，用于将数据集中的数据分成不同的聚类或组。聚类算法的目标是将相似的数据点分组在一起，使得同一聚类中的数据点相似度高，而不同聚类中的数据点相似度低。以k均值（k-means）聚类算法为例，下面的代码首先使用scikit-learn库中的 make_blobs() 函数创建了一个包含300个样本和4个中心的模拟数据集。其次，创建一个 KMeans聚类器，即 KMeans类型的对象，并设置聚类数量为4。然后，使用拟合函数对数据进行聚类拟合，并获取每个数据点的聚类标签。最后，使用 Matplotlib库将聚类结果可视化，如图4-10所示。读者可以根据自己的实际需求对模型进行调整和优化。from sklearn.cluster import KMeans from sklearn.datasets import make_blobs import matplotlib.pyplot as plt # 使用 make_blobs(）函数创建模拟数据集 X,y=make_blobs(n_samples=300,centers=4,random_state=42,cluster_std=0.60) # 创建 KMeans 模型，设置聚类数量为 4 kmeans=KMeans(n_clusters=4,random_state=42) # 使用拟合函数对数据进行聚类拟合 kmeans.fit(X) # 获取每个数据点的聚类标签 labels=kmeans.labels_ # 绘制聚类结果的可视化图形",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          20
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "机器学习库 scikit-learn",
+        "section_number": "4.2",
+        "subsection": "构建聚类模型",
+        "subsection_number": "4.2.3",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "plt.scatter(X[:,0],X[:,1],c=labels,cmap='viridis') plt.show()\n4.3 图像处理库 OpenCV\nOpenCV 库是一个开源的计算机视觉库，为开发者提供了一系列用于处理图像和视频的函数与工具。它被广泛应用于计算机视觉、机器学习和人工智能领域。它还可以与其他流行的机器学习库，如 TensorFlow 和 PyTorch等进行集成。OpenCV 库具有广泛的应用领域，它被用于物体检测和识别、人脸分析和识别、手势识别、运动跟踪。在 Python语言中，也可以使用pillow、scikit-image等库处理图像。4.3.1 图像的读取与保存在Python程序中使用 OpenCV 库时，需要通过cv2导入该库，可使用其中的imread() 函数读取图像，使用imshow(）函数显示图像，代码如下：import cv2 # 读取图像 img=cv2.imread('lena.jpg') # 显示图像 cv2.imshow('image',img) cv2.waitKey(0) cv2.destroyAllWindows() # 保存图像 cv2.imwrite('new_image.jpg',img)\n在上述代码中，首先通过名字cv2导入 OpenCV 库，然后使用imread(）函数读取名为",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          21
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "图像处理库 OpenCV",
+        "section_number": "4.3",
+        "subsection": "图像的读取与保存",
+        "subsection_number": "4.3.1",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "lena.jpg的图像文件，并将其存储在img变量中。接下来，使用imshow(）函数将图像显示在屏幕上，如图 4-11 所示，并使用 waitKey(）函数等待用户按下任意键，最后使用 destroyAllWindows(）函数关闭所有打开的窗口。为了保存图像，可以使用imwrite(）函数将img变量中的图像保存为新图像文件new_image.jpg。图4-11 使用 OpenCV库读取图像并显示\n4.3.2 图像的基本信息使用 OpenCV 库读取的图像包含一些基本信息，常见的彩色图像有三个色彩通道，分别是 R（红）、G（绿）、B（蓝），而灰度图像仅有一个色彩通道。对于灰度图像，每个像素只有一个颜色通道值；对于彩色图像，每个像素有三个颜色通道值（红、绿、蓝）。下面的代码使用 OpenCV 库获取图像的宽度和高度。import cv2\n# 读取图像\nimg=cv2.imread('image.jpg')\n# 获取图像大小\nheight,width=img.shape[:2]\nprint('图像大小：',height,width)\n图像的像素值大小取值在0~255之间。如图4-12所示，图像中帽子处的像素值为【58,66,133]，头发处的像素值为【23,40,83]，图像的像素值越接近0，表示当前位置越暗，图像的像素值越接近255，表示当前位置越亮。4.3.3 图像的平移与旋转变换图像的变换通常用于数据增强，能够提升模型的泛化性。要平移图像，可以使用 cv2.warpAffine(）函数，代码如下：UUUU\nUUUU\n图4-12 不同位置的像素值大小",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          22
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "图像处理库 OpenCV",
+        "section_number": "4.3",
+        "subsection": "图像的基本信息",
+        "subsection_number": "4.3.2",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "import cv2 import numpy as np # 读取图像 img=cv2.imread('lena.jpg') # 定义平移矩阵，这里将图像向右移动 100 像素，向下移动 50 像素 M=np.float32([[1,0,100],[0,1,50]]) # 对图像进行平移变换 dst=cv2.warpAffine(img,M,(img.shape[1]+100,img.shape[0]+50)) # 显示平移后的图像 cv2.imshow('image',dst) cv2.waitKey(0) cv2.destroyAllWindows()\n要旋转图像，可以使用cv2.getRotationMatrix2D(）函数定义旋转矩阵，然后将其与原始图像进行矩阵乘法运算，代码如下：import cv2 # 读取图像 img=cv2.imread('lena.jpg') # 定义旋转矩阵，这里将图像顺时针旋转 45 度 M=cv2.getRotationMatrix2D((img.shape[1]/2,img.shape[0]/2),- 45,1) # 对图像进行旋转变换 dst=cv2.warpAffine(img,M,(img.shape[1],img.shape[0])) # 显示旋转后的图像 cv2.imshow('image',dst) cv2.waitKey(0) cv2.destroyAllWindows()\n图像的平移与旋转变换结果，如图4-13所示。图4-13 图像的平移与旋转变换结果",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          23
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "图像处理库 OpenCV",
+        "section_number": "4.3",
+        "subsection": "图像的平移与旋转变换",
+        "subsection_number": "4.3.3",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "4.3.4 图像的边缘信息提取要使用 OpenCV 库提取图像边缘信息，可以使用 Canny边缘检测算法。Canny边缘检测算法是一种经典的边缘检测算法，它可以检测出图像中的强边缘，并抑制弱边缘，从而得到清晰的边缘图像，代码如下：import cv2\n# 以灰度模式读取图像\nimg=cv2.imread('lena.jpg',cv2.IMREAD_GRAYSCALE)\n# 使用 Canny 边缘检测算法提取边缘信息\nedges=cv2.Canny(img,100,200)\n# 显示原始灰度图像和边缘信息图像\ncv2.imshow('Original Image',img)\ncv2.imshow('Edge Image',edges)\ncv2.waitKey(0)\ncv2.destroyAllWindows()\n在上述代码中，首先使用cv2.imread(）函数读取名为lena.jpg的图像文件，并将其转换为灰度图像。然后使用cv2.Canny(）函数对图像进行 Canny边缘检测，其中第二个和第三个参数分别为像素的低阈值和高阈值。低阈值用于边缘连接，高阈值用于强边缘检测。最后使用cv2.imshow(）函数显示原始灰度图像和边缘信息图像，如图4-14所示。图4-14 原始灰度图像和边缘信息图像习题\n1.Python语言中的图像处理工具除了 OpenCV 库之外，还有pillow 工具库。使用命令 pipinstallpillow 安装该库，并使用Image.open(）函数读取图像，与 OpenCV 工具库的",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          24
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "图像处理库 OpenCV",
+        "section_number": "4.3",
+        "subsection": "图像的边缘信息提取",
+        "subsection_number": "4.3.4",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "cv2.imread(）函数读取的图像进行对比，两者读取的图像数据格式是否一致？从图像大小、格式、颜色通道的角度分别进行比较。2.使用 Python 语言的 Pandas 工具库，可以对关系型数据进行排序，使用 pandas.DataFrame.sort_values(）方法时，参数inplace的作用是什么？3.Pandas工具库不仅能从 XLS、XLSX等文件中读取数据，还能连接数据库获取数据。下面是使用 Pandas库从数据库中读取数据的代码，尝试使用 MySQL 创建一个数据库 StuDB，库中包含一张学生的基础信息表stu_info，运行下列代码，并从数据库中获取stu_ info表的全部数据。import pandas as pd from sqlalchemy import create_engine # 初始化数据库连接 # 按实际情况依次填写 MySQL 的用户名、密码、IP 地址、端口、数据库名 engine=create_engine('mysql+pymysql://用户名：密码@localhost:3306/StuDB') # 填写自己所需的 SQL 语句，可以是复杂的查询语句 sql_query='select * from stu_info;' # 使用 Pandas 库的 read_sql_query(）函数执行 SQL 语句，并存入 DataFrame df_read=pd.read_sql_query(sql_query,engine) print(df_read)\n4.尝试拍摄一张照片，并使用 OpenCV 库的 Canny边缘检测算法提取拍摄照片的边缘信息。在提取图像边缘信息时，有以下两个参数可以设置。在 Canny算法中，minVal（最小阈值）和 maxVal（最大阈值）是两个关键参数，它们用于确定边缘的强度。这两个阈值在算法的滞后阈值处理步骤中起到决定性作用。(1)minVal（最小阈值）：这个值定义了边缘强度的下限。如果一个像素的梯度值低于这个阈值，它将不会被考虑为边缘。(2)maxVal（最大阈值）：这个值定义了边缘强度的上限。如果一个像素的梯度值高于这个阈值，它将被确定为强边缘。调整 minVal和 maxVal，查看不同阈值计算的包含边缘信息的图像差异。5.在4.2.1节中，使用scikit-learn库的 SVM 分类器构建了分类模型，常见的关系型数据建模库还有 LightGBM、XGBoost等。使用 LightGBM 库建立鸢尾花分类模型，并与 SVM 分类器的分类准确率进行比较。安装 LightGBM 库的命令如下：pip install lightgbm\n建模的范例代码如下：import numpy as np import pandas as pd from sklearn.model_selection import train_test_split from sklearn.metrics import accuracy_score",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          25
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "机器学习库 scikit-learn",
+        "section_number": "4.2",
+        "subsection": "构建分类模型",
+        "subsection_number": "4.2.1",
+        "is_section_start": true,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "from lightgbm import LGBMClassifier # 假设有一个 DataFrame，其中包含特征（'feature1','feature2',...,'featureN'）和目标 # 变量（'target') data=pd.read_csv('your_data.csv') # 请用自己的数据文件路径替换'your_data.csv' # 划分训练集和测试集 X=data.drop('target',axis=1) y=data['target'] X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.2,random_ state=42) # 初始化模型 model=LGBMClassifier() # 训练模型 model.fit(X_train,y_train) # 预测测试集结果 y_pred=model.predict(X_test) # 计算预测准确率 accuracy=accuracy_score(y_test,y_pred) print(f'Accuracy:{accuracy}')",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          26
+        ],
+        "chunk_type": "semantic",
+        "chapter": "数据分析",
+        "chapter_number": "第4章",
+        "section": "习题",
+        "section_number": "",
+        "subsection": "",
+        "subsection_number": "",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "《数据科学导论（案例版）》\n\n目录：\n第1章 数据思维\n  1.1 数据思维无处不在\n  1.2 新兴技术蓬勃发展\n  1.3 数据工程的基本流程\n  1.4 数据工程案例\n    1.4.1 特征发现\n    1.4.2 文本推荐\n    1.4.3 智能制造\n    1.4.4 技术预测\n  习题\n第2章 数据科学基本知识\n  2.1 认识数据\n    2.1.1 数据\n    2.1.2 数据的分类\n    2.1.3 数据的特征\n    2.1.4 信息化、数据化与数字化\n  2.2 数据科学\n    2.2.1 数据科学的概念\n    2.2.2 数据科学的发展历程（里程碑事件及展望）\n    2.2.3 数据科学的知识体系\n    2.2.4 数据科学的研究目的与任务\n    2.2.5 数据科学的研究内容\n  2.3 数据科学的基本流程\n  习题\n第3章 Python 语言快速入门\n  3.1 Python 语言基本简介\n    3.1.1 Python 语言的历史及学习路线\n    3.1.2 Python 语言的特性\n    3.1.3 常用的集成开发环境\n  3.2 Python 语言的语法\n    3.2.1 变量及其赋值\n    3.2.2 运算符与标准库\n    3.2.3 流程控制与循环结构\n    3.2.4 数据类型\n    3.2.5 函数\n    3.2.6 面向对象\n  3.3 网络爬虫实践\n    3.3.1 爬虫库与爬虫安全\n    3.3.2 爬虫流程\n    3.3.3 案例介绍\n  习题\n第4章 数据分析\n  4.1 数据分析基础\n    4.1.1 读取与创建数据\n    4.1.2 索引与选择\n    4.1.3 统计与映射\n    4.1.4 组合与排序\n    4.1.5 数据类型与缺失值\n    4.1.6 数据拼接\n  4.2 机器学习库 scikit-learn\n    4.2.1 构建分类模型\n    4.2.2 构建回归模型\n    4.2.3 构建聚类模型\n  4.3 图像处理库 OpenCV\n    4.3.1 图像的读取与保存\n    4.3.2 图像的基本信息\n    4.3.3 图像的平移与旋转变换\n    4.3.4 图像的边缘信息提取\n  习题\n第5章 数据可视化\n  5.1 数据可视化概述\n    5.1.1 什么是数据可视化\n    5.1.2 数据可视化的分类\n    5.1.3 数据可视化的基本流程\n    5.1.4 常用工具与案例概览\n    5.1.5 数据可视化案例\n  5.2 用 Tableau 进行数据探索\n  5.3 Python 数据可视化\n    5.3.1 Python 数据可视化简介\n    5.3.2 常用的数据可视化工具库\n    5.3.3 统计数据可视化\n  习题\n第6章 监督学习常用算法\n  6.1 分类问题\n    6.1.1 k 近邻算法\n    6.1.2 支持向量机算法\n    6.1.3 朴素贝叶斯算法\n    6.1.4 决策树算法\n    6.1.5 分类模型的评价\n  6.2 回归问题\n    6.2.1 线性回归模型\n    6.2.2 回归模型的评价\n  6.3 其他算法\n    6.3.1 集成学习：随机森林和梯度提升树\n    6.3.2 非线性回归\n  习题\n第7章 无监督学习算法\n  7.1 聚类算法\n    7.1.1 k 均值聚类算法\n    7.1.2 密度聚类算法\n    7.1.3 层次聚类算法\n    7.1.4 聚类模型的评价\n  7.2 降维问题\n    7.2.1 主成分分析\n    7.2.2 核主成分分析\n  7.3 其他算法\n    7.3.1 谱聚类算法\n    7.3.2 LDA 算法\n  习题\n第8章 深度学习\n  8.1 深度学习概述\n    8.1.1 人工智能与神经网络\n    8.1.2 神经网络的深度\n    8.1.3 深度学习的常见任务\n    8.1.4 深度学习的利器\n  8.2 卷积神经网络\n    8.2.1 基础知识\n    8.2.2 经典的卷积神经网络\n    8.2.3 基于 LeNet5 的 MNIST 手写数字识别\n  8.3 循环神经网络\n    8.3.1 标准循环神经网络\n    8.3.2 长短期记忆网络\n    8.3.3 循环神经网络与自然语言处理\n  8.4 项目实践——美食“图”鉴\n    8.4.1 项目介绍\n    8.4.2 数据准备\n    8.4.3 网络搭建\n    8.4.4 模型训练与测试\n    8.4.5 优化改进\n  习题\n第9章 大语言模型及其应用\n  9.1 自然语言处理\n    9.1.1 自然语言处理方法\n    9.1.2 文本挖掘模型\n    9.1.3 智能问答\n  9.2 大语言模型的概念、实例与提示工程\n    9.2.1 大语言模型的概念\n    9.2.2 大语言模型的实例\n    9.2.3 提示工程\n  9.3 大语言模型的应用\n    9.3.1 基于大语言模型的辅助写作助手\n    9.3.2 基于大语言模型的文献辅助阅读工具\n    9.3.3 基于大语言模型的金融服务助手\n  习题\n第10章 数据科学竞赛\n  10.1 竞赛平台\n    10.1.1 kaggle\n    10.1.2 DrivenData\n    10.1.3 阿里云天池\n    10.1.4 DataCastle\n    10.1.5 DataFountain\n    10.1.6 ChinaVis\n    10.1.7 和鲸社区\n  10.2 参赛流程\n  10.3 赛题解析\n    10.3.1 算法分析报告\n    10.3.2 答辩报告\n  习题\n附录 DT 数据科学平台",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [],
+        "chunk_type": "struct",
+        "chapter": "目录",
+        "chapter_number": "",
+        "section": "",
+        "section_number": "",
+        "subsection": "",
+        "subsection_number": "",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "第4章数据分析章节导航了解数据分析常用的库 Pandas，能够读取关系型数据，使用统计、组合、排序、拼接等方法处理数据。了解机器学习与时间序列预测库 scikit-learn。了解图像处理库 OpenCV。本章知识导图\n4.1 数据分析基础\n4.1.1 读取与创建数据进行数据建模前，首先要读取数据。常见的数据存储格式有 JSON(JavaScript object notation,JS 对象简谱）、CSV(comma separated values，逗号分隔值）、XLSX 等。CSV 数据存储格式中每行保存的内容用空格作为分隔符，行与行之间用换行符隔开，CSV 数据可以用常见的表格处理软件打开，视图内容与 XLSX、XLS 格式的文件一样，但是与实际的数据结构有很大差别。使用 CSV 数据存储格式是因为这种类型的数据制作与保存较为方便，仅使用文本编辑器就可以快速编辑。下面是使用 CSV 格式存储电影名称和评分数据的示例。西线无战事 8.6\n名侦探柯南：万圣节的新娘 7.9\n危笑 6.3\n类似地，还有TSV数据格式，这种类型的数据是用制表符分隔数据，常见于问答系统的标注文件。本质上讲，各种类型的数据交换格式只是为了更加方便地处理数据，使用最基本的TXT文件也可以存储与读取文件。1.读取数据在 Python 语言中，Pandas 库用于处理关系型数据。使用 Pandas 库一般都是从导入库开始的，代码如下：读取文件\n\n在如表4-1所示的问答对中可以看到，第一列数据是问题，第二列数据是回答，类似这样按行和列划分的数据，可以简单地将其理解为关系型数据。人们通常把关系型数据存储到数据库中。在数据科学建模时，人们通常先把关系型数据导出为 CSV 或 XLSX文件。表4-1关系型数据：问答对表4-1\n关系型数据：问答对编号问题答案1三国演义的作者是谁？罗贯中2兔子的英文是什么？Rabbit3点灯是谁发明的爱迪生编号问题答案\n1\n三国演义的作者是谁？罗贯中\n2\n兔子的英文是什么？Rabbit\n3\n点灯是谁发明的爱迪生读取 CSV 文件可以使用read_csv(）函数，读取 XLSX文件可以使用read_excel(）函数，代码如下：import pandas as pd # 导入 pandas 库 book=pd.read_csv(\"book.csv\") # 使用 read_csv(）函数读取 CSV 文件 student=pd.read_excel(\"student.xlsx\")\nread_csv(）函数包含很多参数。例如，可以指定index_col参数，将 CSV 文件中的某一列作为索引，设置index_col=\"某一字段\"，这样读取数据时不会再创建新的索引；又如，date_parser参数可以将读取的数据转化为时间格式，这个方法在计算与时间相关的数据时特别重要。刚开始使用 Pandas库读取数据时，只需指定数据文件所在目录，其余参数使用默认值即可。读取数据后，可以使用shape属性查看读取的数据表的维度。book.shape # 注意这是一个属性，不带括号还可以使用head(）方法查看数据表的前5行，或使用tail(）方法查看数据表的后5行。book.head() # head(）方法可接受一个参数 n,n 表示显示的行数，默认为 5 book.tail() # head(）和 tail(）都是方法，需要带括号\n2.创建数据如果要创建新的数据表，可以使用以下代码实现：import pandas as pd qa=pd.DataFrame({'question':['今天的天气','兔子的英文怎么说'],'answer':['晴','rabbit']})\n这里使用了 Pandas库的十分重要的一种数据类型：DataFrame。DataFrame是一个数据表，DataFrame中的每一个条目都是一列，条目的名字就是列名。上面的代码中，创建了一个 DataFrame类型的数据表，表中包含两列数据，第一列是问题，第二列是答案。\n\n另一种常用的数据类型是Series，表示数据序列。DataFrame是数据表，Series是数据序列，注意不要混淆两种数据类型，这两种数据类型包含的方法是不同的。可以直接传入一个列表来构造一个Series对象，代码如下：pd.Series([1,2,3,4,5])\nSeries数据序列本质上是 DataFrame数据表中的一列。4.1.2 索引与选择\n1.获取单个数据列在处理数据时，往往需要选取某一列、某一行的数据，或按照某种要求进行数据筛选，Pandas库为此提供了十分便捷的选择功能。Pandas索引数据 4.1.2节~4.1.6节使用的数据是某网站上用户对一个影片的评论信息，包含用户的昵称、所在地、粉丝数量，以...",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "chunk_type": "shadow",
+        "chapter": "数据思维",
+        "chapter_number": "第1章",
+        "section": "",
+        "section_number": "",
+        "subsection": "",
+        "subsection_number": "",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "is_retweet bool verified int64 dtype:object\n此外，如果查看Series对象的数据类型，则需要使用Series.dtype属性。使用astype(）方法，可以更改数据类型，在处理包含相同字段的多个数据表时，常常会遇到不同表中同一字段名的数据类型不一致的问题。可以使用astype(）方法修改数据的类型。这种修改方法会对一个数据表中的某一列进行批量转换，而非对单个数值进行转换。例如，将user_followers字段的数据类型改为int32，代码如下：squid[\"user_followers_32\"]=squid[\"user_followers\"].astype(\"int32\") squid[\"user_followers_32\"].dtype\n输出结果如下：dtype('int32')\n在Pandas库中，可以很方便地查看与处理空值，isnull(）方法用于查看数据是否存在空值，fillna(）方法常用于填充缺失值。例如，查看用户所在位置为空的数据，并将空值填充为 Unknown，代码如下：unknown_loc =squid[squid[\"user_location\"].isnull()][\"user_location\"] unknown_loc.fillna('Unknown')\n输出结果如下：0 Unknown 1 Unknown 2 Unknown 6 Unknown 8 Unknown......29981 Unknown 29986 Unknown 29987 Unknown 29990 Unknown 29997 Unknown Name:user_location,Length:8622,dtype:object\n4.1.6 数据拼接在处理数据时，数据可能来自多个数据源。为了将多个数据源的数据拼接起来，可以\n\n使用pd.concat(）函数，代码如下：df1=squid.iloc[0:2,:] df2=squid.iloc[5:7,:] pd.concat([df1,df2])\n数据拼接的输出结果如图4-7所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verifieddate0the_ûndër-ratêdniggáhNaN@ManUtd die hard \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\2019-09-0619:24:57+00:0058110358922False2021-10-0612:05:38+00:001Best uncleon planetearthNaNNaN2013-05-0819:35:26+00:007417308432False2021-10-0612:05:22+00:005Peyman @@@UnitedKingdomOfficial @KardiaChain$KAIAmbassador\\nMarketi2018-01-2712:07:31+00:005463186265False2021-10-0612:04:54+00:006Aeriaaaa♡NaNFujoshi / Thai BL-obsessed/Alwaysdistracted2021-06-0114:08:10+00:0014110518False2021-10-0612:04:45+00:00\nuser_name\nuser_location\nuser_description\nuser_created\nuser_followers\nuser_friends\nuser_favourites\nuser_verified\ndate\n0\nthe_ûndër-ratêdniggáh\nNaN\n@ManUtd die hard \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n2019-09-0619:24:57+00:00\n581\n1035\n8922\nFalse\n2021-10-0612:05:38+00:00\n1\nBest uncleon planetearth\nNaN\nNaN\n2013-05-0819:35:26+00:00\n741\n730\n8432\nFalse\n2021-10-0612:05:22+00:00\n5\nPeyman @@@\nUnitedKingdom\nOfficial @KardiaChain$KAIAmbassador\\nMarketi\n2018-01-2712:07:31+00:00\n546\n318\n6265\nFalse\n2021-10-0612:04:54...",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "chunk_type": "shadow",
+        "chapter": "数据科学基本知识",
+        "chapter_number": "第2章",
+        "section": "",
+        "section_number": "",
+        "subsection": "",
+        "subsection_number": "",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    },
+    {
+      "content": "from lightgbm import LGBMClassifier # 假设有一个 DataFrame，其中包含特征（'feature1','feature2',...,'featureN'）和目标 # 变量（'target') data=pd.read_csv('your_data.csv') # 请用自己的数据文件路径替换'your_data.csv' # 划分训练集和测试集 X=data.drop('target',axis=1) y=data['target'] X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.2,random_ state=42) # 初始化模型 model=LGBMClassifier() # 训练模型 model.fit(X_train,y_train) # 预测测试集结果 y_pred=model.predict(X_test) # 计算预测准确率 accuracy=accuracy_score(y_test,y_pred) print(f'Accuracy:{accuracy}')",
+      "metadata": {
+        "source_file": "数据科学导论(案例版)_第4章.pdf",
+        "source_pages": [
+          26
+        ],
+        "chunk_type": "shadow",
+        "chapter": "Python 语言快速入门",
+        "chapter_number": "第3章",
+        "section": "",
+        "section_number": "",
+        "subsection": "",
+        "subsection_number": "",
+        "is_section_start": false,
+        "contains_exercise": false
+      }
+    }
+  ]
+}

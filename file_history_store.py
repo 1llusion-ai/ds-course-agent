@@ -46,5 +46,66 @@ class FileChatMessageHistory(BaseChatMessageHistory):
         def clear(self) -> None:
             with open(self.file_path, "w", encoding="utf-8") as f:
                 json.dump([], f)
+        
+        def delete(self) -> bool:
+            """删除历史记录文件"""
+            try:
+                if os.path.exists(self.file_path):
+                    os.remove(self.file_path)
+                    return True
+                return False
+            except Exception:
+                return False
+
+
+def get_all_sessions(storage_path=None):
+    """获取所有会话ID列表"""
+    if storage_path is None:
+        storage_path = config.storage_path
+    
+    if not os.path.exists(storage_path):
+        return []
+    
+    sessions = []
+    for filename in os.listdir(storage_path):
+        file_path = os.path.join(storage_path, filename)
+        if os.path.isfile(file_path):
+            sessions.append(filename)
+    return sessions
+
+
+def delete_session(session_id, storage_path=None):
+    """删除指定会话的历史记录"""
+    if storage_path is None:
+        storage_path = config.storage_path
+    
+    file_path = os.path.join(storage_path, session_id)
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def clear_all_sessions(storage_path=None):
+    """清空所有会话历史"""
+    if storage_path is None:
+        storage_path = config.storage_path
+    
+    if not os.path.exists(storage_path):
+        return 0
+    
+    count = 0
+    for filename in os.listdir(storage_path):
+        file_path = os.path.join(storage_path, filename)
+        if os.path.isfile(file_path):
+            try:
+                os.remove(file_path)
+                count += 1
+            except Exception:
+                pass
+    return count
 
 

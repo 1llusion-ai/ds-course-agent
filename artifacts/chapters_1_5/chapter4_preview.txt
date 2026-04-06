@@ -1,0 +1,372 @@
+《数据科学导论》第4章 - TOC-based Chunking V2
+============================================================
+
+总分块: 30
+  - 语义分块: 26
+  - 结构分块: 1
+  - 影子分块: 3
+平均大小: 1250 字符
+
+节覆盖: 4.1, 2.3, 4.2, 4.3
+子节覆盖: 4.1.1, 4.1.2, 4.1.3, 4.1.4, 4.1.5, 4.1.6, 4.2.1, 4.2.2, 4.2.3, 4.3.1, 4.3.2, 4.3.3, 4.3.4
+
+语义分块详情:
+------------------------------------------------------------
+
+--- Chunk 1 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.1 读取与创建数据
+页码: [1]
+字数: 617
+is_section_start: True
+contains_exercise: False
+内容:
+第4章数据分析章节导航了解数据分析常用的库 Pandas，能够读取关系型数据，使用统计、组合、排序、拼接等方法处理数据。了解机器学习与时间序列预测库 scikit-learn。了解图像处理库 OpenCV。本章知识导图
+4.1 数据分析基础
+4.1.1 读取与创建数据进行数据建模前，首先要读取数据。常见的数据存储格式有 JSON(JavaScript object notation,JS 对象简谱）、CSV(comma separated values，逗号分隔值）、XLSX 等。CSV 数据存储格式中每行保存的内容用空格作为分隔符，行与行之间用换行符隔开，CSV 数据可以用常见的表格处理软件打开，视图内容与 XLSX、XLS 格式的文件一样，但是与实际的数据结构有很大差别。使用 CSV 数据存储格式是因为这种类型的数据制作与保存较为方便，仅使用文本编辑器就可以快速编辑。下面是使用 CSV...
+
+--- Chunk 2 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.1 读取与创建数据
+页码: [2]
+字数: 1068
+is_section_start: False
+contains_exercise: False
+内容:
+在如表4-1所示的问答对中可以看到，第一列数据是问题，第二列数据是回答，类似这样按行和列划分的数据，可以简单地将其理解为关系型数据。人们通常把关系型数据存储到数据库中。在数据科学建模时，人们通常先把关系型数据导出为 CSV 或 XLSX文件。表4-1关系型数据：问答对表4-1
+关系型数据：问答对编号问题答案1三国演义的作者是谁？罗贯中2兔子的英文是什么？Rabbit3点灯是谁发明的爱迪生编号问题答案
+1
+三国演义的作者是谁？罗贯中
+2
+兔子的英文是什么？Rabbit
+3
+点灯是谁发明的爱迪生读取 CSV 文件可以使用read_csv(）函数，读取 XLSX文件可以使用read_excel(）函数，代码如下：import pandas as pd # 导入 pandas 库 book=pd.read_csv("book.csv") # 使用 read_csv(）函数读取 CSV 文件 stu...
+
+--- Chunk 3 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.2 索引与选择
+页码: [3]
+字数: 1973
+is_section_start: True
+contains_exercise: False
+内容:
+另一种常用的数据类型是Series，表示数据序列。DataFrame是数据表，Series是数据序列，注意不要混淆两种数据类型，这两种数据类型包含的方法是不同的。可以直接传入一个列表来构造一个Series对象，代码如下：pd.Series([1,2,3,4,5])
+Series数据序列本质上是 DataFrame数据表中的一列。4.1.2 索引与选择
+1.获取单个数据列在处理数据时，往往需要选取某一列、某一行的数据，或按照某种要求进行数据筛选，Pandas库为此提供了十分便捷的选择功能。Pandas索引数据 4.1.2节~4.1.6节使用的数据是某网站上用户对一个影片的评论信息，包含用户的昵称、所在地、粉丝数量，以及评论的发布时间、内容、来源等。首先读取数据文件并输出前5行数据，代码如下：# 读取数据 squid=pd.read_csv("Squid_Game_Netflix_Twitte...
+
+--- Chunk 4 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.2 索引与选择
+页码: [4]
+字数: 903
+is_section_start: False
+contains_exercise: False
+内容:
+数据。例如，squid数据表包含user_name字段，通过访问squid.user_name即可获取该列数据。输出结果如下：0 the_ûnder-ratèd niggáh 1 Best uncle on planet earth 2 marcie 3 YoMo.Mdp 4 Laura Reactions......29995 Lu Xu(Lou Shoe/徐露） 29996 See Ya,Sucker 29997 maddy earley 29998 29999 White Thunder Name:user_name,Length:30000,dtype:object
+另一种数据索引的方式是以字典的方式，Python语言有字典类型的数据，DataFrame 类型的数据可以用键值对的方式索引，如squid["user_name"]，该方法与第一种索引方法的结果相同。上述两种获取列数据的...
+
+--- Chunk 5 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.2 索引与选择
+页码: [5]
+字数: 1189
+is_section_start: False
+contains_exercise: False
+内容:
+输出结果如下：user_nameuser_location0the_under-ratedniggahNaN1Best uncle on planet earthNaN2marcieNaN3YoMo.MdpAny pronouns4Laura ReactionsFrance29995Lu Xu(Lou Shoe/徐露）Halifax,Nova Scotia29996See Ya,Sucker72429997maddy earleyNaN2999829999White ThunderSomewhere30000 rows×2 columns
+user_name
+user_location
+0
+the_under-ratedniggah
+NaN
+1
+Best uncle on planet earth
+NaN
+2
+marcie
+NaN
+3
+YoMo.Mdp
+Any pronouns
+4
+Lau...
+
+--- Chunk 6 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.2 索引与选择
+页码: [6]
+字数: 2051
+is_section_start: False
+contains_exercise: False
+内容:
+29995 2015-07-24 13:42:51+00:00 29996 2014-02-06 04:14:20+00:00 29997 2014-11-27 04:32:52+00:00 29998 2021-03-04 11:54:39+00:00 29999 2013-09-05 18:32:49+00:00 Name:user_created,Length:30000,dtype:object
+使用上述方法的结果与使用squid["user_created"】方法的结果相同。在上述方法中，注意到使用了冒号（:)，该符号也属于 Python语法，表示所有内容，当冒号与其他数值一起使用时，表示选择一定范围内的数据。例如，选择 user_name列的第1、2、3行数据，代码如下：squid.iloc[:3,0]
+输出结果如下：0 the_ûndër- ratèd niggáh
+1 Be...
+
+--- Chunk 7 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.2 索引与选择
+页码: [7]
+字数: 774
+is_section_start: False
+contains_exercise: False
+内容:
+4.基于标签选择数据基于标签选择数据使用loc属性，如选择user_name列的第2行数据，代码如下：squid.loc[1,'user_name']
+输出结果如下：'Best uncle on planet earth'
+squid.loc[1,'user_name'】的第一个参数为1，这里的1表示数据表的行标签，如果 1出现在iloc属性中，则表示索引序号。loc属性常常与iloc属性混淆。在使用iloc属性时，忽略了数据表的标签，也就是字段名和行名，直接将数据表当成一个矩阵，通过元素所在的行和列进行选择。通常情况下，在选择列数据时，每列都带有字段名，因此使用loc属性。5.条件筛选在 Pandas库中，可以使用条件语句对数据进行筛选，类似于 SQL 中 SELECT A FROM B WHERECONDITION 语句的功能，但使用 Pandas库的条件语句要方便得多。例如，需要筛选...
+
+--- Chunk 8 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.2 索引与选择
+页码: [8]
+字数: 2864
+is_section_start: False
+contains_exercise: False
+内容:
+user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verified4LauraReactionsFranceI talk and I makereactions videosabout shows2018-12-1920:38:28+00:003301522278False1539LauraReactionsFranceI talk and I makereactions videosabout shows2018-12-1920:38:28+00:003301522278False6022Nath L.FranceLe mondeappartient à ceuxqui rêventtrop!#lt2010-07-2520:14:08+00:001...
+
+--- Chunk 9 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.3 统计与映射
+页码: [9]
+字数: 1801
+is_section_start: True
+contains_exercise: False
+内容:
+squid[squid["user_location"].isin(['France','Germany','United States'])]
+使用isin(）方法筛选的输出结果如图4-5所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verified4LauraReactionsFranceI talk and I makereactions videosabout shows2018-12-1920:38:28+00:003301522278False26EarlyGameGermanyOwn Your Game2019-11-1314:56:55+00:0049381153963False47MyMasqueBar- Self-Car...
+
+--- Chunk 10 ---
+章节: 第4章 数据分析
+小节: 2.3 数据科学的基本流程
+子节: 4.1.3 统计与映射
+页码: [10]
+字数: 1055
+is_section_start: True
+contains_exercise: False
+内容:
+可以看到，describe(）方法给出了用户粉丝数的平均值、标准差、最小值、上四分位数、下四分位数等统计量，通过该方法可以对数据的分布有初步认识。如果要单独查看某个统计量，可以直接调用计算该统计量的方法，如计算平均值的代码如下：squid["user_followers"].mean()
+另一个较为有用的统计方法是info()，该方法能够输出每列数据的非空值的数量、数据类型，以及整个数据表的内存占用信息等。在数据建模时，一般要求输入特征不能为空，可以使用info(）方法查看，代码如下：squid.info()
+输出结果如下：<class'pandas.core.frame.DataFrame'> RangeIndex:30000 entries,0 to 29999 Data columns(total 12 columns):# Column Non- Null Count Dtype ...
+
+--- Chunk 11 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.3 统计与映射
+页码: [11]
+字数: 1294
+is_section_start: False
+contains_exercise: False
+内容:
+array(['Twitter for Android','Twitter Web App','Twitter for iPhone','Buffer','Twitter for iPad','PromoRepublic','TweetDeck','Instagram','Sprout Social','Hootsuite Inc.','Tweetbot for iOS','dlvr.it','Meltwater Social','Twitter for Mac',...,dtype=object)
+value_counts(）方法的作用是统计某个特征字段的不同取值的个数，该方法常用于性别统计、星座统计等。例如，对用户发布评论所使用的设备进行统计，代码如下：squid["source"].value_counts()
+输出结果如下：Twitter for iPhone13919Twitte...
+
+--- Chunk 12 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.3 统计与映射
+页码: [12]
+字数: 848
+is_section_start: True
+contains_exercise: False
+内容:
+输出结果如下：0 28987 1 1013
+Name:verified,dtype:int64
+分析上述代码，首先定义了check_verify(）函数，该函数接收一条数据作为输入，当该条数据中user_verified字段为 False时，返回0，否则返回1。然后，squid.apply(）方法调用了这个函数，并将结果赋值给新的列squid["verified"]。调用时check_verify不能带括号，如果带上括号就是将函数的返回结果作为输入，发送给apply(）方法。此外，squid.apply(check_verify,axis=1）中参数axis的取值是0或者1,0代表按照每列进行计算，1代表按照每行进行计算，此处是每次取一行数据，然后判断指定字段是 True还是 False，因此参数axis需要设置为1。4.1.4 组合与排序
+1.组合
+4.1.3节中，使用 value_co...
+
+--- Chunk 13 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.4 组合与排序
+页码: [13]
+字数: 777
+is_section_start: False
+contains_exercise: False
+内容:
+squid.groupby("source").user_followers.max()
+输出结果如下：15 Minute Fun 269 AT Auto Tweet 361 Agorapulse app 1585950 Apphi 8645 Bearguin 8070......sankoffoncor 7 tshell- bash 3814 tweetpancake 63 twitterproject122 16 www.keengamer.com 10408 Name:user_followers,Length:133,dtype:int64
+2.排序对数据进行聚合统计后，得到的统计数据没有按照大小顺序排列，使用sort_values() 方法可以对数据排序，代码如下：max_followers=squid.groupby("source").user_followers.max()...
+
+--- Chunk 14 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.5 数据类型与缺失值
+页码: [14]
+字数: 1593
+is_section_start: True
+contains_exercise: False
+内容:
+参数传入列表，代码如下：squid.sort_values(by=["user_followers","user_favourites"])
+sort_values(）方法的输出结果如图4-6所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verified282George.Athens,NYSarcasm is myhome.2021-10-0517:04:50+00:00010False349ToDisenyoNaNDesign,Marketing,Innovation2021-02-1910:23:21+00:000140False616IBADOMetro Manila,PhilippinesSelling locallymanufa...
+
+--- Chunk 15 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.6 数据拼接
+页码: [15]
+字数: 795
+is_section_start: True
+contains_exercise: False
+内容:
+is_retweet bool verified int64 dtype:object
+此外，如果查看Series对象的数据类型，则需要使用Series.dtype属性。使用astype(）方法，可以更改数据类型，在处理包含相同字段的多个数据表时，常常会遇到不同表中同一字段名的数据类型不一致的问题。可以使用astype(）方法修改数据的类型。这种修改方法会对一个数据表中的某一列进行批量转换，而非对单个数值进行转换。例如，将user_followers字段的数据类型改为int32，代码如下：squid["user_followers_32"]=squid["user_followers"].astype("int32") squid["user_followers_32"].dtype
+输出结果如下：dtype('int32')
+在Pandas库中，可以很方便地查看与处理空值，isnull(...
+
+--- Chunk 16 ---
+章节: 第4章 数据分析
+小节: 4.1 数据分析基础
+子节: 4.1.6 数据拼接
+页码: [16]
+字数: 2563
+is_section_start: False
+contains_exercise: False
+内容:
+使用pd.concat(）函数，代码如下：df1=squid.iloc[0:2,:] df2=squid.iloc[5:7,:] pd.concat([df1,df2])
+数据拼接的输出结果如图4-7所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verifieddate0the_ûndër-ratêdniggáhNaN@ManUtd die hard \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\2019-09-0619:24:57+00:0058110358922False2021-10-0612:05:38+00:001Best uncleon planetearthNaNNaN2013-05-0819:35:...
+
+--- Chunk 17 ---
+章节: 第4章 数据分析
+小节: 4.2 机器学习库 scikit-learn
+子节: 4.2.1 构建分类模型
+页码: [17]
+字数: 1242
+is_section_start: True
+contains_exercise: False
+内容:
+数据分析基础总结：本节主要介绍了数据科学工具库Pandas的基本使用，Pandas库主要用于操作关系型数据，使用Pandas库可以很方便地从持久化存储格式中读取数据，如数据库、CSV文件、TXT文件等。Pandas库内置了很多计算工具，方便用户进行数据分析。在数据工程中，往往会先使用Pandas库读取数据，对数据做预处理，如对数据进行统计分析，再对部分数据进行映射、聚合、填充缺失值等操作，方便后续将数据输入模型进行训练。除了阅读本书学习 Pandas库外，推荐有英文阅读基础的读者查找 Pandas库的官方文档，阅读更详细的函数说明。例如，pd.concat(）函数的默认参数还包括axis、join、levels 等，每个参数在官方文档中都有十分详细的说明，阅读官方文档能够快速提升使用 Pandas 库的熟练程度。4.2 机器学习库scikit-learn
+本节介绍 Python语言的机器学...
+
+--- Chunk 18 ---
+章节: 第4章 数据分析
+小节: 4.2 机器学习库 scikit-learn
+子节: 4.2.1 构建分类模型
+页码: [18]
+字数: 662
+is_section_start: False
+contains_exercise: False
+内容:
+X=iris.data y=iris.target # 可视化数据集中的前两个特征 plt.scatter(X[:,0],X[:,1],c=y,cmap='viridis') plt.xlabel('Sepal length') plt.ylabel('Sepal width') plt.title('Iris Dataset') plt.show()
+图4-9 鸢尾花数据集中花萼长度和花萼宽度的分布首先导入scikit-learn库和 NumPy库，代码如下：import numpy as np from sklearn import datasets from sklearn.model_selection import train_test_split from sklearn.preprocessing import StandardScaler from sklearn.svm ...
+
+--- Chunk 19 ---
+章节: 第4章 数据分析
+小节: 4.2 机器学习库 scikit-learn
+子节: 4.2.2 构建回归模型
+页码: [19]
+字数: 1036
+is_section_start: True
+contains_exercise: False
+内容:
+# 将数据集分成训练集和测试集 X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.2,random_ state=42) # 标准化数据
+scaler=StandardScaler() X_train=scaler.fit_transform(X_train)
+X_test=scaler.transform(X_test)
+创建一个SVM 分类器，即SVC类型的对象，并使用训练集数据进行训练。最后使用测试集数据进行预测，并计算分类器的准确率（accuracy)，代码如下：svm=SVC(kernel='linear',C=1,random_state=42) # 使用训练集数据进行训练 svm.fit(X_train,y_train) # 对测试集数据进行预测 y_pred=svm.predict(X_test) ...
+
+--- Chunk 20 ---
+章节: 第4章 数据分析
+小节: 4.2 机器学习库 scikit-learn
+子节: 4.2.3 构建聚类模型
+页码: [20]
+字数: 1033
+is_section_start: True
+contains_exercise: False
+内容:
+# 将数据集分成训练集和测试集 X_train,X _ test,y _ train,y _ test = train _ test _ split (X,y,test _ size = 0.2,random_state= 42) # 创建线性回归模型 regressor= LinearRegression() # 使用训练数据对模型进行训练 regressor.fit(X_train,y_train) # 对测试数据进行预测 y_ pred= regressor.predict(X_test) # 计算模型的均方误差 mse= mean_squared_error(y_test,y_pred) print("Mean squared error:",mse)
+4.2.3 构建聚类模型构建聚类模型使用的是聚类算法。聚类算法是机器学习中的一种无监督学习方法，用于将数据集中的数据分成不同的聚类...
+
+--- Chunk 21 ---
+章节: 第4章 数据分析
+小节: 4.3 图像处理库 OpenCV
+子节: 4.3.1 图像的读取与保存
+页码: [21]
+字数: 580
+is_section_start: True
+contains_exercise: False
+内容:
+plt.scatter(X[:,0],X[:,1],c=labels,cmap='viridis') plt.show()
+4.3 图像处理库 OpenCV
+OpenCV 库是一个开源的计算机视觉库，为开发者提供了一系列用于处理图像和视频的函数与工具。它被广泛应用于计算机视觉、机器学习和人工智能领域。它还可以与其他流行的机器学习库，如 TensorFlow 和 PyTorch等进行集成。OpenCV 库具有广泛的应用领域，它被用于物体检测和识别、人脸分析和识别、手势识别、运动跟踪。在 Python语言中，也可以使用pillow、scikit-image等库处理图像。4.3.1 图像的读取与保存在Python程序中使用 OpenCV 库时，需要通过cv2导入该库，可使用其中的imread() 函数读取图像，使用imshow(）函数显示图像，代码如下：import cv2 # 读取图像 img...
+
+--- Chunk 22 ---
+章节: 第4章 数据分析
+小节: 4.3 图像处理库 OpenCV
+子节: 4.3.2 图像的基本信息
+页码: [22]
+字数: 688
+is_section_start: True
+contains_exercise: False
+内容:
+lena.jpg的图像文件，并将其存储在img变量中。接下来，使用imshow(）函数将图像显示在屏幕上，如图 4-11 所示，并使用 waitKey(）函数等待用户按下任意键，最后使用 destroyAllWindows(）函数关闭所有打开的窗口。为了保存图像，可以使用imwrite(）函数将img变量中的图像保存为新图像文件new_image.jpg。图4-11 使用 OpenCV库读取图像并显示
+4.3.2 图像的基本信息使用 OpenCV 库读取的图像包含一些基本信息，常见的彩色图像有三个色彩通道，分别是 R（红）、G（绿）、B（蓝），而灰度图像仅有一个色彩通道。对于灰度图像，每个像素只有一个颜色通道值；对于彩色图像，每个像素有三个颜色通道值（红、绿、蓝）。下面的代码使用 OpenCV 库获取图像的宽度和高度。import cv2
+# 读取图像
+img=cv2.imread('im...
+
+--- Chunk 23 ---
+章节: 第4章 数据分析
+小节: 4.3 图像处理库 OpenCV
+子节: 4.3.3 图像的平移与旋转变换
+页码: [23]
+字数: 666
+is_section_start: False
+contains_exercise: False
+内容:
+import cv2 import numpy as np # 读取图像 img=cv2.imread('lena.jpg') # 定义平移矩阵，这里将图像向右移动 100 像素，向下移动 50 像素 M=np.float32([[1,0,100],[0,1,50]]) # 对图像进行平移变换 dst=cv2.warpAffine(img,M,(img.shape[1]+100,img.shape[0]+50)) # 显示平移后的图像 cv2.imshow('image',dst) cv2.waitKey(0) cv2.destroyAllWindows()
+要旋转图像，可以使用cv2.getRotationMatrix2D(）函数定义旋转矩阵，然后将其与原始图像进行矩阵乘法运算，代码如下：import cv2 # 读取图像 img=cv2.imread('lena.jpg') # 定义旋...
+
+--- Chunk 24 ---
+章节: 第4章 数据分析
+小节: 4.3 图像处理库 OpenCV
+子节: 4.3.4 图像的边缘信息提取
+页码: [24]
+字数: 665
+is_section_start: True
+contains_exercise: False
+内容:
+4.3.4 图像的边缘信息提取要使用 OpenCV 库提取图像边缘信息，可以使用 Canny边缘检测算法。Canny边缘检测算法是一种经典的边缘检测算法，它可以检测出图像中的强边缘，并抑制弱边缘，从而得到清晰的边缘图像，代码如下：import cv2
+# 以灰度模式读取图像
+img=cv2.imread('lena.jpg',cv2.IMREAD_GRAYSCALE)
+# 使用 Canny 边缘检测算法提取边缘信息
+edges=cv2.Canny(img,100,200)
+# 显示原始灰度图像和边缘信息图像
+cv2.imshow('Original Image',img)
+cv2.imshow('Edge Image',edges)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+在上述代码中，首先使用cv2.imread(）函数读取名为lena.jpg的图像...
+
+--- Chunk 25 ---
+章节: 第4章 数据分析
+小节: 4.2 机器学习库 scikit-learn
+子节: 4.2.1 构建分类模型
+页码: [25]
+字数: 1273
+is_section_start: True
+contains_exercise: False
+内容:
+cv2.imread(）函数读取的图像进行对比，两者读取的图像数据格式是否一致？从图像大小、格式、颜色通道的角度分别进行比较。2.使用 Python 语言的 Pandas 工具库，可以对关系型数据进行排序，使用 pandas.DataFrame.sort_values(）方法时，参数inplace的作用是什么？3.Pandas工具库不仅能从 XLS、XLSX等文件中读取数据，还能连接数据库获取数据。下面是使用 Pandas库从数据库中读取数据的代码，尝试使用 MySQL 创建一个数据库 StuDB，库中包含一张学生的基础信息表stu_info，运行下列代码，并从数据库中获取stu_ info表的全部数据。import pandas as pd from sqlalchemy import create_engine # 初始化数据库连接 # 按实际情况依次填写 MySQL 的用户名、密码、...
+
+--- Chunk 26 ---
+章节: 第4章 数据分析
+小节:  习题
+子节:  
+页码: [26]
+字数: 505
+is_section_start: False
+contains_exercise: False
+内容:
+from lightgbm import LGBMClassifier # 假设有一个 DataFrame，其中包含特征（'feature1','feature2',...,'featureN'）和目标 # 变量（'target') data=pd.read_csv('your_data.csv') # 请用自己的数据文件路径替换'your_data.csv' # 划分训练集和测试集 X=data.drop('target',axis=1) y=data['target'] X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.2,random_ state=42) # 初始化模型 model=LGBMClassifier() # 训练模型 model.fit(X_train,y_train) # 预测测试集结果 y_...
+

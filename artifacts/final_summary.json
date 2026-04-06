@@ -1,0 +1,22 @@
+{
+  "course": "数据科学导论",
+  "collection": "course_c37b7b78",
+  "embedding_model": "Qwen/Qwen3-Embedding-8B",
+  "embedding_dim": 4096,
+  "total_documents": 237,
+  "chapters": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "chunk_size": 800,
+  "chunk_overlap": 150,
+  "generated_at": "2026-04-06T17:17:28.953828"
+}

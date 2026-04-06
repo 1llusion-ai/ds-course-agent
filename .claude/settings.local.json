@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python build_course_kb.py \"data/数据科学导论\\(案例版\\)_第1章.pdf\")",
+      "Bash(python course_pdf_parser.py \"data/数据科学导论\\(案例版\\)_第1章.pdf\")",
+      "Bash(python:*)",
+      "Bash(tee build_chapter1_output.log)",
+      "Bash(conda activate:*)",
+      "Bash(nvidia-smi)",
+      "Bash(ls -la data/数据科学导论*_第[1-5]章.pdf)",
+      "Bash(tee artifacts/chapters_1_5/batch_log.txt)",
+      "Bash(ls:*)",
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(ollama pull:*)"
+    ]
+  }
+}

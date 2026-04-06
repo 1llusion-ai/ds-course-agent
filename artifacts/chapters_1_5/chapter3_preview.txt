@@ -1,0 +1,321 @@
+《数据科学导论》第3章 - TOC-based Chunking V2
+============================================================
+
+总分块: 28
+  - 语义分块: 25
+  - 结构分块: 1
+  - 影子分块: 2
+平均大小: 1030 字符
+
+节覆盖: 3.1, 3.2, 2.3, 3.3, 6.3, 2.2
+子节覆盖: 3.1.1, 3.1.2, 3.1.3, 3.2.1, 3.2.5, 3.2.2, 3.2.3, 3.2.4, 3.2.6, 3.3.1, 3.3.2, 3.3.3
+
+语义分块详情:
+------------------------------------------------------------
+
+--- Chunk 1 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.1 Python 语言基本简介
+子节: 3.1.1 Python 语言的历史及学习路线
+页码: [1]
+字数: 950
+is_section_start: True
+contains_exercise: False
+内容:
+第3章
+Python 语言快速人门章节导航了解 Python 语言的起源和应用领域。了解 Python 语言的特点，掌握 Python 语言的基础语法，Python 语言与其他编程语言的特性差异。· 能搭建 Python 环境，学会在命令行、PyCharm 编辑器和 Jupyter Notebook 等环境下编写 Python 代码并执行。本章知识导
+3.1 Python 语言基本简介本节主要介绍 Python 语言的起源、特性和集成开发环境，目的是让刚步入数据科学领域的读者了解 Python 语言的应用领域，理解使用 Python 语言进行数据科学分析与进行软件开发的区别。3.1.1 Python 语言的历史及学习路线
+Python 语言是一种通用的解释型高级语言，由吉多·范罗苏姆（Guido van Rossum）于1991年发明。它具有灵活、高效、易学的特点，并包含一组功能完备的标准...
+
+--- Chunk 2 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.1 Python 语言基本简介
+子节: 3.1.2 Python 语言的特性
+页码: [2]
+字数: 1351
+is_section_start: True
+contains_exercise: False
+内容:
+(1）初学期（0~3个月的学习周期）。对于零基础的初学者，通常需要1~4周的时间掌握 Python语言基础语法。如果初学者已经具备Java语言或 C 语言的基础，那么可以直接开始接触项目。刚开始接触 Python语言时，初学者可能会对一些概念感到困惑，但不用担心，随着学习的深入，这些概念会逐渐变得明朗。在这个阶段，可以进行一些简单的文档查找，完成初级的网络爬虫任务等。在学习过程中，除了学习 Python语言，学习者还会接触到一些操作系统和数据结构的知识，并逐渐掌握一些 HTML、串联样式表（cascading stylesheets,CSS)，甚至JavaScript(JS）语言的知识。(2）进阶期（3~6个月的学习周期）。在这个阶段，学习者已经开始应用 Python语言的一些进阶功能，如网络编程、多线程等技术。开始接触一些数据科学任务或系统运维任务，能够理解数据科学项目中的大部分代码，并...
+
+--- Chunk 3 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.1 Python 语言基本简介
+子节: 3.1.3 常用的集成开发环境
+页码: [3]
+字数: 1344
+is_section_start: True
+contains_exercise: False
+内容:
+调用，这种调用也成为一种微服务方式，使得 Python语言融入Java、C#等语言开发的应用。如下代码所示，使用 Python语言可以很方便地实现深度学习算法的模型创建。from timm.models import create_model model_name="pretrain_mae_base_patch16_224"device_name="cuda:0"drop_path_rate=0.0 input_size=224 model_path="./model/pretrain_mae_vit_base_mask_0.75_400e.pth"model=create_model(model_name=model_name,pretrained=False,drop_path_rate=drop_path_rate,drop_block_rate=None)
+凡事有利必有弊，解释型...
+
+--- Chunk 4 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.1 Python 语言基本简介
+子节: 3.1.3 常用的集成开发环境
+页码: [4]
+字数: 481
+is_section_start: False
+contains_exercise: False
+内容:
+数据分析的 Python语言发行版本，包含 SciPy、NumPy等190多个科学包及其依赖项。conda是开源包（packages）和虚拟环境（virtualenvironment）的管理系统。可以直接在官网下载 Anaconda软件。AnacondaNavigator是 Anaconda发行版中包含的桌面图形用户界面，是一个导航窗口，如图3-1所示，可以使用它启动JupyterNotebook或者JupyterLab，也可以使用它创建新的 Python环境或安装新的第三方库。图3-1 AnacondaNavigator窗口
+AnacondaPrompt是包含 Anaconda的一个数据科学计算环境的命令行终端。在这里可以运行操作系统的文件系统，可以在启动栏输入 AnacondaPrompt启动命令行终端窗口，并使用pip命令安装JupyterNotebook工具。安装完成后，输入Jup...
+
+--- Chunk 5 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.1 Python 语言基本简介
+子节: 3.1.3 常用的集成开发环境
+页码: [5]
+字数: 782
+is_section_start: False
+contains_exercise: False
+内容:
+JupyterNotebook（以下简称 Notebook）的使用相对 PyCharm 来说更简单，常用于数据的探索与可视化分析，下面介绍 Notebook的启动与使用方法。首先在 AnacondaPrompt中启动 Notebook，程序会在默认的浏览器中打开 Notebook，可以单击窗口右上角的 New 按钮创建一个新的 Notebook，如图3-3所示，最上方的菜单栏用于保存文件、修改文件、切换是否启动行号等。窗口中每一个灰色的方块称为一个代码单元（cell)，每个代码单元可以单独运行，也就是说，可以跳过某个代码单元直接运行下一个。需要注意的是，代码单元之间的变量是相互共享的，例如，在第一个代码单元导入了第三方工具库 Pandas，后续的代码单元都不再需要导入 Pandas就可以直接使用。此外，Notebook 运行文件的后缀是.ipynb，这与 Python程序的.py格式不同，...
+
+--- Chunk 6 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.2 Python 语言的语法
+子节: 3.2.1 变量及其赋值
+页码: [6]
+字数: 380
+is_section_start: True
+contains_exercise: False
+内容:
+图3-4 PyCharm 工作窗口
+3.2 Python语言的语法本节介绍 Python语言的语法。Python语言的基础语法与JS、C 语言等有很多共同之处，如数据类型、基本操作运算符、函数的定义等。通过本节的学习，读者将掌握基础的 Python语法，并能够使用 Python语言完成基础的文件读取与保存操作。3.2.1 变量及其赋值
+1.变量赋值和其他语言一样，Python语言也使用等号（=）为变量赋值，变量名在等号左侧，需要赋值的内容在等号右侧。关于变量赋值，要注意如下几点：(1）变量需声明再使用；(2）不规定变量的类型；(3）不规定数组长度。下面代码的功能是使用 Python语言声明变量。# 此处没有显式声明创建的变量的类型 a=1 b="How Are You"# 数组长度可变，在 Python 语言中下面的数组也称为列表 c=[1,2,3]...
+
+--- Chunk 7 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.2 Python 语言的语法
+子节: 3.2.5 函数
+页码: [7]
+字数: 1117
+is_section_start: True
+contains_exercise: False
+内容:
+Java语言（或 C语言）是较为严格的编程语言，在声明变量时，需要声明变量的类型，在创建数组时，需要声明数组的长度。下面的代码是使用Java语言声明变量。int a=5;String b="How Are you";// 数组长度不可变 int[]c=new int[]{1,2,3}；在 Python语言中，可以使用print(）函数在终端打印内容。my_name="Tony"print(my_name) # 终端会输出 Tony
+可以发现，在 Python语言中不会显式声明创建的变量的类型，甚至在定义函数时也不需要规定变量的输入类型。Python解释器会自动对数据的类型进行解析。例如，数组c=[1,2,"hello",4,5]，若要循环打印其中的元素，即print(c),Python 解释器会依次解析每个元素的数据类型。因为1和hello属于不同的数据类型，占用的内存空间是不一样的，而顺...
+
+--- Chunk 8 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.2 Python 语言的语法
+子节: 3.2.2 运算符与标准库
+页码: [8]
+字数: 772
+is_section_start: True
+contains_exercise: False
+内容:
+3.2.2 运算符与标准库在 Python语言中使用运算符进行计算。例如，3+4+5的操作，其中3、4、5称为操作数，而+称为运算符。a=3 b=4 c=5 result=a**2+b**2-c**2 # **2 表示 2 次方 print(result) # 结果为 0 print(a*b) # 结果为 12 print(a/c) # 结果为 0.6 # 在 Python 语言中，加号可以用于连接字符串 name="Jack"intro="My name is"+name print(intro) # 结果为 My name is Jack
+此外，如果进行更加复杂的计算，如计算半径为2cm 的圆的面积，又或者计算log(12）的结果，可以借助Python语言的标准库 math。下面使用标准库 math进行计算，log(）函数的底数默认为e。# 使用 import 导入标准库 math i...
+
+--- Chunk 9 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.2 Python 语言的语法
+子节: 3.2.3 流程控制与循环结构
+页码: [9]
+字数: 756
+is_section_start: False
+contains_exercise: False
+内容:
+执行的代码块。流程控制是程序执行的核心功能。Python语言中的流程控制一般使用if、else、elif(elseif的缩写）。在 Python语言中，一条控制语句可以包含多个条件，每个条件之间可以使用and、or连接。# 判断是否成年 age=16 if age>=18:print("成年了") else:print("未成年")
+上面的代码使用if、else判断变量的数值，如果age大于或等于18，打印"成年了"，如果age小于18，打印"未成年"。除了if、else语句之外，缩进是 Python语言中区分代码块的重要工具，一般使用键盘上的 Tab键或4个空格为一个缩进。因此，如果在if语句中写一个for循环，for循环中的代码块就需要两个缩进。# 判断成绩 score=85 if score>=90:grade='A' # 在一条判断语句中可以使用多个判断条件 elif score>...
+
+--- Chunk 10 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.2 Python 语言的语法
+子节: 3.2.3 流程控制与循环结构
+页码: [10]
+字数: 913
+is_section_start: False
+contains_exercise: False
+内容:
+# 对数组中的元素进行遍历 fruits=["apple","banana","peach"] for fruit in fruits:print(fruit)
+for循环还可以结合else语句使用，for循环中的语句和普通语句没有区别，else语句在循环正常执行完的情况下执行，如查找指定数字范围内的质数。for num in range(11,25):# 迭代 11~ 24 之间的数字 for i in range(2,num):# 根据因子迭代 if num%i==0:# 确定第一个因子 j=num/i # 计算第二个因子 print('%d 等于%d * %d'% (num,i,j)) break # 跳出当前循环 else:# 循环的 else 部分 print('%d 是一个质数'% num)
+3.while循环
+while循环与for循环的功能类似，但在一些场景中 while循...
+
+--- Chunk 11 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.2 Python 语言的语法
+子节: 3.2.4 数据类型
+页码: [11]
+字数: 861
+is_section_start: True
+contains_exercise: False
+内容:
+3.2.4 数据类型
+1.列表列表是Python语言中的重要数据类型，在JS语言中被称为数组，Python 语言中的列表具有如下特点：Python常见数据类型的区别 (1）列表是 Python语言中内置的有序、可变序列，列表的所有元素放在一对方括号"[]"中，并使用逗号隔开；(2）当列表元素增加或删除时，列表对象自动扩展或收缩内存，保证元素之间没有缝隙。在 Python语言中，一个列表中的数据类型可以各不相同。# 定义列表时，不需要规定列表的长度 list_a=['chinese','math',1997,2000] # 列表中可以包含不同类型的数据 list_b=[5,3,3,4,5] list_c=["a","b","c","d"]
+使用下标直接访问列表元素，使用冒号":"分隔，可以访问列表中的多个元素，如果指定的下标不存在，则抛出异常。list_a=[2,3,4,5,6] print...
+
+--- Chunk 12 ---
+章节: 第3章 Python 语言快速入门
+小节: 2.3 数据科学的基本流程
+子节: 3.2.4 数据类型
+页码: [12]
+字数: 863
+is_section_start: True
+contains_exercise: False
+内容:
+a_List=[3,4,5,7,9,11,13,15,17] a_List.insert(3,6) # 在下标为 3 的位置插入元素 6 print(a_List) # 结果为【3,4,5,6,7,9,11,13,15,17]
+使用pop(）方法可以删除元素，默认从列表的末尾删除元素，也可以删除指定下标处的元素，如果指定的下标超出索引则会报错。a_list=[3,5,7,9,11] # 使用 pop(）方法删除元素 a_list.pop() # 默认从列表结尾删除元素 print(a_list) # 结果为【3,5,7,9] a_list.pop(1) # 删除下标为 1 的元素 print(a_list) # 结果为【3,7,9]
+2.元组元组和列表类似，但元组属于不可变序列，元组一旦创建，用任何方法都不可以修改其元素。元组的定义方式和列表相同，但定义时所有元素是放在一对圆括号"()"中...
+
+--- Chunk 13 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.2 Python 语言的语法
+子节: 3.2.4 数据类型
+页码: [13]
+字数: 866
+is_section_start: False
+contains_exercise: False
+内容:
+a={3,5} a.add(7) # 向集合中添加元素 print(a) # 结果为{3,5,7} # 使用 set(）方法将其他类型的数据转换为集合 b_set=set([0,1,2,3,0,1,2,3,7,8]) # 自动去除重复的元素 # 删除元素 a={1,4,2,3} print(a.pop()) # 结果为 1
+pop(）方法随机删除集合中的一个元素，并返回删除的元素。集合支持交集、并集、差集等运算。a_set=set([8,9,10,11,12,13]) b_set={0,1,2,3,7,8} a_set| b_set # 并集，结果为{0,1,2,3,7,8,9,10,11,12,13} a_set.union(b_set) # 并集的第二种写法，结果为{0,1,2,3,7,8,9,10,11,12,13} a_set & b_set # 交集，结果为{8} a_set.i...
+
+--- Chunk 14 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.2 Python 语言的语法
+子节: 3.2.5 函数
+页码: [14]
+字数: 717
+is_section_start: True
+contains_exercise: False
+内容:
+Traceback (most recent call last):File"<pyshell# 53>",line 1,in <module> aDict['tel'] KeyError:'tel'
+使用字典对象的get(）方法可以获取指定键对应的值，并且可以在键不存在的时候返回指定值。aDict={'name':'Dong','sex':'male','age':37} print(aDict.get('address')) # 结果为 None print(aDict.get('name')) # 结果为 Dong
+使用字典对象的items(）方法可以返回由字典的键、值组成的元组；使用字典对象的 keys(）方法可以返回字典的键；使用字典对象的values(）方法可以返回字典的值。aDict={'name':'Dong','sex':'male','age':37} for item...
+
+--- Chunk 15 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.2 Python 语言的语法
+子节: 3.2.5 函数
+页码: [15]
+字数: 882
+is_section_start: False
+contains_exercise: False
+内容:
+数组中元素的最大值和最小值。array_a=[3,4,5,6] len(array_a) # array_a 包含 4 个元素，因此 array_a 的长度为 4 min(array_a) # 结果为 3 max(array_a) # 结果为 6
+2.函数的定义对于一些更加复杂的功能，需要自行创建函数完成。可以使用 Python语言中的def关键字定义函数。# 定义函数 get_area()，用于计算长方形面积 # width 和 height 是函数 get_area(）的输入参数，即长方形的宽和高 def get_area(width,height):area=width*height # 将计算之后的值返回 return area # 调用函数 area=get_area(4,5) print(area) # 结果为 20
+这里的函数和在高中课本上函数的意义基本相同，都是输入一些参数...
+
+--- Chunk 16 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.2 Python 语言的语法
+子节: 3.2.6 面向对象
+页码: [16]
+字数: 844
+is_section_start: True
+contains_exercise: False
+内容:
+for a in a_list:if a % 7==0:array_a.append(a) # 返回数组类型的数据 return array_a
+print(array_a) # 会报错，提示无法打印结果，因为 array_a 未被定义，这是因为 array_a 是 # 函数内部的局部变量，无法作为全局变量使用将最后一行语句改为如下两行代码，输出正确结果：result=operation(a) print(result) # 结果为【7,14,21,28]
+读者可以试着使用自定义函数，计算给定半径的圆的周长和面积，或者计算一组数据的方差和标准差。3.2.6 面向对象
+1.面向对象的概念面向对象是一种抽象化的编程思想。首先介绍以下两个概念：类和对象。(1）类：描述事物的抽象概念，是对一系列具有相同特征和行为的事物的统称，如动物类。(2）对象/实例：由类创建出来的真实存在的结果，是类的实例化的...
+
+--- Chunk 17 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.2 Python 语言的语法
+子节: 3.2.6 面向对象
+页码: [17]
+字数: 1182
+is_section_start: False
+contains_exercise: False
+内容:
+tony=Student("Tony","male","23") tony.display_student_info() # 结果为 Tony male 23
+代码中，第一行声明了类的名称Student，一般类的名称的首字母大写。对于包含多个单词的类名，使用大写字母开头的驼峰命名法：每个单词的首字母大写。Student类有两种方法，第一种方法 __init__ (）是一种特殊的方法，被称为类的构造函数或初始化方法，创建这个类的实例时就会调用该方法，因此后续在实例化Student类时，需要按顺序传入name、gender和age参数的值。第二种方法display_studenti_nfo(）是Student类的另一种方法，用于打印当前实例包含的变量name、gender和age。除此之外，Student类中的每种方法都传入了变量self,self代指实例化后的实例本身。例如，代码中的self...
+
+--- Chunk 18 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.3 网络爬虫实践
+子节: 3.3.1 爬虫库与爬虫安全
+页码: [18]
+字数: 708
+is_section_start: True
+contains_exercise: False
+内容:
+3.3 网络爬虫实践在互联网时代，网络爬虫（简称爬虫）是被普遍运用的一项网络信息搜集技术。该项技术最早被应用于搜索引擎领域，是搜索引擎获取数据的支撑性技术之一。爬虫的目的是收集信息，为数据分析与建模提供数据。例如，一个电影推荐系统想要为用户推荐电影，它首先需要掌握用户对电影的偏好，从电影评分网站上获取各类电影的类型与评分，再基于评分数据建立推荐系统。在构建这个推荐系统的数据获取阶段，如果数据量不大，可以采用人工搜索的方式逐一获取数据，而当数据量增大且数据源不断更新时，就需要使用爬虫工具自动爬取数据。爬取数据的网站一般带有大量的数据，如旅游网站、电商网站或电影资源网站。以豆瓣电影网站为例，豆瓣电影排行榜如图3-5所示，可以通过访问 https://movie.douban.com/ chart获取网站资源。上述链接称为统一资源定位符（uniformresourcelocator,URL)。图...
+
+--- Chunk 19 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.3 网络爬虫实践
+子节: 3.3.2 爬虫流程
+页码: [19]
+字数: 1013
+is_section_start: True
+contains_exercise: False
+内容:
+若被爬网站设定了获取数据信息的措施（包括实名认证、账号密码、内部权限等），爬虫企业应避免通过伪造实名认证或窃取账号密码、内部权限的形式获取数据。(3）参考网站中的robots.txt文件，合法爬取网站内容。很多网站都会设置robots.txt文件，用来规范、约束或者禁止爬虫对网站中数据的采集等操作。robots.txt文件用于禁止爬虫访问网站的指定目录。robots.txt文件采用面向行的语法，分为空行、注释行（以 # 开头）、规则行。规则行的格式为 Field:value。常见的规则行包括 User-agent、Disallow、Allow 行。下面是豆瓣网站的robots.txt。Disallow 表示哪些网站目录中的资源文件是不被允许访问的，如果违反该约束就会被网站封IP地址。Allow 表示哪些网站目录中的资源文件是被允许访问的。User-agent:*
+Disallow:/sub...
+
+--- Chunk 20 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.3 网络爬虫实践
+子节: 3.3.3 案例介绍
+页码: [20]
+字数: 861
+is_section_start: True
+contains_exercise: False
+内容:
+在爬取网站内容前，请浏览网站的robots.txt文件，确认感兴趣的内容可以被爬取，再进行爬虫操作。在使用爬虫爬取网站内容时，标准做法是先使用 Python语言的requests 库将网站的内容缓存到本地，requests库可以伪装成浏览器，将网页访问请求发送给目标服务器，并获得网站的内容。由于网站的内容是半结构化的 HTML文本，文本中包含了大量的 HTML标签和 CSS修饰文本，使用 Python语言的正规表达式获取感兴趣的内容的难度较高，因此可以使用爬虫工具库 BeautifulSoup解析缓存到本地的网页内容，把页面解析成较容易处理的对象，然后使用 BeautifulSoup库内置的方法从中找到感兴趣的数据，并一一提取出来，然后将数据保存到文本文件或数据库中。3.3.3 案例介绍本节案例使用豆瓣电影排行榜的数据实现一个简单的爬虫应用，从豆瓣电影排行榜爬取排名靠前电影的名称、评分和电...
+
+--- Chunk 21 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.3 网络爬虫实践
+子节: 3.3.3 案例介绍
+页码: [21]
+字数: 1249
+is_section_start: False
+contains_exercise: False
+内容:
+使用requests库可以获取当前页面的内容，代码如下所示。其中前两行使用import语句导入爬虫需要用到的库，然后定义了 headers参数，用于保存访问网站时的请求头信息。get_url(）函数使用 GET 请求方法从服务器获取网站页面的所有内容。import requests from bs4 import BeautifulSoup headers={'User-Agent':'Mozilla/5.0 (Windows NT 10.0;Win64;x64) AppleWebKit/537.36 (KHTML,like Gecko)''Chrome/93.0.4577.63 Safari/537.36 Edg/93.0.961.47' } def get_url(url):response=requests.get(url=url,headers=headers) if respon...
+
+--- Chunk 22 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.3 网络爬虫实践
+子节: 3.3.3 案例介绍
+页码: [22]
+字数: 801
+is_section_start: False
+contains_exercise: False
+内容:
+lxml或 BeautifulSoup等库解析 HTML 结构的文本并使用它们定位 HTML 文本中的节点信息，快速获取感兴趣的数据。使用 BeautifulSoup库解析 HTML文本的代码如下：url="https://movie.douban.com/chart"content=get_url(url) soup=BeautifulSoup(content,'html.parser')
+其中，url变量是豆瓣电影排行榜页面的地址，get_url(）函数会根据传入的网址，将访问到的信息缓存到本地，然后根据content变量，对豆瓣电影排行榜页面的 HTML文本进行解析，实例化为一个 BeautifulSoup类的对象，以便于后续采集数据。为了获取电影名称、评分和电影介绍网页 URL，需要定位这些数据所在的位置，即观察div标签位置与class属性的内容。通过这些位置信息，使用Beaut...
+
+--- Chunk 23 ---
+章节: 第3章 Python 语言快速入门
+小节: 3.3 网络爬虫实践
+子节: 3.3.3 案例介绍
+页码: [23]
+字数: 846
+is_section_start: False
+contains_exercise: False
+内容:
+图3-8 使用调试工具获取网页内容根据用调试工具获取的标签信息，使用 BeautifulSoup库提供的工具获取指定信息，代码如下所示：movies_intro=soup.find_all(name='div',attrs={"class":"pl2"}) for movie_intro in movies_intro:title=movie_intro.find_all("a") rating _ content = movie _ intro.find _ all (name ="div",attrs = {"class":"star clearfix"}) if len(rating_content) ==0:continue rating _ score = rating _ content [0].find _ all (name ="span",attrs = {"class"...
+
+--- Chunk 24 ---
+章节: 第3章 Python 语言快速入门
+小节: 6.3 其他算法
+子节:  
+页码: [24]
+字数: 1341
+is_section_start: True
+contains_exercise: True
+内容:
+<p class="pl">2022-09-12（多伦多电影节）/ 2022-09-29（德国）/2022-10-28（德国网络）/费利克斯·卡米勒/阿尔布雷希特·舒赫/亚伦·希尔默/丹尼尔·布鲁赫/塞巴斯蒂安·胡克/莫里茨·克劳斯/阿德里安·格鲁内瓦尔德/埃丁·哈萨诺维奇/蒂博·德·蒙塔朗贝尔...</p> <div class="star clearfix"> <span class="allstar45"></span> <span class="rating_nums">8.6</span> <span class="pl">(64832 人评价）</span> </div> </div>,<div class="pl2"> <a class=""href="https://movie.douban.com/subject/35437938/"> 名侦探柯南：万圣节的新娘 /< s...
+
+--- Chunk 25 ---
+章节: 第3章 Python 语言快速入门
+小节: 2.2 数据科学
+子节:  
+页码: [25]
+字数: 491
+is_section_start: True
+contains_exercise: True
+内容:
+for letter in"Jack":if letter=='c':continue else:print(letter)
+2.写出下列代码的输出结果。list01=['python',786,2.23,'john',70.2] print(list01[0]) print(list01[-1]) print(list01[0:3])
+3.简述Python语言中元组、列表、集合与字典的区别。如果想改变元组中的元素，可以采用什么方式？4.写出下列代码的输出结果，并观察其中有什么规律。num_list=[] for num in range(2,100):for i in range(2,num):if num% i==0:break else:num_list.append(num) print(num_list)
+5.使用 Python语言中的 while循环与break关键字实现一个数...
+
