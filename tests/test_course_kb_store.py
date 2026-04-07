@@ -10,7 +10,7 @@ class TestSanitizeCollectionName:
 
     def test_sanitize_chinese_name(self):
         """测试中文名称转换"""
-        from course_kb_store import sanitize_collection_name
+        from kb_builder.store import sanitize_collection_name
         
         result = sanitize_collection_name("数据科学导论")
         
@@ -21,7 +21,7 @@ class TestSanitizeCollectionName:
 
     def test_sanitize_english_name(self):
         """测试英文名称"""
-        from course_kb_store import sanitize_collection_name
+        from kb_builder.store import sanitize_collection_name
         
         result = sanitize_collection_name("Data Science Introduction")
         
@@ -31,7 +31,7 @@ class TestSanitizeCollectionName:
 
     def test_sanitize_empty_name(self):
         """测试空名称"""
-        from course_kb_store import sanitize_collection_name
+        from kb_builder.store import sanitize_collection_name
         
         result = sanitize_collection_name("")
         
@@ -39,7 +39,7 @@ class TestSanitizeCollectionName:
 
     def test_sanitize_special_chars(self):
         """测试特殊字符"""
-        from course_kb_store import sanitize_collection_name
+        from kb_builder.store import sanitize_collection_name
         
         result = sanitize_collection_name("test@#$%name!")
         
@@ -51,7 +51,7 @@ class TestSanitizeCollectionName:
 
     def test_sanitize_long_name(self):
         """测试超长名称"""
-        from course_kb_store import sanitize_collection_name
+        from kb_builder.store import sanitize_collection_name
         
         long_name = "a" * 600
         result = sanitize_collection_name(long_name)
@@ -61,7 +61,7 @@ class TestSanitizeCollectionName:
 
     def test_sanitize_short_name(self):
         """测试过短名称"""
-        from course_kb_store import sanitize_collection_name
+        from kb_builder.store import sanitize_collection_name
         
         result = sanitize_collection_name("ab")
         
@@ -73,7 +73,7 @@ class TestCourseKnowledgeBase:
 
     def test_collection_name_logic(self):
         """测试 collection 名称逻辑"""
-        from course_kb_store import sanitize_collection_name
+        from kb_builder.store import sanitize_collection_name
         
         course_name = "测试课程"
         custom_collection = "custom_collection"
@@ -96,7 +96,7 @@ class TestCourseKnowledgeBase:
 
     def test_clear_method_with_cached_chroma_class(self):
         """测试 clear() 方法使用缓存的 Chroma 类"""
-        from course_kb_store import CourseKnowledgeBase
+        from kb_builder.store import CourseKnowledgeBase
         
         mock_vector_store = MagicMock()
         mock_chroma = MagicMock(return_value=mock_vector_store)
@@ -134,7 +134,7 @@ class TestCollectionNaming:
 
     def test_no_double_prefix(self):
         """测试避免双前缀"""
-        from course_kb_store import sanitize_collection_name
+        from kb_builder.store import sanitize_collection_name
         
         result = sanitize_collection_name("course_test")
         
@@ -147,7 +147,7 @@ class TestIngestResult:
 
     def test_ingest_result_dataclass(self):
         """测试入库结果数据类"""
-        from course_kb_store import IngestResult
+        from kb_builder.store import IngestResult
         
         result = IngestResult(
             source_file="test.pdf",
@@ -168,7 +168,7 @@ class TestKBStatus:
 
     def test_kb_status_dataclass(self):
         """测试状态数据类"""
-        from course_kb_store import KBStatus
+        from kb_builder.store import KBStatus
         
         status = KBStatus(
             collection_name="test_collection",

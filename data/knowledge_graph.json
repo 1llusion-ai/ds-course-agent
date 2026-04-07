@@ -1,0 +1,222 @@
+{
+  "course_name": "数据科学导论",
+  "version": "1.0",
+  "concepts": [
+    {
+      "canonical_id": "data_science_definition",
+      "display_name": "数据科学定义",
+      "aliases": ["什么是数据科学", "data science", "数据科学是什么", "数据科学的定义"],
+      "related_concepts": ["数据分析", "机器学习", "大数据"],
+      "chapter": "第1章",
+      "section": "1.1"
+    },
+    {
+      "canonical_id": "data_collection",
+      "display_name": "数据采集",
+      "aliases": ["数据收集", "data collection", "如何获取数据", "数据来源"],
+      "related_concepts": ["爬虫", "API", "问卷调查"],
+      "chapter": "第2章",
+      "section": "2.1"
+    },
+    {
+      "canonical_id": "data_cleaning",
+      "display_name": "数据清洗",
+      "aliases": ["数据预处理", "data cleaning", "数据清理", "缺失值处理", "异常值处理"],
+      "related_concepts": ["缺失值", "异常值", "数据标准化", "特征工程"],
+      "chapter": "第2章",
+      "section": "2.3"
+    },
+    {
+      "canonical_id": "eda",
+      "display_name": "探索性数据分析",
+      "aliases": ["EDA", "exploratory data analysis", "数据探索", "描述性统计"],
+      "related_concepts": ["数据可视化", "统计分布", "相关性分析"],
+      "chapter": "第3章",
+      "section": "3.1"
+    },
+    {
+      "canonical_id": "data_visualization",
+      "display_name": "数据可视化",
+      "aliases": ["可视化", "data visualization", "画图", "图表", "matplotlib", "seaborn"],
+      "related_concepts": ["EDA", "散点图", "柱状图", "箱线图"],
+      "chapter": "第3章",
+      "section": "3.2"
+    },
+    {
+      "canonical_id": "descriptive_statistics",
+      "display_name": "描述性统计",
+      "aliases": ["均值", "方差", "标准差", "中位数", "众数", "descriptive statistics"],
+      "related_concepts": ["推断性统计", "集中趋势", "离散程度"],
+      "chapter": "第4章",
+      "section": "4.1"
+    },
+    {
+      "canonical_id": "probability",
+      "display_name": "概率基础",
+      "aliases": ["概率", "probability", "概率分布", "随机变量"],
+      "related_concepts": ["条件概率", "贝叶斯定理", "正态分布"],
+      "chapter": "第4章",
+      "section": "4.2"
+    },
+    {
+      "canonical_id": "hypothesis_testing",
+      "display_name": "假设检验",
+      "aliases": ["假设检验", "hypothesis testing", "t检验", "p值", "显著性检验"],
+      "related_concepts": ["置信区间", "统计推断", "显著性水平"],
+      "chapter": "第4章",
+      "section": "4.4"
+    },
+    {
+      "canonical_id": "linear_regression",
+      "display_name": "线性回归",
+      "aliases": ["线性回归", "linear regression", "最小二乘法", "最小二乘", "回归分析"],
+      "related_concepts": ["回归系数", "R平方", "多元回归", "过拟合"],
+      "chapter": "第5章",
+      "section": "5.1"
+    },
+    {
+      "canonical_id": "logistic_regression",
+      "display_name": "逻辑回归",
+      "aliases": ["逻辑回归", "logistic regression", "分类", "二分类"],
+      "related_concepts": ["sigmoid", "分类问题", "阈值"],
+      "chapter": "第5章",
+      "section": "5.2"
+    },
+    {
+      "canonical_id": "supervised_learning",
+      "display_name": "监督学习",
+      "aliases": ["监督学习", "supervised learning", "有监督学习", "带标签数据"],
+      "related_concepts": ["分类", "回归", "训练集", "测试集"],
+      "chapter": "第6章",
+      "section": "6.1"
+    },
+    {
+      "canonical_id": "svm",
+      "display_name": "支持向量机",
+      "aliases": ["支持向量机", "SVM", "support vector machine", "支持向量", "最大间隔"],
+      "related_concepts": ["核函数", "分类边界", "软间隔", "核技巧"],
+      "chapter": "第6章",
+      "section": "6.2"
+    },
+    {
+      "canonical_id": "svm_kernel",
+      "display_name": "核函数",
+      "aliases": ["核函数", "kernel function", "核技巧", "kernel trick", "核方法", "径向基核", "RBF", "多项式核"],
+      "related_concepts": ["SVM", "非线性分类", "高维映射", "高斯核"],
+      "chapter": "第6章",
+      "section": "6.3"
+    },
+    {
+      "canonical_id": "decision_tree",
+      "display_name": "决策树",
+      "aliases": ["决策树", "decision tree", "信息熵", "信息增益", "ID3", "C4.5", "CART"],
+      "related_concepts": ["剪枝", "随机森林", "集成学习", "基尼指数"],
+      "chapter": "第6章",
+      "section": "6.4"
+    },
+    {
+      "canonical_id": "knn",
+      "display_name": "K近邻算法",
+      "aliases": ["K近邻", "KNN", "k-nearest neighbors", "最近邻"],
+      "related_concepts": ["距离度量", "欧氏距离", "K值选择"],
+      "chapter": "第6章",
+      "section": "6.5"
+    },
+    {
+      "canonical_id": "naive_bayes",
+      "display_name": "朴素贝叶斯",
+      "aliases": ["朴素贝叶斯", "naive bayes", "贝叶斯分类器"],
+      "related_concepts": ["贝叶斯定理", "条件独立", "文本分类"],
+      "chapter": "第6章",
+      "section": "6.6"
+    },
+    {
+      "canonical_id": "ensemble_learning",
+      "display_name": "集成学习",
+      "aliases": ["集成学习", "ensemble learning", "随机森林", "random forest", "bagging", "boosting"],
+      "related_concepts": ["决策树", "投票", "Adaboost", "XGBoost"],
+      "chapter": "第6章",
+      "section": "6.7"
+    },
+    {
+      "canonical_id": "unsupervised_learning",
+      "display_name": "无监督学习",
+      "aliases": ["无监督学习", "unsupervised learning", "聚类", "降维"],
+      "related_concepts": ["K-means", "层次聚类", "PCA", "无标签数据"],
+      "chapter": "第7章",
+      "section": "7.1"
+    },
+    {
+      "canonical_id": "kmeans",
+      "display_name": "K-means聚类",
+      "aliases": ["K-means", "kmeans", "K均值", "K均值聚类"],
+      "related_concepts": ["聚类中心", "肘部法则", "轮廓系数"],
+      "chapter": "第7章",
+      "section": "7.2"
+    },
+    {
+      "canonical_id": "pca",
+      "display_name": "主成分分析",
+      "aliases": ["PCA", "主成分分析", "principal component analysis", "降维"],
+      "related_concepts": ["特征提取", "方差", "协方差矩阵"],
+      "chapter": "第7章",
+      "section": "7.3"
+    },
+    {
+      "canonical_id": "model_evaluation",
+      "display_name": "模型评估",
+      "aliases": ["模型评估", "model evaluation", "准确率", "精确率", "召回率", "F1分数"],
+      "related_concepts": ["混淆矩阵", "ROC曲线", "AUC", "交叉验证"],
+      "chapter": "第8章",
+      "section": "8.1"
+    },
+    {
+      "canonical_id": "cross_validation",
+      "display_name": "交叉验证",
+      "aliases": ["交叉验证", "cross validation", "k折交叉验证", "k-fold"],
+      "related_concepts": ["过拟合", "模型选择", "验证集"],
+      "chapter": "第8章",
+      "section": "8.2"
+    },
+    {
+      "canonical_id": "overfitting",
+      "display_name": "过拟合",
+      "aliases": ["过拟合", "overfitting", "过配", "泛化能力差", "过拟合问题"],
+      "related_concepts": ["正则化", "交叉验证", "模型复杂度", "欠拟合"],
+      "chapter": "第8章",
+      "section": "8.3"
+    },
+    {
+      "canonical_id": "regularization",
+      "display_name": "正则化",
+      "aliases": ["正则化", "regularization", "L1正则", "L2正则", "岭回归", "Lasso"],
+      "related_concepts": ["过拟合", "惩罚项", "模型复杂度控制"],
+      "chapter": "第8章",
+      "section": "8.4"
+    },
+    {
+      "canonical_id": "feature_engineering",
+      "display_name": "特征工程",
+      "aliases": ["特征工程", "feature engineering", "特征选择", "特征提取", "特征构造"],
+      "related_concepts": ["数据预处理", "维度灾难", "特征重要性"],
+      "chapter": "第9章",
+      "section": "9.1"
+    },
+    {
+      "canonical_id": "neural_network",
+      "display_name": "神经网络基础",
+      "aliases": ["神经网络", "neural network", "深度学习", "deep learning", "神经元", "感知机"],
+      "related_concepts": ["激活函数", "反向传播", "梯度下降", "多层感知机"],
+      "chapter": "第10章",
+      "section": "10.1"
+    },
+    {
+      "canonical_id": "gradient_descent",
+      "display_name": "梯度下降",
+      "aliases": ["梯度下降", "gradient descent", "批量梯度下降", "随机梯度下降", "SGD", "学习率"],
+      "related_concepts": ["优化算法", "损失函数", "反向传播", "局部最优"],
+      "chapter": "第10章",
+      "section": "10.2"
+    }
+  ]
+}

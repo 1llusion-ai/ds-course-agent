@@ -1,162 +1,340 @@
-# CLAUDE.md
+# CLAUDE.md - RAG课程助教系统开发指南
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## 项目结构 (重构后)
 
-## 项目概述
+```
+RAG_System/
+├── apps/                       # 应用界面层
+│   ├── qa.py                  # Streamlit问答界面
+│   └── file_uploader.py       # 文件上传界面
+│
+├── core/                       # 核心业务逻辑
+│   ├── __init__.py
+│   ├── agent.py               # Agent服务（集成记忆系统）
+│   ├── rag.py                 # RAG检索服务
+│   ├── hybrid_retriever.py    # BM25混合检索
+│   ├── tools.py               # Agent工具
+│   ├── memory_core.py         # 记忆核心（学生画像、事件记录）
+│   ├── events.py              # 学习事件Schema
+│   ├── profile_models.py      # 学生画像模型
+│   └── knowledge_mapper.py    # 知识点映射（三层匹配）
+│
+├── skills/                     # 教学Skills层
+│   ├── personalized_explanation.py  # 个性化讲解Skill
+│   ├── progressive_hint.py    # 渐进式提示Skill（预留）
+│   ├── error_diagnosis.py     # 错因诊断Skill（预留）
+│   └── review_recommendation.py # 复习建议Skill（预留）
+│
+├── kb_builder/                 # 知识库构建
+│   ├── __init__.py
+│   ├── parser.py              # PDF解析
+│   ├── cleaner.py             # 文本清洗
+│   ├── chunker.py             # 文本分块
+│   ├── toc_parser.py          # 目录解析
+│   └── store.py               # 向量入库
+│
+├── utils/                      # 工具 utilities
+│   ├── __init__.py
+│   ├── config.py              # 配置管理
+│   ├── history.py             # 会话历史
+│   └── vector_store.py        # 向量存储
+│
+├── eval/                       # 评估测试
+│   ├── __init__.py
+│   ├── retrieval.py           # 检索评估
+│   ├── samples.py             # 评测样本
+│   └── run_eval.py            # 评测脚本
+│
+├── tests/                      # 单元测试
+│   ├── __init__.py
+│   ├── test_agent.py
+│   ├── test_rag.py
+│   ├── test_kb_builder.py
+│   ├── test_knowledge_mapper.py  # 知识点映射测试
+│   └── test_idempotency.py    # 幂等性测试
+│
+├── scripts/                    # 启动脚本
+│   ├── run_qa.py              # 启动问答界面
+│   └── build_kb.py            # 构建知识库
+│
+├── docs/                       # 文档
+│   ├── CLAUDE.md              # 本文件
+│   ├── README.md              # 项目说明
+│   └── prompts/               # 提示词
+│       └── system_prompt.txt
+│
+├── data/                       # 课程资料
+│   ├── knowledge_graph.json   # 课程知识点图谱
+│   └── 目录.json              # 教材目录结构
+├── chroma_db/                  # 向量数据库
+├── chat_history/               # 会话历史
+│   ├── learning_events/       # 学习事件存储
+│   └── profiles/              # 学生画像存储
+│
+├── main.py                     # 主入口
+├── .env                        # 环境变量
+└── requirements.txt            # 依赖
+```
 
-《数据科学导论》课程助教 RAG 系统，基于 LangChain + LangGraph 单智能体架构。
+## 核心流程
 
-核心工作流：
-1. **课程知识库构建**: PDF → 解析 → 清洗 → 分块 → 向量入库
-2. **问答服务**: Agent → RAG Tool → 向量检索 → 生成回答
+### 1. 知识库构建
+```
+PDF → parser.py → cleaner.py → chunker.py → store.py → ChromaDB
+```
+
+### 2. 问答流程（含记忆系统）
+```
+用户提问 → KnowledgeMapper → 知识点识别
+                ↓
+         [匹配到概念?] → 是 → 个性化讲解Skill → 检索课程资料 → 生成回答
+                ↓                              ↓
+                否 → Agent → course_rag_tool → RRF融合排序 → 生成回答
+                              ↓
+                        记录学习事件(ConceptMentionedEvent)
+                              ↓
+                        会话结束 → aggregate_profile → 更新学生画像
+```
+
+### 3. 记忆系统架构
+
+**三层架构**: 课程信息 Tool + Memory Core + 教学 Skills
+
+```
+┌─────────────────────────────────────────────┐
+│              教学 Skills 层                   │
+│  PersonalizedExplanationSkill               │
+│  ProgressiveHintSkill (预留)                │
+│  ErrorDiagnosisSkill (预留)                 │
+│  ReviewRecommendationSkill (预留)           │
+└─────────────────┬───────────────────────────┘
+                  │
+┌─────────────────▼───────────────────────────┐
+│              Memory Core 层                  │
+│  ┌─────────────┐  ┌───────────────────────┐ │
+│  │ 事件记录    │  │ 学生画像              │ │
+│  │ record_event│  │ - recent_concepts     │ │
+│  │             │  │ - weak_spot_candidates│ │
+│  │ 事件类型:   │  │ - progress            │ │
+│  │ - CONCEPT_  │  │                       │ │
+│  │   MENTIONED │  │ 聚合规则:             │ │
+│  │ - CLARIFI-  │  │ - mention_count: 30天 │ │
+│  │   CATION    │  │   滑动窗口            │ │
+│  └─────────────┘  │ - current_chapter:    │ │
+│                   │   14天多数投票        │ │
+│                   │ - weak_spots: 信号检测│ │
+│                   └───────────────────────┘ │
+└─────────────────┬───────────────────────────┘
+                  │
+┌─────────────────▼───────────────────────────┐
+│           课程信息 Tools 层                  │
+│  course_rag_tool (RAG检索)                  │
+│  course_dynamic_info (课程动态)             │
+└─────────────────────────────────────────────┘
+```
+
+### 4. Agent架构
+- **框架**: LangGraph `create_react_agent`
+- **模型**: DeepSeek-V3 (远程) / Ollama (本地)
+- **工具**: `course_rag_tool` (RAG检索), `check_knowledge_base_status`
+- **记忆集成**: `chat_with_history()` 集成知识点映射和个性化讲解
+- **提示词**: `docs/prompts/system_prompt.txt`
 
 ## 常用命令
 
-### 运行应用
 ```bash
 # 启动问答界面
-streamlit run app_qa.py
+python main.py qa
+# 或
+streamlit run apps/qa.py
 
-# 启动文件上传界面（旧版）
-streamlit run app_file_uploader.py
+# 构建知识库
+python main.py build data/
+
+# 运行评估
+python main.py eval
+
+# 运行测试
+python main.py test
 ```
 
-### 构建课程知识库
-```bash
-# 单个文件构建（推荐测试用）
-python build_course_kb.py "data/数据科学导论(案例版)_第1章.pdf"
+## 模块说明
 
-# 目录批量构建（支持 GPU 加速）
-TORCH_DEVICE=cuda python build_course_kb.py data/
+| 模块 | 功能 | 关键类/函数 |
+|------|------|-------------|
+| core/agent.py | Agent服务 (LangGraph) | AgentService, chat_with_history(), end_session() |
+| core/rag.py | RAG服务 | RAGService, retrieve(), answer_with_context() |
+| core/hybrid_retriever.py | BM25+向量混合检索 | HybridRetriever, BM25Retriever, RRF融合排序 |
+| core/tools.py | Agent工具 | course_rag_tool, check_knowledge_base_status() |
+| **core/memory_core.py** | **记忆核心** | **MemoryCore, record_event(), aggregate_profile()** |
+| **core/events.py** | **事件Schema** | **EventType, ConceptMentionedEvent, build_concept_mentioned_event()** |
+| **core/profile_models.py** | **学生画像模型** | **StudentProfile, ConceptFocus, WeakSpotCandidate** |
+| **core/knowledge_mapper.py** | **知识点映射** | **KnowledgeMapper, map_question_to_concepts()** |
+| **skills/personalized_explanation.py** | **个性化讲解Skill** | **PersonalizedExplanationSkill, execute()** |
+| kb_builder/parser.py | PDF解析 | parse_pdf_file(), parse_pdf_directory() |
+| kb_builder/chunker.py | 文本分块 | chunk_document(), CourseChunkerV2 |
+| kb_builder/store.py | 向量入库 | CourseKnowledgeBase, ingest_chunks() |
+| kb_builder/toc_parser.py | 目录解析 | TOCParser, 章节页码映射 |
+| utils/config.py | 配置管理 | 环境变量读取 |
+| utils/history.py | 会话历史 | get_history(), FileChatMessageHistory |
 
-# 仅解析检查不入库
-python build_course_kb.py data/ --no-ingest
+## 知识点映射（三层匹配）
 
-# 输出文档树结构
-python build_course_kb.py data/ --emit-tree
+**问题 → 知识点标准化映射**:
+1. **精确匹配**: 别名匹配（含归一化），score=1.0
+2. **规则匹配**: 正则表达式捕获（如 `SVM.*核`），score=0.95
+3. **Embedding兜底**: 语义相似度，阈值0.82
+
+**知识图谱**: `data/knowledge_graph.json`
+- 27个课程知识点
+- 每个概念含 canonical_id, aliases, chapter, section, related_concepts
+
+## 聚合规则（可解释、可验证）
+
+| 字段 | 计算规则 | 置信度 |
+|------|----------|--------|
+| mention_count | 日计数器，30天滑动窗口求和 | 1.0 (硬事实) |
+| current_chapter | 最近14天学习相关事件多数投票，min_evidence=3 | min(count/10, 1.0) |
+| weak_spot_candidates | 信号A: 24h内≥2次澄清; 信号B: 跨会话>7天重复 | 信号强度加权 |
+| confidence更新 | 指数移动平均: new = (1-α)*old + α*new_signal, α=0.3 | - |
+
+## 配置说明
+
+环境变量 `.env`:
+```env
+# Embedding API (硅基流动)
+EMBEDDING_API_KEY=sk-xxx
+EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
+EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B
+
+# LLM配置 (二选一)
+USE_REMOTE_LLM=true
+REMOTE_MODEL_NAME=Pro/deepseek-ai/DeepSeek-V3
+# 或本地Ollama
+CHAT_MODEL=qwen3:8b
+CHAT_BASE_URL=http://localhost:11434
+
+# 检索配置
+SIMILARITY_TOP_K=3
 ```
 
-### 测试
-```bash
-# 运行所有测试
-pytest tests/ -v
+## 检索策略
 
-# 运行单个测试文件
-pytest tests/test_rag_tool.py -v
-pytest tests/test_agent_smoke.py -v
-pytest tests/test_course_chunker.py -v
+**BM25混合检索** (默认启用):
+- BM25稀疏检索: 基于词频-逆文档频率(TF-IDF)
+- 向量语义检索: 向量余弦相似度 (Qwen3-Embedding-8B, 4096维)
+- 融合排序: RRF (Reciprocal Rank Fusion)
+
+**适用场景**:
+| 场景 | 推荐策略 |
+|------|----------|
+| 精确术语匹配 | BM25混合检索 |
+| 概念理解查询 | BM25混合检索 |
+| 同义词/语义相关 | 纯语义检索 |
+
+## 页码映射机制
+
+**问题**: PDF解析得到的是相对页码，需要映射为教材绝对页码
+
+**解决方案**:
+1. 从 `data/目录.json` 动态读取章节起始页码
+2. `core/tools.py:_get_absolute_page()` 计算绝对页码
+3. `core/rag.py:_format_documents()` 用绝对页码覆盖元数据中的相对页码
+
+**计算公式**: `绝对页码 = 章节起始页 + 相对页码 - 1`
+
+## 系统提示词规则
+
+`docs/prompts/system_prompt.txt` 关键约束:
+1. **必须使用工具**: 课程相关问题必须使用 `course_rag_tool`
+2. **严禁重复添加来源**: Tool返回结果已包含来源，Agent不得在回答中再添加"参考来源"等字样
+3. **公式格式**: 使用行内LaTeX (`$x$`)，不使用块级公式
+
+## 防幻觉机制
+
+**问题**: LLM 在教材未涵盖的问题上编造虚假引用（如"第5章 数据管理与治理 第89页"）
+
+**解决方案** (`skills/personalized_explanation.py`):
+1. **严格基于资料**: Prompt 中明确约束"只能使用教材参考资料中提供的内容，严禁编造章节、页码"
+2. **无资料时诚实告知**: 如果 RAG 返回"无相关资料"，明确告知学生"教材中未找到相关内容"
+3. **分离处理**: 有资料时用个性化讲解；无资料时用通用知识回答但不编造引用
+
+**关键 Prompt 约束**:
+```
+## 生成要求
+1. **严格基于资料**: 只能使用上面"教材参考资料"中提供的内容，严禁编造章节、页码或教材中不存在的内容
+2. **禁止幻觉**: 如果资料中没有相关信息，明确告知"教材中未找到相关内容"，不要猜测或编造
 ```
 
-### 评测
-```bash
-# 运行评测（生成 eval_report.json）
-python -m eval.run_eval
+## Streamlit 界面功能
+
+`apps/qa.py` 集成学习画像显示:
+
+**侧边栏统计**:
+- 最近关注概念（mention_count）
+- 需要巩固的薄弱点（confidence > 0.5）
+- 当前学习进度（current_chapter）
+- 🔄 刷新画像按钮（手动触发 aggregate_profile）
+
+**自动聚合**: 页面加载时自动调用 `aggregate_profile()`，确保画像实时更新
+
+**路径处理**: `apps/qa.py` 开头添加 `sys.path.insert` 避免 `ModuleNotFoundError`
+
+## 工程实现细节
+
+### 1. 循环导入避免
+`core/agent.py` 中使用延迟导入 Skills:
+```python
+# 避免在模块级别导入
+# from skills.personalized_explanation import PersonalizedExplanationSkill
+
+# 在 __init__ 中延迟导入
+from skills.personalized_explanation import PersonalizedExplanationSkill
+self.explanation_skill = PersonalizedExplanationSkill()
 ```
 
-## 系统架构
-
-### Agent 架构（LangGraph ReAct）
-```
-app_qa.py
-    ↓
-AgentService (agent_service.py)
-    ├── ChatOllama (本地 LLM: qwen3:8b)
-    ├── Tools: [course_rag_tool]
-    └── System Prompt (prompts/assistant_system_prompt.txt)
-        ↓
-        RAGService (rag.py) → ChromaDB 检索
+### 2. JSON 反序列化类型安全
+`core/profile_models.py` 中 `from_dict()` 确保数值类型正确:
+```python
+# 恢复 weak_spot_candidates 时确保 confidence 是 float
+s_copy["confidence"] = float(s_copy["confidence"])
 ```
 
-Agent 使用 `create_agent()` 创建 ReAct 循环，只有一个核心工具 `course_rag_tool`，负责课程资料检索。
-
-### 知识库构建流水线
-```
-build_course_kb.py
-    ├── course_pdf_parser.py    # PDF 解析 (Marker)
-    ├── text_cleaner.py         # 文本清洗
-    ├── course_chunker_v2.py    # V2: TOC-based 章节划分
-    │   └── toc_parser.py       # 目录解析 (data/目录.json)
-    └── course_kb_store.py      # 向量入库 (ChromaDB)
+### 3. 参数传递一致性
+`apps/qa.py` 中显式传递 `student_id`:
+```python
+response = st.session_state["agent_service"].chat_with_history(
+    prompt,
+    session_id=current_session,
+    student_id=current_session  # 显式传递确保一致性
+)
 ```
 
-构建产物保存在 `artifacts/`：
-- `build_report.json` - 构建报告
-- `chunks_v2/` - V2 分块结果
-- `parse_trace.json` - 解析追踪
+## 开发规范
 
-## 配置系统
+1. **新增工具**: 在 `core/tools.py` 中添加，使用 `@tool` 装饰器
+2. **新增 Skills**: 在 `skills/` 目录下创建，继承 BaseSkill 模式
+3. **修改配置**: 更新 `utils/config.py` 和 `.env`
+4. **添加测试**: 在 `tests/` 目录下创建对应测试文件
+5. **代码风格**: 遵循 PEP 8，使用类型注解
 
-所有配置通过环境变量管理，从 `.env` 文件加载（见 `.env.example`）：
+## 已知问题
 
-**必须配置:**
-- `EMBEDDING_API_KEY` - Embedding API 密钥（如 SiliconFlow）
-- `EMBEDDING_BASE_URL` - 默认 https://api.siliconflow.cn/v1
+1. **Windows终端编码**: 已处理（强制UTF-8输出）
+2. **jieba警告**: pkg_resources废弃警告，不影响功能
 
-**可选配置:**
-- `CHAT_MODEL` - 本地 Ollama 模型，默认 qwen3:8b
-- `CHAT_BASE_URL` - Ollama 地址，默认 http://localhost:11434
-- `COURSE_NAME` - 课程名称，默认"数据科学导论"
-- `CHUNK_SIZE` / `CHUNK_OVERGLE` - 分块参数
+## 最近修复
 
-配置集中定义在 `config_data.py`，通过 `os.getenv()` 读取并转换为模块常量。
-
-## 开发注意事项
-
-### 依赖管理
-- 核心依赖: `langchain>=0.3.0`, `langgraph>=0.2.0`, `chromadb`, `streamlit`
-- PDF 解析: `marker-pdf`（需单独安装，较重）
-- 本地 LLM: Ollama 需独立安装并在后台运行 (`ollama serve`)
-
-### GPU 加速 (CUDA)
-- PyTorch 需安装 CUDA 版本: `pip install torch --index-url https://download.pytorch.org/whl/cu126`
-- 设置环境变量: `TORCH_DEVICE=cuda`
-- Marker 会自动使用 GPU 进行 Layout 识别和 OCR
-
-### 向量存储
-- 使用 ChromaDB，持久化在 `chroma_db/`
-- Collection 名称要求: 只能包含 `[a-zA-Z0-9._-]`，长度 3-512
-- 中文课程名会自动转换为合法名称
-
-### TOC-based 章节划分 (V2)
-- 使用 `toc_parser.py` 解析 `data/目录.json`
-- `course_chunker_v2.py` 根据目录页码范围确定内容所属章节
-- Chunk 元数据包含: chapter_number, section_number, subsection
-
-### Agent Tool 开发
-RAG Tool 定义在 `tools/rag_tool.py`，使用 `@tool` 装饰器。新增工具需要:
-1. 在 `tools/rag_tool.py` 中定义函数并用 `@tool` 装饰
-2. 在 `get_rag_tools()` 中返回新工具
-3. Agent 会自动获取所有工具
-
-### 测试模式
-- `test_agent_smoke.py` - Agent 冒烟测试，检查服务能否正常启动
-- `test_course_chunker.py` - 分块逻辑测试
-- `test_eval.py` - 评测功能测试
-
----
-
-## 当前任务进度 (2025-04-06)
-
-### ✅ 已完成
-1. **PDF 解析器修复** - 修复 Marker CLI 参数格式、JSON 输出路径编码问题
-2. **CUDA GPU 加速** - 安装 PyTorch cu126 版本，GPU 可用
-3. **TOC-based 章节划分 V2** - 基于 `data/目录.json` 实现页码范围的章节识别
-4. **批量处理支持** - `build_course_kb.py` 支持目录批量处理
-5. **知识库存储适配** - `course_kb_store.py` 兼容 V1/V2 Chunk 结构
-
-### 🔄 待完成
-1. ~~批量构建测试~~ - 所有10章PDF已批量处理完成 ✅
-2. ~~入库验证~~ - ChromaDB入库237文档，检索功能正常 ✅
-3. **问答测试** - 测试 Agent 问答效果
-4. **分块粒度优化** - 优化章节标题截断问题（如 1.4.1 被识别为 4.1）
-
-### ⚠️ 已知问题与修复
-- **集合名称不匹配** - 已修复：入库使用`course_c37b78`，但检索使用`rag_knowledge_base`
-  - 修复方案：更新`.env`中`COURSE_COLLECTION_NAME`和`COLLECTION_NAME`为实际集合名
-
-### 📁 关键文件变更
-- `course_pdf_parser.py` - Marker 调用修复
-- `course_chunker_v2.py` - 新增 TOC-based 分块器
-- `toc_parser.py` - 新增目录解析器
-- `build_course_kb.py` - 批量处理 + V2 集成
-- `course_kb_store.py` - V2 结构兼容
+| 日期 | 修复内容 |
+|------|----------|
+| 2026-04-07 | **防幻觉机制**: 强化 `personalized_explanation.py` Prompt 约束，禁止编造章节页码，无资料时诚实告知 |
+| 2026-04-07 | **Streamlit集成**: 侧边栏显示学习画像（关注概念、薄弱点、当前进度），支持手动刷新 |
+| 2026-04-07 | **类型安全**: 修复 `profile_models.py` JSON 反序列化时数值类型转换（str→float/int） |
+| 2026-04-07 | **循环导入**: `core/agent.py` 延迟导入 Skills，避免 `core` 与 `skills` 循环依赖 |
+| 2026-04-07 | **记忆系统**: 实现三层架构（Memory Core + 学生画像 + 教学Skills），支持知识点映射、事件记录、画像聚合 |
+| 2026-04-07 | **知识点映射**: 三层匹配策略（精确→规则→embedding），标准27个课程概念 |
+| 2026-04-07 | **聚合规则**: 可解释的统计规则（滑动窗口mention_count、多数投票current_chapter、信号检测weak_spots） |
+| 2026-04-07 | **幂等性**: 确保record_event和aggregate_profile重复运行不重复记账 |
+| 2026-04-07 | Agent架构: 使用 `create_react_agent` 替代废弃的 `create_agent`，参数改为 `prompt` |
+| 2026-04-07 | 页码映射: 实现动态章节页码映射，Tool返回绝对页码（如"第120页"）|
+| 2026-04-07 | 系统提示: 添加严禁重复添加来源的规则，避免Agent重复标注来源 |

@@ -1,35 +1,34 @@
 {
-  "source_file": "数据科学导论(案例版)_第6章.pdf",
+  "source_file": "数据科学导论(案例版)_第1章.pdf",
   "parser_mode": "marker",
-  "generated_at": "2026-04-06T06:26:53.852870",
+  "generated_at": "2026-04-07T02:04:30.134069",
   "parse_result": {
-    "total_pages": 24,
-    "marker_pages": 24,
+    "total_pages": 14,
+    "marker_pages": 14,
     "success_rate": 1.0
   },
   "clean_result": {
-    "pages_count": 24,
-    "total_chars_removed": 578,
-    "titles_found": 3
+    "pages_count": 14,
+    "total_chars_removed": 407,
+    "titles_found": 5
   },
   "chunk_result": {
-    "total_chunks": 116,
-    "struct_chunks": 0,
-    "semantic_chunks": 56,
-    "shadow_chunks": 60,
-    "avg_chunk_size": 403.5,
-    "chapters": {}
+    "total_chunks": 16,
+    "struct_chunks": 1,
+    "semantic_chunks": 14,
+    "shadow_chunks": 1,
+    "avg_chunk_size": 897.3125
   },
   "ingest_result": {
-    "success_count": 0,
+    "success_count": 14,
     "skip_count": 0,
     "error_count": 0
   },
   "quality_metrics": {
-    "title_recall_rate": 0.0,
+    "title_recall_rate": 0.5,
     "empty_chunks": 0,
     "section_pollution_rate": 0.0,
     "page_coverage": 1.0,
-    "overall_score": 60.0
+    "overall_score": 80.0
   }
 }

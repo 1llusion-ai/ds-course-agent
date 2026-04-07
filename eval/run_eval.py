@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 from eval.samples import get_eval_samples, EvalSample
-from tools.rag_tool import course_rag_tool
+from core.tools import course_rag_tool
 
 
 def safe_print(text: str):

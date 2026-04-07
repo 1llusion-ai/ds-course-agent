@@ -3,7 +3,7 @@ QA-1 回归测试
 验证标题召回、空chunk、section格式
 """
 import pytest
-from course_chunker import (
+from kb_builder.chunker import (
     extract_chapters,
     extract_sections,
     chunk_document,
@@ -117,7 +117,7 @@ class TestEmptyChunk:
     
     def test_filter_empty_chunks(self):
         """过滤空 chunk 功能"""
-        from course_chunker import TextChunk, ChunkMetadata
+        from kb_builder.chunker import TextChunk, ChunkMetadata
         
         chunks = [
             TextChunk(content="有效内容", metadata=ChunkMetadata(

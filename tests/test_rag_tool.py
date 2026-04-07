@@ -4,7 +4,7 @@ RAG Tool 单元测试
 import pytest
 from unittest.mock import patch, MagicMock
 
-from tools.rag_tool import course_rag_tool, check_knowledge_base_status, get_rag_tools
+from core.tools import course_rag_tool, check_knowledge_base_status, get_rag_tools
 
 
 class TestCourseRAGTool:
@@ -26,7 +26,7 @@ class TestCourseRAGTool:
         assert len(tools) >= 1
         assert course_rag_tool in tools
 
-    @patch("tools.rag_tool.get_rag_service")
+    @patch("core.tools.get_rag_service")
     def test_tool_returns_error_message_on_exception(self, mock_get_service):
         """测试异常情况下返回错误消息"""
         mock_service = MagicMock()
@@ -37,7 +37,7 @@ class TestCourseRAGTool:
         
         assert "错误" in result or "异常" in result or "error" in result.lower()
 
-    @patch("tools.rag_tool.get_rag_service")
+    @patch("core.tools.get_rag_service")
     def test_tool_returns_no_results_message(self, mock_get_service):
         """测试无检索结果时返回提示消息"""
         mock_service = MagicMock()
@@ -55,7 +55,7 @@ class TestCourseRAGTool:
 class TestCheckKnowledgeBaseStatus:
     """知识库状态检查工具测试"""
 
-    @patch("tools.rag_tool.get_rag_service")
+    @patch("core.tools.get_rag_service")
     def test_status_tool_returns_success(self, mock_get_service):
         """测试状态检查返回成功"""
         mock_service = MagicMock()
@@ -68,7 +68,7 @@ class TestCheckKnowledgeBaseStatus:
         
         assert "正常" in result or "✅" in result
 
-    @patch("tools.rag_tool.get_rag_service")
+    @patch("core.tools.get_rag_service")
     def test_status_tool_returns_error_on_exception(self, mock_get_service):
         """测试状态检查异常时返回错误"""
         mock_get_service.side_effect = Exception("连接失败")

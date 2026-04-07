@@ -12,36 +12,36 @@ class TestAgentServiceInit:
 
     def test_agent_service_can_be_imported(self):
         """测试 Agent 服务可以导入"""
-        from agent_service import AgentService
+        from core.agent import AgentService
         assert AgentService is not None
 
     def test_get_agent_service_function_exists(self):
         """测试获取 Agent 服务函数存在"""
-        from agent_service import get_agent_service
+        from core.agent import get_agent_service
         assert callable(get_agent_service)
 
 
 class TestAgentServiceMock:
     """Agent 服务 Mock 测试"""
 
-    @patch("agent_service.ChatOllama")
-    @patch("agent_service.get_rag_tools")
+    @patch("core.agent.ChatOllama")
+    @patch("core.agent.get_rag_tools")
     def test_agent_service_initialization(self, mock_get_tools, mock_llm):
         """测试 Agent 服务初始化"""
         mock_get_tools.return_value = []
         mock_llm_instance = MagicMock()
         mock_llm.return_value = mock_llm_instance
         
-        from agent_service import AgentService
+        from core.agent import AgentService
         
-        with patch("agent_service.Path") as mock_path:
+        with patch("core.agent.Path") as mock_path:
             mock_path.return_value.parent.return_value.__truediv__.return_value.exists.return_value = False
             service = AgentService()
             
             assert service is not None
             assert service.tools == []
 
-    @patch("agent_service.create_agent")
+    @patch("core.agent.create_react_agent")
     def test_agent_chat_returns_string(self, mock_create_agent):
         """测试 Agent 对话返回字符串"""
         mock_agent_instance = MagicMock()
@@ -50,7 +50,7 @@ class TestAgentServiceMock:
         }
         mock_create_agent.return_value = mock_agent_instance
         
-        from agent_service import AgentService
+        from core.agent import AgentService
         
         with patch.object(AgentService, "_load_system_prompt", return_value="测试提示词"):
             with patch.object(AgentService, "_format_chat_history", return_value=[]):
@@ -70,7 +70,7 @@ class TestAgentServiceIntegration:
     @pytest.mark.skip(reason="需要真实环境运行")
     def test_agent_service_can_answer_question(self):
         """测试 Agent 可以回答问题"""
-        from agent_service import get_agent_service
+        from core.agent import get_agent_service
         
         service = get_agent_service()
         result = service.chat("你好")
@@ -81,7 +81,7 @@ class TestAgentServiceIntegration:
     @pytest.mark.skip(reason="需要真实环境运行")
     def test_agent_service_handles_empty_history(self):
         """测试 Agent 处理空历史"""
-        from agent_service import get_agent_service
+        from core.agent import get_agent_service
         
         service = get_agent_service()
         result = service.chat("测试问题", chat_history=[])
@@ -112,7 +112,7 @@ class TestSystemPrompt:
     def test_system_prompt_has_course_name(self):
         """测试系统提示词包含课程名称"""
         from pathlib import Path
-        import config_data as config
+        import utils.config as config
         
         prompt_path = Path(__file__).parent.parent / "prompts" / "assistant_system_prompt.txt"
         content = prompt_path.read_text(encoding="utf-8")
@@ -125,7 +125,7 @@ class TestConfigIntegration:
 
     def test_config_has_required_fields(self):
         """测试配置包含必要字段"""
-        import config_data as config
+        import utils.config as config
         
         required_fields = [
             "COURSE_NAME",
@@ -139,7 +139,7 @@ class TestConfigIntegration:
 
     def test_config_course_name_not_empty(self):
         """测试课程名称不为空"""
-        import config_data as config
+        import utils.config as config
         
         assert config.COURSE_NAME
         assert len(config.COURSE_NAME) > 0
@@ -150,7 +150,7 @@ class TestFormatChatHistory:
 
     def test_format_dict_messages(self):
         """测试 dict 格式消息转换"""
-        from agent_service import AgentService
+        from core.agent import AgentService
         
         service = AgentService.__new__(AgentService)
         service.llm = MagicMock()
@@ -172,7 +172,7 @@ class TestFormatChatHistory:
 
     def test_format_base_message_input(self):
         """测试 BaseMessage 输入直接透传"""
-        from agent_service import AgentService
+        from core.agent import AgentService
         
         service = AgentService.__new__(AgentService)
         service.llm = MagicMock()
@@ -192,7 +192,7 @@ class TestFormatChatHistory:
 
     def test_format_mixed_messages(self):
         """测试混合格式消息"""
-        from agent_service import AgentService
+        from core.agent import AgentService
         
         service = AgentService.__new__(AgentService)
         service.llm = MagicMock()
@@ -219,8 +219,8 @@ class TestFormatChatHistory:
 class TestChatWithHistory:
     """测试 chat_with_history 功能"""
 
-    @patch("agent_service.create_agent")
-    @patch("file_history_store.get_history")
+    @patch("core.agent.create_react_agent")
+    @patch("utils.history.get_history")
     def test_chat_with_history_calls_file_store(self, mock_get_history, mock_create_agent):
         """测试 chat_with_history 调用文件存储"""
         mock_agent_instance = MagicMock()
@@ -233,7 +233,7 @@ class TestChatWithHistory:
         mock_history.messages = []
         mock_get_history.return_value = mock_history
         
-        from agent_service import AgentService
+        from core.agent import AgentService
         
         with patch.object(AgentService, "_load_system_prompt", return_value="测试提示词"):
             service = AgentService.__new__(AgentService)
@@ -247,8 +247,8 @@ class TestChatWithHistory:
             mock_get_history.assert_called_once_with("test_session")
             mock_history.add_messages.assert_called_once()
 
-    @patch("agent_service.create_agent")
-    @patch("file_history_store.get_history")
+    @patch("core.agent.create_react_agent")
+    @patch("utils.history.get_history")
     def test_chat_with_history_with_existing_messages(self, mock_get_history, mock_create_agent):
         """测试 chat_with_history 处理已有消息"""
         mock_agent_instance = MagicMock()
@@ -264,7 +264,7 @@ class TestChatWithHistory:
         ]
         mock_get_history.return_value = mock_history
         
-        from agent_service import AgentService
+        from core.agent import AgentService
         
         with patch.object(AgentService, "_load_system_prompt", return_value="测试提示词"):
             service = AgentService.__new__(AgentService)
