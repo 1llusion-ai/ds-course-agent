@@ -14,7 +14,7 @@ from langchain.agents import create_agent
 import utils.config as config
 from core.tools import get_rag_tools
 from core.memory_core import get_memory_core, record_event, aggregate_profile
-from core.events import build_concept_mentioned_event, build_session_end_event, EventType
+from core.events import build_concept_mentioned_event, EventType
 
 # 延迟导入 skills 避免循环导入
 # from skills.personalized_explanation import PersonalizedExplanationSkill
@@ -42,8 +42,6 @@ class AgentService(object):
         self.tools = get_rag_tools()
         self.system_prompt = self._load_system_prompt()
 
-        # 记忆系统相关
-        self.memory_core = get_memory_core()
         # 延迟导入避免循环导入
         from skills.personalized_explanation import PersonalizedExplanationSkill
         self.explanation_skill = PersonalizedExplanationSkill()
@@ -252,7 +250,7 @@ class AgentService(object):
                 raw_question=user_input,
                 enable_hash=False
             )
-            self.memory_core.record_event(event)
+            get_memory_core().record_event(event)
 
             # 使用个性化技能生成回答
             result = self.explanation_skill.execute(user_input, student_id, session_id)
@@ -262,6 +260,24 @@ class AgentService(object):
             # 如果是 generator，转换为字符串
             if hasattr(result, '__iter__') and not isinstance(result, str):
                 result = ''.join(result)
+
+            # 记录一般提问事件（未匹配到知识点）
+            from core.events import build_concept_mentioned_event
+            # 获取当前章节
+            current_profile = get_memory_core().get_profile(student_id)
+            current_ch = current_profile.progress.current_chapter or "未分类"
+            event = build_concept_mentioned_event(
+                session_id=session_id,
+                student_id=student_id,
+                concept_id="general_question",
+                concept_name="一般问题",
+                chapter=current_ch,
+                question_type="general",
+                matched_score=0.0,
+                raw_question=user_input,
+                enable_hash=False
+            )
+            get_memory_core().record_event(event)
 
         # 保存到历史
         history.add_messages([
@@ -291,11 +307,11 @@ class AgentService(object):
         触发画像聚合
         """
         print(f"[Agent] 会话结束，聚合画像: {student_id}")
-        self.memory_core.aggregate_profile(student_id)
+        get_memory_core().aggregate_profile(student_id)
 
     def get_student_profile(self, student_id: str):
         """获取学生画像"""
-        return self.memory_core.get_profile(student_id)
+        return get_memory_core().get_profile(student_id)
 
 
 _agent_service: Optional[AgentService] = None
