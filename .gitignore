@@ -21,3 +21,4 @@ __pycache__/
 
 # MD5记录文件
 md5.text
+.worktrees/
