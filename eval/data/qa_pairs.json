@@ -1,0 +1,34 @@
+{
+  "qa_pairs": [
+    {
+      "id": "eval_001",
+      "question": "什么是支持向量机（SVM）？",
+      "category": "概念理解",
+      "expected_keywords": ["分类器", "超平面", "间隔", "最大化", "支持向量"],
+      "ground_truth": {
+        "relevant_doc_ids": ["doc_ch3_svm_intro"],
+        "relevance_scores": {"doc_ch3_svm_intro": 1.0, "doc_ch3_svm_theory": 0.9}
+      }
+    },
+    {
+      "id": "eval_002",
+      "question": "梯度下降的学习率应该如何选择？",
+      "category": "应用问题",
+      "expected_keywords": ["学习率", "步长", "收敛", "过大", "过小"],
+      "ground_truth": {
+        "relevant_doc_ids": ["doc_ch2_gradient_descent"],
+        "relevance_scores": {"doc_ch2_gradient_descent": 1.0}
+      }
+    },
+    {
+      "id": "eval_003",
+      "question": "逻辑回归和线性回归有什么区别？",
+      "category": "概念对比",
+      "expected_keywords": ["分类", "回归", "离散", "连续", "sigmoid"],
+      "ground_truth": {
+        "relevant_doc_ids": ["doc_ch2_logistic_regression", "doc_ch2_linear_regression"],
+        "relevance_scores": {"doc_ch2_logistic_regression": 1.0, "doc_ch2_linear_regression": 0.9}
+      }
+    }
+  ]
+}
