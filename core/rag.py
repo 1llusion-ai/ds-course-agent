@@ -132,7 +132,7 @@ class RAGService(object):
 
         return conversation_chain
 
-    def retrieve(self, question: str, top_k: Optional[int] = None, similarity_threshold: float = 0.85) -> RetrievalResult:
+    def retrieve(self, question: str, top_k: Optional[int] = None, similarity_threshold: float = 1.0) -> RetrievalResult:
         """
         检索相关文档
 
