@@ -1,0 +1,633 @@
+{
+  "qa_pairs": [
+    {
+      "id": "001",
+      "query": "什么是数据科学",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第1章.pdf_107844",
+        "数据科学导论(案例版)_第2章.pdf_753266",
+        "数据科学导论(案例版)_第4章.pdf_212884"
+      ],
+      "concept_id": "data_science_definition",
+      "concept_name": "数据科学定义",
+      "annotation_rule": "keywords_in_content: ['数据科学定义', '什么是数据科学', 'data science']"
+    },
+    {
+      "id": "002",
+      "query": "数据思维",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第1章.pdf_107844",
+        "数据科学导论(案例版)_第1章.pdf_308216",
+        "数据科学导论(案例版)_第1章.pdf_151149"
+      ],
+      "concept_id": "﻿data_thinking",
+      "concept_name": "数据思维",
+      "annotation_rule": "keywords_in_content: ['数据思维', '数据思维', 'data thinking']"
+    },
+    {
+      "id": "003",
+      "query": "过拟合",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第8章.pdf_277614",
+        "数据科学导论(案例版)_第6章.pdf_983610",
+        "数据科学导论(案例版)_第8章.pdf_122572"
+      ],
+      "concept_id": "overfitting",
+      "concept_name": "过拟合",
+      "annotation_rule": "keywords_in_content: ['过拟合', '过拟合', 'overfitting']"
+    },
+    {
+      "id": "004",
+      "query": "可视化",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第1章.pdf_107844",
+        "数据科学导论(案例版)_第5章.pdf_660439",
+        "数据科学导论(案例版)_第5章.pdf_648767"
+      ],
+      "concept_id": "data_visualization",
+      "concept_name": "数据可视化",
+      "annotation_rule": "keywords_in_content: ['数据可视化', '可视化', 'data visualization']"
+    },
+    {
+      "id": "005",
+      "query": "监督学习",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第4章.pdf_212884",
+        "数据科学导论(案例版)_第6章.pdf_552081",
+        "数据科学导论(案例版)_第4章.pdf_659491"
+      ],
+      "concept_id": "supervised_learning",
+      "concept_name": "监督学习",
+      "annotation_rule": "keywords_in_content: ['监督学习', '监督学习', 'supervised learning']"
+    },
+    {
+      "id": "006",
+      "query": "无监督学习",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第6章.pdf_552081",
+        "数据科学导论(案例版)_第4章.pdf_659491",
+        "数据科学导论(案例版)_第7章.pdf_010789"
+      ],
+      "concept_id": "unsupervised_learning",
+      "concept_name": "无监督学习",
+      "annotation_rule": "keywords_in_content: ['无监督学习', '无监督学习', 'unsupervised learning']"
+    },
+    {
+      "id": "007",
+      "query": "数据洞见",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第2章.pdf_798684"
+      ],
+      "concept_id": "data_insight",
+      "concept_name": "数据洞见",
+      "annotation_rule": "keywords_in_content: ['数据洞见', '数据洞见', 'data insight']"
+    },
+    {
+      "id": "008",
+      "query": "数字经济",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第2章.pdf_753266",
+        "数据科学导论(案例版)_第1章.pdf_308216",
+        "数据科学导论(案例版)_第1章.pdf_151149"
+      ],
+      "concept_id": "digital_economy",
+      "concept_name": "数字经济",
+      "annotation_rule": "keywords_in_content: ['数字经济', '数字经济', 'digital economy']"
+    },
+    {
+      "id": "009",
+      "query": "集成学习",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第6章.pdf_445129"
+      ],
+      "concept_id": "ensemble_learning",
+      "concept_name": "集成学习",
+      "annotation_rule": "keywords_in_content: ['集成学习', '集成学习', 'ensemble learning']"
+    },
+    {
+      "id": "010",
+      "query": "分类问题",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第6章.pdf_284336",
+        "数据科学导论(案例版)_第6章.pdf_552081",
+        "数据科学导论(案例版)_第6章.pdf_022906"
+      ],
+      "concept_id": "classification_problem",
+      "concept_name": "分类问题",
+      "annotation_rule": "keywords_in_content: ['分类问题', '分类问题', 'classification problem']"
+    },
+    {
+      "id": "011",
+      "query": "聚类算法",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第7章.pdf_470918",
+        "数据科学导论(案例版)_第7章.pdf_769167",
+        "数据科学导论(案例版)_第7章.pdf_592395"
+      ],
+      "concept_id": "clustering",
+      "concept_name": "聚类算法",
+      "annotation_rule": "keywords_in_content: ['聚类算法', '聚类算法', 'clustering']"
+    },
+    {
+      "id": "012",
+      "query": "降维",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第7章.pdf_470918",
+        "数据科学导论(案例版)_第7章.pdf_551465",
+        "数据科学导论(案例版)_第7章.pdf_345859"
+      ],
+      "concept_id": "dimensionality_reduction",
+      "concept_name": "降维",
+      "annotation_rule": "keywords_in_content: ['降维', '降维', 'dimensionality reduction']"
+    },
+    {
+      "id": "013",
+      "query": "自然语言处理",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第8章.pdf_572732",
+        "数据科学导论(案例版)_第8章.pdf_277614",
+        "数据科学导论(案例版)_第9章.pdf_173553"
+      ],
+      "concept_id": "natural_language_processing",
+      "concept_name": "自然语言处理",
+      "annotation_rule": "keywords_in_content: ['自然语言处理', '自然语言处理', 'nlp']"
+    },
+    {
+      "id": "014",
+      "query": "深度学习常见任务",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第8章.pdf_277614",
+        "数据科学导论(案例版)_第8章.pdf_615284"
+      ],
+      "concept_id": "deep_learning_tasks",
+      "concept_name": "深度学习常见任务",
+      "annotation_rule": "keywords_in_content: ['深度学习常见任务', '深度学习常见任务', '图像分类']"
+    },
+    {
+      "id": "015",
+      "query": "数据探索",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第10章.pdf_790011",
+        "数据科学导论(案例版)_第10章.pdf_733955"
+      ],
+      "concept_id": "eda",
+      "concept_name": "探索性数据分析",
+      "annotation_rule": "keywords_in_content: ['探索性数据分析', 'EDA', 'exploratory data analysis']"
+    },
+    {
+      "id": "016",
+      "query": "文本挖掘",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第1章.pdf_107844",
+        "数据科学导论(案例版)_第9章.pdf_173553",
+        "数据科学导论(案例版)_第9章.pdf_520223"
+      ],
+      "concept_id": "text_mining",
+      "concept_name": "文本挖掘",
+      "annotation_rule": "keywords_in_content: ['文本挖掘', '文本挖掘', 'text mining']"
+    },
+    {
+      "id": "017",
+      "query": "交叉验证",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第10章.pdf_790011",
+        "数据科学导论(案例版)_第10章.pdf_667375",
+        "数据科学导论(案例版)_第7章.pdf_592395"
+      ],
+      "concept_id": "cross_validation",
+      "concept_name": "交叉验证",
+      "annotation_rule": "keywords_in_content: ['交叉验证', '交叉验证', 'cross validation']"
+    },
+    {
+      "id": "018",
+      "query": "正则化",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第7章.pdf_625807",
+        "数据科学导论(案例版)_第7章.pdf_736199",
+        "数据科学导论(案例版)_第10章.pdf_790011"
+      ],
+      "concept_id": "regularization",
+      "concept_name": "正则化",
+      "annotation_rule": "keywords_in_content: ['正则化', '正则化', 'regularization']"
+    },
+    {
+      "id": "019",
+      "query": "模型评估",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第10章.pdf_790011",
+        "数据科学导论(案例版)_第6章.pdf_557845",
+        "数据科学导论(案例版)_第8章.pdf_575442"
+      ],
+      "concept_id": "model_evaluation",
+      "concept_name": "模型评估",
+      "annotation_rule": "keywords_in_content: ['模型评估', '模型评估', 'model evaluation']"
+    },
+    {
+      "id": "020",
+      "query": "神经网络",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第8章.pdf_404673",
+        "数据科学导论(案例版)_第8章.pdf_572732",
+        "数据科学导论(案例版)_第8章.pdf_549446"
+      ],
+      "concept_id": "neural_network",
+      "concept_name": "神经网络基础",
+      "annotation_rule": "keywords_in_content: ['神经网络基础', '神经网络', 'neural network']"
+    },
+    {
+      "id": "021",
+      "query": "DIKW金字塔",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第1章.pdf_107844",
+        "数据科学导论(案例版)_第9章.pdf_173553",
+        "数据科学导论(案例版)_第4章.pdf_212884"
+      ],
+      "concept_id": "dikw_pyramid",
+      "concept_name": "DIKW金字塔",
+      "annotation_rule": "keywords_in_content: ['DIKW金字塔', 'DIKW金字塔', 'DIKW模型']"
+    },
+    {
+      "id": "022",
+      "query": "技术成熟度曲线",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第1章.pdf_308216",
+        "数据科学导论(案例版)_第1章.pdf_151149",
+        "数据科学导论(案例版)_第1章.pdf_369695"
+      ],
+      "concept_id": "technology_hype_cycle",
+      "concept_name": "技术成熟度曲线",
+      "annotation_rule": "keywords_in_content: ['技术成熟度曲线', '技术成熟度曲线', 'Gartner成熟度曲线']"
+    },
+    {
+      "id": "023",
+      "query": "大数据4V",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第2章.pdf_324299"
+      ],
+      "concept_id": "big_data_4v",
+      "concept_name": "大数据4V特征",
+      "annotation_rule": "keywords_in_content: ['大数据4V特征', '大数据4V', '4V特征']"
+    },
+    {
+      "id": "024",
+      "query": "数字化",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第2章.pdf_753266",
+        "数据科学导论(案例版)_第2章.pdf_036274",
+        "数据科学导论(案例版)_第2章.pdf_522695"
+      ],
+      "concept_id": "digitization",
+      "concept_name": "数字化",
+      "annotation_rule": "keywords_in_content: ['数字化', '数字化', 'digitalization']"
+    },
+    {
+      "id": "025",
+      "query": "数据融合",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第2章.pdf_674689"
+      ],
+      "concept_id": "data_fusion",
+      "concept_name": "数据融合",
+      "annotation_rule": "keywords_in_content: ['数据融合', '数据融合', 'data fusion']"
+    },
+    {
+      "id": "026",
+      "query": "特征发现",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第1章.pdf_107844"
+      ],
+      "concept_id": "feature_discovery",
+      "concept_name": "特征发现",
+      "annotation_rule": "keywords_in_content: ['特征发现', '特征发现', 'feature discovery']"
+    },
+    {
+      "id": "027",
+      "query": "智能制造",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第2章.pdf_036274",
+        "数据科学导论(案例版)_第1章.pdf_991082"
+      ],
+      "concept_id": "intelligent_manufacturing",
+      "concept_name": "智能制造",
+      "annotation_rule": "keywords_in_content: ['智能制造', '智能制造', 'smart manufacturing']"
+    },
+    {
+      "id": "028",
+      "query": "技术预测",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第1章.pdf_880748",
+        "数据科学导论(案例版)_第1章.pdf_409332"
+      ],
+      "concept_id": "technology_forecasting",
+      "concept_name": "技术预测",
+      "annotation_rule": "keywords_in_content: ['技术预测', '技术预测', 'technology forecasting']"
+    },
+    {
+      "id": "029",
+      "query": "数据业务化",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第2章.pdf_798684"
+      ],
+      "concept_id": "data_businessization",
+      "concept_name": "数据业务化",
+      "annotation_rule": "keywords_in_content: ['数据业务化', '数据业务化', '业务的数据化']"
+    },
+    {
+      "id": "030",
+      "query": "数据收集",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第1章.pdf_107844",
+        "数据科学导论(案例版)_第2章.pdf_798684",
+        "数据科学导论(案例版)_第1章.pdf_991082"
+      ],
+      "concept_id": "data_collection",
+      "concept_name": "数据采集",
+      "annotation_rule": "keywords_in_content: ['数据采集', '数据收集', 'data collection']"
+    },
+    {
+      "id": "031",
+      "query": "数据预处理",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第10章.pdf_667375",
+        "数据科学导论(案例版)_第4章.pdf_212884",
+        "数据科学导论(案例版)_第10章.pdf_959300"
+      ],
+      "concept_id": "data_cleaning",
+      "concept_name": "数据清洗",
+      "annotation_rule": "keywords_in_content: ['数据清洗', '数据预处理', 'data cleaning']"
+    },
+    {
+      "id": "032",
+      "query": "缺失值处理",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第4章.pdf_719496",
+        "数据科学导论(案例版)_第4章.pdf_055368"
+      ],
+      "concept_id": "missing_values",
+      "concept_name": "缺失值处理",
+      "annotation_rule": "keywords_in_content: ['缺失值处理', '缺失值处理', '缺失值']"
+    },
+    {
+      "id": "033",
+      "query": "分组聚合",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第4章.pdf_181813",
+        "数据科学导论(案例版)_第4章.pdf_232921"
+      ],
+      "concept_id": "groupby_aggregation",
+      "concept_name": "分组聚合",
+      "annotation_rule": "keywords_in_content: ['分组聚合', '分组聚合', 'groupby']"
+    },
+    {
+      "id": "034",
+      "query": "数据拼接",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第4章.pdf_723635",
+        "数据科学导论(案例版)_第4章.pdf_055368"
+      ],
+      "concept_id": "data_merge",
+      "concept_name": "数据拼接",
+      "annotation_rule": "keywords_in_content: ['数据拼接', '数据拼接', '数据合并']"
+    },
+    {
+      "id": "035",
+      "query": "均值",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第7章.pdf_551465",
+        "数据科学导论(案例版)_第4章.pdf_893316",
+        "数据科学导论(案例版)_第7章.pdf_592395"
+      ],
+      "concept_id": "descriptive_statistics",
+      "concept_name": "描述性统计",
+      "annotation_rule": "keywords_in_content: ['描述性统计', '均值', '方差']"
+    },
+    {
+      "id": "036",
+      "query": "假设检验",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第7章.pdf_625807",
+        "数据科学导论(案例版)_第10章.pdf_790011",
+        "数据科学导论(案例版)_第10章.pdf_667375"
+      ],
+      "concept_id": "hypothesis_testing",
+      "concept_name": "假设检验",
+      "annotation_rule": "keywords_in_content: ['假设检验', '假设检验', 'hypothesis testing']"
+    },
+    {
+      "id": "037",
+      "query": "概率",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第6章.pdf_781438",
+        "数据科学导论(案例版)_第6章.pdf_022906",
+        "数据科学导论(案例版)_第6章.pdf_280576"
+      ],
+      "concept_id": "probability",
+      "concept_name": "概率基础",
+      "annotation_rule": "keywords_in_content: ['概率基础', '概率', 'probability']"
+    },
+    {
+      "id": "038",
+      "query": "kaggle",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第10章.pdf_964099",
+        "数据科学导论(案例版)_第10章.pdf_216285",
+        "数据科学导论(案例版)_第10章.pdf_785844"
+      ],
+      "concept_id": "kaggle",
+      "concept_name": "Kaggle",
+      "annotation_rule": "keywords_in_content: ['Kaggle', 'kaggle']"
+    },
+    {
+      "id": "039",
+      "query": "特征工程",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第7章.pdf_736199",
+        "数据科学导论(案例版)_第10章.pdf_790011",
+        "数据科学导论(案例版)_第10章.pdf_667375"
+      ],
+      "concept_id": "feature_engineering",
+      "concept_name": "特征工程",
+      "annotation_rule": "keywords_in_content: ['特征工程', '特征工程', 'feature engineering']"
+    },
+    {
+      "id": "040",
+      "query": "参赛流程",
+      "category": "term",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第10章.pdf_629647"
+      ],
+      "concept_id": "competition_workflow",
+      "concept_name": "参赛流程",
+      "annotation_rule": "keywords_in_content: ['参赛流程', '参赛流程', '比赛流程']"
+    },
+    {
+      "id": "041",
+      "query": "python语言",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第3章.pdf_135420",
+        "数据科学导论(案例版)_第3章.pdf_677252",
+        "数据科学导论(案例版)_第3章.pdf_661940"
+      ],
+      "concept_id": "python_language",
+      "concept_name": "Python语言",
+      "annotation_rule": "keywords_in_content: ['Python语言', 'python语言', 'python']"
+    },
+    {
+      "id": "042",
+      "query": "pandas库",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第4章.pdf_824986",
+        "数据科学导论(案例版)_第4章.pdf_762745",
+        "数据科学导论(案例版)_第4章.pdf_464863"
+      ],
+      "concept_id": "pandas",
+      "concept_name": "Pandas",
+      "annotation_rule": "keywords_in_content: ['Pandas', 'pandas', 'pandas库']"
+    },
+    {
+      "id": "043",
+      "query": "数据表",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第4章.pdf_762745",
+        "数据科学导论(案例版)_第4章.pdf_464863",
+        "数据科学导论(案例版)_第4章.pdf_719496"
+      ],
+      "concept_id": "dataframe",
+      "concept_name": "DataFrame",
+      "annotation_rule": "keywords_in_content: ['DataFrame', 'dataframe', '数据表']"
+    },
+    {
+      "id": "044",
+      "query": "数据序列",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第4章.pdf_464863",
+        "数据科学导论(案例版)_第4章.pdf_608187",
+        "数据科学导论(案例版)_第4章.pdf_055368"
+      ],
+      "concept_id": "series",
+      "concept_name": "Series",
+      "annotation_rule": "keywords_in_content: ['Series', 'series', '数据序列']"
+    },
+    {
+      "id": "045",
+      "query": "loc与iloc",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第4章.pdf_723635",
+        "数据科学导论(案例版)_第4章.pdf_762745",
+        "数据科学导论(案例版)_第4章.pdf_053587"
+      ],
+      "concept_id": "loc_iloc",
+      "concept_name": "loc与iloc",
+      "annotation_rule": "keywords_in_content: ['loc与iloc', 'loc与iloc', 'iloc']"
+    },
+    {
+      "id": "046",
+      "query": "支持向量机",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第8章.pdf_533121",
+        "数据科学导论(案例版)_第4章.pdf_212884",
+        "数据科学导论(案例版)_第4章.pdf_495087"
+      ],
+      "concept_id": "svm",
+      "concept_name": "支持向量机",
+      "annotation_rule": "keywords_in_content: ['支持向量机', '支持向量机', 'SVM']"
+    },
+    {
+      "id": "047",
+      "query": "主成分分析",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第7章.pdf_470918",
+        "数据科学导论(案例版)_第7章.pdf_625807",
+        "数据科学导论(案例版)_第7章.pdf_736199"
+      ],
+      "concept_id": "pca",
+      "concept_name": "主成分分析",
+      "annotation_rule": "keywords_in_content: ['主成分分析', 'PCA', '主成分分析']"
+    },
+    {
+      "id": "048",
+      "query": "K近邻",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第6章.pdf_284336",
+        "数据科学导论(案例版)_第6章.pdf_067765",
+        "数据科学导论(案例版)_第6章.pdf_468632"
+      ],
+      "concept_id": "knn",
+      "concept_name": "K近邻算法",
+      "annotation_rule": "keywords_in_content: ['K近邻算法', 'K近邻', 'KNN']"
+    },
+    {
+      "id": "049",
+      "query": "长短期记忆网络",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第9章.pdf_949004",
+        "数据科学导论(案例版)_第8章.pdf_346779",
+        "数据科学导论(案例版)_第8章.pdf_308361"
+      ],
+      "concept_id": "lstm",
+      "concept_name": "长短期记忆网络",
+      "annotation_rule": "keywords_in_content: ['长短期记忆网络', '长短期记忆网络', 'lstm']"
+    },
+    {
+      "id": "050",
+      "query": "scikit-learn",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "数据科学导论(案例版)_第4章.pdf_216385",
+        "数据科学导论(案例版)_第8章.pdf_533121",
+        "数据科学导论(案例版)_第4章.pdf_212884"
+      ],
+      "concept_id": "scikit_learn",
+      "concept_name": "scikit-learn",
+      "annotation_rule": "keywords_in_content: ['scikit-learn', 'scikit-learn', 'sklearn']"
+    }
+  ]
+}
