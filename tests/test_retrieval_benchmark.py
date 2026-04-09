@@ -1,7 +1,9 @@
 import json
+import math
 import pytest
 from pathlib import Path
 
+from eval.qa_dataset import load_retrieval_qa_dataset, normalize_qa_pair
 from eval.metrics.retrieval import (
     calculate_recall_at_k,
     calculate_precision_at_k,
@@ -40,7 +42,25 @@ class TestRetrievalMetrics:
         retrieved = ["a", "b", "c"]
         relevance = {"a": 2.0, "b": 1.0}
         ndcg = calculate_ndcg_at_k(retrieved, relevance, k=3)
-        assert ndcg > 0.0
+        expected = (
+            (2 ** 2.0 - 1) / math.log2(2) +
+            (2 ** 1.0 - 1) / math.log2(3)
+        ) / (
+            (2 ** 2.0 - 1) / math.log2(2) +
+            (2 ** 1.0 - 1) / math.log2(3)
+        )
+        assert ndcg == pytest.approx(expected)
+
+    def test_normalize_qa_pair_populates_new_fields(self):
+        normalized = normalize_qa_pair({
+            "id": "demo",
+            "query": "demo",
+            "category": "term",
+            "ground_truth_ids": ["a", "b"],
+        })
+        assert normalized["acceptable_ids"] == ["a", "b"]
+        assert normalized["relevance_scores"] == {"a": 1.0, "b": 1.0}
+        assert normalized["enabled"] is True
 
 
 class TestBenchmarkData:
@@ -58,7 +78,11 @@ class TestBenchmarkData:
         for p in pairs:
             assert "query" in p
             assert "ground_truth_ids" in p
+            assert "acceptable_ids" in p
+            assert "relevance_scores" in p
             assert isinstance(p["ground_truth_ids"], list)
+            assert isinstance(p["acceptable_ids"], list)
+            assert isinstance(p["relevance_scores"], dict)
 
     def test_category_distribution(self):
         with open("eval/data/retrieval_qa_pairs.json", "r", encoding="utf-8") as f:
@@ -70,6 +94,11 @@ class TestBenchmarkData:
         assert abs(counts.get("semantic", 0) - 20) <= 3
         assert abs(counts.get("term", 0) - 20) <= 3
         assert abs(counts.get("code_abbr", 0) - 10) <= 3
+
+    def test_dataset_loader_excludes_disabled_samples(self):
+        dataset = load_retrieval_qa_dataset()
+        assert len(dataset["qa_pairs"]) < len(dataset["all_qa_pairs"])
+        assert all(pair["enabled"] for pair in dataset["qa_pairs"])
 
 
 @pytest.mark.skip(reason="需要真实 ChromaDB 和 Embedding API 环境")

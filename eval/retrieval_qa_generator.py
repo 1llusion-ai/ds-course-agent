@@ -7,11 +7,12 @@ import sys
 from pathlib import Path
 import chromadb
 from typing import List, Dict
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import utils.config as config
+from eval.qa_dataset import load_review_overrides, normalize_qa_pair
 
 
 @dataclass
@@ -23,6 +24,11 @@ class RetrievalQAPair:
     concept_id: str
     concept_name: str
     annotation_rule: str
+    acceptable_ids: List[str] = field(default_factory=list)
+    relevance_scores: Dict[str, float] = field(default_factory=dict)
+    enabled: bool = True
+    review_status: str = "auto_generated"
+    review_notes: str = ""
 
 
 CATEGORY_MAPPING = {
@@ -138,16 +144,27 @@ def generate_qa_pairs() -> List[RetrievalQAPair]:
                 ground_truth_ids=gt_ids,
                 concept_id=cid,
                 concept_name=display,
-                annotation_rule=f"keywords_in_content: {keywords}"
+                annotation_rule=f"keywords_in_content: {keywords}",
+                acceptable_ids=gt_ids.copy(),
+                relevance_scores={chunk_id: 1.0 for chunk_id in gt_ids},
             ))
             idx += 1
     return pairs
 
 
 def save_json(pairs: List[RetrievalQAPair], path: str = "eval/data/retrieval_qa_pairs.json"):
-    data = [asdict(p) for p in pairs]
+    review_overrides = load_review_overrides()
+    data = []
+    for pair in pairs:
+        item = asdict(pair)
+        override = review_overrides.get(item["id"], {})
+        # 只合并元数据字段；chunk_id 随 KB 重建可能变化，避免用旧 id 覆盖新生成的ground truth
+        for meta_key in ("enabled", "review_status", "review_notes"):
+            if meta_key in override:
+                item[meta_key] = override[meta_key]
+        data.append(normalize_qa_pair(item))
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({"qa_pairs": data}, f, ensure_ascii=False, indent=2)
+        json.dump({"schema_version": 2, "qa_pairs": data}, f, ensure_ascii=False, indent=2)
     print(f"Saved {len(pairs)} QA pairs to {path}")
 
 

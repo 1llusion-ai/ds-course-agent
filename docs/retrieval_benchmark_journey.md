@@ -52,7 +52,9 @@
 | `kb_builder/store.py` | 修复 V2 `chunk_id` 为确定性 crc32 |
 | `eval/retrieval_qa_generator.py` | 半自动 GT 标注器，产出 50 条样本 |
 | `eval/data/retrieval_qa_pairs.json` | 50 条测试样本（query + category + GT chunk_ids）|
+| `eval/data/retrieval_qa_reviews.json` | 人工复核覆盖层，补充 acceptable_ids / relevance_scores / disable 标记 |
 | `eval/retrieval_benchmark.py` | 评测主脚本，对比 vector vs hybrid，输出指标 + 统计显著性检验 |
+| `eval/qa_dataset.py` | 统一加载与归一化 retrieval QA 数据集，合并 review overrides |
 | `eval/audit_ground_truth.py` | GT 审计脚本，自动识别双输/救援样本 |
 | `tests/test_retrieval_benchmark.py` | pytest：指标计算单元测试、数据格式校验 |
 
@@ -65,6 +67,8 @@
 ---
 
 ## 四、实验过程记录
+
+> 注：本节到第七节前半部分主要记录历史实验过程。若与当前代码和最新报告中的数字不一致，以“7.3 当前状态更新”和“7.4 下一步优化方向”为准。
 
 ### 4.1 第一轮 Benchmark（存在 confounder）
 
@@ -209,6 +213,125 @@
 
 ---
 
+### 7.3 当前状态更新（2026-04-10）
+
+在第一轮 fair benchmark 和 GT 审计之后，系统又做了第二轮“评测体系修平”，目标是让结论更接近真实检索质量，而不是被评测口径放大或压低。
+
+**已完成优化**
+
+1. **无阈值公平对比**
+   - `RAGService.retrieve` 支持 `similarity_threshold = null`，纯向量检索不再被额外阈值裁剪。
+   - benchmark 统一按“原始 Top-k 检索能力”对比 vector 与 hybrid。
+
+2. **Ground Truth 升级为可接受集合 + 分级相关性**
+   - 数据集支持 `acceptable_ids` 与 `relevance_scores`，不再把“同节内合理命中但不是唯一 chunk”误判为 0。
+   - nDCG 改为标准 `log2(i + 2)` 形式，指标解释更接近标准 IR 口径。
+
+3. **高风险样本人工复核**
+   - 已先审 15 条高风险样本。
+   - 其中 12 条保留并补充 review notes，3 条暂时禁用：`017 交叉验证`、`036 假设检验`、`039 特征工程`。
+   - 当前有效评测集为 **47 条 query**。
+
+4. **Chunk 参数已上调**
+   - 当前 `chunk_size = 1300`，`chunk_overlap = 300`。
+   - 调整目标是减少“概念定义 + 解释 + 例子”被拦腰切断的情况，提升语义块完整性。
+
+**最新 benchmark（reviewed dataset, Top-5）**
+
+| 指标 | Vector | Hybrid | 提升 |
+|------|--------|--------|------|
+| Recall@5 | 0.6781 | **0.7498** | **+10.6%** |
+| Precision@5 | 0.3915 | **0.4468** | **+14.1%** |
+| MRR | 0.7638 | **0.8589** | **+12.4%** |
+| NDCG@5 | 0.6540 | **0.7421** | **+13.5%** |
+| Hit Rate | **0.9787** | 0.9362 | -4.3% |
+
+**分类结果**
+
+| 类别 | 指标 | Vector | Hybrid | 观察 |
+|------|------|--------|--------|------|
+| semantic (n=19) | Recall@5 | 0.7020 | **0.7376** | 混合检索仍有稳定增益，但差距已经回到“合理优势” |
+| semantic (n=19) | MRR | 0.7430 | **0.7825** | 排序质量仍优于纯向量 |
+| term (n=18) | Recall@5 | 0.7500 | **0.8889** | 术语类依旧是 hybrid 最有价值的场景 |
+| term (n=18) | MRR | 0.8611 | **0.9722** | BM25 对精确名词补召回非常明显 |
+| code_abbr (n=10) | Recall@5 | 0.5033 | 0.5225 | 有轻微提升，但不是最稳的增益点 |
+| code_abbr (n=10) | Hit Rate | **1.0000** | 0.8000 | 缩写类 query 仍提示需要单独优化 |
+
+**最新 GT 审计**
+
+- `double_misses = 0`：历史上的“双方都没命中”问题，当前已基本消失。
+- `hybrid_rescues = 1`：只剩 `025 数据融合` 这一条是真正的 BM25 补召回样本。
+- 这说明当前阶段的主要矛盾已经从“GT 是否过窄”转向“chunk 粒度与排序细节是否还能继续提效”。
+
+**当前结论**
+
+- 混合检索仍然优于纯向量，但不再是早期报告里那种被 confounder 放大的 30%-40% 全面领先。
+- 在 reviewed 数据集上，hybrid 的真实优势主要集中在：
+  - `term` 类 query 的补召回与前排排序；
+  - `semantic` 类 query 的轻中度排序提升；
+  - `code_abbr` 类 query 仍不稳定，说明问题不只在召回层，也可能在 query 归一化与融合策略。
+- 因此，当前优化重心应从“先修评测”切换到“先修 chunk 与精排”。
+
+### 7.4 下一步优化方向（按优先级）
+
+#### 第一优先级：先把 chunk 做扎实
+
+1. **补上真正生效的硬上限切分**
+   - 当前代码虽然写了 `max_chunk_size = 1500`，但超长段落仍可能直接形成超长 chunk。
+   - 建议在单段过长时增加二次切分：优先按标题、句号、分号、列表项断开，再回退到字符级兜底。
+   - 目标不是继续把 chunk 变大，而是让 `1300` 真正成为“受控目标值”。
+
+2. **做一次 chunk ablation**
+   - 建议固定其他变量，只对 `1000/250`、`1150/275`、`1300/300` 三组参数跑同一套 reviewed benchmark。
+   - 重点关注：
+     - `semantic` 的 Recall@5 / NDCG@5；
+     - `term` 的 MRR；
+     - `code_abbr` 的 Hit@1 / MRR。
+   - 如果 `1300` 只提升 semantic，但明显拖累 code_abbr，则需要回调到更保守区间。
+
+#### 第二优先级：针对 code_abbr 做专项优化
+
+3. **做 alias / abbreviation query expansion**
+   - 对 `SVM/PCA/KNN/loc/iloc/sklearn/pandas/DataFrame` 这类查询，在检索前展开中英别名与全称。
+   - 这比单纯继续增大 chunk 更可能改善 code_abbr 的命中稳定性。
+
+4. **检查 BM25 分词与归一化**
+   - 缩写、英文大小写、带符号术语通常对分词器更敏感。
+   - 建议单独做一个 code_abbr 小基准，排查是否存在大小写、符号、英文 token 切分不稳定的问题。
+
+#### 第三优先级：提升排序质量
+
+5. **加入轻量 reranker**
+   - 现阶段 hybrid 的召回已经不差，接下来的收益更可能来自前 5 条排序。
+   - 可先用 Top-20 候选 + 轻量 reranker 取 Top-5，目标是提升 Precision@5 与回答上下文纯度。
+
+6. **尝试 query-aware 的融合策略**
+   - 不是所有 query 都该让 BM25 和向量完全平权。
+   - 可按 query 类型动态调权：
+     - `term/code_abbr` 偏向 BM25；
+     - `semantic` 偏向向量。
+
+#### 第四优先级：继续完善评测集
+
+7. **把剩余 35 条样本逐步 review 完**
+   - 现在评测已经比第一版稳得多，但 reviewed 覆盖还不是 100%。
+   - 后续可以继续补：
+     - `primary_chunk_id`
+     - `acceptable_ids`
+     - `relevance_scores`
+     - `review_notes`
+
+8. **为 chunk 实验补一个专门的 code_abbr 集**
+   - 当前 code_abbr 只有 10 条，波动仍偏大。
+   - 可以扩充一组 exact alias / abbreviation benchmark，用来专门验证 chunk 调整是否真的帮到了短 query。
+
+**推荐执行顺序**
+
+1. 先修 chunk 的硬上限与超长段二次切分。
+2. 跑 `1000/1150/1300` 三组 chunk ablation。
+3. 如果 `code_abbr` 仍弱，再做 query expansion 与 BM25 归一化。
+4. 最后再引入 reranker 和动态融合，避免多个变量同时变化导致因果不清。
+
 ## 八、简历/面试素材提炼
 
 ### 推荐的简历写法（工程/算法岗）
@@ -236,6 +359,82 @@ D:/Anaconda/envs/RAG/python.exe eval/audit_ground_truth.py
 # 跑测试
 D:/Anaconda/python.exe -m pytest tests/test_retrieval_benchmark.py -v
 ```
+
+---
+
+### 7.5 第三轮实验：纯分册知识库与 chunk_size 控制实验（2026-04-10 晚）
+
+在第一轮 fair benchmark 和第二轮 review 之后，我们又对**知识库构建方式**和**分块参数**做了控制实验，结果揭露了第三个 confounder。
+
+**背景**
+
+- 原知识库是 `全书.pdf + 第1章.pdf…第10章.pdf` 一起构建的。
+- 这导致同一个知识点既出现在“全书”chunk 中，又出现在“分册”chunk 中，ChromaDB 里存在大量内容重复或高度重叠的文档。
+- 这种重复对纯向量检索是“增益”的（相关文档数量翻倍，命中概率提高），对 BM25 更是“超级增益”（TF 被重复计算）。
+
+**实验设计**
+
+1. 将 `data/数据科学导论(案例版).pdf` 移出构建目录，仅保留 11 个分册（第 1-10 章 + 附录）。
+2. 利用已生成的解析/清洗缓存（`data/cache/`），快速重建知识库。
+3. 分别测试两组 chunk 参数：
+   - `chunk_size=1300 / overlap=300 / max=1500`（之前尝试的“大 chunk”）
+   - `chunk_size=800 / overlap=150`（原始默认值）
+
+**关键发现：全书重复是一个被低估的 confounder**
+
+在纯分册知识库上，之前那种 30%-40% 的混合检索优势**几乎消失**了。
+
+| 指标 | 纯向量 | 混合检索 | 提升 | p-value |
+|------|--------|----------|------|---------|
+| Recall@5 | 0.5284 | 0.5496 | +4.0% | 0.4661（不显著） |
+| Precision@5 | 0.2426 | 0.2596 | +7.0% | 0.2899（不显著） |
+| MRR | 0.5564 | 0.6035 | +8.5% | 0.1174（不显著） |
+| NDCG@5 | 0.4819 | 0.5298 | +9.9% | **0.0322（显著）** |
+| Hit Rate | 0.7447 | 0.6809 | **-8.6%** | 0.0832 |
+
+**按类别拆分**
+
+| 类别 | 指标 | 纯向量 | 混合 | 观察 |
+|------|------|--------|------|------|
+| semantic (n=19) | Recall@5 | 0.5000 | 0.5175 | +3.5%，几乎没有增益 |
+| term (n=18) | Recall@5 | 0.6111 | 0.6667 | +9.1%，仍是 hybrid 唯一有正向表现的类别 |
+| code_abbr (n=10) | Recall@5 | 0.4333 | 0.4000 | **-7.7%**，混合反而更差 |
+
+**GT 审计（纯分册版）**
+
+- 双输样本：12 条（25.5%），比“全书+分册”时期更多。
+- BM25 救援成功：**0 条**。
+- 这说明在干净的纯分册库上，BM25 的增量价值非常有限；很多“失败”本质上仍然是 GT 标注过窄或 query 与 chunk 匹配模式的问题。
+
+**chunk_size 的 A/B 结果**
+
+- `1300` 大 chunk 在纯分册上表现更差（混合 Recall@5 跌至 0.3404，低于纯向量的 0.4043）。
+- 回退到 `800` 后，纯向量 recall 回升到 0.5284，混合也回升到 0.5496。
+- **结论**：在当前教材结构下，盲目增大 chunk_size 到 1300 会损害语义聚焦度，尤其对 code_abbr 和精确术语查询有害。
+
+**修正后的最终结论**
+
+1. **第一次 fair benchmark（全书+分册，chunk=800）** 的 +34.6% Recall 提升，是 **similarity_threshold confounder** 和 **全书重复 confounder** 叠加的结果。
+2. 当两个 confounder 都被消除后（纯分册、threshold=1.0、chunk=800），混合检索的真实优势只剩下：
+   - `term` 类 query 的轻中度补召回；
+   - 整体 NDCG 的轻度提升（p < 0.05）；
+   - **Recall@5 的 4% 提升在统计上不显著**。
+3. 这并不意味着混合检索“无用”，而是说明：
+   - 在**垂直封闭域、 clean 知识库**中，BM25 的增量价值比想象中的小；
+   - 下一步要获得显著提升，必须走到 **query expansion、reranker、动态融合** 这些更深层次的优化上，而不是继续调 chunk size。
+
+### 7.6 对简历/面试素材的修正建议
+
+**原始说法（已过时，存在被追问风险）**
+
+> "在 Recall@5、Precision@5、MRR、NDCG@5 上均取得 30%-40% 的显著提升（p < 0.01）"
+
+**建议改为（更经得起追问）**
+
+> "设计并实现了课程知识库的检索对比评测体系。最初跑 benchmark 时混合检索比纯向量提升了 210%，我随后定位到两个实验设计缺陷：
+> 1. 纯向量路径存在 `similarity_threshold=0.85` 的硬过滤，人为压低了基线；
+> 2. 知识库由 `全书+分册` 重复构建，放大了混合检索的命中概率。
+> 消除这两个 confounder 后，对应急名词类（term）query 仍有稳定收益（Recall@5 +9%），但整体优势收窄到 NDCG 层面的轻中度提升。这一过程让我养成了‘先怀疑实验设计，再相信数字’的习惯。"
 
 ---
 

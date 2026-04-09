@@ -32,8 +32,11 @@ def audit_double_misses(report: Dict) -> List[Dict]:
                 "query": v["query"],
                 "category": v["category"],
                 "gt_ids": v["gt_ids"],
+                "acceptable_ids": v.get("acceptable_ids", v["gt_ids"]),
                 "vector_retrieved": v["retrieved_ids"],
                 "hybrid_retrieved": h["retrieved_ids"],
+                "review_status": v.get("review_status", "auto_generated"),
+                "review_notes": v.get("review_notes", ""),
             })
     return double_misses
 
@@ -53,9 +56,12 @@ def audit_hybrid_rescues(report: Dict) -> List[Dict]:
                 "query": v["query"],
                 "category": v["category"],
                 "gt_ids": v["gt_ids"],
+                "acceptable_ids": v.get("acceptable_ids", v["gt_ids"]),
                 "vector_retrieved": v["retrieved_ids"],
                 "hybrid_retrieved": h["retrieved_ids"],
                 "hybrid_recall": h["recall"],
+                "review_status": v.get("review_status", "auto_generated"),
+                "review_notes": v.get("review_notes", ""),
             })
     return rescues
 
@@ -66,21 +72,31 @@ def print_audit_section(title: str, items: List[Dict], show_hybrid_recall: bool 
     print("=" * 70)
     for item in items:
         print(f"\n[ID {item['id']}] {item['query']} | 类别: {item['category']}")
-        print(f"  Ground Truth : {item['gt_ids']}")
+        print(f"  Primary GT   : {item['gt_ids']}")
+        print(f"  Acceptable   : {item['acceptable_ids']}")
         print(f"  Vector 召回  : {item['vector_retrieved']}")
         extra = ""
         if show_hybrid_recall:
             extra = f" (Recall={item['hybrid_recall']:.2f})"
         print(f"  Hybrid 召回  : {item['hybrid_retrieved']}{extra}")
+        if item.get("review_notes"):
+            print(f"  Review Notes : {item['review_notes']}")
 
 
-def export_audit_json(double_misses: List[Dict], rescues: List[Dict], output_path: str = "eval/reports/ground_truth_audit.json"):
+def export_audit_json(
+    report: Dict,
+    double_misses: List[Dict],
+    rescues: List[Dict],
+    output_path: str = "eval/reports/ground_truth_audit.json",
+):
     data = {
+        "dataset": report.get("dataset", {}),
+        "evaluation_mode": report.get("evaluation_mode", {}),
         "double_misses": double_misses,
         "hybrid_rescues": rescues,
         "notes": [
-            "double_misses: 两种检索都未命中，建议人工复核 GT 是否过偏或缺失",
-            "hybrid_rescues: 纯向量未命中但混合检索命中，说明 BM25 确实补充了召回"
+            "double_misses: 两种检索都未命中，建议优先复核低覆盖概念、GT 过窄或 query 歧义。",
+            "hybrid_rescues: 纯向量未命中但混合检索命中，结合 acceptable_ids 判断是否属于 BM25 真正补召回。"
         ]
     }
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -97,7 +113,7 @@ def main():
     print_audit_section("双输样本 (Vector=0, Hybrid=0)", double_misses)
     print_audit_section("BM25 救援成功 (Vector=0, Hybrid>0)", rescues, show_hybrid_recall=True)
 
-    export_audit_json(double_misses, rescues)
+    export_audit_json(report, double_misses, rescues)
 
     print(f"\n{'='*70}")
     print("审计总结")

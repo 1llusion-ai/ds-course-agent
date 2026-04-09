@@ -154,14 +154,23 @@ python main.py qa
 # 或
 streamlit run apps/qa.py
 
-# 构建知识库
+# 构建知识库（默认使用缓存，默认2进程并行，防止GPU显存不足）
 python main.py build data/
+
+# 清空旧库并重建（用于chunker参数修改后完整重建）
+python main.py build data/ --clear-db
+
+# 强制重新解析（跳过解析/清洗缓存）
+python main.py build data/ --no-cache
 
 # 运行评估
 python main.py eval
 
 # 运行测试
 python main.py test
+
+# 直接运行构建脚本（更多参数）
+python scripts/build_kb.py data/ --workers 2 --clear-db
 ```
 
 ## 模块说明
@@ -179,7 +188,7 @@ python main.py test
 | **skills/personalized_explanation.py** | **个性化讲解Skill** | **PersonalizedExplanationSkill, execute()** |
 | kb_builder/parser.py | PDF解析 | parse_pdf_file(), parse_pdf_directory() |
 | kb_builder/chunker.py | 文本分块 | chunk_document(), CourseChunkerV2 |
-| kb_builder/store.py | 向量入库 | CourseKnowledgeBase, ingest_chunks() |
+| kb_builder/store.py | 向量入库 | CourseKnowledgeBase, ingest_chunks(), clear() |
 | kb_builder/toc_parser.py | 目录解析 | TOCParser, 章节页码映射 |
 | utils/config.py | 配置管理 | 环境变量读取 |
 | utils/history.py | 会话历史 | get_history(), FileChatMessageHistory |
@@ -340,6 +349,24 @@ response = st.session_state["agent_service"].chat_with_history(
 - 空响应检测和重试机制
 - `_fallback_explanation()` 处理未匹配知识点的情况
 
+## 分块器参数（CourseChunkerV2）
+
+**当前配置**（2026-04-10优化后）:
+- `chunk_size = 1300` 字符
+- `chunk_overlap = 300` 字符
+- `max_chunk_size = 1500` 字符硬上限
+- **强制切块**: 支持二级标题 (`1.4`) 和三级标题 (`1.4.2`)
+- **代码块保护**: 检测缩进代码/Python特征，避免在代码中间切断
+
+## 知识库构建缓存
+
+`scripts/build_kb.py` 支持分层缓存：
+- **解析缓存** (`parse`): 基于PDF文件的mtime+size哈希，保存 `PDFParseResult`
+- **清洗缓存** (`clean`): 保存 `CleanedDocument`
+- 缓存位置: `data/cache/{pdf_name}_{hash}_mp{max_pages}_{stage}.pkl`
+- 使用 `--no-cache` 可强制重新解析和清洗
+- 分块和入库结果**不缓存**，因为chunker参数变化会直接影响分块结果
+
 ## 开发规范
 
 1. **新增工具**: 在 `core/tools.py` 中添加，使用 `@tool` 装饰器
@@ -357,7 +384,11 @@ response = st.session_state["agent_service"].chat_with_history(
 
 | 日期 | 修复内容 |
 |------|----------|
-| 2026-04-10 | **检索对比评测体系**: 构建50条精确ground-truth检索测试集（语义概念20/专有名词20/代码缩写10），实现`eval/retrieval_benchmark.py`对比BM25混合检索与纯向量检索，支持Recall@K/Precision@K/MRR/NDCG/HitRate分类型输出；修复`chunk_id`为确定性crc32；消除`similarity_threshold`干扰后重新评估，Recall@5提升34.6%(p=0.0024)，并增加统计显著性检验(paired t-test/Wilcoxon)及Ground Truth审计脚本 |
+| 2026-04-10 | **发现关键构建缺陷（待修复）**：1）`scripts/build_kb.py` 调用 `chunker.chunk_document()` 时未传入 `page_offset`，导致所有分册 PDF（第2-10章、附录）的章节元数据全部错标为「第1章 数据思维」，连带页码映射也大面积错误；2）`kb_builder/chunker.py` 的超长段落内部切分机制失效，出现 5500 字符超大 chunk（第7章公式推导页），语义极度割裂，严重稀释 embedding 质量。这是近期 benchmark 衰退的根因 |
+| 2026-04-10 | **纯分册控制实验与评测修正**: 移除全书 PDF 重复构建 confounder，进行 chunk_size 控制实验。发现原 34.6% Recall 提升部分源于全书+分册的内容重复；在干净纯分册库上（chunk_size=800），混合检索真实优势收窄到 term 类 +9.1% Recall，整体 NDCG@5 +9.9%（p=0.032），Recall@5 提升 4% 不显著。GT 审计显示双输样本 12 条（25.5%），BM25 救援 0 条。已更新 `docs/retrieval_benchmark_journey.md` 并修正简历表述建议 |
+| 2026-04-10 | **分块器优化（已回退 chunk_size）**: `kb_builder/chunker.py` 尝试 `chunk_size=1300` 后发现对纯分册 KB 有害（混合 Recall 跌至 0.34），回退到 `chunk_size=800`；保留二级标题 (`1.4`) 强制切块、代码块边界保护、1200 字符硬上限等改进 |
+| 2026-04-10 | **构建脚本增强**: `scripts/build_kb.py` 支持 GPU 加速 Marker 解析 (`TORCH_DEVICE=cuda`)、增加解析/清洗两层缓存 (`data/cache/`)、支持 `--workers` 多进程并行和 `--clear-db` 重建前清空知识库 |
+| 2026-04-10 | **评测体系修正**: 修复`eval/retrieval_qa_generator.py`中`review_override`覆盖新生成`chunk_id`的bug，确保KB重建后ground truth自动同步（不再混入旧hash的6位ID）。基于校正后的纯分册KB重新评估（47条有效查询，3条停用）：Recall@5 0.4326→0.4894（+13.1%），Precision@5 0.1915→0.2340（+22.2%），NDCG@5 0.4123→0.4717（+14.4%, p=0.0427），MRR略升+4.2%，Hit Rate 0.6809→0.6596（-3.1%, 不显著）。按类别：term类Recall@5提升最大（+25.0%），code_abbr类Recall下降-9.1%。GT审计：双输样本14条（29.8%），BM25救援1条（2.1%） |
 | 2026-04-09 | **错误处理与重试机制**: 修复回复不稳定问题，`core/agent.py` 添加空响应检测、自动重试、友好错误提示；`apps/qa.py` 添加重试按钮和错误详情展示 |
 | 2026-04-07 | **防幻觉机制**: 强化 `personalized_explanation.py` Prompt 约束，禁止编造章节页码，无资料时诚实告知 |
 | 2026-04-07 | **Streamlit集成**: 侧边栏显示学习画像（关注概念、薄弱点、当前进度），支持手动刷新 |
