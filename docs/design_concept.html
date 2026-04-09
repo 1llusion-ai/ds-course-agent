@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG课程助教 - 设计概念</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-indigo: #4f46e5;
+            --primary-indigo-light: #e0e7ff;
+            --accent-amber: #f59e0b;
+            --warm-gray: #fafaf9;
+            --paper: #fefdfb;
+            --text-primary: #1c1917;
+            --text-secondary: #78716c;
+            --border-soft: #e7e5e4;
+        }
+
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background: linear-gradient(135deg, #fafaf9 0%, #f5f5f4 100%);
+            min-height: 100vh;
+        }
+
+        .font-serif { font-family: 'Noto Serif SC', serif; }
+
+        /* 纸张质感背景 */
+        .paper-texture {
+            background-color: var(--paper);
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+        }
+
+        /* 柔和阴影 */
+        .shadow-soft {
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05),
+                        0 4px 12px rgba(0,0,0,0.04),
+                        0 8px 24px rgba(0,0,0,0.03);
+        }
+
+        .shadow-hover:hover {
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06),
+                        0 8px 20px rgba(0,0,0,0.05),
+                        0 16px 40px rgba(0,0,0,0.04);
+        }
+
+        /* 侧边栏项目悬停 */
+        .nav-item {
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-item:hover {
+            background: rgba(79, 70, 229, 0.04);
+            border-left-color: var(--primary-indigo);
+        }
+
+        .nav-item.active {
+            background: rgba(79, 70, 229, 0.08);
+            border-left-color: var(--primary-indigo);
+        }
+
+        /* 聊天气泡 */
+        .chat-bubble {
+            position: relative;
+            max-width: 80%;
+        }
+
+        .chat-bubble.user {
+            background: var(--primary-indigo);
+            color: white;
+            border-radius: 18px 18px 4px 18px;
+        }
+
+        .chat-bubble.assistant {
+            background: white;
+            border: 1px solid var(--border-soft);
+            border-radius: 18px 18px 18px 4px;
+        }
+
+        /* 概念标签 */
+        .concept-tag {
+            background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+            color: #3730a3;
+            transition: transform 0.2s ease;
+        }
+
+        .concept-tag:hover {
+            transform: translateY(-1px);
+        }
+
+        /* 薄弱点标签 */
+        .weakness-tag {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            color: #92400e;
+        }
+
+        /* 输入框 */
+        .input-area {
+            background: white;
+            border: 1px solid var(--border-soft);
+            transition: all 0.3s ease;
+        }
+
+        .input-area:focus-within {
+            border-color: var(--primary-indigo);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        /* 打字机动画 */
+        @keyframes typing {
+            0%, 60%, 100% { opacity: 1; }
+            30% { opacity: 0.4; }
+        }
+
+        .typing-dot {
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        /* 滚动条美化 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #d6d3d1;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a29e;
+        }
+    </style>
+</head>
+<body class="text-stone-800">
+    <!-- 顶部导航 -->
+    <header class="h-16 bg-white border-b border-stone-200 flex items-center justify-between px-6 sticky top-0 z-50">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xl">
+                🎓
+            </div>
+            <div>
+                <h1 class="font-serif font-bold text-lg text-stone-900">智能课程助教</h1>
+                <p class="text-xs text-stone-500">数据科学基础</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <button class="px-4 py-2 text-sm text-stone-600 hover:text-indigo-600 transition-colors">
+                📊 学习画像
+            </button>
+            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-sm font-medium">
+                张
+            </div>
+        </div>
+    </header>
+
+    <div class="flex h-[calc(100vh-64px)]">
+        <!-- 侧边栏 - 会话列表 -->
+        <aside class="w-72 bg-white border-r border-stone-200 flex flex-col">
+            <!-- 新建会话按钮 -->
+            <div class="p-4">
+                <button class="w-full py-3 px-4 bg-stone-900 text-white rounded-xl flex items-center justify-center gap-2 hover:bg-stone-800 transition-all shadow-soft">
+                    <span class="text-lg">+</span>
+                    <span class="font-medium">新建会话</span>
+                </button>
+            </div>
+
+            <!-- 会话列表 -->
+            <div class="flex-1 overflow-y-auto px-3 pb-4">
+                <div class="text-xs font-medium text-stone-400 uppercase tracking-wider mb-2 px-3">今天</div>
+
+                <div class="nav-item active rounded-lg p-3 mb-1 cursor-pointer">
+                    <div class="font-medium text-sm text-stone-900 mb-1">SVM 支持向量机疑问</div>
+                    <div class="text-xs text-stone-500 flex items-center gap-2">
+                        <span>💬 12 条消息</span>
+                        <span>·</span>
+                        <span>2 小时前</span>
+                    </div>
+                </div>
+
+                <div class="nav-item rounded-lg p-3 mb-1 cursor-pointer">
+                    <div class="font-medium text-sm text-stone-700 mb-1">过拟合和正则化</div>
+                    <div class="text-xs text-stone-500 flex items-center gap-2">
+                        <span>💬 8 条消息</span>
+                        <span>·</span>
+                        <span>5 小时前</span>
+                    </div>
+                </div>
+
+                <div class="text-xs font-medium text-stone-400 uppercase tracking-wider mb-2 mt-4 px-3">昨天</div>
+
+                <div class="nav-item rounded-lg p-3 mb-1 cursor-pointer">
+                    <div class="font-medium text-sm text-stone-700 mb-1">梯度下降原理解析</div>
+                    <div class="text-xs text-stone-500 flex items-center gap-2">
+                        <span>💬 15 条消息</span>
+                        <span>·</span>
+                        <span>昨天</span>
+                    </div>
+                </div>
+
+                <div class="nav-item rounded-lg p-3 mb-1 cursor-pointer">
+                    <div class="font-medium text-sm text-stone-700 mb-1">线性回归 vs 逻辑回归</div>
+                    <div class="text-xs text-stone-500 flex items-center gap-2">
+                        <span>💬 6 条消息</span>
+                        <span>·</span>
+                        <span>昨天</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主聊天区 -->
+        <main class="flex-1 flex flex-col bg-gradient-to-br from-stone-50 to-stone-100">
+            <!-- 简要画像卡片 -->
+            <div class="mx-6 mt-6 p-4 paper-texture rounded-2xl shadow-soft">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-serif font-semibold text-stone-800 flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs">📊</span>
+                        学习快照
+                    </h3>
+                    <a href="#" class="text-xs text-indigo-600 hover:text-indigo-700 font-medium">查看完整画像 →</a>
+                </div>
+
+                <div class="flex items-center gap-6">
+                    <!-- 关注概念 -->
+                    <div class="flex-1">
+                        <div class="text-xs text-stone-500 mb-2">🔥 最近关注</div>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="concept-tag px-3 py-1 rounded-full text-xs font-medium">支持向量机</span>
+                            <span class="concept-tag px-3 py-1 rounded-full text-xs font-medium">梯度下降</span>
+                            <span class="concept-tag px-3 py-1 rounded-full text-xs font-medium">过拟合</span>
+                            <span class="text-xs text-stone-400 self-center">+2</span>
+                        </div>
+                    </div>
+
+                    <!-- 薄弱点 -->
+                    <div class="flex-1 border-l border-stone-200 pl-6">
+                        <div class="text-xs text-stone-500 mb-2">⚠️ 需要巩固</div>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="weakness-tag px-3 py-1 rounded-full text-xs font-medium">核函数</span>
+                            <span class="weakness-tag px-3 py-1 rounded-full text-xs font-medium">交叉验证</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 聊天区域 -->
+            <div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+                <!-- AI 欢迎消息 -->
+                <div class="flex gap-4">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-sm flex-shrink-0">
+                        🤖
+                    </div>
+                    <div class="chat-bubble assistant p-4">
+                        <p class="text-stone-700 leading-relaxed">
+                            你好！我是你的《数据科学基础》课程助教。我可以帮你：
+                        </p>
+                        <ul class="mt-2 space-y-1 text-stone-600 text-sm">
+                            <li class="flex items-center gap-2"><span class="text-indigo-500">•</span> 理解课程概念和知识点</li>
+                            <li class="flex items-center gap-2"><span class="text-indigo-500">•</span> 解答教材中的疑难问题</li>
+                            <li class="flex items-center gap-2"><span class="text-indigo-500">•</span> 分析你的学习进度和薄弱点</li>
+                        </ul>
+                        <p class="mt-3 text-stone-700">今天想学习什么内容呢？</p>
+                    </div>
+                </div>
+
+                <!-- 用户消息 -->
+                <div class="flex gap-4 justify-end">
+                    <div class="chat-bubble user p-4">
+                        <p>什么是SVM的支持向量？为什么要最大化间隔？</p>
+                    </div>
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+                        张
+                    </div>
+                </div>
+
+                <!-- AI 回复 -->
+                <div class="flex gap-4">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-sm flex-shrink-0">
+                        🤖
+                    </div>
+                    <div class="chat-bubble assistant p-4 max-w-3xl">
+                        <p class="text-stone-700 leading-relaxed mb-3">
+                            支持向量（Support Vectors）是 SVM 算法中最关键的样本点，它们决定了最优分类超平面的位置。
+                        </p>
+
+                        <div class="bg-stone-50 rounded-xl p-4 mb-3 border border-stone-100">
+                            <h4 class="font-semibold text-stone-800 mb-2 text-sm">📐 直观理解</h4>
+                            <p class="text-stone-600 text-sm leading-relaxed">
+                                想象在两类数据之间画一条"街道"，支持向量就是离这条街道最近的那些点——它们像是"围栏"，决定了街道能有多宽。
+                            </p>
+                        </div>
+
+                        <p class="text-stone-700 leading-relaxed mb-3">
+                            <strong>为什么要最大化间隔？</strong>
+                        </p>
+                        <ul class="space-y-2 text-stone-600 text-sm mb-3">
+                            <li class="flex items-start gap-2">
+                                <span class="text-indigo-500 font-bold">1.</span>
+                                <span><strong>泛化能力更强</strong>：间隔越大，分类器对新数据的容错空间越大</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <span class="text-indigo-500 font-bold">2.</span>
+                                <span><strong>鲁棒性更好</strong>：减少噪声点对决策边界的影响</span>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <span class="text-indigo-500 font-bold">3.</span>
+                                <span><strong>结构风险最小化</strong>：符合统计学习理论，降低过拟合风险</span>
+                            </li>
+                        </ul>
+
+                        <div class="flex items-center gap-2 mt-3 pt-3 border-t border-stone-100 text-xs text-stone-500">
+                            <span class="text-stone-400">📚</span>
+                            <span>来源：第3章 支持向量机 · 第45-47页</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 输入区域 -->
+                <div class="pt-4">
+                    <div class="input-area rounded-2xl p-4 flex items-end gap-3 shadow-soft">
+                        <textarea
+                            placeholder="继续提问，或输入新问题..."
+                            class="flex-1 bg-transparent border-none outline-none resize-none text-stone-700 placeholder-stone-400 min-h-[24px] max-h-[120px]"
+                            rows="1"
+                        ></textarea>
+                        <button class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <p class="text-center text-xs text-stone-400 mt-2">AI 助手基于课程教材回答，仅供参考</p>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

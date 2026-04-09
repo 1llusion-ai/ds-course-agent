@@ -512,9 +512,30 @@ def main():
                     st.write(response)
                     st.session_state["messages"].append({"role": "assistant", "content": response})
                 except Exception as e:
-                    error_msg = f"抱歉，处理出错：{str(e)}"
-                    st.error(error_msg)
-                    st.session_state["messages"].append({"role": "assistant", "content": error_msg})
+                    error_msg = str(e)
+                    st.session_state["last_error"] = error_msg
+                    st.session_state["last_error_time"] = __import__('time').time()
+
+                    # 显示友好的错误提示
+                    st.error("⚠️ **生成回复失败**")
+                    st.markdown(f"""
+                    错误信息：{error_msg[:100]}
+
+                    可能原因：
+                    - AI 服务暂时不可用
+                    - 网络连接超时
+                    - 课程资料检索失败
+                    """)
+
+                    # 重试按钮
+                    if st.button("🔄 重试", key="retry_error", type="primary"):
+                        st.session_state["pending_input"] = pending_input
+                        st.rerun()
+
+                    st.session_state["messages"].append({
+                        "role": "assistant",
+                        "content": f"⚠️ 生成回复失败，请重试。"
+                    })
 
         st.rerun()
 
@@ -541,9 +562,30 @@ def main():
                     st.write(response)
                     st.session_state["messages"].append({"role": "assistant", "content": response})
                 except Exception as e:
-                    error_msg = f"抱歉，处理出错：{str(e)}"
-                    st.error(error_msg)
-                    st.session_state["messages"].append({"role": "assistant", "content": error_msg})
+                    error_msg = str(e)
+                    st.session_state["last_error"] = error_msg
+                    st.session_state["last_error_time"] = __import__('time').time()
+
+                    # 显示友好的错误提示
+                    st.error("⚠️ **生成回复失败**")
+                    st.markdown(f"""
+                    错误信息：{error_msg[:100]}
+
+                    可能原因：
+                    - AI 服务暂时不可用
+                    - 网络连接超时
+                    - 课程资料检索失败
+                    """)
+
+                    # 重试按钮
+                    if st.button("🔄 重试", key=f"retry_{len(st.session_state['messages'])}", type="primary"):
+                        st.session_state["pending_input"] = prompt
+                        st.rerun()
+
+                    st.session_state["messages"].append({
+                        "role": "assistant",
+                        "content": f"⚠️ 生成回复失败，请重试。"
+                    })
 
         st.rerun()
 

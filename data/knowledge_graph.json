@@ -1,222 +1,2214 @@
 {
   "course_name": "数据科学导论",
-  "version": "1.0",
+  "version": "1.1",
   "concepts": [
     {
-      "canonical_id": "data_science_definition",
-      "display_name": "数据科学定义",
-      "aliases": ["什么是数据科学", "data science", "数据科学是什么", "数据科学的定义"],
-      "related_concepts": ["数据分析", "机器学习", "大数据"],
+      "canonical_id": "data_literacy",
+      "display_name": "数据素养",
+      "aliases": [
+        "数据素养",
+        "data literacy",
+        "数字素养"
+      ],
+      "related_concepts": [
+        "数据思维",
+        "数据技能",
+        "数字领导力"
+      ],
       "chapter": "第1章",
       "section": "1.1"
     },
     {
-      "canonical_id": "data_collection",
-      "display_name": "数据采集",
-      "aliases": ["数据收集", "data collection", "如何获取数据", "数据来源"],
-      "related_concepts": ["爬虫", "API", "问卷调查"],
-      "chapter": "第2章",
-      "section": "2.1"
+      "canonical_id": "data_science_definition",
+      "display_name": "数据科学定义",
+      "aliases": [
+        "什么是数据科学",
+        "data science",
+        "数据科学是什么",
+        "数据科学的定义"
+      ],
+      "related_concepts": [
+        "数据分析",
+        "机器学习",
+        "大数据"
+      ],
+      "chapter": "第1章",
+      "section": "1.1"
     },
     {
-      "canonical_id": "data_cleaning",
-      "display_name": "数据清洗",
-      "aliases": ["数据预处理", "data cleaning", "数据清理", "缺失值处理", "异常值处理"],
-      "related_concepts": ["缺失值", "异常值", "数据标准化", "特征工程"],
+      "canonical_id": "data_skills",
+      "display_name": "数据技能",
+      "aliases": [
+        "数据技能",
+        "data skills",
+        "数据能力"
+      ],
+      "related_concepts": [
+        "数据素养",
+        "Python语言",
+        "数据分析"
+      ],
+      "chapter": "第1章",
+      "section": "1.1"
+    },
+    {
+      "canonical_id": "digital_economy",
+      "display_name": "数字经济",
+      "aliases": [
+        "数字经济",
+        "digital economy",
+        "数据要素"
+      ],
+      "related_concepts": [
+        "数据思维",
+        "数字化",
+        "数据资源"
+      ],
+      "chapter": "第1章",
+      "section": "1.1"
+    },
+    {
+      "canonical_id": "digital_leadership",
+      "display_name": "数字领导力",
+      "aliases": [
+        "数字领导力",
+        "digital leadership",
+        "数字化领导力"
+      ],
+      "related_concepts": [
+        "数据思维",
+        "数字化",
+        "数据驱动决策"
+      ],
+      "chapter": "第1章",
+      "section": "1.1"
+    },
+    {
+      "canonical_id": "﻿data_thinking",
+      "display_name": "数据思维",
+      "aliases": [
+        "数据思维",
+        "data thinking",
+        "数据驱动思维",
+        "数据化思维"
+      ],
+      "related_concepts": [
+        "数据素养",
+        "数据技能",
+        "数字领导力",
+        "数字经济"
+      ],
+      "chapter": "第1章",
+      "section": "1.1"
+    },
+    {
+      "canonical_id": "technology_hype_cycle",
+      "display_name": "技术成熟度曲线",
+      "aliases": [
+        "技术成熟度曲线",
+        "Gartner成熟度曲线",
+        "hype cycle",
+        "新兴技术成熟度曲线"
+      ],
+      "related_concepts": [
+        "新兴技术",
+        "数字技术",
+        "技术预测"
+      ],
+      "chapter": "第1章",
+      "section": "1.2"
+    },
+    {
+      "canonical_id": "data_engineering_workflow",
+      "display_name": "数据工程基本流程",
+      "aliases": [
+        "数据工程基本流程",
+        "数据工程流程",
+        "data engineering workflow",
+        "数据生命周期"
+      ],
+      "related_concepts": [
+        "数据采集",
+        "数据组织与存储",
+        "数据挖掘",
+        "数据应用与决策"
+      ],
+      "chapter": "第1章",
+      "section": "1.3"
+    },
+    {
+      "canonical_id": "data_storage_models",
+      "display_name": "数据存储模型",
+      "aliases": [
+        "数据存储模型",
+        "关系型数据库",
+        "文档型数据库",
+        "键值对数据库",
+        "图数据库"
+      ],
+      "related_concepts": [
+        "数据工程基本流程",
+        "MySQL",
+        "MongoDB",
+        "Redis"
+      ],
+      "chapter": "第1章",
+      "section": "1.3"
+    },
+    {
+      "canonical_id": "feature_discovery",
+      "display_name": "特征发现",
+      "aliases": [
+        "特征发现",
+        "feature discovery",
+        "特征分析"
+      ],
+      "related_concepts": [
+        "推荐系统",
+        "用户画像",
+        "精准营销"
+      ],
+      "chapter": "第1章",
+      "section": "1.4.1"
+    },
+    {
+      "canonical_id": "text_recommendation",
+      "display_name": "文本推荐",
+      "aliases": [
+        "文本推荐",
+        "text recommendation",
+        "新闻推荐",
+        "政务推荐"
+      ],
+      "related_concepts": [
+        "推荐系统",
+        "自然语言处理",
+        "智能问答"
+      ],
+      "chapter": "第1章",
+      "section": "1.4.2"
+    },
+    {
+      "canonical_id": "intelligent_manufacturing",
+      "display_name": "智能制造",
+      "aliases": [
+        "智能制造",
+        "smart manufacturing",
+        "制造业数据挖掘"
+      ],
+      "related_concepts": [
+        "数据仓库",
+        "多源异构数据",
+        "预测性维护"
+      ],
+      "chapter": "第1章",
+      "section": "1.4.3"
+    },
+    {
+      "canonical_id": "technology_forecasting",
+      "display_name": "技术预测",
+      "aliases": [
+        "技术预测",
+        "technology forecasting",
+        "专利预测",
+        "需求分析"
+      ],
+      "related_concepts": [
+        "专利分析",
+        "趋势预测",
+        "数据驱动决策"
+      ],
+      "chapter": "第1章",
+      "section": "1.4.4"
+    },
+    {
+      "canonical_id": "dikw_pyramid",
+      "display_name": "DIKW金字塔",
+      "aliases": [
+        "DIKW金字塔",
+        "DIKW模型",
+        "data information knowledge wisdom"
+      ],
+      "related_concepts": [
+        "数据",
+        "信息",
+        "知识",
+        "智慧"
+      ],
+      "chapter": "第2章",
+      "section": "2.1.1"
+    },
+    {
+      "canonical_id": "data_classification",
+      "display_name": "数据分类",
+      "aliases": [
+        "数据分类",
+        "数据的分类",
+        "data classification"
+      ],
+      "related_concepts": [
+        "结构化数据",
+        "半结构化数据",
+        "非结构化数据"
+      ],
+      "chapter": "第2章",
+      "section": "2.1.2"
+    },
+    {
+      "canonical_id": "semi_structured_data",
+      "display_name": "半结构化数据",
+      "aliases": [
+        "半结构化数据",
+        "semi-structured data",
+        "xml",
+        "html"
+      ],
+      "related_concepts": [
+        "数据分类",
+        "网页数据",
+        "网络爬虫"
+      ],
+      "chapter": "第2章",
+      "section": "2.1.2"
+    },
+    {
+      "canonical_id": "structured_data",
+      "display_name": "结构化数据",
+      "aliases": [
+        "结构化数据",
+        "structured data"
+      ],
+      "related_concepts": [
+        "数据分类",
+        "关系型数据库",
+        "表格数据"
+      ],
+      "chapter": "第2章",
+      "section": "2.1.2"
+    },
+    {
+      "canonical_id": "unstructured_data",
+      "display_name": "非结构化数据",
+      "aliases": [
+        "非结构化数据",
+        "unstructured data",
+        "文本图像音频视频"
+      ],
+      "related_concepts": [
+        "数据分类",
+        "文本数据",
+        "图像数据"
+      ],
+      "chapter": "第2章",
+      "section": "2.1.2"
+    },
+    {
+      "canonical_id": "big_data_4v",
+      "display_name": "大数据4V特征",
+      "aliases": [
+        "大数据4V",
+        "4V特征",
+        "volume variety value velocity",
+        "大数据特征"
+      ],
+      "related_concepts": [
+        "数据特征",
+        "大数据",
+        "价值密度"
+      ],
+      "chapter": "第2章",
+      "section": "2.1.3"
+    },
+    {
+      "canonical_id": "digitization",
+      "display_name": "数字化",
+      "aliases": [
+        "数字化",
+        "digitalization",
+        "数据化",
+        "信息化与数字化"
+      ],
+      "related_concepts": [
+        "数字经济",
+        "数据要素",
+        "数字化转型"
+      ],
+      "chapter": "第2章",
+      "section": "2.1.4"
+    },
+    {
+      "canonical_id": "data_science_history",
+      "display_name": "数据科学发展历程",
+      "aliases": [
+        "数据科学发展历程",
+        "数据科学里程碑",
+        "data science history"
+      ],
+      "related_concepts": [
+        "数据科学定义",
+        "数据科学知识体系"
+      ],
+      "chapter": "第2章",
+      "section": "2.2.2"
+    },
+    {
+      "canonical_id": "data_science_knowledge_system",
+      "display_name": "数据科学知识体系",
+      "aliases": [
+        "数据科学知识体系",
+        "数据科学知识框架",
+        "data science knowledge system"
+      ],
+      "related_concepts": [
+        "数据科学定义",
+        "交叉学科",
+        "数据科学发展历程"
+      ],
+      "chapter": "第2章",
+      "section": "2.2.3"
+    },
+    {
+      "canonical_id": "data_science_tasks",
+      "display_name": "数据科学研究任务",
+      "aliases": [
+        "数据科学研究任务",
+        "数据科学研究内容",
+        "data science tasks"
+      ],
+      "related_concepts": [
+        "数据洞见",
+        "数据业务化",
+        "数据生命周期"
+      ],
+      "chapter": "第2章",
+      "section": "2.2.4"
+    },
+    {
+      "canonical_id": "data_businessization",
+      "display_name": "数据业务化",
+      "aliases": [
+        "数据业务化",
+        "业务的数据化",
+        "数据的业务化"
+      ],
+      "related_concepts": [
+        "数字化",
+        "数据洞见",
+        "数据驱动决策"
+      ],
+      "chapter": "第2章",
+      "section": "2.2.5"
+    },
+    {
+      "canonical_id": "data_insight",
+      "display_name": "数据洞见",
+      "aliases": [
+        "数据洞见",
+        "data insight",
+        "数据价值发现"
+      ],
+      "related_concepts": [
+        "数据挖掘",
+        "数据科学研究任务",
+        "数据业务化"
+      ],
+      "chapter": "第2章",
+      "section": "2.2.5"
+    },
+    {
+      "canonical_id": "data_collection",
+      "display_name": "数据采集",
+      "aliases": [
+        "数据收集",
+        "data collection",
+        "如何获取数据",
+        "数据来源"
+      ],
+      "related_concepts": [
+        "数据科学基本流程",
+        "网络爬虫",
+        "数据源",
+        "数据清洗"
+      ],
       "chapter": "第2章",
       "section": "2.3"
     },
     {
-      "canonical_id": "eda",
-      "display_name": "探索性数据分析",
-      "aliases": ["EDA", "exploratory data analysis", "数据探索", "描述性统计"],
-      "related_concepts": ["数据可视化", "统计分布", "相关性分析"],
-      "chapter": "第3章",
-      "section": "3.1"
+      "canonical_id": "data_fusion",
+      "display_name": "数据融合",
+      "aliases": [
+        "数据融合",
+        "data fusion",
+        "多源数据融合",
+        "数据对齐"
+      ],
+      "related_concepts": [
+        "缺失值处理",
+        "数据冲突检测",
+        "流式计算"
+      ],
+      "chapter": "第2章",
+      "section": "2.3"
     },
     {
-      "canonical_id": "data_visualization",
-      "display_name": "数据可视化",
-      "aliases": ["可视化", "data visualization", "画图", "图表", "matplotlib", "seaborn"],
-      "related_concepts": ["EDA", "散点图", "柱状图", "箱线图"],
+      "canonical_id": "streaming_computing",
+      "display_name": "流式计算",
+      "aliases": [
+        "流式计算",
+        "stream processing",
+        "实时计算"
+      ],
+      "related_concepts": [
+        "时间序列数据",
+        "数据科学基本流程",
+        "计算引擎"
+      ],
+      "chapter": "第2章",
+      "section": "2.3"
+    },
+    {
+      "canonical_id": "python_language",
+      "display_name": "Python语言",
+      "aliases": [
+        "python语言",
+        "python",
+        "python基础"
+      ],
+      "related_concepts": [
+        "Python语法",
+        "Anaconda",
+        "Jupyter Notebook",
+        "PyCharm"
+      ],
+      "chapter": "第3章",
+      "section": "3.1.1"
+    },
+    {
+      "canonical_id": "anaconda",
+      "display_name": "Anaconda",
+      "aliases": [
+        "anaconda",
+        "conda",
+        "anaconda navigator",
+        "anaconda prompt"
+      ],
+      "related_concepts": [
+        "Python开发环境",
+        "Jupyter Notebook",
+        "虚拟环境"
+      ],
+      "chapter": "第3章",
+      "section": "3.1.3"
+    },
+    {
+      "canonical_id": "jupyter_notebook",
+      "display_name": "Jupyter Notebook",
+      "aliases": [
+        "jupyter notebook",
+        "jupyterlab",
+        "notebook环境"
+      ],
+      "related_concepts": [
+        "Anaconda",
+        "Python开发环境",
+        "数据探索"
+      ],
+      "chapter": "第3章",
+      "section": "3.1.3"
+    },
+    {
+      "canonical_id": "pycharm",
+      "display_name": "PyCharm",
+      "aliases": [
+        "pycharm",
+        "python编辑器",
+        "pycharm编辑器"
+      ],
+      "related_concepts": [
+        "Python开发环境",
+        "Jupyter Notebook"
+      ],
+      "chapter": "第3章",
+      "section": "3.1.3"
+    },
+    {
+      "canonical_id": "python_ide",
+      "display_name": "Python开发环境",
+      "aliases": [
+        "python开发环境",
+        "集成开发环境",
+        "python环境搭建"
+      ],
+      "related_concepts": [
+        "PyCharm",
+        "Jupyter Notebook",
+        "Anaconda"
+      ],
+      "chapter": "第3章",
+      "section": "3.1.3"
+    },
+    {
+      "canonical_id": "python_syntax",
+      "display_name": "Python语法",
+      "aliases": [
+        "python语法",
+        "python基础语法",
+        "变量与赋值",
+        "流程控制"
+      ],
+      "related_concepts": [
+        "Python语言",
+        "Python数据类型",
+        "Python函数"
+      ],
       "chapter": "第3章",
       "section": "3.2"
     },
     {
-      "canonical_id": "descriptive_statistics",
-      "display_name": "描述性统计",
-      "aliases": ["均值", "方差", "标准差", "中位数", "众数", "descriptive statistics"],
-      "related_concepts": ["推断性统计", "集中趋势", "离散程度"],
-      "chapter": "第4章",
-      "section": "4.1"
+      "canonical_id": "python_data_types",
+      "display_name": "Python数据类型",
+      "aliases": [
+        "python数据类型",
+        "列表元组字典集合",
+        "list tuple dict set"
+      ],
+      "related_concepts": [
+        "Python语法",
+        "列表",
+        "字典"
+      ],
+      "chapter": "第3章",
+      "section": "3.2.4"
     },
     {
-      "canonical_id": "probability",
-      "display_name": "概率基础",
-      "aliases": ["概率", "probability", "概率分布", "随机变量"],
-      "related_concepts": ["条件概率", "贝叶斯定理", "正态分布"],
+      "canonical_id": "python_functions",
+      "display_name": "Python函数",
+      "aliases": [
+        "python函数",
+        "def函数",
+        "自定义函数"
+      ],
+      "related_concepts": [
+        "Python语法",
+        "局部变量",
+        "返回值"
+      ],
+      "chapter": "第3章",
+      "section": "3.2.5"
+    },
+    {
+      "canonical_id": "object_oriented_programming",
+      "display_name": "面向对象编程",
+      "aliases": [
+        "面向对象",
+        "面向对象编程",
+        "oop",
+        "类和对象"
+      ],
+      "related_concepts": [
+        "Python函数",
+        "Python语法",
+        "类",
+        "对象"
+      ],
+      "chapter": "第3章",
+      "section": "3.2.6"
+    },
+    {
+      "canonical_id": "web_crawler",
+      "display_name": "网络爬虫",
+      "aliases": [
+        "网络爬虫",
+        "网页爬虫",
+        "web crawler",
+        "爬虫"
+      ],
+      "related_concepts": [
+        "爬虫安全",
+        "HTML",
+        "URL",
+        "robots.txt协议"
+      ],
+      "chapter": "第3章",
+      "section": "3.3"
+    },
+    {
+      "canonical_id": "crawler_security",
+      "display_name": "爬虫安全",
+      "aliases": [
+        "爬虫安全",
+        "robots协议",
+        "反爬虫",
+        "爬虫合规"
+      ],
+      "related_concepts": [
+        "网络爬虫",
+        "robots.txt协议",
+        "网页采集"
+      ],
+      "chapter": "第3章",
+      "section": "3.3.1"
+    },
+    {
+      "canonical_id": "robots_protocol",
+      "display_name": "robots.txt协议",
+      "aliases": [
+        "robots.txt",
+        "robots.txt协议"
+      ],
+      "related_concepts": [
+        "网络爬虫",
+        "爬虫安全"
+      ],
+      "chapter": "第3章",
+      "section": "3.3.1"
+    },
+    {
+      "canonical_id": "html_document",
+      "display_name": "HTML",
+      "aliases": [
+        "html",
+        "超文本标记语言",
+        "网页源码"
+      ],
+      "related_concepts": [
+        "网络爬虫",
+        "半结构化数据",
+        "URL"
+      ],
+      "chapter": "第3章",
+      "section": "3.3.2"
+    },
+    {
+      "canonical_id": "url_concept",
+      "display_name": "URL",
+      "aliases": [
+        "url",
+        "统一资源定位符"
+      ],
+      "related_concepts": [
+        "网络爬虫",
+        "HTML"
+      ],
+      "chapter": "第3章",
+      "section": "3.3.2"
+    },
+    {
+      "canonical_id": "dataframe",
+      "display_name": "DataFrame",
+      "aliases": [
+        "dataframe",
+        "数据表"
+      ],
+      "related_concepts": [
+        "Pandas",
+        "Series",
+        "索引与选择"
+      ],
       "chapter": "第4章",
-      "section": "4.2"
+      "section": "4.1.1"
+    },
+    {
+      "canonical_id": "pandas",
+      "display_name": "Pandas",
+      "aliases": [
+        "pandas",
+        "pandas库"
+      ],
+      "related_concepts": [
+        "DataFrame",
+        "Series",
+        "read_csv"
+      ],
+      "chapter": "第4章",
+      "section": "4.1.1"
+    },
+    {
+      "canonical_id": "series",
+      "display_name": "Series",
+      "aliases": [
+        "series",
+        "数据序列"
+      ],
+      "related_concepts": [
+        "Pandas",
+        "DataFrame"
+      ],
+      "chapter": "第4章",
+      "section": "4.1.1"
+    },
+    {
+      "canonical_id": "data_indexing",
+      "display_name": "索引与选择",
+      "aliases": [
+        "索引与选择",
+        "数据索引",
+        "条件筛选"
+      ],
+      "related_concepts": [
+        "iloc",
+        "loc",
+        "Pandas"
+      ],
+      "chapter": "第4章",
+      "section": "4.1.2"
+    },
+    {
+      "canonical_id": "loc_iloc",
+      "display_name": "loc与iloc",
+      "aliases": [
+        "loc与iloc",
+        "iloc",
+        "loc索引",
+        "基于标签选择",
+        "基于位置选择"
+      ],
+      "related_concepts": [
+        "索引与选择",
+        "Pandas"
+      ],
+      "chapter": "第4章",
+      "section": "4.1.2"
+    },
+    {
+      "canonical_id": "descriptive_statistics",
+      "display_name": "描述性统计",
+      "aliases": [
+        "均值",
+        "方差",
+        "标准差",
+        "中位数",
+        "众数",
+        "descriptive statistics"
+      ],
+      "related_concepts": [
+        "均值",
+        "方差",
+        "标准差",
+        "数据分析"
+      ],
+      "chapter": "第4章",
+      "section": "4.1.3"
     },
     {
       "canonical_id": "hypothesis_testing",
       "display_name": "假设检验",
-      "aliases": ["假设检验", "hypothesis testing", "t检验", "p值", "显著性检验"],
-      "related_concepts": ["置信区间", "统计推断", "显著性水平"],
+      "aliases": [
+        "假设检验",
+        "hypothesis testing",
+        "t检验",
+        "p值",
+        "显著性检验"
+      ],
+      "related_concepts": [
+        "描述性统计",
+        "显著性检验",
+        "统计推断"
+      ],
       "chapter": "第4章",
-      "section": "4.4"
+      "section": "4.1.3"
     },
     {
-      "canonical_id": "linear_regression",
-      "display_name": "线性回归",
-      "aliases": ["线性回归", "linear regression", "最小二乘法", "最小二乘", "回归分析"],
-      "related_concepts": ["回归系数", "R平方", "多元回归", "过拟合"],
+      "canonical_id": "probability",
+      "display_name": "概率基础",
+      "aliases": [
+        "概率",
+        "probability",
+        "概率分布",
+        "随机变量"
+      ],
+      "related_concepts": [
+        "概率分布",
+        "随机变量",
+        "统计分析"
+      ],
+      "chapter": "第4章",
+      "section": "4.1.3"
+    },
+    {
+      "canonical_id": "groupby_aggregation",
+      "display_name": "分组聚合",
+      "aliases": [
+        "分组聚合",
+        "groupby",
+        "聚合统计"
+      ],
+      "related_concepts": [
+        "Pandas",
+        "排序",
+        "统计分析"
+      ],
+      "chapter": "第4章",
+      "section": "4.1.4"
+    },
+    {
+      "canonical_id": "data_cleaning",
+      "display_name": "数据清洗",
+      "aliases": [
+        "数据预处理",
+        "data cleaning",
+        "数据清理",
+        "缺失值处理",
+        "异常值处理",
+        "数据清洗"
+      ],
+      "related_concepts": [
+        "缺失值处理",
+        "数据类型",
+        "数据融合",
+        "数据预处理"
+      ],
+      "chapter": "第4章",
+      "section": "4.1.5"
+    },
+    {
+      "canonical_id": "missing_values",
+      "display_name": "缺失值处理",
+      "aliases": [
+        "缺失值处理",
+        "缺失值",
+        "missing value",
+        "空值处理"
+      ],
+      "related_concepts": [
+        "数据清洗",
+        "数据类型",
+        "数据融合"
+      ],
+      "chapter": "第4章",
+      "section": "4.1.5"
+    },
+    {
+      "canonical_id": "data_merge",
+      "display_name": "数据拼接",
+      "aliases": [
+        "数据拼接",
+        "数据合并",
+        "merge",
+        "concat"
+      ],
+      "related_concepts": [
+        "Pandas",
+        "分组聚合",
+        "数据分析"
+      ],
+      "chapter": "第4章",
+      "section": "4.1.6"
+    },
+    {
+      "canonical_id": "scikit_learn",
+      "display_name": "scikit-learn",
+      "aliases": [
+        "scikit-learn",
+        "sklearn"
+      ],
+      "related_concepts": [
+        "分类模型",
+        "回归模型",
+        "聚类模型"
+      ],
+      "chapter": "第4章",
+      "section": "4.2"
+    },
+    {
+      "canonical_id": "opencv",
+      "display_name": "OpenCV",
+      "aliases": [
+        "opencv",
+        "计算机视觉库"
+      ],
+      "related_concepts": [
+        "图像读取与保存",
+        "图像变换",
+        "边缘提取"
+      ],
+      "chapter": "第4章",
+      "section": "4.3"
+    },
+    {
+      "canonical_id": "image_transformation",
+      "display_name": "图像变换",
+      "aliases": [
+        "图像变换",
+        "平移与旋转",
+        "图像平移",
+        "图像旋转"
+      ],
+      "related_concepts": [
+        "OpenCV",
+        "图像读取与保存"
+      ],
+      "chapter": "第4章",
+      "section": "4.3.3"
+    },
+    {
+      "canonical_id": "edge_detection",
+      "display_name": "边缘提取",
+      "aliases": [
+        "边缘提取",
+        "边缘检测",
+        "edge detection"
+      ],
+      "related_concepts": [
+        "OpenCV",
+        "图像变换"
+      ],
+      "chapter": "第4章",
+      "section": "4.3.4"
+    },
+    {
+      "canonical_id": "data_visualization",
+      "display_name": "数据可视化",
+      "aliases": [
+        "可视化",
+        "data visualization",
+        "画图",
+        "图表",
+        "matplotlib",
+        "seaborn"
+      ],
+      "related_concepts": [
+        "科学可视化",
+        "信息可视化",
+        "可视分析",
+        "视觉编码"
+      ],
       "chapter": "第5章",
-      "section": "5.1"
+      "section": "5.1.1"
     },
     {
-      "canonical_id": "logistic_regression",
-      "display_name": "逻辑回归",
-      "aliases": ["逻辑回归", "logistic regression", "分类", "二分类"],
-      "related_concepts": ["sigmoid", "分类问题", "阈值"],
+      "canonical_id": "information_visualization",
+      "display_name": "信息可视化",
+      "aliases": [
+        "信息可视化",
+        "information visualization",
+        "图结构可视化"
+      ],
+      "related_concepts": [
+        "数据可视化",
+        "视觉编码",
+        "交互"
+      ],
+      "chapter": "第5章",
+      "section": "5.1.2"
+    },
+    {
+      "canonical_id": "scientific_visualization",
+      "display_name": "科学可视化",
+      "aliases": [
+        "科学可视化",
+        "scientific visualization"
+      ],
+      "related_concepts": [
+        "数据可视化",
+        "可视映射",
+        "可视分析"
+      ],
+      "chapter": "第5章",
+      "section": "5.1.2"
+    },
+    {
+      "canonical_id": "visual_analytics",
+      "display_name": "可视分析",
+      "aliases": [
+        "可视分析",
+        "visual analytics",
+        "人机交互可视分析"
+      ],
+      "related_concepts": [
+        "数据挖掘",
+        "信息可视化",
+        "数据可视化"
+      ],
+      "chapter": "第5章",
+      "section": "5.1.2"
+    },
+    {
+      "canonical_id": "visualization_classification",
+      "display_name": "数据可视化分类",
+      "aliases": [
+        "数据可视化分类",
+        "可视化分类",
+        "科学可视化",
+        "信息可视化",
+        "可视分析"
+      ],
+      "related_concepts": [
+        "科学可视化",
+        "信息可视化",
+        "可视分析"
+      ],
+      "chapter": "第5章",
+      "section": "5.1.2"
+    },
+    {
+      "canonical_id": "visual_encoding",
+      "display_name": "视觉编码",
+      "aliases": [
+        "视觉编码",
+        "visual encoding",
+        "位置尺寸色彩形状"
+      ],
+      "related_concepts": [
+        "信息可视化",
+        "数据可视化",
+        "交互"
+      ],
+      "chapter": "第5章",
+      "section": "5.1.3"
+    },
+    {
+      "canonical_id": "wordcloud",
+      "display_name": "词云图",
+      "aliases": [
+        "词云图",
+        "wordcloud",
+        "词云"
+      ],
+      "related_concepts": [
+        "Python数据可视化",
+        "文本挖掘"
+      ],
+      "chapter": "第5章",
+      "section": "5.1.5"
+    },
+    {
+      "canonical_id": "dashboard",
+      "display_name": "仪表板",
+      "aliases": [
+        "仪表板",
+        "dashboard",
+        "数据看板"
+      ],
+      "related_concepts": [
+        "Tableau",
+        "ECharts",
+        "数据可视化"
+      ],
       "chapter": "第5章",
       "section": "5.2"
     },
     {
-      "canonical_id": "supervised_learning",
-      "display_name": "监督学习",
-      "aliases": ["监督学习", "supervised learning", "有监督学习", "带标签数据"],
-      "related_concepts": ["分类", "回归", "训练集", "测试集"],
+      "canonical_id": "eda",
+      "display_name": "探索性数据分析",
+      "aliases": [
+        "EDA",
+        "exploratory data analysis",
+        "数据探索",
+        "描述性统计"
+      ],
+      "related_concepts": [
+        "数据可视化",
+        "Tableau",
+        "数据探索",
+        "描述性统计"
+      ],
+      "chapter": "第5章",
+      "section": "5.2"
+    },
+    {
+      "canonical_id": "tableau",
+      "display_name": "Tableau",
+      "aliases": [
+        "tableau",
+        "tableau数据探索",
+        "tableau仪表板"
+      ],
+      "related_concepts": [
+        "仪表板",
+        "数据探索",
+        "数据可视化"
+      ],
+      "chapter": "第5章",
+      "section": "5.2"
+    },
+    {
+      "canonical_id": "matplotlib",
+      "display_name": "Matplotlib",
+      "aliases": [
+        "matplotlib",
+        "plt"
+      ],
+      "related_concepts": [
+        "Python数据可视化",
+        "Seaborn",
+        "pyecharts"
+      ],
+      "chapter": "第5章",
+      "section": "5.3.2"
+    },
+    {
+      "canonical_id": "pyecharts",
+      "display_name": "pyecharts",
+      "aliases": [
+        "pyecharts"
+      ],
+      "related_concepts": [
+        "Python数据可视化",
+        "ECharts"
+      ],
+      "chapter": "第5章",
+      "section": "5.3.2"
+    },
+    {
+      "canonical_id": "seaborn",
+      "display_name": "Seaborn",
+      "aliases": [
+        "seaborn"
+      ],
+      "related_concepts": [
+        "Matplotlib",
+        "Python数据可视化"
+      ],
+      "chapter": "第5章",
+      "section": "5.3.2"
+    },
+    {
+      "canonical_id": "classification_problem",
+      "display_name": "分类问题",
+      "aliases": [
+        "分类问题",
+        "classification problem",
+        "分类任务"
+      ],
+      "related_concepts": [
+        "K近邻算法",
+        "支持向量机",
+        "朴素贝叶斯",
+        "决策树"
+      ],
       "chapter": "第6章",
       "section": "6.1"
     },
     {
-      "canonical_id": "svm",
-      "display_name": "支持向量机",
-      "aliases": ["支持向量机", "SVM", "support vector machine", "支持向量", "最大间隔"],
-      "related_concepts": ["核函数", "分类边界", "软间隔", "核技巧"],
+      "canonical_id": "logistic_regression",
+      "display_name": "逻辑回归",
+      "aliases": [
+        "逻辑回归",
+        "logistic regression",
+        "分类",
+        "二分类"
+      ],
+      "related_concepts": [
+        "分类问题",
+        "监督学习",
+        "模型评估"
+      ],
       "chapter": "第6章",
-      "section": "6.2"
+      "section": "6.1"
     },
     {
-      "canonical_id": "svm_kernel",
-      "display_name": "核函数",
-      "aliases": ["核函数", "kernel function", "核技巧", "kernel trick", "核方法", "径向基核", "RBF", "多项式核"],
-      "related_concepts": ["SVM", "非线性分类", "高维映射", "高斯核"],
+      "canonical_id": "supervised_learning",
+      "display_name": "监督学习",
+      "aliases": [
+        "监督学习",
+        "supervised learning",
+        "有监督学习",
+        "带标签数据"
+      ],
+      "related_concepts": [
+        "分类问题",
+        "回归问题",
+        "模型评估"
+      ],
       "chapter": "第6章",
-      "section": "6.3"
-    },
-    {
-      "canonical_id": "decision_tree",
-      "display_name": "决策树",
-      "aliases": ["决策树", "decision tree", "信息熵", "信息增益", "ID3", "C4.5", "CART"],
-      "related_concepts": ["剪枝", "随机森林", "集成学习", "基尼指数"],
-      "chapter": "第6章",
-      "section": "6.4"
+      "section": "6.1"
     },
     {
       "canonical_id": "knn",
       "display_name": "K近邻算法",
-      "aliases": ["K近邻", "KNN", "k-nearest neighbors", "最近邻"],
-      "related_concepts": ["距离度量", "欧氏距离", "K值选择"],
+      "aliases": [
+        "K近邻",
+        "KNN",
+        "k-nearest neighbors",
+        "最近邻"
+      ],
+      "related_concepts": [
+        "分类问题",
+        "距离度量",
+        "监督学习"
+      ],
       "chapter": "第6章",
-      "section": "6.5"
+      "section": "6.1.1"
+    },
+    {
+      "canonical_id": "svm",
+      "display_name": "支持向量机",
+      "aliases": [
+        "支持向量机",
+        "SVM",
+        "support vector machine",
+        "支持向量",
+        "最大间隔",
+        "SVM哪个好"
+      ],
+      "related_concepts": [
+        "核函数",
+        "分类问题",
+        "支持向量"
+      ],
+      "chapter": "第6章",
+      "section": "6.1.2"
+    },
+    {
+      "canonical_id": "svm_kernel",
+      "display_name": "核函数",
+      "aliases": [
+        "核函数",
+        "kernel function",
+        "核技巧",
+        "kernel trick",
+        "核方法",
+        "径向基核",
+        "RBF",
+        "多项式核",
+        "实现核函数",
+        "Python里怎么实现核函数"
+      ],
+      "related_concepts": [
+        "支持向量机",
+        "核技巧",
+        "高维映射"
+      ],
+      "chapter": "第6章",
+      "section": "6.1.2"
     },
     {
       "canonical_id": "naive_bayes",
       "display_name": "朴素贝叶斯",
-      "aliases": ["朴素贝叶斯", "naive bayes", "贝叶斯分类器"],
-      "related_concepts": ["贝叶斯定理", "条件独立", "文本分类"],
+      "aliases": [
+        "朴素贝叶斯",
+        "naive bayes",
+        "贝叶斯分类器"
+      ],
+      "related_concepts": [
+        "分类问题",
+        "贝叶斯定理",
+        "文本分类"
+      ],
       "chapter": "第6章",
-      "section": "6.6"
+      "section": "6.1.3"
+    },
+    {
+      "canonical_id": "decision_tree",
+      "display_name": "决策树",
+      "aliases": [
+        "决策树",
+        "decision tree",
+        "信息熵",
+        "信息增益",
+        "ID3",
+        "C4.5",
+        "CART"
+      ],
+      "related_concepts": [
+        "分类问题",
+        "信息增益",
+        "随机森林"
+      ],
+      "chapter": "第6章",
+      "section": "6.1.4"
+    },
+    {
+      "canonical_id": "classification_evaluation",
+      "display_name": "分类模型评估",
+      "aliases": [
+        "分类模型评估",
+        "分类评估",
+        "混淆矩阵",
+        "precision recall f1"
+      ],
+      "related_concepts": [
+        "模型评估",
+        "分类问题",
+        "ROC曲线"
+      ],
+      "chapter": "第6章",
+      "section": "6.1.5"
+    },
+    {
+      "canonical_id": "cross_validation",
+      "display_name": "交叉验证",
+      "aliases": [
+        "交叉验证",
+        "cross validation",
+        "k折交叉验证",
+        "k-fold",
+        "在没见过数据上表现好",
+        "我想让模型在没见过数据上表现好"
+      ],
+      "related_concepts": [
+        "模型评估",
+        "过拟合",
+        "验证集"
+      ],
+      "chapter": "第6章",
+      "section": "6.1.5"
+    },
+    {
+      "canonical_id": "model_evaluation",
+      "display_name": "模型评估",
+      "aliases": [
+        "模型评估",
+        "model evaluation",
+        "准确率",
+        "精确率",
+        "召回率",
+        "F1分数"
+      ],
+      "related_concepts": [
+        "分类模型评估",
+        "回归模型评估",
+        "交叉验证"
+      ],
+      "chapter": "第6章",
+      "section": "6.1.5"
+    },
+    {
+      "canonical_id": "regression_problem",
+      "display_name": "回归问题",
+      "aliases": [
+        "回归问题",
+        "regression problem",
+        "回归任务"
+      ],
+      "related_concepts": [
+        "线性回归",
+        "非线性回归",
+        "回归模型评估"
+      ],
+      "chapter": "第6章",
+      "section": "6.2"
+    },
+    {
+      "canonical_id": "linear_regression",
+      "display_name": "线性回归",
+      "aliases": [
+        "线性回归",
+        "linear regression",
+        "最小二乘法",
+        "最小二乘",
+        "回归分析"
+      ],
+      "related_concepts": [
+        "回归问题",
+        "回归模型评估",
+        "非线性回归"
+      ],
+      "chapter": "第6章",
+      "section": "6.2.1"
+    },
+    {
+      "canonical_id": "regression_evaluation",
+      "display_name": "回归模型评估",
+      "aliases": [
+        "回归模型评估",
+        "回归评估",
+        "均方误差",
+        "mae",
+        "rmse"
+      ],
+      "related_concepts": [
+        "模型评估",
+        "线性回归"
+      ],
+      "chapter": "第6章",
+      "section": "6.2.2"
     },
     {
       "canonical_id": "ensemble_learning",
       "display_name": "集成学习",
-      "aliases": ["集成学习", "ensemble learning", "随机森林", "random forest", "bagging", "boosting"],
-      "related_concepts": ["决策树", "投票", "Adaboost", "XGBoost"],
+      "aliases": [
+        "集成学习",
+        "ensemble learning",
+        "随机森林",
+        "random forest",
+        "bagging",
+        "boosting"
+      ],
+      "related_concepts": [
+        "随机森林",
+        "梯度提升树",
+        "决策树"
+      ],
       "chapter": "第6章",
-      "section": "6.7"
+      "section": "6.3.1"
+    },
+    {
+      "canonical_id": "gradient_boosting_tree",
+      "display_name": "梯度提升树",
+      "aliases": [
+        "梯度提升树",
+        "gradient boosting tree",
+        "gbdt",
+        "boosting"
+      ],
+      "related_concepts": [
+        "集成学习",
+        "随机森林"
+      ],
+      "chapter": "第6章",
+      "section": "6.3.1"
+    },
+    {
+      "canonical_id": "random_forest",
+      "display_name": "随机森林",
+      "aliases": [
+        "随机森林",
+        "random forest"
+      ],
+      "related_concepts": [
+        "集成学习",
+        "决策树",
+        "Bagging"
+      ],
+      "chapter": "第6章",
+      "section": "6.3.1"
+    },
+    {
+      "canonical_id": "nonlinear_regression",
+      "display_name": "非线性回归",
+      "aliases": [
+        "非线性回归",
+        "nonlinear regression"
+      ],
+      "related_concepts": [
+        "回归问题",
+        "线性回归"
+      ],
+      "chapter": "第6章",
+      "section": "6.3.2"
+    },
+    {
+      "canonical_id": "clustering",
+      "display_name": "聚类算法",
+      "aliases": [
+        "聚类算法",
+        "clustering",
+        "聚类"
+      ],
+      "related_concepts": [
+        "K-means聚类",
+        "密度聚类",
+        "层次聚类"
+      ],
+      "chapter": "第7章",
+      "section": "7.1"
     },
     {
       "canonical_id": "unsupervised_learning",
       "display_name": "无监督学习",
-      "aliases": ["无监督学习", "unsupervised learning", "聚类", "降维"],
-      "related_concepts": ["K-means", "层次聚类", "PCA", "无标签数据"],
+      "aliases": [
+        "无监督学习",
+        "unsupervised learning",
+        "聚类",
+        "降维"
+      ],
+      "related_concepts": [
+        "聚类算法",
+        "降维",
+        "无标签数据"
+      ],
       "chapter": "第7章",
       "section": "7.1"
     },
     {
       "canonical_id": "kmeans",
       "display_name": "K-means聚类",
-      "aliases": ["K-means", "kmeans", "K均值", "K均值聚类"],
-      "related_concepts": ["聚类中心", "肘部法则", "轮廓系数"],
+      "aliases": [
+        "K-means",
+        "kmeans",
+        "K均值",
+        "K均值聚类"
+      ],
+      "related_concepts": [
+        "聚类算法",
+        "聚类中心",
+        "聚类评估"
+      ],
+      "chapter": "第7章",
+      "section": "7.1.1"
+    },
+    {
+      "canonical_id": "dbscan",
+      "display_name": "密度聚类",
+      "aliases": [
+        "密度聚类",
+        "dbscan"
+      ],
+      "related_concepts": [
+        "聚类算法",
+        "K-means聚类"
+      ],
+      "chapter": "第7章",
+      "section": "7.1.2"
+    },
+    {
+      "canonical_id": "hierarchical_clustering",
+      "display_name": "层次聚类",
+      "aliases": [
+        "层次聚类",
+        "hierarchical clustering"
+      ],
+      "related_concepts": [
+        "聚类算法",
+        "聚类评估"
+      ],
+      "chapter": "第7章",
+      "section": "7.1.3"
+    },
+    {
+      "canonical_id": "clustering_evaluation",
+      "display_name": "聚类模型评估",
+      "aliases": [
+        "聚类模型评估",
+        "聚类评估",
+        "轮廓系数"
+      ],
+      "related_concepts": [
+        "聚类算法",
+        "K-means聚类",
+        "层次聚类"
+      ],
+      "chapter": "第7章",
+      "section": "7.1.4"
+    },
+    {
+      "canonical_id": "dimensionality_reduction",
+      "display_name": "降维",
+      "aliases": [
+        "降维",
+        "dimensionality reduction"
+      ],
+      "related_concepts": [
+        "主成分分析",
+        "核主成分分析"
+      ],
       "chapter": "第7章",
       "section": "7.2"
     },
     {
       "canonical_id": "pca",
       "display_name": "主成分分析",
-      "aliases": ["PCA", "主成分分析", "principal component analysis", "降维"],
-      "related_concepts": ["特征提取", "方差", "协方差矩阵"],
+      "aliases": [
+        "PCA",
+        "主成分分析",
+        "principal component analysis",
+        "降维"
+      ],
+      "related_concepts": [
+        "降维",
+        "核主成分分析",
+        "特征提取"
+      ],
       "chapter": "第7章",
-      "section": "7.3"
+      "section": "7.2.1"
     },
     {
-      "canonical_id": "model_evaluation",
-      "display_name": "模型评估",
-      "aliases": ["模型评估", "model evaluation", "准确率", "精确率", "召回率", "F1分数"],
-      "related_concepts": ["混淆矩阵", "ROC曲线", "AUC", "交叉验证"],
+      "canonical_id": "kernel_pca",
+      "display_name": "核主成分分析",
+      "aliases": [
+        "核主成分分析",
+        "kernel pca",
+        "kpca"
+      ],
+      "related_concepts": [
+        "主成分分析",
+        "降维"
+      ],
+      "chapter": "第7章",
+      "section": "7.2.2"
+    },
+    {
+      "canonical_id": "spectral_clustering",
+      "display_name": "谱聚类",
+      "aliases": [
+        "谱聚类",
+        "spectral clustering"
+      ],
+      "related_concepts": [
+        "聚类算法",
+        "图聚类"
+      ],
+      "chapter": "第7章",
+      "section": "7.3.1"
+    },
+    {
+      "canonical_id": "lda_topic_model",
+      "display_name": "LDA算法",
+      "aliases": [
+        "lda算法",
+        "latent dirichlet allocation",
+        "主题模型"
+      ],
+      "related_concepts": [
+        "文本挖掘",
+        "无监督学习",
+        "谱聚类"
+      ],
+      "chapter": "第7章",
+      "section": "7.3.2"
+    },
+    {
+      "canonical_id": "artificial_intelligence",
+      "display_name": "人工智能",
+      "aliases": [
+        "人工智能",
+        "artificial intelligence"
+      ],
+      "related_concepts": [
+        "神经网络",
+        "深度学习"
+      ],
       "chapter": "第8章",
-      "section": "8.1"
-    },
-    {
-      "canonical_id": "cross_validation",
-      "display_name": "交叉验证",
-      "aliases": ["交叉验证", "cross validation", "k折交叉验证", "k-fold"],
-      "related_concepts": ["过拟合", "模型选择", "验证集"],
-      "chapter": "第8章",
-      "section": "8.2"
-    },
-    {
-      "canonical_id": "overfitting",
-      "display_name": "过拟合",
-      "aliases": ["过拟合", "overfitting", "过配", "泛化能力差", "过拟合问题"],
-      "related_concepts": ["正则化", "交叉验证", "模型复杂度", "欠拟合"],
-      "chapter": "第8章",
-      "section": "8.3"
-    },
-    {
-      "canonical_id": "regularization",
-      "display_name": "正则化",
-      "aliases": ["正则化", "regularization", "L1正则", "L2正则", "岭回归", "Lasso"],
-      "related_concepts": ["过拟合", "惩罚项", "模型复杂度控制"],
-      "chapter": "第8章",
-      "section": "8.4"
-    },
-    {
-      "canonical_id": "feature_engineering",
-      "display_name": "特征工程",
-      "aliases": ["特征工程", "feature engineering", "特征选择", "特征提取", "特征构造"],
-      "related_concepts": ["数据预处理", "维度灾难", "特征重要性"],
-      "chapter": "第9章",
-      "section": "9.1"
+      "section": "8.1.1"
     },
     {
       "canonical_id": "neural_network",
       "display_name": "神经网络基础",
-      "aliases": ["神经网络", "neural network", "深度学习", "deep learning", "神经元", "感知机"],
-      "related_concepts": ["激活函数", "反向传播", "梯度下降", "多层感知机"],
-      "chapter": "第10章",
-      "section": "10.1"
+      "aliases": [
+        "神经网络",
+        "neural network",
+        "深度学习",
+        "deep learning",
+        "神经元",
+        "感知机",
+        "神经网络哪个好",
+        "神经网络和SVM哪个好"
+      ],
+      "related_concepts": [
+        "人工智能",
+        "反向传播",
+        "激活函数",
+        "深度学习"
+      ],
+      "chapter": "第8章",
+      "section": "8.1.1"
+    },
+    {
+      "canonical_id": "activation_function",
+      "display_name": "激活函数",
+      "aliases": [
+        "激活函数",
+        "activation function",
+        "relu",
+        "sigmoid",
+        "tanh"
+      ],
+      "related_concepts": [
+        "神经网络",
+        "反向传播",
+        "卷积神经网络"
+      ],
+      "chapter": "第8章",
+      "section": "8.1.2"
+    },
+    {
+      "canonical_id": "backpropagation",
+      "display_name": "反向传播",
+      "aliases": [
+        "反向传播",
+        "backpropagation",
+        "bp算法"
+      ],
+      "related_concepts": [
+        "梯度下降",
+        "神经网络",
+        "激活函数"
+      ],
+      "chapter": "第8章",
+      "section": "8.1.2"
+    },
+    {
+      "canonical_id": "deep_learning_tasks",
+      "display_name": "深度学习常见任务",
+      "aliases": [
+        "深度学习常见任务",
+        "图像分类",
+        "目标检测",
+        "序列建模"
+      ],
+      "related_concepts": [
+        "深度学习",
+        "卷积神经网络",
+        "循环神经网络"
+      ],
+      "chapter": "第8章",
+      "section": "8.1.3"
+    },
+    {
+      "canonical_id": "deep_learning_frameworks",
+      "display_name": "深度学习利器",
+      "aliases": [
+        "深度学习利器",
+        "tensorflow",
+        "pytorch",
+        "深度学习框架"
+      ],
+      "related_concepts": [
+        "深度学习",
+        "模型训练",
+        "GPU"
+      ],
+      "chapter": "第8章",
+      "section": "8.1.4"
+    },
+    {
+      "canonical_id": "convolutional_neural_network",
+      "display_name": "卷积神经网络",
+      "aliases": [
+        "卷积神经网络",
+        "cnn",
+        "convolutional neural network"
+      ],
+      "related_concepts": [
+        "神经网络",
+        "LeNet-5",
+        "MNIST手写数字识别"
+      ],
+      "chapter": "第8章",
+      "section": "8.2"
+    },
+    {
+      "canonical_id": "lenet5",
+      "display_name": "LeNet-5",
+      "aliases": [
+        "lenet5",
+        "lenet-5"
+      ],
+      "related_concepts": [
+        "卷积神经网络",
+        "MNIST手写数字识别"
+      ],
+      "chapter": "第8章",
+      "section": "8.2.2"
+    },
+    {
+      "canonical_id": "mnist",
+      "display_name": "MNIST手写数字识别",
+      "aliases": [
+        "mnist",
+        "手写数字识别"
+      ],
+      "related_concepts": [
+        "LeNet-5",
+        "卷积神经网络"
+      ],
+      "chapter": "第8章",
+      "section": "8.2.3"
+    },
+    {
+      "canonical_id": "recurrent_neural_network",
+      "display_name": "循环神经网络",
+      "aliases": [
+        "循环神经网络",
+        "rnn",
+        "recurrent neural network"
+      ],
+      "related_concepts": [
+        "长短期记忆网络",
+        "自然语言处理"
+      ],
+      "chapter": "第8章",
+      "section": "8.3.1"
+    },
+    {
+      "canonical_id": "lstm",
+      "display_name": "长短期记忆网络",
+      "aliases": [
+        "长短期记忆网络",
+        "lstm"
+      ],
+      "related_concepts": [
+        "循环神经网络",
+        "自然语言处理"
+      ],
+      "chapter": "第8章",
+      "section": "8.3.2"
+    },
+    {
+      "canonical_id": "food_image_project",
+      "display_name": "美食图鉴项目",
+      "aliases": [
+        "美食图鉴",
+        "项目实践美食图鉴"
+      ],
+      "related_concepts": [
+        "卷积神经网络",
+        "模型训练与测试",
+        "数据准备"
+      ],
+      "chapter": "第8章",
+      "section": "8.4"
     },
     {
       "canonical_id": "gradient_descent",
       "display_name": "梯度下降",
-      "aliases": ["梯度下降", "gradient descent", "批量梯度下降", "随机梯度下降", "SGD", "学习率"],
-      "related_concepts": ["优化算法", "损失函数", "反向传播", "局部最优"],
+      "aliases": [
+        "梯度下降",
+        "gradient descent",
+        "批量梯度下降",
+        "随机梯度下降",
+        "SGD",
+        "学习率"
+      ],
+      "related_concepts": [
+        "反向传播",
+        "模型训练与测试",
+        "学习率"
+      ],
+      "chapter": "第8章",
+      "section": "8.4.4"
+    },
+    {
+      "canonical_id": "overfitting",
+      "display_name": "过拟合",
+      "aliases": [
+        "过拟合",
+        "overfitting",
+        "过配",
+        "泛化能力差",
+        "过拟合问题",
+        "过拟合和欠拟合",
+        "训练集上记住数据",
+        "模型在训练集上记住数据",
+        "在没见过数据上表现好"
+      ],
+      "related_concepts": [
+        "正则化",
+        "交叉验证",
+        "模型泛化"
+      ],
+      "chapter": "第8章",
+      "section": "8.4.5"
+    },
+    {
+      "canonical_id": "regularization",
+      "display_name": "正则化",
+      "aliases": [
+        "正则化",
+        "regularization",
+        "L1正则",
+        "L2正则",
+        "岭回归",
+        "Lasso"
+      ],
+      "related_concepts": [
+        "过拟合",
+        "L1正则",
+        "L2正则"
+      ],
+      "chapter": "第8章",
+      "section": "8.4.5"
+    },
+    {
+      "canonical_id": "natural_language_processing",
+      "display_name": "自然语言处理",
+      "aliases": [
+        "自然语言处理",
+        "nlp",
+        "natural language processing"
+      ],
+      "related_concepts": [
+        "文本挖掘",
+        "智能问答",
+        "大语言模型"
+      ],
+      "chapter": "第9章",
+      "section": "9.1.1"
+    },
+    {
+      "canonical_id": "text_mining",
+      "display_name": "文本挖掘",
+      "aliases": [
+        "文本挖掘",
+        "text mining"
+      ],
+      "related_concepts": [
+        "自然语言处理",
+        "LDA算法",
+        "智能问答"
+      ],
+      "chapter": "第9章",
+      "section": "9.1.2"
+    },
+    {
+      "canonical_id": "question_answering",
+      "display_name": "智能问答",
+      "aliases": [
+        "智能问答",
+        "question answering",
+        "问答系统"
+      ],
+      "related_concepts": [
+        "自然语言处理",
+        "大语言模型"
+      ],
+      "chapter": "第9章",
+      "section": "9.1.3"
+    },
+    {
+      "canonical_id": "large_language_model",
+      "display_name": "大语言模型",
+      "aliases": [
+        "大语言模型",
+        "llm",
+        "large language model"
+      ],
+      "related_concepts": [
+        "自然语言处理",
+        "提示工程",
+        "智能问答"
+      ],
+      "chapter": "第9章",
+      "section": "9.2.1"
+    },
+    {
+      "canonical_id": "llm_examples",
+      "display_name": "大语言模型实例",
+      "aliases": [
+        "大语言模型实例",
+        "llm实例",
+        "chatgpt",
+        "文心一言"
+      ],
+      "related_concepts": [
+        "大语言模型",
+        "提示工程"
+      ],
+      "chapter": "第9章",
+      "section": "9.2.2"
+    },
+    {
+      "canonical_id": "prompt_engineering",
+      "display_name": "提示工程",
+      "aliases": [
+        "提示工程",
+        "prompt engineering",
+        "提示词工程"
+      ],
+      "related_concepts": [
+        "大语言模型",
+        "提示词"
+      ],
+      "chapter": "第9章",
+      "section": "9.2.3"
+    },
+    {
+      "canonical_id": "writing_assistant",
+      "display_name": "辅助写作助手",
+      "aliases": [
+        "辅助写作助手",
+        "写作助手",
+        "llm写作助手"
+      ],
+      "related_concepts": [
+        "大语言模型",
+        "提示工程"
+      ],
+      "chapter": "第9章",
+      "section": "9.3.1"
+    },
+    {
+      "canonical_id": "literature_reading_assistant",
+      "display_name": "文献辅助阅读工具",
+      "aliases": [
+        "文献辅助阅读工具",
+        "文献阅读助手",
+        "llm阅读工具"
+      ],
+      "related_concepts": [
+        "大语言模型",
+        "自然语言处理"
+      ],
+      "chapter": "第9章",
+      "section": "9.3.2"
+    },
+    {
+      "canonical_id": "financial_service_assistant",
+      "display_name": "金融服务助手",
+      "aliases": [
+        "金融服务助手",
+        "llm金融助手"
+      ],
+      "related_concepts": [
+        "大语言模型",
+        "智能问答"
+      ],
+      "chapter": "第9章",
+      "section": "9.3.3"
+    },
+    {
+      "canonical_id": "data_science_competition",
+      "display_name": "数据科学竞赛",
+      "aliases": [
+        "数据科学竞赛",
+        "data science competition"
+      ],
+      "related_concepts": [
+        "Kaggle",
+        "参赛流程",
+        "算法分析报告"
+      ],
+      "chapter": "第10章",
+      "section": "10.1"
+    },
+    {
+      "canonical_id": "kaggle",
+      "display_name": "Kaggle",
+      "aliases": [
+        "kaggle"
+      ],
+      "related_concepts": [
+        "数据科学竞赛",
+        "竞赛平台"
+      ],
+      "chapter": "第10章",
+      "section": "10.1.1"
+    },
+    {
+      "canonical_id": "drivendata",
+      "display_name": "DrivenData",
+      "aliases": [
+        "drivendata"
+      ],
+      "related_concepts": [
+        "数据科学竞赛",
+        "竞赛平台"
+      ],
+      "chapter": "第10章",
+      "section": "10.1.2"
+    },
+    {
+      "canonical_id": "tianchi",
+      "display_name": "阿里云天池",
+      "aliases": [
+        "阿里云天池",
+        "天池",
+        "tianchi"
+      ],
+      "related_concepts": [
+        "数据科学竞赛",
+        "竞赛平台"
+      ],
+      "chapter": "第10章",
+      "section": "10.1.3"
+    },
+    {
+      "canonical_id": "datacastle",
+      "display_name": "DataCastle",
+      "aliases": [
+        "datacastle"
+      ],
+      "related_concepts": [
+        "数据科学竞赛",
+        "竞赛平台"
+      ],
+      "chapter": "第10章",
+      "section": "10.1.4"
+    },
+    {
+      "canonical_id": "datafountain",
+      "display_name": "DataFountain",
+      "aliases": [
+        "datafountain"
+      ],
+      "related_concepts": [
+        "数据科学竞赛",
+        "竞赛平台"
+      ],
+      "chapter": "第10章",
+      "section": "10.1.5"
+    },
+    {
+      "canonical_id": "chinavis",
+      "display_name": "ChinaVis",
+      "aliases": [
+        "chinavis"
+      ],
+      "related_concepts": [
+        "数据科学竞赛",
+        "竞赛平台",
+        "可视化竞赛"
+      ],
+      "chapter": "第10章",
+      "section": "10.1.6"
+    },
+    {
+      "canonical_id": "modelwhale",
+      "display_name": "和鲸社区",
+      "aliases": [
+        "和鲸社区",
+        "modelwhale"
+      ],
+      "related_concepts": [
+        "数据科学竞赛",
+        "竞赛平台"
+      ],
+      "chapter": "第10章",
+      "section": "10.1.7"
+    },
+    {
+      "canonical_id": "competition_workflow",
+      "display_name": "参赛流程",
+      "aliases": [
+        "参赛流程",
+        "比赛流程",
+        "competition workflow"
+      ],
+      "related_concepts": [
+        "数据科学竞赛",
+        "特征工程",
+        "模型评估"
+      ],
       "chapter": "第10章",
       "section": "10.2"
+    },
+    {
+      "canonical_id": "feature_engineering",
+      "display_name": "特征工程",
+      "aliases": [
+        "特征工程",
+        "feature engineering",
+        "特征选择",
+        "特征提取",
+        "特征构造"
+      ],
+      "related_concepts": [
+        "参赛流程",
+        "特征选择",
+        "特征构造"
+      ],
+      "chapter": "第10章",
+      "section": "10.2"
+    },
+    {
+      "canonical_id": "algorithm_analysis_report",
+      "display_name": "算法分析报告",
+      "aliases": [
+        "算法分析报告",
+        "算法报告"
+      ],
+      "related_concepts": [
+        "参赛流程",
+        "答辩报告"
+      ],
+      "chapter": "第10章",
+      "section": "10.3.1"
+    },
+    {
+      "canonical_id": "defense_report",
+      "display_name": "答辩报告",
+      "aliases": [
+        "答辩报告",
+        "比赛答辩"
+      ],
+      "related_concepts": [
+        "算法分析报告",
+        "参赛流程"
+      ],
+      "chapter": "第10章",
+      "section": "10.3.2"
     }
   ]
 }

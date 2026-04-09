@@ -3,6 +3,14 @@ Agent 服务模块
 实现单智能体 Agent Loop，集成 RAG Tool
 使用 LangGraph 构建 Agent
 """
+
+# 修复SSL证书路径（必须在导入其他模块前设置）
+import os
+_correct_cert_path = r'D:\Anaconda\envs\RAG\Library\ssl\cacert.pem'
+if os.path.exists(_correct_cert_path):
+    os.environ['SSL_CERT_FILE'] = _correct_cert_path
+    os.environ['REQUESTS_CA_BUNDLE'] = _correct_cert_path
+
 import time
 from typing import Optional, Iterator
 from pathlib import Path
@@ -140,21 +148,69 @@ class AgentService(object):
         if stream:
             return self._stream_chat(messages)
 
-        try:
-            result = self.agent.invoke({"messages": messages})
-            return self._extract_response(result)
-        except Exception as e:
-            error_msg = str(e).lower()
-            # Agent 调用失败时，直接使用工具
-            if "badrequest" in error_msg or "messages" in error_msg:
-                from core.tools import course_rag_tool
-                return course_rag_tool.invoke(user_input)
-            if "502" in error_msg or "responseerror" in error_msg:
-                return (f"抱歉，AI 模型服务暂时不可用。请检查：\n"
-                        f"1. Ollama 是否正在运行 (ollama serve)\n"
-                        f"2. 模型 '{config.MODEL_CHAT}' 是否已加载\n"
-                        f"3. 稍后重试")
-            raise
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                result = self.agent.invoke({"messages": messages})
+                response = self._extract_response(result)
+
+                # 检查空响应
+                if not response or not response.strip():
+                    if attempt < max_retries:
+                        import time
+                        time.sleep(0.5)  # 短暂延迟后重试
+                        continue
+                    else:
+                        return self._build_error_response(
+                            "生成回复失败",
+                            "AI未能生成有效回复，请重试。",
+                            is_retryable=True
+                        )
+
+                return response
+
+            except Exception as e:
+                error_msg = str(e).lower()
+
+                # 可重试错误
+                if any(err in error_msg for err in ["502", "503", "timeout", "connection"]):
+                    if attempt < max_retries:
+                        import time
+                        time.sleep(1)  # 网络错误等待稍长
+                        continue
+                    return self._build_error_response(
+                        "服务暂时不可用",
+                        "AI服务连接超时，请检查网络后重试。",
+                        is_retryable=True
+                    )
+
+                # 请求错误 - 直接使用工具降级
+                if any(err in error_msg for err in ["badrequest", "messages", "validation"]):
+                    try:
+                        from core.tools import course_rag_tool
+                        fallback = course_rag_tool.invoke(user_input)
+                        if fallback and fallback.strip():
+                            return f"{fallback}\n\n[注：由于技术原因，本次使用基础检索模式]"
+                    except Exception:
+                        pass
+
+                # Ollama 特定错误
+                if "ollama" in error_msg:
+                    return self._build_error_response(
+                        "本地模型服务异常",
+                        f"请检查Ollama是否运行，或模型'{config.MODEL_CHAT}'是否已加载。",
+                        is_retryable=True
+                    )
+
+                # 最后一轮，返回通用错误
+                if attempt >= max_retries:
+                    return self._build_error_response(
+                        "处理请求时出错",
+                        f"错误信息：{str(e)[:100]}",
+                        is_retryable=True
+                    )
+
+        return self._build_error_response("未知错误", "请稍后重试", is_retryable=True)
 
     def _stream_chat(self, messages: list) -> Iterator[str]:
         """流式输出对话响应"""
@@ -163,6 +219,13 @@ class AgentService(object):
                 for msg in chunk["agent"]["messages"]:
                     if hasattr(msg, "content") and msg.content:
                         yield msg.content
+
+    def _build_error_response(self, title: str, detail: str, is_retryable: bool = True) -> str:
+        """构建用户友好的错误提示"""
+        retry_hint = "\n\n💡 请稍后重试，或联系管理员。" if is_retryable else ""
+        return f"""⚠️ **{title}**
+
+{detail}{retry_hint}"""
 
     def _extract_response(self, result: dict) -> str:
         """从 Agent 结果中提取响应文本"""
@@ -233,56 +296,85 @@ class AgentService(object):
         matched_concepts = map_question_to_concepts(user_input, top_k=3)
 
         # ===== 生成回答 =====
-        if matched_concepts and matched_concepts[0].score >= 0.5:
-            # 使用个性化讲解技能
-            print(f"[Agent] 识别知识点: {matched_concepts[0].concept_id} ({matched_concepts[0].method})")
+        result = None
+        error_info = None
 
-            # 记录概念提及事件
-            primary = matched_concepts[0]
-            event = build_concept_mentioned_event(
-                session_id=session_id,
-                student_id=student_id,
-                concept_id=primary.concept_id,
-                concept_name=primary.display_name,
-                chapter=primary.chapter,
-                question_type=self._classify_question_type(user_input),
-                matched_score=primary.score,
-                raw_question=user_input,
-                enable_hash=False
-            )
-            get_memory_core().record_event(event)
+        try:
+            if matched_concepts and matched_concepts[0].score >= 0.5:
+                # 使用个性化讲解技能
+                print(f"[Agent] 识别知识点: {matched_concepts[0].concept_id} ({matched_concepts[0].method})")
 
-            # 使用个性化技能生成回答
-            result = self.explanation_skill.execute(user_input, student_id, session_id)
-        else:
-            # 使用普通 Agent 流程
-            result = self.chat(user_input, chat_history, stream=False)
-            # 如果是 generator，转换为字符串
-            if hasattr(result, '__iter__') and not isinstance(result, str):
-                result = ''.join(result)
+                # 记录概念提及事件
+                primary = matched_concepts[0]
+                event = build_concept_mentioned_event(
+                    session_id=session_id,
+                    student_id=student_id,
+                    concept_id=primary.concept_id,
+                    concept_name=primary.display_name,
+                    chapter=primary.chapter,
+                    question_type=self._classify_question_type(user_input),
+                    matched_score=primary.score,
+                    raw_question=user_input,
+                    enable_hash=False
+                )
+                get_memory_core().record_event(event)
 
-            # 记录一般提问事件（未匹配到知识点）
-            from core.events import build_concept_mentioned_event
-            # 获取当前章节
-            current_profile = get_memory_core().get_profile(student_id)
-            current_ch = current_profile.progress.current_chapter or "未分类"
-            event = build_concept_mentioned_event(
-                session_id=session_id,
-                student_id=student_id,
-                concept_id="general_question",
-                concept_name="一般问题",
-                chapter=current_ch,
-                question_type="general",
-                matched_score=0.0,
-                raw_question=user_input,
-                enable_hash=False
-            )
-            get_memory_core().record_event(event)
+                # 使用个性化技能生成回答
+                result = self.explanation_skill.execute(user_input, student_id, session_id)
+            else:
+                # 使用普通 Agent 流程
+                result = self.chat(user_input, chat_history, stream=False)
+                # 如果是 generator，转换为字符串
+                if hasattr(result, '__iter__') and not isinstance(result, str):
+                    result = ''.join(result)
+
+                # 记录一般提问事件（未匹配到知识点）
+                from core.events import build_concept_mentioned_event
+                # 获取当前章节
+                current_profile = get_memory_core().get_profile(student_id)
+                current_ch = current_profile.progress.current_chapter or "未分类"
+                event = build_concept_mentioned_event(
+                    session_id=session_id,
+                    student_id=student_id,
+                    concept_id="general_question",
+                    concept_name="一般问题",
+                    chapter=current_ch,
+                    question_type="general",
+                    matched_score=0.0,
+                    raw_question=user_input,
+                    enable_hash=False
+                )
+                get_memory_core().record_event(event)
+
+        except Exception as e:
+            error_info = f"生成回答时出错: {str(e)}"
+            print(f"[Agent Error] {error_info}")
+
+        # 检查结果有效性
+        if not result or not isinstance(result, str) or not result.strip():
+            # 生成失败，尝试回退方案
+            try:
+                from core.tools import course_rag_tool
+                fallback = course_rag_tool.invoke(user_input)
+                if fallback and fallback.strip() and fallback != "无相关资料":
+                    result = f"{fallback}\n\n[注：使用基础检索模式回答]"
+                else:
+                    result = self._build_error_response(
+                        "无法生成回答",
+                        "抱歉，系统暂时无法回答该问题。可能原因：\n1. 课程资料中未找到相关内容\n2. AI服务暂时不可用",
+                        is_retryable=True
+                    )
+            except Exception as e:
+                result = self._build_error_response(
+                    "服务暂时不可用",
+                    f"生成回答时遇到错误，请稍后重试。\n({str(e)[:80]})",
+                    is_retryable=True
+                )
 
         # 保存到历史
         history.add_messages([
             HumanMessage(content=user_input),
-            AIMessage(content=result if isinstance(result, str) else ""),
+            AIMessage(content=result if isinstance(result, str) else "系统错误"),
         ])
 
         return result

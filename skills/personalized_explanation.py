@@ -246,21 +246,71 @@ class PersonalizedExplanationSkill:
 """
 
         # 使用 LLM 生成回答（简化版，实际可接入 core/agent.py 的 LLM）
-        try:
-            from core.agent import get_chat_model
-            llm = get_chat_model()
-            response = llm.invoke(prompt)
-            return response.content if hasattr(response, 'content') else str(response)
-        except Exception as e:
-            # 降级：直接返回教材内容
-            return f"根据教材资料：\n\n{knowledge}\n\n[注：个性化生成失败，使用原始检索结果]"
+        max_retries = 1
+        for attempt in range(max_retries + 1):
+            try:
+                from core.agent import get_chat_model
+                llm = get_chat_model()
+                response = llm.invoke(prompt)
+
+                # 提取内容
+                content = ""
+                if hasattr(response, 'content'):
+                    content = response.content
+                elif isinstance(response, str):
+                    content = response
+                else:
+                    content = str(response)
+
+                # 检查空响应
+                if content and content.strip():
+                    return content
+
+                # 空响应，尝试重试
+                if attempt < max_retries:
+                    import time
+                    time.sleep(0.5)
+                    continue
+
+                # 重试后仍为空，降级处理
+                if has_valid_knowledge:
+                    return f"根据教材资料：\n\n{knowledge[:2000]}"
+                else:
+                    return "抱歉，系统暂时无法生成回答。请稍后重试。"
+
+            except Exception as e:
+                error_msg = str(e).lower()
+
+                # 可重试错误
+                if any(err in error_msg for err in ["502", "503", "timeout", "connection", "network"]):
+                    if attempt < max_retries:
+                        import time
+                        time.sleep(1)
+                        continue
+
+                # 降级处理
+                if has_valid_knowledge:
+                    return f"根据课程资料：\n\n{knowledge[:2000]}\n\n[注：由于技术原因，使用原始检索结果]"
+                else:
+                    return "抱歉，生成回答时遇到错误。请稍后重试。"
 
     def _fallback_explanation(self, question: str) -> str:
         """
         未匹配到知识点时的回退处理
         """
-        knowledge = course_rag_tool.invoke(question)
-        return f"根据课程资料：\n\n{knowledge}\n\n[注：未能识别具体知识点，建议提问时包含关键术语如'SVM'、'决策树'等]"
+        try:
+            knowledge = course_rag_tool.invoke(question)
+            if knowledge and knowledge.strip() and knowledge != "无相关资料":
+                return f"根据课程资料：\n\n{knowledge}\n\n[注：未能识别具体知识点，建议提问时包含关键术语如'SVM'、'决策树'等]"
+            else:
+                return """抱歉，未能找到与问题相关的课程资料。
+
+建议：
+1. 使用更具体的关键词（如用"SVM"代替"支持向量机"）
+2. 确认问题属于《数据科学导论》课程范围
+3. 尝试简化问题或换种表述方式"""
+        except Exception as e:
+            return f"抱歉，检索课程资料时出错。请稍后重试。（{str(e)[:80]}）"
 
 
 # 便捷函数

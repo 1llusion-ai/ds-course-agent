@@ -1,5 +1,11 @@
 # CLAUDE.md - RAG课程助教系统开发指南
 
+## 要求
+```
+运行前确保使用 conda activate RAG 命令进入该虚拟环境后再进行其它任务，所有依赖等库文件均在此环境中下载。
+每次代码改动后自动更新CLAUDE.md文件。
+```
+
 ## 项目结构 (重构后)
 
 ```
@@ -310,6 +316,30 @@ response = st.session_state["agent_service"].chat_with_history(
 )
 ```
 
+## 错误处理机制
+
+### 1. 回复稳定性保障
+
+**问题**: Agent 调用有时返回空响应或异常
+
+**解决方案** (`core/agent.py`):
+1. **空响应检测**: `_extract_response()` 检查返回值是否为空
+2. **自动重试**: `chat()` 方法实现 2 次重试机制，区分可重试错误（502/503/超时）和不可重试错误
+3. **友好错误提示**: `_build_error_response()` 方法生成用户友好的错误消息
+4. **降级处理**: Agent 失败时自动回退到 `course_rag_tool` 基础检索
+
+**用户界面** (`apps/qa.py`):
+- 错误发生时显示清晰的错误信息（类似 ChatGPT 风格）
+- 提供可能原因列表（AI服务不可用、网络超时等）
+- 显示 **🔄 重试** 按钮，用户可以一键重试
+
+### 2. Skill 层错误处理
+
+`skills/personalized_explanation.py`:
+- LLM 调用失败时捕获异常并降级到原始检索结果
+- 空响应检测和重试机制
+- `_fallback_explanation()` 处理未匹配知识点的情况
+
 ## 开发规范
 
 1. **新增工具**: 在 `core/tools.py` 中添加，使用 `@tool` 装饰器
@@ -327,6 +357,7 @@ response = st.session_state["agent_service"].chat_with_history(
 
 | 日期 | 修复内容 |
 |------|----------|
+| 2026-04-09 | **错误处理与重试机制**: 修复回复不稳定问题，`core/agent.py` 添加空响应检测、自动重试、友好错误提示；`apps/qa.py` 添加重试按钮和错误详情展示 |
 | 2026-04-07 | **防幻觉机制**: 强化 `personalized_explanation.py` Prompt 约束，禁止编造章节页码，无资料时诚实告知 |
 | 2026-04-07 | **Streamlit集成**: 侧边栏显示学习画像（关注概念、薄弱点、当前进度），支持手动刷新 |
 | 2026-04-07 | **类型安全**: 修复 `profile_models.py` JSON 反序列化时数值类型转换（str→float/int） |
