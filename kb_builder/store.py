@@ -15,6 +15,7 @@ import os
 import re
 import json
 import hashlib
+import zlib
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -176,7 +177,7 @@ class CourseKnowledgeBase:
                 "page_end": metadata.source_pages[-1] if metadata.source_pages else 0,
                 "source_pages": source_pages_json,
                 "parser_source": 'marker_v2',
-                "chunk_id": f"{metadata.source_file}_{hash(chunk.content) % 1000000:06d}",
+                "chunk_id": f"{metadata.source_file}_{zlib.crc32(chunk.content.encode('utf-8')) & 0xFFFFFFFF:08x}",
                 "char_count": len(chunk.content),
                 "position": 0,
                 "ingest_time": datetime.now().isoformat(),
