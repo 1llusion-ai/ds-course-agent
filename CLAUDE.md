@@ -357,7 +357,7 @@ response = st.session_state["agent_service"].chat_with_history(
 
 | 日期 | 修复内容 |
 |------|----------|
-| 2026-04-10 | **检索对比评测体系**: 构建50条精确ground-truth检索测试集（语义概念20/专有名词20/代码缩写10），实现`eval/retrieval_benchmark.py`对比BM25混合检索与纯向量检索，支持Recall@K/Precision@K/MRR/NDCG/HitRate分类型输出；修复`chunk_id`为确定性crc32 |
+| 2026-04-10 | **检索对比评测体系**: 构建50条精确ground-truth检索测试集（语义概念20/专有名词20/代码缩写10），实现`eval/retrieval_benchmark.py`对比BM25混合检索与纯向量检索，支持Recall@K/Precision@K/MRR/NDCG/HitRate分类型输出；修复`chunk_id`为确定性crc32；消除`similarity_threshold`干扰后重新评估，Recall@5提升34.6%(p=0.0024)，并增加统计显著性检验(paired t-test/Wilcoxon)及Ground Truth审计脚本 |
 | 2026-04-09 | **错误处理与重试机制**: 修复回复不稳定问题，`core/agent.py` 添加空响应检测、自动重试、友好错误提示；`apps/qa.py` 添加重试按钮和错误详情展示 |
 | 2026-04-07 | **防幻觉机制**: 强化 `personalized_explanation.py` Prompt 约束，禁止编造章节页码，无资料时诚实告知 |
 | 2026-04-07 | **Streamlit集成**: 侧边栏显示学习画像（关注概念、薄弱点、当前进度），支持手动刷新 |
