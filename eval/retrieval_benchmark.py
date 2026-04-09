@@ -5,7 +5,7 @@
 import json
 import sys
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from dataclasses import dataclass
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -17,6 +17,13 @@ from eval.metrics.retrieval import (
     calculate_mrr,
     calculate_ndcg_at_k,
 )
+
+try:
+    from scipy import stats
+    HAS_SCIPY = True
+except Exception:
+    HAS_SCIPY = False
+    stats = None
 
 
 @dataclass
@@ -74,6 +81,32 @@ def aggregate(results: List[dict]) -> Dict:
     }
 
 
+def calculate_significance(vector_results: List[dict], hybrid_results: List[dict]) -> Dict:
+    """计算统计显著性：配对 t 检验和 Wilcoxon 符号秩检验"""
+    if not HAS_SCIPY or not vector_results or not hybrid_results:
+        return {"note": "scipy not installed or empty results"}
+
+    metrics = ["recall", "precision", "mrr", "ndcg", "hit"]
+    significance = {}
+    for metric in metrics:
+        v_vals = [float(r[metric]) for r in vector_results]
+        h_vals = [float(r[metric]) for r in hybrid_results]
+        # 配对 t 检验
+        t_stat, t_p = stats.ttest_rel(h_vals, v_vals)
+        # Wilcoxon 符号秩检验
+        try:
+            w_stat, w_p = stats.wilcoxon(h_vals, v_vals, zero_method="wilcox")
+        except Exception:
+            w_stat, w_p = None, None
+        significance[metric] = {
+            "paired_t_statistic": float(t_stat),
+            "paired_t_pvalue": float(t_p),
+            "wilcoxon_statistic": float(w_stat) if w_stat is not None else None,
+            "wilcoxon_pvalue": float(w_p) if w_p is not None else None,
+        }
+    return significance
+
+
 def run_benchmark(top_k: int = 5, output_path: str = "eval/reports/retrieval_benchmark_report.json"):
     with open("eval/data/retrieval_qa_pairs.json", "r", encoding="utf-8") as f:
         qa_pairs = json.load(f)["qa_pairs"]
@@ -106,21 +139,40 @@ def run_benchmark(top_k: int = 5, output_path: str = "eval/reports/retrieval_ben
             "hybrid": aggregate(h_cat),
         }
 
+    # 统计显著性检验
+    significance = calculate_significance(vector_results, hybrid_results)
+
     # 打印对比表格
     print("\n" + "=" * 70)
     print(f"{'指标':<18} {'纯向量':>12} {'混合检索':>12} {'提升':>12}")
     print("-" * 70)
-    for metric, key in [
-        (f"Recall@{top_k}", "avg_recall"),
-        (f"Precision@{top_k}", "avg_precision"),
-        ("MRR", "avg_mrr"),
-        (f"NDCG@{top_k}", "avg_ndcg"),
-        ("Hit Rate", "hit_rate"),
-    ]:
+    metric_keys = [
+        (f"Recall@{top_k}", "avg_recall", "recall"),
+        (f"Precision@{top_k}", "avg_precision", "precision"),
+        ("MRR", "avg_mrr", "mrr"),
+        (f"NDCG@{top_k}", "avg_ndcg", "ndcg"),
+        ("Hit Rate", "hit_rate", "hit"),
+    ]
+    for metric_name, key, sig_key in metric_keys:
         v = vector_summary.get(key, 0)
         h = hybrid_summary.get(key, 0)
         delta = (h - v) / v * 100 if v > 0 else 0
-        print(f"{metric:<18} {v:>12.4f} {h:>12.4f} {delta:>+11.1f}%")
+        sig_info = significance.get(sig_key, {})
+        p_val = sig_info.get("paired_t_pvalue")
+        p_str = f" (p={p_val:.4f})" if p_val is not None else ""
+        print(f"{metric_name:<18} {v:>12.4f} {h:>12.4f} {delta:>+11.1f}%{p_str}")
+
+    print("\n" + "=" * 70)
+    print("统计显著性检验 (paired t-test / Wilcoxon)")
+    print("-" * 70)
+    for metric_name, _, sig_key in metric_keys:
+        sig_info = significance.get(sig_key, {})
+        t_p = sig_info.get("paired_t_pvalue")
+        w_p = sig_info.get("wilcoxon_pvalue")
+        if t_p is not None:
+            print(f"{metric_name:<18} t-test p={t_p:.4f}  Wilcoxon p={w_p:.4f}")
+        else:
+            print(f"{metric_name:<18} N/A")
 
     print("\n" + "=" * 70)
     print("按类别对比")
@@ -142,6 +194,7 @@ def run_benchmark(top_k: int = 5, output_path: str = "eval/reports/retrieval_ben
     report = {
         "top_k": top_k,
         "total_queries": len(qa_pairs),
+        "significance_tests": significance,
         "vector": {
             "summary": vector_summary,
             "details": vector_results,
