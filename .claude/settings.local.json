@@ -34,7 +34,15 @@
       "Bash(curl -s -X POST http://127.0.0.1:5185/api/sessions -H 'Content-Type: application/json' -d '{\"title\": \"测试\", \"student_id\": \"test\"}')",
       "Bash(curl -s http://127.0.0.1:8082/api/health)",
       "Bash(findstr 8082)",
-      "Bash(taskkill /F /IM python.exe taskkill /F /IM uvicorn.exe sleep 3 netstat -an)"
+      "Bash(taskkill /F /IM python.exe taskkill /F /IM uvicorn.exe sleep 3 netstat -an)",
+      "Bash(D:/Anaconda/envs/RAG/python.exe:*)",
+      "Bash(set PYTHONIOENCODING=utf-8)",
+      "Bash(\"D:/Anaconda/envs/RAG/python.exe\" -m eval.run_eval)",
+      "Bash(\"D:/Anaconda/envs/RAG/python.exe\" -c \"import pytest; print\\(pytest.__version__\\)\")",
+      "Bash(set PYTHONPATH=F:\\\\Projects\\\\RAG_System)",
+      "Bash(\"D:/Anaconda/envs/RAG/python.exe\" tests/test_reranker.py)",
+      "Bash(export PYTHONPATH=\"F:/Projects/RAG_System\")",
+      "Bash(conda run:*)"
     ]
   }
 }

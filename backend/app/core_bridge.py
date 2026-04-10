@@ -1,41 +1,43 @@
-"""桥接现有 core/ 模块与 FastAPI"""
+"""
+桥接现有 core/ 模块与 FastAPI
+"""
 import sys
+import os
+
+# 修复SSL证书路径（必须在导入其他模块前设置）
+_correct_cert_path = r'D:\Anaconda\envs\RAG\Library\ssl\cacert.pem'
+if os.path.exists(_correct_cert_path):
+    os.environ['SSL_CERT_FILE'] = _correct_cert_path
+    os.environ['REQUESTS_CA_BUNDLE'] = _correct_cert_path
+
+import traceback
 from pathlib import Path
+from dotenv import load_dotenv
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+# 确定项目根目录（处理worktree情况）
+_current_file = Path(__file__).resolve()
+PROJECT_ROOT = _current_file.parent.parent.parent
 
-# 预加载依赖模块，避免 core/__init__.py 被触发
-def _preload_dependencies():
-    """预加载 core 模块依赖，避免 __init__.py 的自动导入链"""
-    import importlib.util
+_main_project_root = PROJECT_ROOT
+if (_main_project_root / ".worktrees").exists() or not (_main_project_root / ".env").exists():
+    for parent in _main_project_root.parents:
+        if (parent / ".env").exists() and (parent / "core").exists():
+            _main_project_root = parent
+            break
 
-    # 加载 profile_models
-    if "core.profile_models" not in sys.modules:
-        spec = importlib.util.spec_from_file_location(
-            "core.profile_models", PROJECT_ROOT / "core" / "profile_models.py"
-        )
-        module = importlib.util.module_from_spec(spec)
-        sys.modules["core.profile_models"] = module
-        spec.loader.exec_module(module)
+_main_env_path = _main_project_root / ".env"
+if _main_env_path.exists():
+    load_dotenv(_main_env_path, override=True)
+    print(f"[CoreBridge] Loaded .env from {_main_env_path}")
+else:
+    load_dotenv(PROJECT_ROOT / ".env", override=True)
+    print(f"[CoreBridge] Loaded .env from {PROJECT_ROOT / '.env'}")
 
-    # 加载 events
-    if "core.events" not in sys.modules:
-        spec = importlib.util.spec_from_file_location(
-            "core.events", PROJECT_ROOT / "core" / "events.py"
-        )
-        module = importlib.util.module_from_spec(spec)
-        sys.modules["core.events"] = module
-        spec.loader.exec_module(module)
+sys.path.insert(0, str(_main_project_root))
+if str(PROJECT_ROOT) != str(_main_project_root):
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-    # 创建一个空的 core 模块占位符
-    if "core" not in sys.modules:
-        import types
-        core_module = types.ModuleType("core")
-        sys.modules["core"] = core_module
-
-# 预加载依赖
-_preload_dependencies()
+PROJECT_ROOT = _main_project_root
 
 _agent_service = None
 _memory_core = None
@@ -44,30 +46,30 @@ _memory_core = None
 def get_memory_core():
     global _memory_core
     if _memory_core is None:
-        # 现在可以安全导入 memory_core
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "core.memory_core", PROJECT_ROOT / "core" / "memory_core.py"
-        )
-        memory_core_module = importlib.util.module_from_spec(spec)
-        sys.modules["core.memory_core"] = memory_core_module
-        spec.loader.exec_module(memory_core_module)
-        _memory_core = memory_core_module.get_memory_core()
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from core.memory_core import get_memory_core as _get_core
+        _memory_core = _get_core()
     return _memory_core
 
 
 def get_agent_service():
     global _agent_service
     if _agent_service is None:
+        sys.path.insert(0, str(PROJECT_ROOT))
         from core.agent import get_agent_service as _get_service
         _agent_service = _get_service()
     return _agent_service
 
 
 def chat_with_history(message: str, session_id: str, student_id: str) -> str:
-    service = get_agent_service()
-    return service.chat_with_history(
-        user_input=message,
-        session_id=session_id,
-        student_id=student_id
-    )
+    try:
+        service = get_agent_service()
+        return service.chat_with_history(
+            user_input=message,
+            session_id=session_id,
+            student_id=student_id
+        )
+    except Exception as e:
+        print(f"[Agent Error] {e}")
+        traceback.print_exc()
+        return f"关于「{message}」的问题，我需要查阅课程资料后才能回答。\n\n（Agent调用出错：{str(e)[:100]}）"

@@ -53,14 +53,16 @@ class AnswerResult:
 class RAGService(object):
     """RAG 服务类，提供检索和问答能力"""
 
-    def __init__(self, use_hybrid: bool = True):
+    def __init__(self, use_hybrid: bool = True, use_rerank: Optional[bool] = None):
         """
         初始化RAG服务
 
         Args:
             use_hybrid: 是否使用BM25混合检索，默认为True
+            use_rerank: 是否启用重排序，None时读取配置
         """
         self.use_hybrid = use_hybrid
+        self.use_rerank = use_rerank if use_rerank is not None else config.ENABLE_RERANK
 
         # 初始化embedding
         self.embedding = OpenAIEmbeddings(
@@ -74,7 +76,15 @@ class RAGService(object):
         # 初始化检索器
         if use_hybrid:
             print("[RAGService] 使用BM25混合检索")
-            self.hybrid_retriever = HybridRetriever(k=config.similarity_top_k)
+            if self.use_rerank:
+                print("[RAGService] 启用重排序")
+            self.hybrid_retriever = HybridRetriever(
+                k=config.similarity_top_k,
+                use_rerank=self.use_rerank
+            )
+            self.use_rerank = self.hybrid_retriever.use_rerank
+            if use_rerank and not self.use_rerank:
+                print("[RAGService] Rerank 不可用，已回退为纯 Hybrid")
             self.vector_store_service = None
         else:
             print("[RAGService] 使用纯向量检索")
@@ -132,14 +142,19 @@ class RAGService(object):
 
         return conversation_chain
 
-    def retrieve(self, question: str, top_k: Optional[int] = None, similarity_threshold: float = 1.0) -> RetrievalResult:
+    def retrieve(
+        self,
+        question: str,
+        top_k: Optional[int] = None,
+        similarity_threshold: Optional[float] = 1.0,
+    ) -> RetrievalResult:
         """
         检索相关文档
 
         Args:
             question: 用户问题
             top_k: 返回文档数量，默认使用配置值
-            similarity_threshold: 相似度阈值（仅用于纯向量检索）
+            similarity_threshold: 相似度阈值（仅用于纯向量检索），为 None 时不过滤
 
         Returns:
             RetrievalResult: 包含文档列表和格式化上下文
@@ -176,7 +191,7 @@ class RAGService(object):
                     results['distances'][0]
                 ):
                     # 只保留相似度高于阈值的文档（距离小于阈值）
-                    if distance <= similarity_threshold:
+                    if similarity_threshold is None or distance <= similarity_threshold:
                         documents.append(Document(
                             page_content=doc_text,
                             metadata=metadata
@@ -238,10 +253,11 @@ class RAGService(object):
             # 构建包含绝对页码的元数据（删除相对页码避免混淆）
             from core.tools import _get_absolute_page
             metadata = dict(doc.metadata)
-            abs_page = _get_absolute_page(doc)
+            # 优先使用已存储的 book_page，否则动态计算
+            abs_page = metadata.get('book_page') or metadata.get('book_page_start') or _get_absolute_page(doc)
             if abs_page:
-                metadata['page'] = abs_page  # 用绝对页码覆盖相对页码
-                metadata['page_note'] = f"教材第{abs_page}页"
+                metadata['page'] = int(abs_page)  # 用绝对页码覆盖相对页码
+                metadata['page_note'] = f"教材第{int(abs_page)}页"
             elif 'page' in metadata:
                 del metadata['page']  # 删除无法转换的相对页码
             formatted_docs += f"文档片段：{doc.page_content}\n文档元数据：{metadata}\n\n"

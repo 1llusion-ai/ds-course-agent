@@ -47,6 +47,14 @@ def _get_absolute_page(doc) -> Optional[int]:
     """根据文档元数据计算教材的绝对页码"""
     global _CHAPTER_START_PAGES
     try:
+        # 优先使用已存储的绝对页码（book_page）
+        book_page = doc.metadata.get("book_page")
+        if book_page is not None:
+            return int(book_page)
+        book_page_start = doc.metadata.get("book_page_start")
+        if book_page_start is not None:
+            return int(book_page_start)
+
         # 延迟加载页码映射
         if not _CHAPTER_START_PAGES:
             _CHAPTER_START_PAGES = _get_chapter_start_pages()
@@ -144,12 +152,9 @@ def course_rag_tool(question: str) -> str:
                 sources_info.append(source_display)
         
         answer_result = service.answer_with_context(question, result.formatted_context)
-        
+
         response = answer_result.answer
-        
-        if sources_info:
-            response += f"\n\n参考来源：{', '.join(sources_info)}"
-        
+
         return response
         
     except Exception as e:

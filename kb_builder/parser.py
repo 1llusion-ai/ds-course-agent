@@ -78,11 +78,30 @@ class ParseTrace:
     pages: list[dict]
 
 
+def _get_marker_executable() -> str:
+    """获取当前 Python 环境对应的 marker_single 可执行文件路径"""
+    import sys
+    python_dir = os.path.dirname(sys.executable)
+    # Windows: Scripts/marker_single.exe; Unix: bin/marker_single
+    candidates = [
+        os.path.join(python_dir, "Scripts", "marker_single.exe"),
+        os.path.join(python_dir, "bin", "marker_single"),
+        "marker_single",
+    ]
+    for candidate in candidates:
+        if os.path.isfile(candidate) or candidate == "marker_single":
+            return candidate
+    return "marker_single"
+
+
+MARKER_EXE = _get_marker_executable()
+
+
 def check_marker_available() -> bool:
     """检查 Marker 是否可用"""
     try:
         result = subprocess.run(
-            ["marker_single", "--help"],
+            [MARKER_EXE, "--help"],
             capture_output=True,
             timeout=10
         )
@@ -109,7 +128,7 @@ def parse_with_marker(
     if output_dir is None:
         output_dir = tempfile.mkdtemp()
     
-    cmd = ["marker_single", pdf_path, "--output_dir", output_dir, "--output_format", "json"]
+    cmd = [MARKER_EXE, pdf_path, "--output_dir", output_dir, "--output_format", "json"]
 
     if max_pages > 0:
         # Marker 使用 0-based 索引，page_range 格式为 "0-4"

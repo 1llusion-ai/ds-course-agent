@@ -141,7 +141,9 @@ class TOCParser:
                 elif parent and parent.end_page:
                     sec.end_page = parent.end_page
                 else:
-                    sec.end_page = sec.page + 10  # 默认10页
+                    # 对于最后一个顶层章节（如附录），给一个足够大的哨兵值
+                    # 实际页码范围由 PDF 本身决定，避免硬编码 10 页导致范围不够
+                    sec.end_page = 99999
 
                 all_sections.append(sec)
 

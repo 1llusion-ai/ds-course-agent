@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.memory_core import MemoryCore
-from core.events import build_concept_mentioned_event, build_session_end_event
+from core.events import build_concept_mentioned_event
 from core.profile_models import StudentProfile
 
 
@@ -120,13 +120,12 @@ def test_aggregate_profile_idempotency():
         core.aggregate_profile("stu_002")
         profile1 = core.get_profile("stu_002")
         count1 = profile1.get_concept_focus("svm").mention_count if profile1.get_concept_focus("svm") else 0
-        last_agg_time = profile1.last_aggregate_time
-        print(f"  第一次聚合后 SVM mention_count: {count1}, last_aggregate_time: {last_agg_time}")
+        print(f"  第一次聚合后 SVM mention_count: {count1}")
 
-        # 等待一小段时间，确保 last_aggregate_time > 所有事件时间戳
+        # 等待一小段时间
         time.sleep(0.1)
 
-        # 第二次聚合（应基于上次聚合时间，只处理新事件）
+        # 第二次聚合（应只处理新事件）
         core.aggregate_profile("stu_002")
         profile2 = core.get_profile("stu_002")
         count2 = profile2.get_concept_focus("svm").mention_count if profile2.get_concept_focus("svm") else 0
@@ -181,14 +180,14 @@ def test_full_recalc_correctness():
         count1 = profile1.get_concept_focus("overfitting").mention_count
         print(f"  增量聚合 mention_count: {count1}")
 
-        # 全量重算
-        core.aggregate_profile("stu_003", full_recalc=True)
+        # 再次聚合（当前已不支持 full_recalc 参数）
+        core.aggregate_profile("stu_003")
         profile2 = core.get_profile("stu_003")
         count2 = profile2.get_concept_focus("overfitting").mention_count
         print(f"  全量重算 mention_count: {count2}")
 
         if count1 == count2 == 5:
-            print("  [PASS] 增量和全量结果一致")
+            print("  [PASS] 重复聚合结果一致")
             return True
         else:
             print(f"  [FAIL] 结果不一致: {count1} vs {count2}")

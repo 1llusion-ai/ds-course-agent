@@ -33,18 +33,18 @@ class RetrievalQAPair:
 
 CATEGORY_MAPPING = {
     "semantic": [
-        "data_science_definition", "\ufeffdata_thinking", "overfitting", "data_visualization",
+        "data_science_definition", "data_thinking", "overfitting", "data_visualization",
         "supervised_learning", "unsupervised_learning", "data_insight", "digital_economy",
         "ensemble_learning", "classification_problem", "clustering", "dimensionality_reduction",
         "natural_language_processing", "deep_learning_tasks", "eda", "text_mining",
-        "cross_validation", "regularization", "model_evaluation", "neural_network"
+        "question_answering", "regularization", "model_evaluation", "neural_network"
     ],
     "term": [
         "dikw_pyramid", "technology_hype_cycle", "big_data_4v", "digitization",
         "data_fusion", "feature_discovery", "intelligent_manufacturing", "technology_forecasting",
         "data_businessization", "data_collection", "data_cleaning", "missing_values",
-        "groupby_aggregation", "data_merge", "descriptive_statistics", "hypothesis_testing",
-        "probability", "kaggle", "feature_engineering", "competition_workflow"
+        "groupby_aggregation", "data_merge", "descriptive_statistics", "structured_data",
+        "probability", "kaggle", "linear_regression", "competition_workflow"
     ],
     "code_abbr": [
         "python_language", "pandas", "dataframe", "series", "loc_iloc",
@@ -169,5 +169,11 @@ def save_json(pairs: List[RetrievalQAPair], path: str = "eval/data/retrieval_qa_
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="生成检索 benchmark QA 数据集")
+    parser.add_argument("--output", type=str, default="eval/data/retrieval_qa_pairs.json")
+    args = parser.parse_args()
+
     pairs = generate_qa_pairs()
-    save_json(pairs)
+    save_json(pairs, path=args.output)

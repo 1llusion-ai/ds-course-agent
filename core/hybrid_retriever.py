@@ -18,6 +18,7 @@ from langchain_openai import OpenAIEmbeddings
 import chromadb
 
 import utils.config as config
+from core.reranker import get_reranker
 
 
 @dataclass
@@ -88,16 +89,30 @@ class BM25Retriever:
 class HybridRetriever:
     """混合检索器 - 融合BM25和向量检索"""
 
-    def __init__(self, collection_name: Optional[str] = None, k: int = 5):
+    def __init__(self, collection_name: Optional[str] = None, k: int = 5, use_rerank: Optional[bool] = None):
         """
         初始化混合检索器
 
         Args:
             collection_name: ChromaDB集合名称
             k: 返回结果数量
+            use_rerank: 是否启用重排序，None则读取配置
         """
         self.collection_name = collection_name or config.collection_name
         self.k = k
+        self.use_rerank = use_rerank if use_rerank is not None else config.ENABLE_RERANK
+        if self.use_rerank:
+            from core.reranker import CrossEncoderReranker
+            reranker = CrossEncoderReranker()
+            if reranker.is_available:
+                self.reranker = reranker
+            else:
+                print("[HybridRetriever] Rerank requested but unavailable, fallback to hybrid only")
+                self.reranker = None
+                self.use_rerank = False
+        else:
+            self.reranker = None
+
         self.embedding = OpenAIEmbeddings(
             model=config.MODEL_EMBEDDING,
             api_key=config.API_KEY,
@@ -212,27 +227,40 @@ class HybridRetriever:
             排序后的文档列表
         """
         k = top_k or self.k
+        rerank_top_k = config.RERANK_TOP_K
 
         # BM25检索
-        bm25_results = self.bm25_retriever.retrieve(query, top_k=20)
+        bm25_results = self.bm25_retriever.retrieve(query, top_k=rerank_top_k)
         print(f"[Hybrid] BM25返回 {len(bm25_results)} 个结果")
 
         # 向量检索
-        vector_results = self._vector_search(query, top_k=20)
+        vector_results = self._vector_search(query, top_k=rerank_top_k)
         print(f"[Hybrid] Vector返回 {len(vector_results)} 个结果")
 
         # RRF融合
         fused_results = self._reciprocal_rank_fusion(bm25_results, vector_results)
         print(f"[Hybrid] 融合后 {len(fused_results)} 个结果")
 
-        # 获取Top-K文档
-        documents = []
-        for doc_idx, fused_score in fused_results[:k]:
+        # 获取候选文档（若启用rerank，取rerank_top_k；否则取k）
+        candidate_count = rerank_top_k if (self.use_rerank and self.reranker) else k
+        candidate_docs = []
+        for doc_idx, fused_score in fused_results[:candidate_count]:
             if 0 <= doc_idx < len(self.documents):
                 doc = self.documents[doc_idx]
                 # 添加融合分数到元数据
                 doc.metadata['fused_score'] = fused_score
-                documents.append(doc)
+                candidate_docs.append(doc)
+
+        # 重排序
+        if self.use_rerank and self.reranker and candidate_docs:
+            print(f"[Hybrid] 进入Rerank阶段，候选数={len(candidate_docs)}")
+            reranked = self.reranker.rerank(query, candidate_docs)
+            documents = [doc for doc, score in reranked[:k]]
+            for doc, score in reranked[:k]:
+                doc.metadata['rerank_score'] = score
+            print(f"[Hybrid] Rerank后返回 Top-{k}")
+        else:
+            documents = candidate_docs[:k]
 
         return documents
 

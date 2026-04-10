@@ -8,7 +8,8 @@ class ConceptFocus(BaseModel):
     display_name: str
     mention_count: int
     chapter: Optional[str] = None
-    last_mentioned: datetime
+    # 注意：profile_models 中已移除时间戳，如需时间信息需从事件记录计算
+    # last_mentioned: datetime = None  # 暂不返回，避免语义不准确
 
 
 class WeakSpot(BaseModel):
@@ -22,7 +23,8 @@ class LearningProgress(BaseModel):
     current_chapter: Optional[str] = None
     total_interactions: int
     concepts_explored: int
-    last_study_date: Optional[datetime] = None
+    # 注意：profile_models 中已移除时间戳，如需时间信息需从事件记录计算
+    # last_study_date: Optional[datetime] = None  # 暂不返回，避免语义不准确
 
 
 class ProfileSummary(BaseModel):

@@ -1,3 +1,3 @@
-from app.routers import profile, chat
+from . import sessions
 
-__all__ = ["profile", "chat"]
+__all__ = ["sessions"]

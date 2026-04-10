@@ -21,11 +21,11 @@ def run_qa():
     subprocess.run([sys.executable, "-m", "streamlit", "run", "apps/qa.py"])
 
 
-def build_kb(path="data/"):
+def build_kb(args):
     """构建知识库"""
     from scripts.build_kb import main
     import sys
-    sys.argv = ["build_kb", path]
+    sys.argv = ["build_kb"] + args
     main()
 
 
@@ -73,8 +73,8 @@ def main():
     if command == "qa":
         run_qa()
     elif command == "build":
-        path = sys.argv[2] if len(sys.argv) > 2 else "data/"
-        build_kb(path)
+        build_args = sys.argv[2:] if len(sys.argv) > 2 else ["data/"]
+        build_kb(build_args)
     elif command == "eval":
         run_eval()
     elif command == "test":

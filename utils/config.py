@@ -50,9 +50,16 @@ MD5_RECORD_FILE = _get_path_env("MD5_RECORD_FILE", "md5.text")
 COLLECTION_NAME = COURSE_COLLECTION_NAME if COURSE_COLLECTION_NAME else _get_env("COLLECTION_NAME", "rag_knowledge_base")
 SIMILARITY_TOP_K = int(_get_env("SIMILARITY_TOP_K", "3"))
 
-CHUNK_SIZE = int(_get_env("CHUNK_SIZE", "300"))
-CHUNK_OVERLAP = int(_get_env("CHUNK_OVERLAP", "30"))
-MAX_SPLIT_CHAR_NUMBER = int(_get_env("MAX_SPLIT_CHAR_NUMBER", "1000"))
+CHUNK_SIZE = int(_get_env("CHUNK_SIZE", "1300"))
+CHUNK_OVERLAP = int(_get_env("CHUNK_OVERLAP", "300"))
+MAX_SPLIT_CHAR_NUMBER = int(_get_env("MAX_SPLIT_CHAR_NUMBER", "1500"))
+
+# === Reranker Configuration ===
+ENABLE_RERANK = _get_env("ENABLE_RERANK", "false").lower() == "true"
+RERANK_MODEL = _get_env("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+RERANK_TOP_K = int(_get_env("RERANK_TOP_K", "20"))
+RERANK_BATCH_SIZE = int(_get_env("RERANK_BATCH_SIZE", "8"))
+RERANK_DEVICE = _get_env("RERANK_DEVICE", "auto")
 
 SEPARATORS = ["\n\n", "\n", " ", "", ".", "?", "!", ",", "，", "。", "？", "！"]
 
@@ -77,3 +84,8 @@ similarity_top_k = SIMILARITY_TOP_K
 chunk_size = CHUNK_SIZE
 chunk_overlap = CHUNK_OVERLAP
 max_split_char_number = MAX_SPLIT_CHAR_NUMBER
+enable_rerank = ENABLE_RERANK
+rerank_model = RERANK_MODEL
+rerank_top_k = RERANK_TOP_K
+rerank_batch_size = RERANK_BATCH_SIZE
+rerank_device = RERANK_DEVICE

@@ -161,6 +161,7 @@ class CourseKnowledgeBase:
         if is_v2:
             # V2 结构 (course_chunker_v2)
             source_pages_json = json.dumps(metadata.source_pages) if metadata.source_pages else "[]"
+            book_pages_json = json.dumps(metadata.book_pages) if hasattr(metadata, 'book_pages') and metadata.book_pages else "[]"
             return {
                 "course": self.course_name,
                 "source": metadata.source_file,
@@ -175,7 +176,11 @@ class CourseKnowledgeBase:
                 "page": metadata.source_pages[0] if metadata.source_pages else 0,
                 "page_start": metadata.source_pages[0] if metadata.source_pages else 0,
                 "page_end": metadata.source_pages[-1] if metadata.source_pages else 0,
+                "book_page": metadata.book_pages[0] if hasattr(metadata, 'book_pages') and metadata.book_pages else 0,
+                "book_page_start": metadata.book_pages[0] if hasattr(metadata, 'book_pages') and metadata.book_pages else 0,
+                "book_page_end": metadata.book_pages[-1] if hasattr(metadata, 'book_pages') and metadata.book_pages else 0,
                 "source_pages": source_pages_json,
+                "book_pages": book_pages_json,
                 "parser_source": 'marker_v2',
                 "chunk_id": f"{metadata.source_file}_{zlib.crc32(chunk.content.encode('utf-8')) & 0xFFFFFFFF:08x}",
                 "char_count": len(chunk.content),

@@ -1,25 +1,3 @@
-from app.schemas.profile import (
-    ConceptFocus,
-    WeakSpot,
-    LearningProgress,
-    ProfileSummary,
-    ProfileDetail,
-)
-from app.schemas.chat import (
-    ChatMessage,
-    ChatRequest,
-    ChatResponse,
-    ChatHistoryResponse,
-)
+from .session import SessionCreate, SessionResponse, SessionList, SessionUpdate
 
-__all__ = [
-    "ConceptFocus",
-    "WeakSpot",
-    "LearningProgress",
-    "ProfileSummary",
-    "ProfileDetail",
-    "ChatMessage",
-    "ChatRequest",
-    "ChatResponse",
-    "ChatHistoryResponse",
-]
+__all__ = ["SessionCreate", "SessionResponse", "SessionList", "SessionUpdate"]

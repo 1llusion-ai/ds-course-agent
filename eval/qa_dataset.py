@@ -9,6 +9,7 @@ from typing import Dict, Iterable, List
 
 DEFAULT_QA_PATH = Path("eval/data/retrieval_qa_pairs.json")
 DEFAULT_REVIEW_PATH = Path("eval/data/retrieval_qa_reviews.json")
+REVIEW_METADATA_KEYS = {"enabled", "review_status", "review_notes"}
 
 
 def _unique_preserve_order(items: Iterable[str]) -> List[str]:
@@ -67,6 +68,15 @@ def normalize_qa_pair(qa: Dict) -> Dict:
     return pair
 
 
+def sanitize_review_override(override: Dict) -> Dict:
+    """Keep only review metadata and drop stale chunk-id fields."""
+    return {
+        key: value
+        for key, value in override.items()
+        if key in REVIEW_METADATA_KEYS
+    }
+
+
 def load_review_overrides(path: str | Path = DEFAULT_REVIEW_PATH) -> Dict[str, Dict]:
     review_path = Path(path)
     if not review_path.exists():
@@ -77,14 +87,48 @@ def load_review_overrides(path: str | Path = DEFAULT_REVIEW_PATH) -> Dict[str, D
 
     samples = data.get("samples") or data.get("reviews") or {}
     if isinstance(samples, list):
-        return {sample["id"]: sample for sample in samples if "id" in sample}
-    return samples
+        raw_overrides = {sample["id"]: sample for sample in samples if "id" in sample}
+    else:
+        raw_overrides = samples
+
+    return {
+        sample_id: sanitize_review_override(sample)
+        for sample_id, sample in raw_overrides.items()
+    }
 
 
 def _merge_pair(base: Dict, override: Dict) -> Dict:
     merged = dict(base)
     merged.update(override)
     return merged
+
+
+def find_missing_annotated_chunk_ids(
+    qa_pairs: Iterable[Dict],
+    existing_chunk_ids: Iterable[str],
+) -> List[Dict]:
+    existing = set(existing_chunk_ids)
+    issues: List[Dict] = []
+
+    for qa in qa_pairs:
+        annotated_ids = _unique_preserve_order([
+            *qa.get("ground_truth_ids", []),
+            *qa.get("acceptable_ids", []),
+            *qa.get("relevance_scores", {}).keys(),
+        ])
+        missing_ids = [chunk_id for chunk_id in annotated_ids if chunk_id not in existing]
+        if not missing_ids:
+            continue
+
+        issues.append({
+            "id": qa.get("id", ""),
+            "query": qa.get("query", ""),
+            "category": qa.get("category", ""),
+            "review_status": qa.get("review_status", "auto_generated"),
+            "missing_chunk_ids": missing_ids,
+        })
+
+    return issues
 
 
 def load_retrieval_qa_dataset(

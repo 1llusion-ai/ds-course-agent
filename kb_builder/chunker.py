@@ -32,6 +32,9 @@ class ChunkMetadataV2:
     is_section_start: bool = False
     contains_exercise: bool = False
 
+    # 绝对页码（教材原书页码）
+    book_pages: list = field(default_factory=list)
+
 
 @dataclass
 class ChunkV2:
@@ -69,6 +72,10 @@ class CourseChunkerV2:
         # 二级/三级标题检测（用于强制切块）
         self.subsection_header_pattern = re.compile(
             r'^\s*(\d+\.\d+\.\d+)\s+',  # 1.4.2 格式
+            re.MULTILINE
+        )
+        self.section_header_pattern = re.compile(
+            r'^\s*(\d+\.\d+)\s+',  # 1.4 格式
             re.MULTILINE
         )
 
@@ -173,42 +180,145 @@ class CourseChunkerV2:
     def _split_by_semantic(
         self,
         text: str,
-        chunk_size: int = 500,
-        overlap: int = 150,
-        section_info: dict = None
+        chunk_size: int = 1300,
+        overlap: int = 300,
+        section_info: dict = None,
+        max_chunk_size: Optional[int] = None,
     ) -> list[str]:
         """
         语义分块：按段落分割，保持语义完整
 
         改进：
-        1. overlap 增加到 150 字符，减少语义断裂
+        1. chunk_size 1300，overlap 300，减少语义断裂
         2. 在二级/三级标题处强制切块，让"标题+首段"在同一块
+        3. 代码块边界保护，避免在代码中间切断
+        4. 1500 字符硬上限，防止异常长块
         """
+        max_chunk_size = max_chunk_size or max(chunk_size + 200, chunk_size)
+
+        def _split_large_paragraph(para: str, max_size: int) -> list[str]:
+            """对超过 max_size 的单个段落进行内部切分"""
+            if len(para) <= max_size:
+                return [para]
+
+            # 尝试按句子边界切分（中文/英文句号、问号、感叹号）
+            sentence_boundaries = []
+            for m in re.finditer(r'[。！？\n]|\.[ \t]+|[?!][ \t]+', para):
+                sentence_boundaries.append(m.end())
+            sentence_boundaries.append(len(para))
+
+            parts = []
+            start = 0
+            for end in sentence_boundaries:
+                if end - start > max_size and start == 0:
+                    # 第一句自己就超过上限，回退到公式/表格友好切分
+                    break
+                if end - start > max_size:
+                    parts.append(para[start:end].strip())
+                    start = end
+            else:
+                if start < len(para):
+                    parts.append(para[start:].strip())
+                if parts:
+                    return [p for p in parts if p]
+
+            # 公式/表格友好切分：优先在数学运算符、逗号、等号、括号后断开
+            # 适用于 LaTeX 公式块、表格数值流、矩阵表达式等
+            formula_friendly_pattern = re.compile(r'[,;，、]|\)|\]|\}|=|\+|\-|\*|\\|\^')
+            parts = []
+            start = 0
+            while start < len(para):
+                end = min(start + max_size, len(para))
+                if end < len(para):
+                    lookback = para[start:end]
+                    # 从后往前找公式友好切分点
+                    best_pos = -1
+                    for m in formula_friendly_pattern.finditer(lookback):
+                        pos = m.end()
+                        # 优先在靠近 max_size 的 50%~100% 处
+                        if pos >= max_size * 0.5:
+                            best_pos = pos
+                    if best_pos > 0:
+                        end = start + best_pos
+                    else:
+                        # 再回退到空白字符
+                        ws_pos = lookback.rfind(' ')
+                        tab_pos = lookback.rfind('\t')
+                        split_pos = max(ws_pos, tab_pos)
+                        if split_pos > max_size * 0.5:
+                            end = start + split_pos + 1
+                parts.append(para[start:end].strip())
+                start = end
+            return [p for p in parts if p]
+
         # 按段落分割
-        paragraphs = re.split(r'\n\s*\n', text)
-        paragraphs = [p.strip() for p in paragraphs if p.strip()]
+        raw_paragraphs = re.split(r'\n\s*\n', text)
+        raw_paragraphs = [p.strip() for p in raw_paragraphs if p.strip()]
+
+        # 预处理超大段落
+        paragraphs = []
+        for para in raw_paragraphs:
+            if len(para) > max_chunk_size:
+                paragraphs.extend(_split_large_paragraph(para, max_chunk_size))
+            else:
+                paragraphs.append(para)
 
         chunks = []
         current_chunk = []
         current_size = 0
 
-        # 判断是否在标题开头
-        is_section_start_chunk = section_info and section_info.get('is_section_start', False)
+        def _is_code_block(para: str) -> bool:
+            """判断段落是否为代码块（以空格/制表符缩进或包含代码特征）"""
+            lines = para.split('\n')
+            if not lines:
+                return False
+            # 多行且每行都以空格/制表符开头，或包含 import/def/class/for 等特征
+            code_indicators = 0
+            for line in lines:
+                stripped = line.lstrip()
+                if not stripped:
+                    continue
+                if line.startswith(' ') or line.startswith('\t'):
+                    code_indicators += 1
+                if stripped.startswith(('import ', 'from ', 'def ', 'class ', 'for ', 'if ', 'while ', 'return ', '#', '>>>', '... ')):
+                    code_indicators += 1
+            # 超过一半行有代码特征
+            non_empty = [l for l in lines if l.strip()]
+            return len(non_empty) > 0 and code_indicators >= len(non_empty) * 0.5
+
+        def _ends_with_code_block_open(para: str) -> bool:
+            """判断段落是否以未闭合的代码块结尾"""
+            lines = para.split('\n')
+            # 如果段落内已有代码特征行，且最后一行是代码特征行，认为代码可能延续
+            for line in reversed(lines):
+                stripped = line.lstrip()
+                if not stripped:
+                    continue
+                return stripped.startswith(('import ', 'from ', 'def ', 'class ', 'for ', 'if ', 'while ', 'return ', '#', ' ', '\t', '>>>', '...'))
+            return False
 
         for i, para in enumerate(paragraphs):
             para_size = len(para)
+            is_code = _is_code_block(para)
+            next_is_code = (i + 1 < len(paragraphs) and _is_code_block(paragraphs[i + 1]))
+            code_continues = is_code and (_ends_with_code_block_open(para) or next_is_code)
 
             # 检查是否是二级/三级标题（用于强制切块）
             is_subsection_header = bool(self.subsection_header_pattern.match(para))
+            is_section_header = bool(self.section_header_pattern.match(para))
+            is_header = is_section_header or is_subsection_header
 
             # 强制切块条件：
-            # 1. 当前块已足够大
-            # 2. 遇到二级/三级标题，且当前块非空
-            should_split = (
-                current_size + para_size > chunk_size and current_chunk
-            ) or (
-                is_subsection_header and current_chunk and current_size > 200
-            )
+            # 1. 当前块已足够大（且不在代码块中间）
+            # 2. 遇到二级/三级标题，且当前块非空且已累积一定内容
+            # 3. 达到硬上限
+            should_split = False
+            if current_size + para_size > max_chunk_size and current_chunk:
+                should_split = True
+            elif current_size + para_size > chunk_size and current_chunk and not code_continues:
+                should_split = True
+            elif is_header and current_chunk and current_size > 300:
+                should_split = True
 
             if should_split:
                 # 保存当前块
@@ -222,9 +332,8 @@ class CourseChunkerV2:
                         overlap_text.insert(0, p)
                         overlap_size += len(p)
                     else:
-                        # 如果当前段落太长，截断一部分
                         remaining = overlap - overlap_size
-                        if remaining > 20:  # 至少保留20字符才有意义
+                        if remaining > 20:
                             overlap_text.insert(0, p[-remaining:])
                         break
                 current_chunk = overlap_text
@@ -243,9 +352,10 @@ class CourseChunkerV2:
         self,
         pages: list[tuple[int, str]],
         filename: str,
-        chunk_size: int = 800,  # 800字符，Qwen3-Embedding-8B支持32K tokens
-        chunk_overlap: int = 150,  # 150字符overlap，保证语义连贯
-        page_offset: int = 0  # 页码偏移量（用于章节PDF）
+        chunk_size: int = 1300,  # 语义块目标大小
+        chunk_overlap: int = 300,  # 块间重叠，减少边界语义损失
+        page_offset: int = 0,  # 页码偏移量（用于章节PDF）
+        max_chunk_size: Optional[int] = None,
     ) -> ChunkingResultV2:
         """
         对文档进行分块
@@ -271,7 +381,11 @@ class CourseChunkerV2:
 
             # 语义分块
             semantic_chunks = self._split_by_semantic(
-                text, chunk_size, chunk_overlap, section_info
+                text,
+                chunk_size,
+                chunk_overlap,
+                section_info,
+                max_chunk_size=max_chunk_size,
             )
 
             for i, chunk_text in enumerate(semantic_chunks):
@@ -281,6 +395,7 @@ class CourseChunkerV2:
                 metadata = ChunkMetadataV2(
                     source_file=filename,
                     source_pages=[relative_page_num],  # 保存相对页码
+                    book_pages=[absolute_page_num],      # 保存教材绝对页码
                     chunk_type="semantic",
                     chapter=section_info.get('chapter', ''),
                     chapter_number=section_info.get('chapter_number', ''),
@@ -302,7 +417,7 @@ class CourseChunkerV2:
         chunks.extend(struct_chunks)
 
         # 创建影子分块（全文索引）
-        shadow_chunks = self._create_shadow_chunks(pages, filename)
+        shadow_chunks = self._create_shadow_chunks(pages, filename, page_offset)
         chunks.extend(shadow_chunks)
 
         # 统计
@@ -341,7 +456,8 @@ class CourseChunkerV2:
     def _create_shadow_chunks(
         self,
         pages: list[tuple[int, str]],
-        filename: str
+        filename: str,
+        page_offset: int = 0
     ) -> list[ChunkV2]:
         """创建影子分块 - 章节级全文索引"""
         chunks = []
@@ -349,8 +465,9 @@ class CourseChunkerV2:
         # 按章节聚合内容
         chapter_contents = {}
 
-        for page_num, text in pages:
-            chapter = self.toc.get_chapter_by_page(page_num)
+        for relative_page_num, text in pages:
+            absolute_page_num = relative_page_num + page_offset
+            chapter = self.toc.get_chapter_by_page(absolute_page_num)
             if chapter:
                 chapter_key = chapter.number or chapter.name
                 if chapter_key not in chapter_contents:
@@ -359,7 +476,7 @@ class CourseChunkerV2:
                         'texts': [],
                         'name': chapter.name
                     }
-                chapter_contents[chapter_key]['pages'].append(page_num)
+                chapter_contents[chapter_key]['pages'].append(absolute_page_num)
                 chapter_contents[chapter_key]['texts'].append(text)
 
         # 为每个章节创建影子分块
@@ -393,7 +510,7 @@ def chunk_document(
     兼容旧接口的分块函数
     """
     chunker = CourseChunkerV2()
-    return chunker.chunk_document(pages, filename)
+    return chunker.chunk_document(pages, filename, **kwargs)
 
 
 if __name__ == "__main__":

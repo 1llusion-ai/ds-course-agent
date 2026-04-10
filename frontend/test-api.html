@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>API Test</title>
+</head>
+<body>
+  <h1>API Test</h1>
+  <button onclick="testApi()">Test API</button>
+  <div id="result"></div>
+
+  <script>
+    async function testApi() {
+      const result = document.getElementById('result');
+      result.innerHTML = 'Loading...';
+
+      try {
+        // 创建会话
+        const sessionRes = await fetch('/api/sessions', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({title: 'Test', student_id: 'browser'})
+        });
+        const session = await sessionRes.json();
+        result.innerHTML += `<p>Session created: ${session.id}</p>`;
+
+        // 发送消息
+        const chatRes = await fetch('/api/chat/send', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            session_id: session.id,
+            message: '什么是SVM',
+            student_id: 'browser'
+          })
+        });
+        const chat = await chatRes.json();
+        result.innerHTML += `<p>Response status: ${chatRes.status}</p>`;
+        result.innerHTML += `<p>Response keys: ${Object.keys(chat).join(', ')}</p>`;
+        result.innerHTML += `<p>Message role: ${chat.message?.role}</p>`;
+        result.innerHTML += `<p>Content length: ${chat.message?.content?.length}</p>`;
+        result.innerHTML += `<p>Content preview: ${chat.message?.content?.substring(0, 100)}</p>`;
+      } catch (err) {
+        result.innerHTML += `<p>Error: ${err.message}</p>`;
+        console.error(err);
+      }
+    }
+  </script>
+</body>
+</html>

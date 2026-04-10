@@ -10,6 +10,7 @@ chat_history/
 # Python缓存
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # 日志/数据库
 *.log
@@ -22,3 +23,25 @@ __pycache__/
 # MD5记录文件
 md5.text
 .worktrees/
+
+# 构建缓存/产物
+data/cache/
+artifacts/
+
+# 前端
+frontend/node_modules/
+frontend/dist/
+
+# 临时输出
+temp_response.txt
+EOF
+PYEOF
+
+# 评测输出（保留主 benchmark 报告）
+eval_report.json
+retrieval_eval_results.json
+eval/reports/ground_truth_audit.json
+eval/reports/retrieval_benchmark_report_*.json
+eval/reports/retrieval_benchmark_report_chunk*.json
+eval/reports/retrieval_benchmark_rerank_*.json
+!eval/reports/retrieval_benchmark_report.json

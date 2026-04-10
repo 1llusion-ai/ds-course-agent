@@ -1,33 +1,38 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
-from app.routers import profile, chat
+from app.routers import sessions, chat, profile
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("[START] RAG Tutor Backend Service starting...")
+    yield
+    print("[STOP] RAG Tutor Backend Service stopped")
+
 
 app = FastAPI(
-    title="RAG Learning Assistant API",
-    description="RAG课程助教系统后端API",
-    version="1.0.0"
+    title="RAG 课程助教 API",
+    description="智能课程助教系统后端 API",
+    version="1.0.0",
+    lifespan=lifespan
 )
 
-# CORS配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # 注册路由
-app.include_router(profile.router, prefix="/api/profile", tags=["profile"])
+app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
-
-
-@app.get("/")
-async def root():
-    return {"message": "RAG Learning Assistant API", "version": "1.0.0"}
-
+app.include_router(profile.router, prefix="/api/profile", tags=["profile"])
 
 @app.get("/health")
+@app.get("/api/health")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "ok", "service": "rag-tutor-backend"}

@@ -60,7 +60,6 @@ class KnowledgeGraph:
     def _build_regex_rules(self) -> List[Tuple[re.Pattern, str]]:
         """
         构建正则规则
-        规则比别名更灵活，可以捕获变体
         """
         rules = []
 

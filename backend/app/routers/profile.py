@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException
-from datetime import datetime
+from fastapi import APIRouter
+from typing import List
 
 from app.schemas.profile import (
     ProfileSummary, ProfileDetail,
@@ -24,15 +24,20 @@ async def get_profile_summary(student_id: str):
     profile = memory_core.get_profile(student_id)
 
     # 转换近期概念
+    # 注意：按mention_count排序，而非未实现的时间戳
+    sorted_concepts = sorted(
+        profile.recent_concepts.items(),
+        key=lambda x: x[1].mention_count,
+        reverse=True
+    )
     recent_concepts = [
         ConceptFocus(
             concept_id=cid,
             display_name=cf.display_name,
             mention_count=cf.mention_count,
-            chapter=cf.chapter,
-            last_mentioned=datetime.now()
+            chapter=cf.chapter
         )
-        for cid, cf in list(profile.recent_concepts.items())[:5]
+        for cid, cf in sorted_concepts[:5]
     ]
 
     # 转换薄弱点
@@ -67,15 +72,20 @@ async def get_profile_detail(student_id: str):
         ch = cf.chapter or "未分类"
         chapter_counts[ch] = chapter_counts.get(ch, 0) + cf.mention_count
 
+    # 按mention_count排序
+    sorted_concepts = sorted(
+        profile.recent_concepts.items(),
+        key=lambda x: x[1].mention_count,
+        reverse=True
+    )
     recent_concepts = [
         ConceptFocus(
             concept_id=cid,
             display_name=cf.display_name,
             mention_count=cf.mention_count,
-            chapter=cf.chapter,
-            last_mentioned=datetime.now()
+            chapter=cf.chapter
         )
-        for cid, cf in profile.recent_concepts.items()
+        for cid, cf in sorted_concepts
     ]
 
     weak_spots = [
@@ -83,7 +93,7 @@ async def get_profile_detail(student_id: str):
             concept_id=ws.concept_id,
             display_name=ws.display_name,
             confidence=ws.confidence,
-            evidence_count=len(ws.evidence)
+            evidence_count=len(ws.signals) if hasattr(ws, 'signals') else len(getattr(ws, 'evidence', []))
         )
         for ws in profile.weak_spot_candidates
     ]
@@ -95,8 +105,7 @@ async def get_profile_detail(student_id: str):
         progress=LearningProgress(
             current_chapter=profile.progress.current_chapter,
             total_interactions=sum(cf.mention_count for cf in profile.recent_concepts.values()),
-            concepts_explored=len(profile.recent_concepts),
-            last_study_date=datetime.now()
+            concepts_explored=len(profile.recent_concepts)
         ),
         chapter_stats=chapter_counts,
         daily_activity={}

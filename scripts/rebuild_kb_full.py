@@ -1,316 +1,392 @@
-"""
-完整知识库重建脚本
-- 检查当前状态
-- 解析所有十章PDF
-- 质量检查（分块语义完整性、页码映射）
-- 清空并重建知识库
-"""
-import os
+"""Rebuild the chapter-based course knowledge base with explicit chunk params."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import pickle
 import sys
-import json
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from kb_builder.parser import parse_pdf_file
 from kb_builder.cleaner import clean_document
 from kb_builder.chunker import CourseChunkerV2
+from kb_builder.parser import parse_pdf_file
 from kb_builder.store import CourseKnowledgeBase
 from kb_builder.toc_parser import get_toc_parser
 
 
+def _file_hash(pdf_path: str) -> str:
+    """Match the cache key strategy used by scripts/build_kb.py."""
+    stat = Path(pdf_path).stat()
+    key = f"{Path(pdf_path).resolve()}|{stat.st_mtime}|{stat.st_size}"
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def _cache_path(pdf_path: str, stage: str, max_pages: int = 0) -> Path:
+    base = Path("data/cache")
+    name = f"{Path(pdf_path).stem}_{_file_hash(pdf_path)}_mp{max_pages}_{stage}.pkl"
+    return base / name
+
+
+def _load_cache(cache_path: Path):
+    if not cache_path.exists():
+        return None
+    try:
+        with cache_path.open("rb") as f:
+            return pickle.load(f)
+    except Exception:
+        return None
+
+
+def _save_cache(cache_path: Path, obj):
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    with cache_path.open("wb") as f:
+        pickle.dump(obj, f)
+
+
 def check_current_kb():
-    """检查当前知识库状态"""
+    """Print current KB status and return the active collection + count."""
     print("=" * 60)
-    print("步骤 1: 检查当前知识库状态")
+    print("Step 1: Check current KB")
     print("=" * 60)
 
     import chromadb
     import utils.config as config
 
     client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
-
-    # 列出所有集合
     collections = client.list_collections()
-    print(f"\n现有集合 ({len(collections)}个):")
-    for c in collections:
-        coll = client.get_collection(c.name)
-        print(f"  - {c.name}: {coll.count()} 文档")
+    print(f"\nExisting collections ({len(collections)}):")
+    for collection_info in collections:
+        coll = client.get_collection(collection_info.name)
+        print(f"  - {collection_info.name}: {coll.count()} docs")
 
     if not collections:
-        print("  (无集合)")
+        print("  (none)")
         return None, 0
 
-    # 获取主集合
     collection = client.get_collection(config.COLLECTION_NAME)
     count = collection.count()
-
     if count == 0:
-        print("\n知识库为空，需要全新构建")
+        print("\nCurrent KB is empty")
         return collection, 0
 
-    # 统计章节分布
-    results = collection.get(include=['metadatas'], limit=1000)
+    results = collection.get(include=["metadatas"], limit=1000)
     chapter_counts = defaultdict(int)
     sources = set()
+    for metadata in results["metadatas"]:
+        if not metadata:
+            continue
+        chapter = metadata.get("chapter_no", metadata.get("chapter", "Unknown"))
+        chapter_counts[chapter] += 1
+        sources.add(metadata.get("source", "unknown"))
 
-    for meta in results['metadatas']:
-        if meta:
-            chapter = meta.get('chapter_no', meta.get('chapter', 'Unknown'))
-            chapter_counts[chapter] += 1
-            sources.add(meta.get('source', 'unknown'))
-
-    print(f"\n当前文档数: {count}")
-    print(f"来源文件数: {len(sources)}")
-    print("\n章节分布:")
-    for ch in sorted(chapter_counts.keys()):
-        print(f"  {ch}: {chapter_counts[ch]} 文档")
+    print(f"\nCurrent docs: {count}")
+    print(f"Source files: {len(sources)}")
+    print("Chapter distribution:")
+    for chapter in sorted(chapter_counts.keys()):
+        print(f"  {chapter}: {chapter_counts[chapter]}")
 
     return collection, count
 
 
 def get_pdf_files():
-    """获取所有章节PDF文件"""
+    """Return chapter PDFs plus appendix in a deterministic order."""
     data_dir = Path("data")
-    # 查找分章PDF文件，按章节排序
     pdf_files = []
-    for i in range(1, 11):
-        pattern = f"数据科学导论(案例版)_第{i}章.pdf"
-        pdf_path = data_dir / pattern
+    for chapter_num in range(1, 11):
+        pdf_path = data_dir / f"数据科学导论(案例版)_第{chapter_num}章.pdf"
         if pdf_path.exists():
-            pdf_files.append((i, str(pdf_path)))
+            pdf_files.append((chapter_num, str(pdf_path)))
+
+    appendix_path = data_dir / "数据科学导论(案例版)_附录.pdf"
+    if appendix_path.exists():
+        pdf_files.append(("appendix", str(appendix_path)))
 
     return pdf_files
 
 
-def check_chunk_quality(chunk_result, chapter_num):
-    """检查分块质量"""
+def resolve_source_section(toc, chapter_key):
+    """Map a source PDF to its TOC section to recover absolute book pages."""
+    if chapter_key == "appendix":
+        for section in toc.sections:
+            if "附录" in section.title or "附录" in section.name:
+                return section
+        return None
+
+    target_number = f"第{chapter_key}章"
+    for section in toc.sections:
+        if section.number == target_number:
+            return section
+    return None
+
+
+def check_chunk_quality(chunk_result):
+    """Simple chunk quality checks used during rebuild."""
     issues = []
 
-    # 1. 检查空chunk
     empty_chunks = [c for c in chunk_result.chunks if not c.content or not c.content.strip()]
     if empty_chunks:
-        issues.append(f"发现 {len(empty_chunks)} 个空chunk")
+        issues.append(f"empty_chunks={len(empty_chunks)}")
 
-    # 2. 检查超短chunk（可能语义不完整）
     short_chunks = [c for c in chunk_result.chunks if len(c.content) < 100]
     if short_chunks:
-        issues.append(f"发现 {len(short_chunks)} 个超短chunk(<100字符)")
+        issues.append(f"short_chunks={len(short_chunks)}")
 
-    # 3. 检查章节信息缺失
     no_chapter = [c for c in chunk_result.chunks if not c.metadata.chapter]
     if no_chapter:
-        issues.append(f"发现 {len(no_chapter)} 个chunk缺少章节信息")
+        issues.append(f"missing_chapter={len(no_chapter)}")
 
-    # 4. 检查分块边界（段落被切断）
     cut_paragraphs = 0
     for chunk in chunk_result.chunks:
         content = chunk.content.strip()
-        # 检查是否以不完整句子结尾
-        if content and not content[-1] in '。！？.!?\n':
-            # 检查下一行是否是小写字母开头（可能是同一段）
-            lines = content.split('\n')
-            if lines and len(lines[-1]) < 50:  # 最后一行很短
+        if content and content[-1] not in "。！？?!\n":
+            lines = content.split("\n")
+            if lines and len(lines[-1]) < 50:
                 cut_paragraphs += 1
-    if cut_paragraphs > 0:
-        issues.append(f"可能切断段落: {cut_paragraphs} 处")
+    if cut_paragraphs:
+        issues.append(f"maybe_cut_paragraphs={cut_paragraphs}")
 
-    # 5. 统计信息
-    semantic = [c for c in chunk_result.chunks if c.metadata.chunk_type == 'semantic']
-    struct = [c for c in chunk_result.chunks if c.metadata.chunk_type == 'struct']
-    shadow = [c for c in chunk_result.chunks if c.metadata.chunk_type == 'shadow']
+    semantic_chunks = [c for c in chunk_result.chunks if c.metadata.chunk_type == "semantic"]
+    struct_chunks = [c for c in chunk_result.chunks if c.metadata.chunk_type == "struct"]
+    shadow_chunks = [c for c in chunk_result.chunks if c.metadata.chunk_type == "shadow"]
 
-    stats = {
-        'total': chunk_result.total_chunks,
-        'semantic': len(semantic),
-        'struct': len(struct),
-        'shadow': len(shadow),
-        'avg_size': sum(len(c.content) for c in chunk_result.chunks) / len(chunk_result.chunks) if chunk_result.chunks else 0,
-        'issues': issues
+    return {
+        "total": chunk_result.total_chunks,
+        "semantic": len(semantic_chunks),
+        "struct": len(struct_chunks),
+        "shadow": len(shadow_chunks),
+        "avg_size": (
+            sum(len(chunk.content) for chunk in chunk_result.chunks) / len(chunk_result.chunks)
+            if chunk_result.chunks
+            else 0
+        ),
+        "issues": issues,
     }
 
-    return stats
 
+def process_source(
+    chapter_key,
+    pdf_path,
+    toc,
+    chunk_size: int = 1300,
+    chunk_overlap: int = 300,
+    max_chunk_size: int | None = None,
+    use_cache: bool = True,
+):
+    """Parse, clean, chunk one source PDF."""
+    parse_cache = _cache_path(pdf_path, "parse", max_pages=0)
+    clean_cache = _cache_path(pdf_path, "clean", max_pages=0)
 
-def process_chapter(chapter_num, pdf_path, toc):
-    """处理单个章节"""
-    print(f"\n  解析 PDF...")
-    parse_result = parse_pdf_file(pdf_path)
-    print(f"    总页数: {parse_result.total_pages}, 解析成功: {parse_result.marker_pages}")
+    parse_result = _load_cache(parse_cache) if use_cache else None
+    if parse_result is not None:
+        print(f"\n  Parse PDF... [cache] {parse_cache.name}")
+    else:
+        print("\n  Parse PDF...")
+        parse_result = parse_pdf_file(pdf_path)
+        if use_cache:
+            _save_cache(parse_cache, parse_result)
+            print(f"    saved parse cache: {parse_cache.name}")
+    print(f"    total_pages={parse_result.total_pages}, marker_pages={parse_result.marker_pages}")
 
-    print(f"  清洗文本...")
-    pages = [(p.page_num, p.text) for p in parse_result.pages if p.text]
-    cleaned = clean_document(pages, parse_result.file_name)
-    print(f"    清洗后: {len(cleaned.pages)} 页")
+    cleaned = _load_cache(clean_cache) if use_cache else None
+    if cleaned is not None:
+        print(f"  Clean text... [cache] {clean_cache.name}")
+    else:
+        print("  Clean text...")
+        pages = [(page.page_num, page.text) for page in parse_result.pages if page.text]
+        cleaned = clean_document(pages, parse_result.file_name)
+        if use_cache:
+            _save_cache(clean_cache, cleaned)
+            print(f"    saved clean cache: {clean_cache.name}")
+    print(f"    cleaned_pages={len(cleaned.pages)}")
 
-    print(f"  分块处理...")
-    # 计算页码偏移量（用于绝对页码映射）
-    chapter_info = None
-    for sec in toc.sections:
-        if sec.number == f"第{chapter_num}章":
-            chapter_info = sec
-            break
+    source_section = resolve_source_section(toc, chapter_key)
+    page_offset = source_section.page - 1 if source_section else 0
+    print(f"  page_offset={page_offset}")
 
-    page_offset = chapter_info.page - 1 if chapter_info else 0
-    print(f"    章节起始页: {chapter_info.page if chapter_info else 'Unknown'}, 偏移量: {page_offset}")
-
-    chunk_pages = [(p.page_num, p.cleaned_text) for p in cleaned.pages]
+    chunk_pages = [(page.page_num, page.cleaned_text) for page in cleaned.pages]
     chunker = CourseChunkerV2()
     chunk_result = chunker.chunk_document(
         chunk_pages,
         parse_result.file_name,
-        page_offset=page_offset
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        page_offset=page_offset,
+        max_chunk_size=max_chunk_size,
     )
 
-    # 质量检查
-    print(f"  质量检查...")
-    quality = check_chunk_quality(chunk_result, chapter_num)
-    print(f"    总分块: {quality['total']}, 语义: {quality['semantic']}, 结构: {quality['struct']}")
-    print(f"    平均大小: {quality['avg_size']:.0f} 字符")
-    if quality['issues']:
-        for issue in quality['issues']:
+    quality = check_chunk_quality(chunk_result)
+    print(
+        "  Chunk stats:"
+        f" total={quality['total']}, semantic={quality['semantic']},"
+        f" struct={quality['struct']}, shadow={quality['shadow']},"
+        f" avg_size={quality['avg_size']:.0f}"
+    )
+    if quality["issues"]:
+        for issue in quality["issues"]:
             print(f"    [!] {issue}")
     else:
-        print(f"    [OK] 无质量问题")
+        print("    [OK] no obvious chunk issues")
 
     return chunk_result, parse_result.file_name
 
 
 def verify_page_mapping():
-    """验证页码映射"""
+    """Print start pages from the TOC and return them for display."""
     print("\n" + "=" * 60)
-    print("步骤 3: 验证页码映射")
+    print("Step 3: Verify page mapping")
     print("=" * 60)
 
     toc = get_toc_parser()
-
-    # 从目录提取章节起始页
     chapter_pages = {}
-    for sec in toc.sections:
-        if sec.number.startswith('第') and '章' in sec.number:
+    for section in toc.sections:
+        if section.number.startswith("第") and "章" in section.number:
             try:
-                num = int(sec.number.replace('第', '').replace('章', ''))
-                chapter_pages[num] = sec.page
-            except:
+                chapter_num = int(section.number.replace("第", "").replace("章", ""))
+                chapter_pages[chapter_num] = section.page
+            except ValueError:
                 pass
+        elif "附录" in section.title or "附录" in section.name:
+            chapter_pages["appendix"] = section.page
 
-    print("\n目录中的章节起始页:")
-    for ch, page in sorted(chapter_pages.items()):
-        print(f"  第{ch}章: 第{page}页")
+    print("\nTOC start pages:")
+    for chapter_key, page in sorted(chapter_pages.items(), key=lambda item: (isinstance(item[0], str), item[0])):
+        if chapter_key == "appendix":
+            print(f"  appendix: page {page}")
+        else:
+            print(f"  chapter {chapter_key}: page {page}")
 
     return chapter_pages
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Rebuild the chapter-based knowledge base")
+    parser.add_argument("--chunk-size", type=int, default=1300, help="Target semantic chunk size")
+    parser.add_argument("--chunk-overlap", type=int, default=300, help="Overlap between chunks")
+    parser.add_argument(
+        "--max-chunk-size",
+        type=int,
+        default=None,
+        help="Hard upper bound; defaults to chunk_size + 200",
+    )
+    parser.add_argument("--no-cache", action="store_true", help="Ignore parse/clean caches under data/cache")
+    return parser.parse_args()
+
+
 def main():
-    """主流程"""
+    args = parse_args()
+
     print("=" * 60)
-    print("知识库完整重建")
+    print("Knowledge base rebuild")
     print("=" * 60)
 
-    # 步骤1: 检查当前状态
-    collection, current_count = check_current_kb()
+    _, current_count = check_current_kb()
 
-    # 步骤2: 获取PDF文件
     print("\n" + "=" * 60)
-    print("步骤 2: 检查PDF文件")
+    print("Step 2: Check source PDFs")
     print("=" * 60)
 
     pdf_files = get_pdf_files()
-    print(f"\n找到 {len(pdf_files)} 个章节PDF文件:")
-    for ch, path in pdf_files:
-        size = Path(path).stat().st_size / 1024 / 1024
-        print(f"  第{ch}章: {Path(path).name} ({size:.1f} MB)")
+    print(f"\nFound {len(pdf_files)} source PDFs:")
+    for chapter_key, path in pdf_files:
+        label = "appendix" if chapter_key == "appendix" else f"chapter {chapter_key}"
+        size_mb = Path(path).stat().st_size / 1024 / 1024
+        print(f"  {label}: {Path(path).name} ({size_mb:.1f} MB)")
 
-    if len(pdf_files) < 10:
-        print(f"\n[!] 警告: 只找到 {len(pdf_files)} 章，预期 10 章")
-
-    # 步骤3: 验证页码映射
     chapter_pages = verify_page_mapping()
 
-    # 步骤4: 确认重建
     print("\n" + "=" * 60)
-    print("步骤 4: 准备重建")
+    print("Step 4: Prepare rebuild")
     print("=" * 60)
-
     if current_count > 0:
-        print(f"\n[!] 当前知识库有 {current_count} 个文档")
-        print("重建将清空现有数据并重新入库")
+        print(f"\n[!] current KB docs: {current_count}")
+        print("    rebuild will clear the active collection first")
 
-    print(f"\n将处理以下章节:")
-    for ch, path in pdf_files:
-        start_page = chapter_pages.get(ch, 'Unknown')
-        print(f"  第{ch}章 (起始页: {start_page})")
+    print("\nSources to ingest:")
+    for chapter_key, path in pdf_files:
+        label = "appendix" if chapter_key == "appendix" else f"chapter {chapter_key}"
+        print(f"  {label}: start_page={chapter_pages.get(chapter_key, 'Unknown')} file={Path(path).name}")
 
-    # 步骤5: 执行重建
+    effective_max = args.max_chunk_size or (args.chunk_size + 200)
+    print(f"use_cache: {not args.no_cache}")
+    print(
+        f"\nchunk params: chunk_size={args.chunk_size}, "
+        f"chunk_overlap={args.chunk_overlap}, max_chunk_size={effective_max}"
+    )
+
     print("\n" + "=" * 60)
-    print("步骤 5: 执行重建")
+    print("Step 5: Rebuild")
     print("=" * 60)
 
-    # 初始化知识库（会清空现有数据）
     kb = CourseKnowledgeBase()
-    print("\n清空现有知识库...")
+    print("\nClear active collection...")
     kb.clear()
-    print("  [OK] 已清空")
+    print("  [OK] cleared")
 
-    # 处理每个章节
     toc = get_toc_parser()
     total_stats = {
-        'chapters': 0,
-        'chunks': 0,
-        'semantic': 0,
-        'errors': []
+        "sources": 0,
+        "chunks": 0,
+        "errors": [],
     }
 
-    for ch, pdf_path in pdf_files:
-        print(f"\n{'='*60}")
-        print(f"处理第{ch}章: {Path(pdf_path).name}")
-        print('='*60)
+    for chapter_key, pdf_path in pdf_files:
+        label = "appendix" if chapter_key == "appendix" else f"chapter {chapter_key}"
+        print(f"\n{'=' * 60}")
+        print(f"Process {label}: {Path(pdf_path).name}")
+        print("=" * 60)
 
         try:
-            chunk_result, source_file = process_chapter(ch, pdf_path, toc)
-
-            print(f"\n  入库中...")
+            chunk_result, source_file = process_source(
+                chapter_key,
+                pdf_path,
+                toc,
+                chunk_size=args.chunk_size,
+                chunk_overlap=args.chunk_overlap,
+                max_chunk_size=args.max_chunk_size,
+                use_cache=not args.no_cache,
+            )
+            print("\n  Ingest...")
             ingest_result = kb.ingest_chunking_result(chunk_result, source_file=source_file)
+            print(
+                f"    success={ingest_result.success_count}, "
+                f"skip={ingest_result.skip_count}, error={ingest_result.error_count}"
+            )
 
-            print(f"    成功: {ingest_result.success_count}")
-            print(f"    跳过: {ingest_result.skip_count}")
-            print(f"    错误: {ingest_result.error_count}")
-
-            total_stats['chapters'] += 1
-            total_stats['chunks'] += ingest_result.success_count
-
+            total_stats["sources"] += 1
+            total_stats["chunks"] += ingest_result.success_count
             if ingest_result.errors:
-                total_stats['errors'].extend(ingest_result.errors[:3])  # 只记录前3个错误
-
-        except Exception as e:
-            print(f"\n  [FAIL] 处理失败: {e}")
+                total_stats["errors"].extend(ingest_result.errors[:3])
+        except Exception as exc:
+            print(f"\n  [FAIL] {exc}")
             import traceback
+
             traceback.print_exc()
 
-    # 步骤6: 最终验证
     print("\n" + "=" * 60)
-    print("步骤 6: 最终验证")
+    print("Step 6: Final verification")
     print("=" * 60)
 
     status = kb.get_status()
-    print(f"\n知识库状态:")
-    print(f"  集合名称: {status.collection_name}")
-    print(f"  课程名称: {status.course_name}")
-    print(f"  文档总数: {status.document_count}")
-    print(f"  来源文件: {len(status.sources)} 个")
+    print("\nKB status:")
+    print(f"  collection={status.collection_name}")
+    print(f"  course={status.course_name}")
+    print(f"  document_count={status.document_count}")
+    print(f"  source_files={len(status.sources)}")
 
-    print(f"\n处理统计:")
-    print(f"  成功处理章节: {total_stats['chapters']}/{len(pdf_files)}")
-    print(f"  成功入库chunk: {total_stats['chunks']}")
-
-    if total_stats['errors']:
-        print(f"\n  错误信息 (前3个):")
-        for err in total_stats['errors']:
-            print(f"    - {err}")
+    print("\nRun stats:")
+    print(f"  ingested_sources={total_stats['sources']}/{len(pdf_files)}")
+    print(f"  ingested_chunks={total_stats['chunks']}")
+    if total_stats["errors"]:
+        print("  errors:")
+        for error in total_stats["errors"]:
+            print(f"    - {error}")
 
     print("\n" + "=" * 60)
-    print("重建完成!")
+    print("Rebuild complete")
     print("=" * 60)
 
 
