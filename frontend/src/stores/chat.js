@@ -1,127 +1,151 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { chatApi } from '../api/chat'
 import { DEFAULT_STUDENT_ID } from '../config'
 import { useSessionStore } from './session'
 
+function buildPendingMessage(requestId) {
+  return {
+    role: 'assistant',
+    content: '',
+    timestamp: new Date().toISOString(),
+    isLoading: true,
+    requestId
+  }
+}
+
 export const useChatStore = defineStore('chat', () => {
   const messages = ref([])
-  const loading = ref(false)
   const activeSessionId = ref(null)
-  const loadingSessionId = ref(null)
   const messagesBySession = ref({})
+  const pendingCountsBySession = ref({})
 
-  function ensureSessionMessages(sessionId) {
-    if (!messagesBySession.value[sessionId]) {
-      messagesBySession.value[sessionId] = []
+  const loading = computed(() => {
+    const sessionId = activeSessionId.value
+    if (!sessionId) return false
+    return (pendingCountsBySession.value[sessionId] || 0) > 0
+  })
+
+  function isSessionPending(sessionId) {
+    if (!sessionId) return false
+    return (pendingCountsBySession.value[sessionId] || 0) > 0
+  }
+
+  function setSessionMessages(sessionId, nextMessages) {
+    messagesBySession.value = {
+      ...messagesBySession.value,
+      [sessionId]: nextMessages
     }
-    return messagesBySession.value[sessionId]
+
+    if (activeSessionId.value === sessionId) {
+      messages.value = nextMessages
+    }
+  }
+
+  function updatePendingCount(sessionId, delta) {
+    const current = pendingCountsBySession.value[sessionId] || 0
+    const next = Math.max(0, current + delta)
+    pendingCountsBySession.value = {
+      ...pendingCountsBySession.value,
+      [sessionId]: next
+    }
+  }
+
+  function replacePendingMessage(sessionId, requestId, nextMessage) {
+    const currentMessages = messagesBySession.value[sessionId] || []
+    let replaced = false
+
+    const nextMessages = currentMessages.map(message => {
+      if (message.requestId === requestId) {
+        replaced = true
+        return nextMessage
+      }
+      return message
+    })
+
+    return replaced ? nextMessages : [...currentMessages, nextMessage]
   }
 
   async function fetchHistory(sessionId, studentId = DEFAULT_STUDENT_ID) {
     activeSessionId.value = sessionId
     const response = await chatApi.getHistory(sessionId, studentId)
     const history = Array.isArray(response.messages) ? response.messages : []
-    // 整体替换对象以触发Vue响应式更新
-    messagesBySession.value = {
-      ...messagesBySession.value,
-      [sessionId]: history
-    }
+    const localMessages = messagesBySession.value[sessionId] || []
 
-    // 仅在会话仍然活跃时更新 visuals
-    if (activeSessionId.value === sessionId) {
-      const localMessages = messagesBySession.value[sessionId] || []
-      // 如果当前正在发送消息，且本地已有乐观消息，但后端历史尚未包含它，则保护本地状态
-      if (loadingSessionId.value === sessionId && localMessages.length > history.length) {
-        // 不覆盖，保持本地乐观更新
-      } else {
-        messages.value = history
-      }
-    }
+    const shouldKeepLocal =
+      localMessages.some(message => message.isLoading) ||
+      localMessages.length > history.length
+
+    const nextMessages = shouldKeepLocal ? localMessages : history
+    setSessionMessages(sessionId, nextMessages)
     return response
   }
 
   async function sendMessage(sessionId, message, studentId = DEFAULT_STUDENT_ID) {
-    loading.value = true
-    loadingSessionId.value = sessionId
-
-    // 创建新数组触发响应式更新 - 必须整体替换对象才能触发Vue响应式
+    const requestId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const userMessage = {
-      role: 'user', content: message, timestamp: new Date().toISOString()
+      role: 'user',
+      content: message,
+      timestamp: new Date().toISOString()
     }
-    const currentMessages = messagesBySession.value[sessionId] || []
-    const messagesWithUser = [...currentMessages, userMessage]
-    messagesBySession.value = {
-      ...messagesBySession.value,
-      [sessionId]: messagesWithUser
-    }
-    if (activeSessionId.value === sessionId) {
-      messages.value = messagesBySession.value[sessionId]
-    }
+    const optimisticMessages = [
+      ...(messagesBySession.value[sessionId] || []),
+      userMessage,
+      buildPendingMessage(requestId)
+    ]
+
+    updatePendingCount(sessionId, 1)
+    setSessionMessages(sessionId, optimisticMessages)
 
     try {
       const response = await chatApi.send({
-        session_id: sessionId, message, student_id: studentId
+        session_id: sessionId,
+        message,
+        student_id: studentId
+      })
+      const sessionStore = useSessionStore()
+      const nextMessages = replacePendingMessage(sessionId, requestId, response.message)
+
+      setSessionMessages(sessionId, nextMessages)
+      sessionStore.syncSession(sessionId, {
+        message_count: nextMessages.filter(item => !item.isLoading).length,
+        updated_at: response.message.timestamp
       })
 
-      // 使用本地快照合并回复，避免 fetchHistory 并发覆盖导致用户消息消失
-      const messagesWithResponse = [...messagesWithUser, response.message]
-      messagesBySession.value = {
-        ...messagesBySession.value,
-        [sessionId]: messagesWithResponse
-      }
-      if (activeSessionId.value === sessionId) {
-        messages.value = messagesWithResponse
-      } else {
-        const sessionStore = useSessionStore()
-        sessionStore.incrementUnread(sessionId)
-      }
-      return response.message
-    } catch (error) {
-      const sessionStore = useSessionStore()
       if (activeSessionId.value !== sessionId) {
         sessionStore.incrementUnread(sessionId)
       }
-      // 添加错误消息到对话
-      const errorResponse = {
+
+      return response.message
+    } catch (error) {
+      const sessionStore = useSessionStore()
+      const errorMessage = {
         role: 'assistant',
         content: `⚠️ 发送失败：${error.message || '网络错误'}`,
         timestamp: new Date().toISOString(),
         isError: true
       }
-      messagesBySession.value = {
-        ...messagesBySession.value,
-        [sessionId]: [...messagesBySession.value[sessionId], errorResponse]
+      const nextMessages = replacePendingMessage(sessionId, requestId, errorMessage)
+
+      setSessionMessages(sessionId, nextMessages)
+
+      if (activeSessionId.value !== sessionId) {
+        sessionStore.incrementUnread(sessionId)
       }
-      if (activeSessionId.value === sessionId) {
-        messages.value = messagesBySession.value[sessionId]
-      }
+
       throw error
     } finally {
-      if (loadingSessionId.value === sessionId) {
-        loadingSessionId.value = null
-      }
-      loading.value = false
+      updatePendingCount(sessionId, -1)
     }
   }
 
   function setActiveSession(sessionId) {
     activeSessionId.value = sessionId
-    // 确保会话消息数组存在
-    if (!messagesBySession.value[sessionId]) {
-      messagesBySession.value = {
-        ...messagesBySession.value,
-        [sessionId]: []
-      }
-    }
-    messages.value = messagesBySession.value[sessionId] || []
 
-    if (loadingSessionId.value) {
-      if (loadingSessionId.value === sessionId) {
-        loading.value = true
-      } else {
-        loading.value = false
-      }
+    if (!messagesBySession.value[sessionId]) {
+      setSessionMessages(sessionId, [])
+    } else {
+      messages.value = messagesBySession.value[sessionId]
     }
 
     const sessionStore = useSessionStore()
@@ -134,19 +158,14 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
 
-    messagesBySession.value = {
-      ...messagesBySession.value,
-      [sessionId]: []
-    }
-    if (activeSessionId.value === sessionId) {
-      messages.value = []
-    }
+    setSessionMessages(sessionId, [])
   }
 
   return {
     messages,
     loading,
     activeSessionId,
+    isSessionPending,
     fetchHistory,
     sendMessage,
     setActiveSession,

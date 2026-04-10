@@ -21,6 +21,11 @@ import utils.config as config
 from core.reranker import get_reranker
 
 
+def _normalize_latin_tokens(text: str) -> str:
+    """Make Latin tokens case-insensitive for retrieval, especially textbook acronyms."""
+    return re.sub(r"[A-Za-z]{2,}", lambda match: match.group(0).upper(), text)
+
+
 @dataclass
 class RetrievalResult:
     """检索结果"""
@@ -40,6 +45,7 @@ class BM25Retriever:
 
     def _tokenize(self, text: str) -> List[str]:
         """中文分词"""
+        text = _normalize_latin_tokens(text)
         # 使用jieba分词
         tokens = list(jieba.cut(text))
         # 过滤停用词和短词
@@ -147,6 +153,7 @@ class HybridRetriever:
 
     def _vector_search(self, query: str, top_k: int = 10) -> List[tuple[int, float]]:
         """向量语义检索 - 使用ChromaDB"""
+        query = _normalize_latin_tokens(query)
         query_embedding = self.embedding.embed_query(query)
 
         client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
@@ -226,6 +233,7 @@ class HybridRetriever:
         Returns:
             排序后的文档列表
         """
+        query = _normalize_latin_tokens(query)
         k = top_k or self.k
         rerank_top_k = config.RERANK_TOP_K
 

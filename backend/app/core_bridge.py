@@ -61,10 +61,14 @@ def get_agent_service():
     return _agent_service
 
 
-def chat_with_history(message: str, session_id: str, student_id: str) -> str:
+def chat_with_history(message: str, session_id: str, student_id: str) -> dict:
+    from core.tools import begin_retrieval_trace, end_retrieval_trace
+
+    token = begin_retrieval_trace()
+
     try:
         service = get_agent_service()
-        return service.chat_with_history(
+        content = service.chat_with_history(
             user_input=message,
             session_id=session_id,
             student_id=student_id
@@ -72,4 +76,12 @@ def chat_with_history(message: str, session_id: str, student_id: str) -> str:
     except Exception as e:
         print(f"[Agent Error] {e}")
         traceback.print_exc()
-        return f"关于「{message}」的问题，我需要查阅课程资料后才能回答。\n\n（Agent调用出错：{str(e)[:100]}）"
+        content = f"关于「{message}」的问题，我需要查阅课程资料后才能回答。\n\n（Agent调用出错：{str(e)[:100]}）"
+    finally:
+        trace = end_retrieval_trace(token)
+
+    return {
+        "content": content,
+        "used_retrieval": trace.used_retrieval,
+        "sources": trace.sources,
+    }

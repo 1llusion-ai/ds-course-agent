@@ -30,16 +30,6 @@
           <!-- Messages List -->
           <div v-else class="messages-list">
             <ChatMessage v-for="(m, i) in chatStore.messages" :key="i" :message="m" />
-
-            <!-- Loading Indicator -->
-            <div v-if="chatStore.loading" class="loading-message">
-              <div class="avatar">🤖</div>
-              <div class="loading-bubble">
-                <span class="dot"></span>
-                <span class="dot"></span>
-                <span class="dot"></span>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -128,6 +118,13 @@ async function handleSend(message) {
       await router.push(`/chat/${newSession.id}`)
     }
   } else {
+    if (sessionStore.shouldAutoTitle(sessionId)) {
+      try {
+        await sessionStore.updateSession(sessionId, { title: message.slice(0, 20) })
+      } catch (err) {
+        console.error('更新会话标题失败:', err)
+      }
+    }
     chatStore.setActiveSession(sessionId)
     await chatStore.sendMessage(sessionId, message)
   }
@@ -255,50 +252,6 @@ onMounted(() => sessionStore.fetchSessions())
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.loading-message {
-  display: flex;
-  gap: 16px;
-}
-
-.loading-message .avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  flex-shrink: 0;
-}
-
-.loading-bubble {
-  background: white;
-  border: 1px solid #e7e5e4;
-  border-radius: 16px;
-  border-top-left-radius: 4px;
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  background: #a8a29e;
-  border-radius: 50%;
-  animation: bounce 1.4s infinite ease-in-out both;
-}
-
-.dot:nth-child(1) { animation-delay: -0.32s; }
-.dot:nth-child(2) { animation-delay: -0.16s; }
-
-@keyframes bounce {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
 }
 
 .input-area {

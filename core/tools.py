@@ -3,6 +3,9 @@ RAG Tool 模块
 封装 RAG 检索与问答能力为 LangChain Tool
 """
 import os
+import re
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from typing import Optional
 
 from langchain_core.tools import tool
@@ -35,12 +38,63 @@ _CHAPTER_START_PAGES: dict[str, int] = {}
 _rag_service: Optional[RAGService] = None
 
 
+@dataclass
+class RetrievalTrace:
+    used_retrieval: bool = False
+    sources: list[dict] = field(default_factory=list)
+
+
+_retrieval_trace: ContextVar[Optional[RetrievalTrace]] = ContextVar(
+    "retrieval_trace",
+    default=None,
+)
+
+
 def get_rag_service() -> RAGService:
     """获取 RAG 服务单例"""
     global _rag_service
     if _rag_service is None:
         _rag_service = RAGService()
     return _rag_service
+
+
+def begin_retrieval_trace():
+    return _retrieval_trace.set(RetrievalTrace())
+
+
+def end_retrieval_trace(token) -> RetrievalTrace:
+    trace = _retrieval_trace.get() or RetrievalTrace()
+    _retrieval_trace.reset(token)
+    return trace
+
+
+def _merge_sources(existing: list[dict], incoming: list[dict]) -> list[dict]:
+    merged = list(existing)
+    seen = {
+        item.get("reference")
+        for item in existing
+        if isinstance(item, dict) and item.get("reference")
+    }
+
+    for item in incoming:
+        if not isinstance(item, dict):
+            continue
+        reference = item.get("reference")
+        if not reference or reference in seen:
+            continue
+        merged.append({"reference": reference})
+        seen.add(reference)
+
+    return merged
+
+
+def _track_retrieval(sources: list[dict], used: bool = True) -> None:
+    trace = _retrieval_trace.get()
+    if trace is None:
+        return
+
+    trace.used_retrieval = trace.used_retrieval or used
+    trace.sources = _merge_sources(trace.sources, sources)
 
 
 def _get_absolute_page(doc) -> Optional[int]:
@@ -98,6 +152,40 @@ def _get_absolute_page(doc) -> Optional[int]:
         return None
 
 
+def build_sources_from_documents(documents) -> list[dict]:
+    sources: list[dict] = []
+
+    for doc in documents or []:
+        metadata = getattr(doc, "metadata", {}) or {}
+        source = metadata.get("source", "未知来源")
+        chapter = metadata.get("chapter", "")
+        chapter_no = metadata.get("chapter_no", "")
+
+        if not chapter_no:
+            match = re.search(r"第(\d+)章", source)
+            if match:
+                chapter_no = f"第{match.group(1)}章"
+
+        abs_page = _get_absolute_page(doc)
+
+        if chapter:
+            if abs_page and chapter_no:
+                reference = f"《{chapter_no} {chapter}》第{abs_page}页"
+            elif abs_page:
+                reference = f"《{chapter}》第{abs_page}页"
+            elif chapter_no:
+                reference = f"《{chapter_no} {chapter}》"
+            else:
+                reference = f"《{chapter}》"
+        else:
+            reference = os.path.basename(source)
+
+        if reference not in [item["reference"] for item in sources]:
+            sources.append({"reference": reference})
+
+    return sources
+
+
 @tool
 def course_rag_tool(question: str) -> str:
     """
@@ -118,38 +206,11 @@ def course_rag_tool(question: str) -> str:
         service = get_rag_service()
         
         result = service.retrieve(question)
+        sources = build_sources_from_documents(result.documents)
+        _track_retrieval(sources, used=True)
         
         if not result.has_results:
             return f"抱歉，在《{config.COURSE_NAME}》课程资料中未找到与您问题相关的内容。建议您：\n1. 尝试用不同的关键词重新提问\n2. 检查问题是否与课程主题相关\n3. 联系助教获取更多帮助"
-        
-        sources_info = []
-        for doc in result.documents:
-            source = doc.metadata.get("source", "未知来源")
-            chapter = doc.metadata.get("chapter", "")
-
-            # 计算绝对页码
-            abs_page = _get_absolute_page(doc)
-            page_info = f"第{abs_page}页" if abs_page else ""
-
-            # 构建更详细的来源信息
-            # 从source文件名提取章节号
-            import re
-            match = re.search(r'第(\d+)章', source)
-            chapter_num = f"第{match.group(1)}章" if match else ""
-
-            if chapter:
-                if page_info and chapter_num:
-                    # 使用章节号+章节名+绝对页码
-                    source_display = f"《{chapter_num} {chapter}》{page_info}"
-                elif page_info:
-                    source_display = f"《{chapter}》{page_info}"
-                else:
-                    source_display = f"《{chapter}》"
-            else:
-                source_display = os.path.basename(source)
-
-            if source_display not in sources_info:
-                sources_info.append(source_display)
         
         answer_result = service.answer_with_context(question, result.formatted_context)
 

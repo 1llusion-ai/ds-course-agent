@@ -3,7 +3,6 @@
 课程助教RAG系统 - 主入口
 
 用法:
-    python main.py qa              # 启动问答界面
     python main.py build [path]    # 构建知识库
     python main.py eval            # 运行评估
     python main.py test            # 运行测试
@@ -13,12 +12,6 @@ import os
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-
-def run_qa():
-    """启动问答界面"""
-    import subprocess
-    subprocess.run([sys.executable, "-m", "streamlit", "run", "apps/qa.py"])
 
 
 def build_kb(args):
@@ -50,14 +43,12 @@ def print_help():
     python main.py <命令> [参数]
 
 命令:
-    qa              启动Streamlit问答界面
     build [path]    构建课程知识库 (默认: data/)
     eval            运行检索效果评估
     test            运行单元测试
     help            显示帮助信息
 
 示例:
-    python main.py qa
     python main.py build data/
     python main.py eval
     """)
@@ -70,9 +61,7 @@ def main():
 
     command = sys.argv[1].lower()
 
-    if command == "qa":
-        run_qa()
-    elif command == "build":
+    if command == "build":
         build_args = sys.argv[2:] if len(sys.argv) > 2 else ["data/"]
         build_kb(build_args)
     elif command == "eval":

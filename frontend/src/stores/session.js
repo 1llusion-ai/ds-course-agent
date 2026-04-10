@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import { sessionsApi } from '../api/sessions'
 import { DEFAULT_STUDENT_ID } from '../config'
 
+const DEFAULT_SESSION_TITLE = '新会话'
+
 export const useSessionStore = defineStore('session', () => {
   const sessions = ref([])
   const currentSessionId = ref(null)
@@ -30,13 +32,33 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function createSession(title = '新会话', studentId = DEFAULT_STUDENT_ID) {
+  async function createSession(title = DEFAULT_SESSION_TITLE, studentId = DEFAULT_STUDENT_ID) {
     const response = await sessionsApi.create({
       title, student_id: studentId
     })
     sessions.value.unshift(response)
     currentSessionId.value = response.id
     return response
+  }
+
+  async function updateSession(sessionId, data) {
+    const response = await sessionsApi.update(sessionId, data)
+    sessions.value = sessions.value.map(session =>
+      session.id === sessionId ? { ...session, ...response } : session
+    )
+    return response
+  }
+
+  function syncSession(sessionId, data) {
+    sessions.value = sessions.value.map(session =>
+      session.id === sessionId ? { ...session, ...data } : session
+    )
+  }
+
+  function shouldAutoTitle(sessionId) {
+    const session = sessions.value.find(item => item.id === sessionId)
+    if (!session) return false
+    return session.title === DEFAULT_SESSION_TITLE && (session.message_count || 0) === 0
   }
 
   async function deleteSession(sessionId, studentId = DEFAULT_STUDENT_ID) {
@@ -65,6 +87,7 @@ export const useSessionStore = defineStore('session', () => {
   return {
     sessions, currentSessionId, loading, unreadCounts,
     currentSession, sortedSessions,
-    fetchSessions, createSession, deleteSession, setCurrentSession, markRead, incrementUnread
+    fetchSessions, createSession, updateSession, syncSession, shouldAutoTitle,
+    deleteSession, setCurrentSession, markRead, incrementUnread
   }
 })

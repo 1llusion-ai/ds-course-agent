@@ -10,9 +10,22 @@
 
 ```
 RAG_System/
-├── apps/                       # 应用界面层
-│   ├── qa.py                  # Streamlit问答界面
-│   └── file_uploader.py       # 文件上传界面
+├── backend/                    # FastAPI后端
+│   ├── app/
+│   │   ├── main.py            # FastAPI入口
+│   │   ├── routers/           # API路由
+│   │   │   ├── chat.py        # 聊天接口
+│   │   │   └── sessions.py    # 会话管理
+│   │   ├── schemas/           # Pydantic模型
+│   │   └── state.py           # 状态持久化
+│   └── requirements.txt
+│
+├── frontend/                   # Vue 3前端
+│   ├── src/
+│   │   ├── components/        # 聊天组件
+│   │   ├── stores/            # Pinia状态管理
+│   │   └── views/             # 页面视图
+│   └── package.json
 │
 ├── core/                       # 核心业务逻辑
 │   ├── __init__.py
@@ -60,7 +73,6 @@ RAG_System/
 │   └── test_idempotency.py    # 幂等性测试
 │
 ├── scripts/                    # 启动脚本
-│   ├── run_qa.py              # 启动问答界面
 │   └── build_kb.py            # 构建知识库
 │
 ├── docs/                       # 文档
@@ -149,10 +161,14 @@ PDF → parser.py → cleaner.py → chunker.py → store.py → ChromaDB
 ## 常用命令
 
 ```bash
-# 启动问答界面
-python main.py qa
-# 或
-streamlit run apps/qa.py
+# 启动后端
+cd backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8083 --reload
+
+# 启动前端
+cd frontend
+npm install
+npm run dev
 
 # 构建知识库（默认使用缓存，默认2进程并行，防止GPU显存不足）
 python main.py build data/
@@ -281,20 +297,6 @@ SIMILARITY_TOP_K=3
 2. **禁止幻觉**: 如果资料中没有相关信息，明确告知"教材中未找到相关内容"，不要猜测或编造
 ```
 
-## Streamlit 界面功能
-
-`apps/qa.py` 集成学习画像显示:
-
-**侧边栏统计**:
-- 最近关注概念（mention_count）
-- 需要巩固的薄弱点（confidence > 0.5）
-- 当前学习进度（current_chapter）
-- 🔄 刷新画像按钮（手动触发 aggregate_profile）
-
-**自动聚合**: 页面加载时自动调用 `aggregate_profile()`，确保画像实时更新
-
-**路径处理**: `apps/qa.py` 开头添加 `sys.path.insert` 避免 `ModuleNotFoundError`
-
 ## 工程实现细节
 
 ### 1. 循环导入避免
@@ -315,16 +317,6 @@ self.explanation_skill = PersonalizedExplanationSkill()
 s_copy["confidence"] = float(s_copy["confidence"])
 ```
 
-### 3. 参数传递一致性
-`apps/qa.py` 中显式传递 `student_id`:
-```python
-response = st.session_state["agent_service"].chat_with_history(
-    prompt,
-    session_id=current_session,
-    student_id=current_session  # 显式传递确保一致性
-)
-```
-
 ## 错误处理机制
 
 ### 1. 回复稳定性保障
@@ -337,10 +329,9 @@ response = st.session_state["agent_service"].chat_with_history(
 3. **友好错误提示**: `_build_error_response()` 方法生成用户友好的错误消息
 4. **降级处理**: Agent 失败时自动回退到 `course_rag_tool` 基础检索
 
-**用户界面** (`apps/qa.py`):
-- 错误发生时显示清晰的错误信息（类似 ChatGPT 风格）
+**用户界面** (`frontend/`):
+- 错误发生时显示清晰的错误信息
 - 提供可能原因列表（AI服务不可用、网络超时等）
-- 显示 **🔄 重试** 按钮，用户可以一键重试
 
 ### 2. Skill 层错误处理
 
@@ -391,9 +382,8 @@ response = st.session_state["agent_service"].chat_with_history(
 | 2026-04-10 | **默认分块参数正式定稿**: 在纯分册库上完成 `1000/200`、`1150/250`、`1300/300` 三组对照后，`1300/300` 拿到最高绝对表现，成为新的默认参数。对应 Top-5 benchmark：Vector `Recall@5 0.5177 / Precision@5 0.2383 / NDCG@5 0.4722`，Hybrid `0.5603 / 0.2723 / 0.5159`；`1150/250` 增益最弱，不再作为推荐配置 |
 | 2026-04-10 | **构建脚本增强**: `scripts/build_kb.py` 支持 GPU 加速 Marker 解析 (`TORCH_DEVICE=cuda`)、增加解析/清洗两层缓存 (`data/cache/`)、支持 `--workers` 多进程并行和 `--clear-db` 重建前清空知识库 |
 | 2026-04-10 | **评测体系修正**: 修复`eval/retrieval_qa_generator.py`中`review_override`覆盖新生成`chunk_id`的bug，确保KB重建后ground truth自动同步（不再混入旧hash的6位ID）。基于校正后的纯分册KB重新评估（47条有效查询，3条停用）：Recall@5 0.4326→0.4894（+13.1%），Precision@5 0.1915→0.2340（+22.2%），NDCG@5 0.4123→0.4717（+14.4%, p=0.0427），MRR略升+4.2%，Hit Rate 0.6809→0.6596（-3.1%, 不显著）。按类别：term类Recall@5提升最大（+25.0%），code_abbr类Recall下降-9.1%。GT审计：双输样本14条（29.8%），BM25救援1条（2.1%） |
-| 2026-04-09 | **错误处理与重试机制**: 修复回复不稳定问题，`core/agent.py` 添加空响应检测、自动重试、友好错误提示；`apps/qa.py` 添加重试按钮和错误详情展示 |
+| 2026-04-09 | **错误处理与重试机制**: 修复回复不稳定问题，`core/agent.py` 添加空响应检测、自动重试、友好错误提示 |
 | 2026-04-07 | **防幻觉机制**: 强化 `personalized_explanation.py` Prompt 约束，禁止编造章节页码，无资料时诚实告知 |
-| 2026-04-07 | **Streamlit集成**: 侧边栏显示学习画像（关注概念、薄弱点、当前进度），支持手动刷新 |
 | 2026-04-07 | **类型安全**: 修复 `profile_models.py` JSON 反序列化时数值类型转换（str→float/int） |
 | 2026-04-07 | **循环导入**: `core/agent.py` 延迟导入 Skills，避免 `core` 与 `skills` 循环依赖 |
 | 2026-04-07 | **记忆系统**: 实现三层架构（Memory Core + 学生画像 + 教学Skills），支持知识点映射、事件记录、画像聚合 |

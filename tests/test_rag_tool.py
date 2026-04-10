@@ -4,7 +4,13 @@ RAG Tool 单元测试
 import pytest
 from unittest.mock import patch, MagicMock
 
-from core.tools import course_rag_tool, check_knowledge_base_status, get_rag_tools
+from core.tools import (
+    begin_retrieval_trace,
+    check_knowledge_base_status,
+    course_rag_tool,
+    end_retrieval_trace,
+    get_rag_tools,
+)
 
 
 class TestCourseRAGTool:
@@ -50,6 +56,58 @@ class TestCourseRAGTool:
         result = course_rag_tool.invoke("测试问题")
         
         assert "未找到" in result or "无" in result or "建议" in result
+
+    @patch("core.tools.get_rag_service")
+    def test_tool_tracks_retrieval_sources(self, mock_get_service):
+        """测试检索轨迹会保留实际来源"""
+        mock_service = MagicMock()
+        mock_result = MagicMock()
+        mock_result.has_results = True
+        mock_result.formatted_context = "context"
+
+        doc = MagicMock()
+        doc.metadata = {
+            "source": "第7章_无监督学习算法.pdf",
+            "chapter": "无监督学习算法",
+            "chapter_no": "第7章",
+            "book_page": 123,
+        }
+        mock_result.documents = [doc]
+        mock_service.retrieve.return_value = mock_result
+
+        mock_answer = MagicMock()
+        mock_answer.answer = "PCA 是一种降维方法"
+        mock_service.answer_with_context.return_value = mock_answer
+        mock_get_service.return_value = mock_service
+
+        token = begin_retrieval_trace()
+        try:
+            result = course_rag_tool.invoke("PCA 的公式是什么？")
+        finally:
+            trace = end_retrieval_trace(token)
+
+        assert result == "PCA 是一种降维方法"
+        assert trace.used_retrieval is True
+        assert trace.sources == [{"reference": "《第7章 无监督学习算法》第123页"}]
+
+    @patch("core.tools.get_rag_service")
+    def test_tool_tracks_empty_sources_when_no_results(self, mock_get_service):
+        """测试无结果时仍会记录已尝试检索"""
+        mock_service = MagicMock()
+        mock_result = MagicMock()
+        mock_result.has_results = False
+        mock_result.documents = []
+        mock_service.retrieve.return_value = mock_result
+        mock_get_service.return_value = mock_service
+
+        token = begin_retrieval_trace()
+        try:
+            course_rag_tool.invoke("你好")
+        finally:
+            trace = end_retrieval_trace(token)
+
+        assert trace.used_retrieval is True
+        assert trace.sources == []
 
 
 class TestCheckKnowledgeBaseStatus:

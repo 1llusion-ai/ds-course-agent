@@ -16,10 +16,16 @@
           : 'hover:bg-stone-50 border-l-4 border-transparent'"
         @click="selectSession(session.id)"
       >
-        <div class="flex justify-between items-center">
-          <span class="font-medium text-sm truncate"
-            :class="sessionStore.currentSessionId === session.id ? 'text-indigo-900' : 'text-stone-700'"
-          >{{ session.title }}</span>
+        <div class="flex justify-between items-center gap-3">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="font-medium text-sm truncate"
+              :class="sessionStore.currentSessionId === session.id ? 'text-indigo-900' : 'text-stone-700'"
+            >{{ session.title }}</span>
+            <span v-if="chatStore.isSessionPending(session.id)" class="session-status" title="进行中">
+              <span class="session-spinner"></span>
+              <span class="session-status-text">进行中</span>
+            </span>
+          </div>
           <div class="flex items-center gap-1">
             <span v-if="sessionStore.unreadCounts[session.id]" class="unread-badge">{{ sessionStore.unreadCounts[session.id] }}</span>
             <el-button v-show="sessionStore.currentSessionId === session.id" type="danger" link size="small" @click.stop="handleDelete(session.id)">
@@ -43,10 +49,12 @@
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session'
+import { useChatStore } from '../stores/chat'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
 const sessionStore = useSessionStore()
+const chatStore = useChatStore()
 
 onMounted(() => sessionStore.fetchSessions())
 
@@ -95,5 +103,34 @@ function formatTime(timeStr) {
   color: white;
   background: #ef4444;
   border-radius: 9999px;
+}
+
+.session-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  color: #4f46e5;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.session-status-text {
+  line-height: 1;
+}
+
+.session-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(79, 70, 229, 0.18);
+  border-top-color: currentColor;
+  border-radius: 9999px;
+  animation: session-spin 0.8s linear infinite;
+}
+
+@keyframes session-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

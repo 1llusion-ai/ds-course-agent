@@ -40,41 +40,6 @@ def _msg_from_dict(data: dict) -> ChatMessage:
     )
 
 
-def _build_sources(question: str):
-    """基于 RAG 检索构建来源列表供前端展示"""
-    try:
-        from core.tools import get_rag_service, _get_absolute_page
-        import os
-        import re
-
-        service = get_rag_service()
-        result = service.retrieve(question)
-        sources = []
-        for doc in result.documents:
-            source = doc.metadata.get("source", "未知来源")
-            chapter = doc.metadata.get("chapter", "")
-            abs_page = _get_absolute_page(doc)
-
-            match = re.search(r'第(\d+)章', source)
-            chapter_num = f"第{match.group(1)}章" if match else ""
-
-            if chapter:
-                if abs_page and chapter_num:
-                    ref = f"《{chapter_num} {chapter}》第{abs_page}页"
-                elif chapter_num:
-                    ref = f"《{chapter_num} {chapter}》"
-                else:
-                    ref = f"《{chapter}》"
-            else:
-                ref = os.path.basename(source)
-
-            if ref not in [s["reference"] for s in sources]:
-                sources.append({"reference": ref})
-        return sources
-    except Exception:
-        return []
-
-
 @router.post("/send", response_model=ChatResponse)
 async def send_message(data: ChatRequest):
     """发送消息（调用真实 Agent）"""
@@ -87,7 +52,7 @@ async def send_message(data: ChatRequest):
 
     try:
         # 调用真实 Agent 生成回答
-        assistant_content = await run_in_threadpool(
+        assistant_result = await run_in_threadpool(
             chat_with_history,
             message=data.message,
             session_id=data.session_id,
@@ -108,8 +73,14 @@ async def send_message(data: ChatRequest):
             }
         )
 
-    sources = _build_sources(data.message)
-    assistant_msg = ChatMessage(role="assistant", content=assistant_content, sources=sources)
+    assistant_content = assistant_result.get("content", "") if isinstance(assistant_result, dict) else str(assistant_result)
+    assistant_sources = assistant_result.get("sources") if isinstance(assistant_result, dict) else None
+
+    assistant_msg = ChatMessage(
+        role="assistant",
+        content=assistant_content,
+        sources=assistant_sources or None,
+    )
     _chat_history[data.session_id].append(_msg_to_dict(assistant_msg))
     _save_state()
 
