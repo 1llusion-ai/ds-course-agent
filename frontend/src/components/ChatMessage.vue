@@ -1,24 +1,33 @@
 <template>
   <div class="message-wrapper" :class="{ 'user-message': message.role === 'user' }">
-    <div class="avatar"
-      :class="message.role === 'user' ? 'user-avatar' : 'ai-avatar'"
-    >
-      {{ message.role === 'user' ? '我' : '🤖' }}
+    <div class="avatar" :class="message.role === 'user' ? 'user-avatar' : 'ai-avatar'">
+      {{ message.role === 'user' ? '我' : 'AI' }}
     </div>
 
-    <div class="message-bubble"
-      :class="message.role === 'user' ? 'user-bubble' : 'ai-bubble'"
-    >
-      <div v-if="message.role === 'user'" class="message-content">{{ message.content }}</div>
-      <div v-else-if="message.isLoading" class="message-content loading-content">
-        <span class="loading-dot"></span>
-        <span class="loading-dot"></span>
-        <span class="loading-dot"></span>
+    <div class="message-bubble" :class="message.role === 'user' ? 'user-bubble' : 'ai-bubble'">
+      <div v-if="message.role === 'user'" class="message-content">
+        {{ message.content }}
       </div>
-      <div v-else class="message-content markdown-body" v-html="renderedContent"></div>
+
+      <template v-else-if="message.isLoading && !message.content">
+        <div class="message-content loading-content">
+          <span class="loading-dot"></span>
+          <span class="loading-dot"></span>
+          <span class="loading-dot"></span>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="message-content markdown-body" v-html="renderedContent"></div>
+        <div v-if="message.isLoading" class="streaming-status">
+          <span class="streaming-pulse"></span>
+          <span>生成中</span>
+        </div>
+      </template>
 
       <div v-if="message.sources?.length" class="message-source">
-        <span>📚</span><span>{{ renderedSources }}</span>
+        <span>来源</span>
+        <span>{{ renderedSources }}</span>
       </div>
     </div>
   </div>
@@ -30,69 +39,64 @@ import { marked } from 'marked'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 
-const props = defineProps({ message: { type: Object, required: true }})
+const props = defineProps({
+  message: {
+    type: Object,
+    required: true
+  }
+})
 
 function renderMarkdownWithMath(text) {
-  const inlineMath = []
+  if (!text) {
+    return ''
+  }
+
   const blockMath = []
+  const inlineMath = []
+  let content = text
 
-  let t = text
-
-  // 1. 兼容 LLM 误用的 [ ... ] 块级公式（单独成行且含 LaTeX 特征）
-  t = t.replace(/(?:^|\n)\[(\n[\s\S]*?\n)\](?=\n|$)/g, (match, code) => {
-    if (/[\\^_=]|\\(frac|sum|int|lambda|alpha|beta|Delta|times|cdot|pm|leq|geq)/.test(code)) {
-      blockMath.push(code.trim())
-      return `\n<BLOCK_MATH_${blockMath.length - 1}>\n`
-    }
-    return match
-  })
-
-  // 2. 提取标准块级公式 $$...$$
-  t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, code) => {
+  content = content.replace(/\$\$([\s\S]*?)\$\$/g, (_, code) => {
     blockMath.push(code.trim())
     return `<BLOCK_MATH_${blockMath.length - 1}>`
   })
 
-  // 3. 提取行内公式 $...$（避免匹配 $$$ 或连续$）
-  t = t.replace(/(?<!\$)\$(?!\$)([^\$\n]+?)\$(?!\$)/g, (_, code) => {
+  content = content.replace(/(?<!\$)\$(?!\$)([^\$\n]+?)\$(?!\$)/g, (_, code) => {
     inlineMath.push(code.trim())
     return `<INLINE_MATH_${inlineMath.length - 1}>`
   })
 
-  // 4. Markdown 渲染
-  let html = marked.parse(t, { breaks: true, gfm: true })
+  let html = marked.parse(content, { breaks: true, gfm: true })
 
-  // 5. 恢复块级公式
-  blockMath.forEach((code, i) => {
+  blockMath.forEach((code, index) => {
     try {
-      const rendered = katex.renderToString(code, { throwOnError: false, displayMode: true })
-      html = html.replace(`<BLOCK_MATH_${i}>`, rendered)
-    } catch (e) {
-      html = html.replace(`<BLOCK_MATH_${i}>`, `<pre>${code}</pre>`)
+      html = html.replace(
+        `<BLOCK_MATH_${index}>`,
+        katex.renderToString(code, { throwOnError: false, displayMode: true })
+      )
+    } catch (error) {
+      html = html.replace(`<BLOCK_MATH_${index}>`, `<pre>${code}</pre>`)
     }
   })
 
-  // 6. 恢复行内公式
-  inlineMath.forEach((code, i) => {
+  inlineMath.forEach((code, index) => {
     try {
-      const rendered = katex.renderToString(code, { throwOnError: false, displayMode: false })
-      html = html.replace(`<INLINE_MATH_${i}>`, rendered)
-    } catch (e) {
-      html = html.replace(`<INLINE_MATH_${i}>`, `<code>${code}</code>`)
+      html = html.replace(
+        `<INLINE_MATH_${index}>`,
+        katex.renderToString(code, { throwOnError: false, displayMode: false })
+      )
+    } catch (error) {
+      html = html.replace(`<INLINE_MATH_${index}>`, `<code>${code}</code>`)
     }
   })
 
   return html
 }
 
-const renderedContent = computed(() => {
-  if (!props.message.content) return ''
-  return renderMarkdownWithMath(props.message.content)
-})
+const renderedContent = computed(() => renderMarkdownWithMath(props.message.content || ''))
 
 const renderedSources = computed(() => {
   const refs = props.message.sources?.map(source => source.reference).filter(Boolean) ?? []
-  return refs.length ? `来源：${refs.join('；')}` : ''
+  return refs.join('；')
 })
 </script>
 
@@ -114,42 +118,45 @@ const renderedSources = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 500;
   flex-shrink: 0;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .user-avatar {
-  background: linear-gradient(135deg, #fbbf24 0%, #f97316 100%);
-  color: white;
+  color: #fff;
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
 }
 
 .ai-avatar {
-  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
-  color: white;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb 0%, #0f766e 100%);
 }
 
 .message-bubble {
-  max-width: 70%;
+  max-width: 72%;
   padding: 12px 16px;
-  border-radius: 16px;
+  border-radius: 18px;
+  box-shadow: 0 12px 28px rgba(28, 25, 23, 0.04);
 }
 
 .user-bubble {
-  background: #4f46e5;
-  color: white;
-  border-top-right-radius: 4px;
+  color: #fff;
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  border-top-right-radius: 6px;
 }
 
 .ai-bubble {
-  background: white;
-  border: 1px solid #e7e5e4;
-  border-top-left-radius: 4px;
+  color: #1c1917;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(231, 229, 228, 0.92);
+  border-top-left-radius: 6px;
 }
 
 .message-content {
+  line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.6;
 }
 
 .loading-content {
@@ -162,21 +169,60 @@ const renderedSources = computed(() => {
 .loading-dot {
   width: 8px;
   height: 8px;
-  background: #a8a29e;
   border-radius: 50%;
+  background: #a8a29e;
   animation: bubble-bounce 1.4s infinite ease-in-out both;
 }
 
-.loading-dot:nth-child(1) { animation-delay: -0.32s; }
-.loading-dot:nth-child(2) { animation-delay: -0.16s; }
-
-@keyframes bubble-bounce {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+.loading-dot:nth-child(1) {
+  animation-delay: -0.32s;
 }
 
-.user-bubble .message-content {
-  white-space: pre-wrap;
+.loading-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.streaming-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.streaming-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.2s infinite ease-in-out;
+}
+
+@keyframes bubble-bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+
+  40% {
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.45;
+  }
+
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
 }
 
 .markdown-body {
@@ -188,14 +234,25 @@ const renderedSources = computed(() => {
 .markdown-body :deep(h3),
 .markdown-body :deep(h4) {
   margin: 12px 0 8px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.4;
 }
 
-.markdown-body :deep(h1) { font-size: 18px; }
-.markdown-body :deep(h2) { font-size: 16px; }
-.markdown-body :deep(h3) { font-size: 15px; }
-.markdown-body :deep(h4) { font-size: 14px; }
+.markdown-body :deep(h1) {
+  font-size: 18px;
+}
+
+.markdown-body :deep(h2) {
+  font-size: 16px;
+}
+
+.markdown-body :deep(h3) {
+  font-size: 15px;
+}
+
+.markdown-body :deep(h4) {
+  font-size: 14px;
+}
 
 .markdown-body :deep(p) {
   margin: 8px 0;
@@ -211,45 +268,40 @@ const renderedSources = computed(() => {
   margin: 4px 0;
 }
 
-.markdown-body :deep(strong) {
-  font-weight: 600;
-}
-
 .markdown-body :deep(a) {
-  color: #4f46e5;
+  color: #1d4ed8;
   text-decoration: underline;
 }
 
 .markdown-body :deep(code) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   background: #f5f5f4;
+  color: #111827;
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 13px;
-  color: #1c1917;
 }
 
 .markdown-body :deep(pre) {
-  background: #f5f5f4;
+  margin: 10px 0;
   padding: 12px;
-  border-radius: 8px;
   overflow-x: auto;
-  margin: 8px 0;
+  border-radius: 10px;
+  background: #f5f5f4;
 }
 
 .markdown-body :deep(pre code) {
-  background: transparent;
   padding: 0;
+  background: transparent;
 }
 
 .markdown-body :deep(blockquote) {
-  margin: 8px 0;
+  margin: 10px 0;
   padding-left: 12px;
   border-left: 3px solid #d6d3d1;
   color: #57534e;
 }
 
-/* KaTeX 公式样式微调 */
 .markdown-body :deep(.katex-display) {
   margin: 8px 0;
   overflow-x: auto;
@@ -261,17 +313,17 @@ const renderedSources = computed(() => {
 }
 
 .message-source {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(0,0,0,0.1);
-  font-size: 12px;
-  opacity: 0.7;
   display: flex;
-  align-items: center;
-  gap: 4px;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  font-size: 12px;
+  color: #57534e;
 }
 
 .user-bubble .message-source {
-  border-top-color: rgba(255,255,255,0.2);
+  color: rgba(255, 255, 255, 0.86);
+  border-top-color: rgba(255, 255, 255, 0.2);
 }
 </style>

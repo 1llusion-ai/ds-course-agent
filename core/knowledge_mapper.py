@@ -159,6 +159,25 @@ class KnowledgeMapper:
             return 0.0
         return float(np.dot(v1, v2) / (norm1 * norm2))
 
+    def _score_substring_match(self, alias: str, normalized: str) -> float:
+        """对子串命中做更稳健的打分，避免长问句压低概念命中分。"""
+        if not alias or not normalized:
+            return 0.0
+
+        if alias == normalized:
+            return 1.0
+
+        # 问句包含完整概念别名时，应视为较强命中。
+        if alias in normalized and len(alias) >= 2:
+            coverage = len(alias) / max(len(normalized), 1)
+            return round(min(0.99, 0.72 + 0.25 * coverage), 3)
+
+        # 用户问题是概念别名的截断或简写时，保留原有比例分。
+        if normalized in alias and len(normalized) >= 2:
+            return round(min(0.9, len(normalized) / max(len(alias), 1)), 3)
+
+        return 0.0
+
     def map_question(self, question: str, top_k: int = 3,
                      embedding_threshold: float = 0.82) -> List[MatchedConcept]:
         """
@@ -198,19 +217,17 @@ class KnowledgeMapper:
         for alias, cid in self.graph.alias_to_concept.items():
             if cid in matched_ids:
                 continue
-            if alias in normalized or normalized in alias:
+            score = self._score_substring_match(alias, normalized)
+            if score >= 0.55:
                 concept = self.graph.get_concept(cid)
-                # 子串匹配 score 根据长度比例计算
-                score = min(len(alias), len(normalized)) / max(len(alias), len(normalized))
-                if score >= 0.5:  # 子串匹配阈值（>=0.5 捕获"核函数"->"核函数怎么选"）
-                    matches.append(MatchedConcept(
-                        concept_id=cid,
-                        display_name=concept["display_name"],
-                        chapter=concept["chapter"],
-                        method="exact_alias",
-                        score=round(score, 2)
-                    ))
-                    matched_ids.add(cid)
+                matches.append(MatchedConcept(
+                    concept_id=cid,
+                    display_name=concept["display_name"],
+                    chapter=concept["chapter"],
+                    method="exact_alias",
+                    score=score
+                ))
+                matched_ids.add(cid)
 
         # ===== Layer 2: 正则规则匹配 =====
         for pattern, cid in self.graph.regex_rules:

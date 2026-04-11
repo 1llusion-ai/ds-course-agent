@@ -1,40 +1,76 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { sessionsApi } from '../api/sessions'
+
 import { DEFAULT_STUDENT_ID } from '../config'
+import { sessionsApi } from '../api/sessions'
 
 const DEFAULT_SESSION_TITLE = '新会话'
+const SESSION_FETCH_RETRIES = 2
+const SESSION_FETCH_RETRY_DELAY_MS = 450
+
+function sleep(ms) {
+  return new Promise(resolve => window.setTimeout(resolve, ms))
+}
 
 export const useSessionStore = defineStore('session', () => {
   const sessions = ref([])
   const currentSessionId = ref(null)
   const loading = ref(false)
+  const loaded = ref(false)
   const unreadCounts = ref({})
+  let fetchPromise = null
 
   const currentSession = computed(() =>
-    sessions.value.find(s => s.id === currentSessionId.value)
+    sessions.value.find(session => session.id === currentSessionId.value)
   )
 
   const sortedSessions = computed(() =>
-    [...sessions.value].sort((a, b) =>
-      new Date(b.updated_at) - new Date(a.updated_at)
+    [...sessions.value].sort((left, right) =>
+      new Date(right.updated_at) - new Date(left.updated_at)
     )
   )
 
-  async function fetchSessions(studentId = DEFAULT_STUDENT_ID) {
-    loading.value = true
-    try {
-      const response = await sessionsApi.list(studentId)
-      sessions.value = response.sessions
-      return response.sessions
-    } finally {
-      loading.value = false
+  async function runFetchSessions(studentId) {
+    let lastError = null
+
+    for (let attempt = 0; attempt <= SESSION_FETCH_RETRIES; attempt += 1) {
+      try {
+        const response = await sessionsApi.list(studentId)
+        const nextSessions = Array.isArray(response.sessions) ? response.sessions : []
+        sessions.value = nextSessions
+        loaded.value = true
+        return nextSessions
+      } catch (error) {
+        lastError = error
+        if (attempt === SESSION_FETCH_RETRIES) {
+          break
+        }
+        await sleep(SESSION_FETCH_RETRY_DELAY_MS * (attempt + 1))
+      }
     }
+
+    throw lastError
+  }
+
+  async function fetchSessions(studentId = DEFAULT_STUDENT_ID) {
+    if (fetchPromise) {
+      return fetchPromise
+    }
+
+    loading.value = true
+    fetchPromise = runFetchSessions(studentId)
+      .finally(() => {
+        loading.value = false
+        fetchPromise = null
+      })
+
+    return fetchPromise
   }
 
   async function createSession(title = DEFAULT_SESSION_TITLE, studentId = DEFAULT_STUDENT_ID) {
     const response = await sessionsApi.create({
-      title, student_id: studentId
+      title,
+      student_id: studentId
     })
     sessions.value.unshift(response)
     currentSessionId.value = response.id
@@ -57,13 +93,15 @@ export const useSessionStore = defineStore('session', () => {
 
   function shouldAutoTitle(sessionId) {
     const session = sessions.value.find(item => item.id === sessionId)
-    if (!session) return false
+    if (!session) {
+      return false
+    }
     return session.title === DEFAULT_SESSION_TITLE && (session.message_count || 0) === 0
   }
 
   async function deleteSession(sessionId, studentId = DEFAULT_STUDENT_ID) {
     await sessionsApi.delete(sessionId, studentId)
-    sessions.value = sessions.value.filter(s => s.id !== sessionId)
+    sessions.value = sessions.value.filter(session => session.id !== sessionId)
     if (currentSessionId.value === sessionId) {
       currentSessionId.value = null
     }
@@ -85,9 +123,21 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   return {
-    sessions, currentSessionId, loading, unreadCounts,
-    currentSession, sortedSessions,
-    fetchSessions, createSession, updateSession, syncSession, shouldAutoTitle,
-    deleteSession, setCurrentSession, markRead, incrementUnread
+    sessions,
+    currentSessionId,
+    loading,
+    unreadCounts,
+    loaded,
+    currentSession,
+    sortedSessions,
+    fetchSessions,
+    createSession,
+    updateSession,
+    syncSession,
+    shouldAutoTitle,
+    deleteSession,
+    setCurrentSession,
+    markRead,
+    incrementUnread
   }
 })

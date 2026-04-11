@@ -5,10 +5,9 @@
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
-from core.memory_core import get_memory_core, record_event
+from core.memory_core import get_memory_core
 from core.knowledge_mapper import map_question_to_concepts, MatchedConcept
-from core.events import build_concept_mentioned_event, EventType
-from core.profile_models import StudentProfile, WeakSpotCandidate
+from core.profile_models import StudentProfile
 from core.tools import course_rag_tool
 
 
@@ -45,38 +44,25 @@ class PersonalizedExplanationSkill:
         Returns:
             个性化讲解内容
         """
+        profile = self.memory_core.get_profile(student_id)
+
         # ===== Step 1: 知识点映射 =====
         matched_concepts = map_question_to_concepts(question, top_k=3)
 
         if not matched_concepts:
+            matched_concepts = self._infer_concepts_from_profile(question, profile)
+
+        if not matched_concepts:
             # 未匹配到知识点，使用通用RAG回答
-            return self._fallback_explanation(question)
+            return self._fallback_explanation(question, profile)
 
-        # 记录概念提及事件
-        primary_match = matched_concepts[0]
-        event = build_concept_mentioned_event(
-            session_id=session_id,
-            student_id=student_id,
-            concept_id=primary_match.concept_id,
-            concept_name=primary_match.display_name,
-            chapter=primary_match.chapter,
-            question_type=self._classify_question_type(question),
-            matched_score=primary_match.score,
-            raw_question=question,
-            enable_hash=False
-        )
-        record_event(event)
-
-        # ===== Step 2: 查询学生画像 =====
-        profile = self.memory_core.get_profile(student_id)
-
-        # ===== Step 3: 构建教学策略 =====
+        # ===== Step 2: 构建教学策略 =====
         strategy = self._build_strategy(matched_concepts, profile, question)
 
-        # ===== Step 4: 检索课程知识 =====
+        # ===== Step 3: 检索课程知识 =====
         knowledge = course_rag_tool.invoke(question)
 
-        # ===== Step 5: 生成个性化回答 =====
+        # ===== Step 4: 生成个性化回答 =====
         response = self._generate_response(
             question=question,
             knowledge=knowledge,
@@ -86,6 +72,38 @@ class PersonalizedExplanationSkill:
         )
 
         return response
+
+    def _infer_concepts_from_profile(
+        self,
+        question: str,
+        profile: StudentProfile
+    ) -> List[MatchedConcept]:
+        inferred: List[MatchedConcept] = []
+        seen = set()
+
+        for concept in profile.weak_spot_candidates:
+            if concept.display_name and concept.display_name in question and concept.concept_id not in seen:
+                inferred.append(MatchedConcept(
+                    concept_id=concept.concept_id,
+                    display_name=concept.display_name,
+                    chapter=profile.progress.current_chapter or "",
+                    method="profile_hint",
+                    score=0.82,
+                ))
+                seen.add(concept.concept_id)
+
+        for concept in profile.recent_concepts.values():
+            if concept.display_name and concept.display_name in question and concept.concept_id not in seen:
+                inferred.append(MatchedConcept(
+                    concept_id=concept.concept_id,
+                    display_name=concept.display_name,
+                    chapter=concept.chapter,
+                    method="profile_hint",
+                    score=0.78,
+                ))
+                seen.add(concept.concept_id)
+
+        return inferred
 
     def _classify_question_type(self, question: str) -> str:
         """
@@ -131,6 +149,12 @@ class PersonalizedExplanationSkill:
                 if rc.mention_count >= 2:
                     connect_to_known.append(match.concept_id)
 
+        for concept_id, concept in profile.recent_concepts.items():
+            if concept_id in target_concepts:
+                continue
+            if concept.mention_count >= 2:
+                connect_to_known.append(concept_id)
+
         # 检查是否跳章学习
         current_chapter = profile.progress.current_chapter
         primary_chapter = matched_concepts[0].chapter
@@ -148,11 +172,78 @@ class PersonalizedExplanationSkill:
 
         return TeachingStrategy(
             target_concepts=target_concepts,
-            emphasize_weak_spots=emphasize_weak_spots,
-            connect_to_known=connect_to_known,
+            emphasize_weak_spots=list(dict.fromkeys(emphasize_weak_spots)),
+            connect_to_known=list(dict.fromkeys(connect_to_known)),
             suggest_examples=suggest_examples,
             reminder_chapter=reminder_chapter
         )
+
+    def _build_personalized_scaffold(
+        self,
+        question: str,
+        profile: StudentProfile,
+        strategy: TeachingStrategy,
+        matched_concepts: List[MatchedConcept]
+    ) -> str:
+        intro_parts = []
+
+        if profile.progress.current_chapter:
+            intro_parts.append(f"结合你现在学到的{profile.progress.current_chapter}进度")
+
+        known_names = [
+            concept.display_name
+            for concept in list(profile.recent_concepts.values())[:2]
+            if concept.display_name
+        ]
+        if known_names:
+            intro_parts.append(f"你已经学过{'、'.join(known_names)}")
+
+        weak_names = [
+            item.display_name
+            for item in profile.weak_spot_candidates
+            if item.confidence > 0.5 and item.display_name
+        ]
+        if weak_names:
+            intro_parts.append(f"考虑到你之前在{'、'.join(weak_names[:2])}上容易混淆")
+        elif "之前" in question or "容易混淆" in question:
+            intro_parts.append("考虑到你前面提到自己容易混淆这个点")
+
+        if not intro_parts:
+            return ""
+
+        target_name = matched_concepts[0].display_name if matched_concepts else "这个知识点"
+        if known_names:
+            bridge = f"这次我会把{target_name}和你之前学过的{'、'.join(known_names)}连起来讲。"
+        else:
+            bridge = f"这次我会围绕{target_name}来讲。"
+
+        if "直观" in question or weak_names:
+            study_plan = "我会先用更直观的方式解释，再给你一个例子，下一步再帮你把它和前面学过的内容连起来。"
+        else:
+            study_plan = "我会先讲核心直觉，再讲关键概念或公式，下一步再告诉你该怎么继续学。"
+
+        return f"{'，'.join(intro_parts)}。{bridge}{study_plan}"
+
+    def _merge_personalized_scaffold(self, content: str, scaffold: str) -> str:
+        if not scaffold:
+            return content
+
+        normalized_content = content.replace(" ", "")
+        required_markers = [
+            marker
+            for marker in [
+                "结合你现在学到的",
+                "你已经学过",
+                "之前学过",
+                "考虑到你之前",
+                "下一步",
+            ]
+            if marker in scaffold
+        ]
+        if required_markers and all(marker in normalized_content for marker in required_markers):
+            return content
+
+        return f"{scaffold}\n\n{content}"
 
     def _generate_response(self, question: str, knowledge: str,
                            strategy: TeachingStrategy, profile: StudentProfile,
@@ -195,6 +286,12 @@ class PersonalizedExplanationSkill:
 
         # 检查知识内容是否有效
         has_valid_knowledge = knowledge and knowledge != "无相关资料" and len(knowledge) > 50
+        personalized_scaffold = self._build_personalized_scaffold(
+            question,
+            profile,
+            strategy,
+            matched_concepts
+        )
 
         # 构建 prompt
         if has_valid_knowledge:
@@ -220,7 +317,9 @@ class PersonalizedExplanationSkill:
 2. **禁止幻觉**：如果资料中没有相关信息，明确告知"教材中未找到相关内容"，不要猜测或编造
 3. **针对性**：如果学生此前对该概念有困惑（薄弱点），请用更直观的方式解释
 4. **关联性**：尽量关联学生已学内容，建立知识连接
-5. **简洁**：先给出核心定义，再展开细节
+5. **显式个性化**：如果有学生进度、已学概念或薄弱点信息，回答开头必须明确点出来，例如“结合你现在学到的第6章进度”或“考虑到你之前容易混淆这个点”
+6. **学习路径**：在回答中明确使用“先……再……下一步……”这样的学习顺序
+7. **简洁**：先给出核心定义，再展开细节
 
 请生成讲解内容：
 """
@@ -264,7 +363,7 @@ class PersonalizedExplanationSkill:
 
                 # 检查空响应
                 if content and content.strip():
-                    return content
+                    return self._merge_personalized_scaffold(content.strip(), personalized_scaffold)
 
                 # 空响应，尝试重试
                 if attempt < max_retries:
@@ -274,7 +373,8 @@ class PersonalizedExplanationSkill:
 
                 # 重试后仍为空，降级处理
                 if has_valid_knowledge:
-                    return f"根据教材资料：\n\n{knowledge[:2000]}"
+                    fallback = f"根据教材资料：\n\n{knowledge[:2000]}"
+                    return self._merge_personalized_scaffold(fallback, personalized_scaffold)
                 else:
                     return "抱歉，系统暂时无法生成回答。请稍后重试。"
 
@@ -290,18 +390,26 @@ class PersonalizedExplanationSkill:
 
                 # 降级处理
                 if has_valid_knowledge:
-                    return f"根据课程资料：\n\n{knowledge[:2000]}\n\n[注：由于技术原因，使用原始检索结果]"
+                    fallback = f"根据课程资料：\n\n{knowledge[:2000]}\n\n[注：由于技术原因，使用原始检索结果]"
+                    return self._merge_personalized_scaffold(fallback, personalized_scaffold)
                 else:
                     return "抱歉，生成回答时遇到错误。请稍后重试。"
 
-    def _fallback_explanation(self, question: str) -> str:
+    def _fallback_explanation(self, question: str, profile: StudentProfile) -> str:
         """
         未匹配到知识点时的回退处理
         """
         try:
             knowledge = course_rag_tool.invoke(question)
+            scaffold = self._build_personalized_scaffold(
+                question,
+                profile,
+                TeachingStrategy([], [], [], False, profile.progress.current_chapter),
+                []
+            )
             if knowledge and knowledge.strip() and knowledge != "无相关资料":
-                return f"根据课程资料：\n\n{knowledge}\n\n[注：未能识别具体知识点，建议提问时包含关键术语如'SVM'、'决策树'等]"
+                fallback = f"根据课程资料：\n\n{knowledge}\n\n[注：未能识别具体知识点，建议提问时包含关键术语如'SVM'、'决策树'等]"
+                return self._merge_personalized_scaffold(fallback, scaffold)
             else:
                 return """抱歉，未能找到与问题相关的课程资料。
 

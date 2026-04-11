@@ -1,238 +1,293 @@
-"""
-画像 API 测试
-覆盖: 画像获取、字段语义、归属校验
-"""
-import pytest
+import tempfile
+
 from fastapi.testclient import TestClient
+
 from app.main import app
+from core.events import build_clarification_event, build_concept_mentioned_event
+from core.memory_core import MemoryCore
+from core.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
 
 client = TestClient(app)
 
 
 class TestProfileAPI:
-    """画像接口测试类"""
-
     def setup_method(self):
-        """每个测试前清理数据"""
-        from app.routers.sessions import _sessions
-        from app.routers.chat import _chat_history
-        _sessions.clear()
-        _chat_history.clear()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.memory = MemoryCore(base_dir=self.temp_dir.name)
 
-    def test_get_summary_basic(self):
-        """测试获取画像摘要"""
-        # 创建会话并发送消息产生画像数据
-        session_resp = client.post("/api/sessions", json={
-            "title": "测试会话",
-            "student_id": "student001"
-        })
-        session_id = session_resp.json()["id"]
+        from app.routers import profile as profile_router
 
-        # 发送关于SVM的消息
-        client.post("/api/chat/send", json={
-            "session_id": session_id,
-            "message": "什么是SVM",
-            "student_id": "student001"
-        })
+        self._old_get_memory = profile_router.get_memory
+        profile_router.get_memory = lambda: self.memory
 
-        # 聚合画像
-        client.post("/api/profile/aggregate/student001")
+    def teardown_method(self):
+        from app.routers import profile as profile_router
 
-        # 获取摘要
+        profile_router.get_memory = self._old_get_memory
+        self.temp_dir.cleanup()
+
+    def test_get_summary_exposes_recent_concepts_and_resolved_count(self):
+        profile = StudentProfile(student_id="student001")
+        profile.recent_concepts["svm"] = ConceptFocus(
+            concept_id="svm",
+            display_name="支持向量机",
+            chapter="第6章",
+            mention_count=3,
+            last_mentioned_at=200.0,
+            last_question_type="概念理解",
+        )
+        profile.weak_spot_candidates.append(
+            WeakSpotCandidate(
+                concept_id="svm_kernel",
+                display_name="核函数",
+                confidence=0.82,
+                clarification_count=3,
+                first_detected_at=100.0,
+                last_triggered_at=180.0,
+                signals=[{"type": "CLARIFICATION"}],
+            )
+        )
+        profile.pending_weak_spots.append(
+            WeakSpotCandidate(
+                concept_id="svm_margin",
+                display_name="间隔最大化",
+                confidence=0.48,
+                clarification_count=1,
+                first_detected_at=90.0,
+                last_triggered_at=95.0,
+                signals=[{"type": "CLARIFICATION"}],
+            )
+        )
+        profile.resolved_weak_spots.append(
+            WeakSpotCandidate(
+                concept_id="overfitting",
+                display_name="过拟合",
+                confidence=0.7,
+                clarification_count=2,
+                first_detected_at=50.0,
+                last_triggered_at=120.0,
+                resolved_at=160.0,
+                signals=[{"type": "CLARIFICATION"}, {"type": "CLARIFICATION"}],
+            )
+        )
+        profile.stats["total_resolved_weak_spots"] = 1
+        self.memory.save_profile(profile)
+
         resp = client.get("/api/profile/summary/student001")
         assert resp.status_code == 200
         data = resp.json()
+
         assert data["student_id"] == "student001"
-        assert "recent_concepts" in data
-        assert "weak_spots" in data
+        assert data["resolved_weak_spot_count"] == 1
+        assert data["recent_concepts"][0]["concept_id"] == "svm"
+        assert data["pending_weak_spots"][0]["concept_id"] == "svm_margin"
+        assert data["recent_concepts"][0]["last_mentioned_at"] is not None
+        assert data["weak_spots"][0]["concept_id"] == "svm_kernel"
+        assert data["weak_spots"][0]["clarification_count"] == 3
 
-    def test_summary_no_timestamps(self):
-        """测试摘要不包含不准确的时间戳"""
-        # 创建一些活动
-        session_resp = client.post("/api/sessions", json={
-            "title": "测试会话",
-            "student_id": "student002"
-        })
-        session_id = session_resp.json()["id"]
+    def test_get_detail_sorts_recent_concepts_by_last_mentioned_at(self):
+        profile = StudentProfile(student_id="student002")
+        profile.recent_concepts["decision_tree"] = ConceptFocus(
+            concept_id="decision_tree",
+            display_name="决策树",
+            chapter="第6章",
+            mention_count=5,
+            last_mentioned_at=100.0,
+            last_question_type="概念理解",
+        )
+        profile.recent_concepts["pca"] = ConceptFocus(
+            concept_id="pca",
+            display_name="主成分分析",
+            chapter="第7章",
+            mention_count=2,
+            last_mentioned_at=300.0,
+            last_question_type="数学推导",
+        )
+        self.memory.save_profile(profile)
 
-        client.post("/api/chat/send", json={
-            "session_id": session_id,
-            "message": "什么是机器学习",
-            "student_id": "student002"
-        })
-
-        client.post("/api/profile/aggregate/student002")
-
-        # 获取摘要
-        resp = client.get("/api/profile/summary/student002")
-        data = resp.json()
-
-        # 检查字段 - 不应包含 last_mentioned（语义不准确）
-        for concept in data.get("recent_concepts", []):
-            assert "last_mentioned" not in concept, "不应包含不准确的时间戳"
-            assert "mention_count" in concept, "应包含mention_count"
-
-    def test_summary_sorted_by_mention_count(self):
-        """测试近期概念按mention_count排序而非时间"""
-        # 多次询问不同概念
-        session_resp = client.post("/api/sessions", json={
-            "title": "测试会话",
-            "student_id": "student003"
-        })
-        session_id = session_resp.json()["id"]
-
-        # 多次询问SVM
-        for _ in range(3):
-            client.post("/api/chat/send", json={
-                "session_id": session_id,
-                "message": "SVM的核函数",
-                "student_id": "student003"
-            })
-
-        # 一次询问决策树
-        client.post("/api/chat/send", json={
-            "session_id": session_id,
-            "message": "决策树是什么",
-            "student_id": "student003"
-        })
-
-        client.post("/api/profile/aggregate/student003")
-
-        # 获取摘要
-        resp = client.get("/api/profile/summary/student003")
-        data = resp.json()
-
-        if len(data.get("recent_concepts", [])) >= 2:
-            # 第一个概念的mention_count应该大于等于第二个
-            first = data["recent_concepts"][0]["mention_count"]
-            second = data["recent_concepts"][1]["mention_count"]
-            assert first >= second, "应按mention_count降序排列"
-
-    def test_get_detail_no_timestamps(self):
-        """测试详情也不包含不准确的时间戳"""
-        session_resp = client.post("/api/sessions", json={
-            "title": "测试会话",
-            "student_id": "student004"
-        })
-        session_id = session_resp.json()["id"]
-
-        client.post("/api/chat/send", json={
-            "session_id": session_id,
-            "message": "什么是SVM",
-            "student_id": "student004"
-        })
-
-        client.post("/api/profile/aggregate/student004")
-
-        resp = client.get("/api/profile/detail/student004")
-        data = resp.json()
-
-        # 检查progress中不应有last_study_date
-        progress = data.get("progress", {})
-        assert "last_study_date" not in progress, "不应包含不准确的时间戳"
-
-        # 检查recent_concepts
-        for concept in data.get("recent_concepts", []):
-            assert "last_mentioned" not in concept, "不应包含不准确的时间戳"
-
-    def test_aggregate_profile(self):
-        """测试手动触发画像聚合"""
-        resp = client.post("/api/profile/aggregate/student005")
+        resp = client.get("/api/profile/detail/student002")
         assert resp.status_code == 200
-        assert resp.json()["student_id"] == "student005"
-
-    def test_profile_isolation(self):
-        """测试不同学生的画像隔离"""
-        # student_a 的活动
-        session_a = client.post("/api/sessions", json={
-            "title": "A的会话",
-            "student_id": "student_a"
-        }).json()["id"]
-
-        client.post("/api/chat/send", json={
-            "session_id": session_a,
-            "message": "什么是SVM",
-            "student_id": "student_a"
-        })
-
-        client.post("/api/profile/aggregate/student_a")
-
-        # student_b 的活动
-        session_b = client.post("/api/sessions", json={
-            "title": "B的会话",
-            "student_id": "student_b"
-        }).json()["id"]
-
-        client.post("/api/chat/send", json={
-            "session_id": session_b,
-            "message": "什么是决策树",
-            "student_id": "student_b"
-        })
-
-        client.post("/api/profile/aggregate/student_b")
-
-        # 获取各自的画像
-        profile_a = client.get("/api/profile/summary/student_a").json()
-        profile_b = client.get("/api/profile/summary/student_b").json()
-
-        # 检查概念不混淆
-        a_concepts = [c["concept_id"] for c in profile_a.get("recent_concepts", [])]
-        b_concepts = [c["concept_id"] for c in profile_b.get("recent_concepts", [])]
-
-        # svm 应在 a 中，decision_tree 应在 b 中
-        assert "svm" in a_concepts or any("svm" in c.lower() for c in a_concepts), "A的画像应包含SVM"
-
-
-class TestProfileFields:
-    """画像字段测试"""
-
-    def test_weak_spot_evidence_count(self):
-        """测试薄弱点的证据数量计算"""
-        # 产生薄弱点信号（多次澄清同一概念）
-        session_resp = client.post("/api/sessions", json={
-            "title": "测试会话",
-            "student_id": "student006"
-        })
-        session_id = session_resp.json()["id"]
-
-        # 同一概念多次询问可能产生薄弱点
-        for _ in range(5):
-            client.post("/api/chat/send", json={
-                "session_id": session_id,
-                "message": "SVM核函数怎么选",
-                "student_id": "student006"
-            })
-
-        client.post("/api/profile/aggregate/student006")
-
-        resp = client.get("/api/profile/detail/student006")
         data = resp.json()
 
-        # 检查薄弱点字段
-        for spot in data.get("weak_spots", []):
-            assert "evidence_count" in spot
-            assert spot["evidence_count"] >= 0
-            assert "confidence" in spot
-            assert 0 <= spot["confidence"] <= 1
+        assert data["recent_concepts"][0]["concept_id"] == "pca"
+        assert data["recent_concepts"][1]["concept_id"] == "decision_tree"
+        assert "stats" in data
+        assert "resolved_weak_spots" in data
 
-    def test_chapter_stats(self):
-        """测试章节统计"""
-        session_resp = client.post("/api/sessions", json={
-            "title": "测试会话",
-            "student_id": "student007"
-        })
-        session_id = session_resp.json()["id"]
+    def test_get_detail_includes_active_and_resolved_weak_spots(self):
+        profile = StudentProfile(student_id="student003")
+        profile.weak_spot_candidates.append(
+            WeakSpotCandidate(
+                concept_id="cross_validation",
+                display_name="交叉验证",
+                confidence=0.75,
+                clarification_count=2,
+                first_detected_at=20.0,
+                last_triggered_at=50.0,
+                signals=[{"type": "CLARIFICATION"}, {"type": "CLARIFICATION"}],
+            )
+        )
+        profile.pending_weak_spots.append(
+            WeakSpotCandidate(
+                concept_id="distinction::demo",
+                display_name="过拟合 vs 泛化",
+                confidence=0.42,
+                clarification_count=1,
+                first_detected_at=15.0,
+                last_triggered_at=40.0,
+                signals=[{"type": "CLARIFICATION"}],
+            )
+        )
+        profile.resolved_weak_spots.append(
+            WeakSpotCandidate(
+                concept_id="gradient_descent",
+                display_name="梯度下降",
+                confidence=0.68,
+                clarification_count=2,
+                first_detected_at=10.0,
+                last_triggered_at=30.0,
+                resolved_at=60.0,
+                resolution_note="explicit_understanding",
+                signals=[{"type": "CLARIFICATION"}, {"type": "MASTERY"}],
+            )
+        )
+        profile.stats.update(
+            {
+                "total_questions": 8,
+                "total_concepts": 3,
+                "pending_weak_spots": 1,
+                "active_weak_spots": 1,
+                "resolved_weak_spots": 1,
+                "total_resolved_weak_spots": 1,
+            }
+        )
+        self.memory.save_profile(profile)
 
-        client.post("/api/chat/send", json={
-            "session_id": session_id,
-            "message": "什么是机器学习",
-            "student_id": "student007"
-        })
-
-        client.post("/api/profile/aggregate/student007")
-
-        resp = client.get("/api/profile/detail/student007")
+        resp = client.get("/api/profile/detail/student003")
+        assert resp.status_code == 200
         data = resp.json()
 
-        assert "chapter_stats" in data
-        assert "daily_activity" in data
+        assert data["pending_weak_spots"][0]["concept_id"] == "distinction::demo"
+        assert data["weak_spots"][0]["concept_id"] == "cross_validation"
+        assert data["resolved_weak_spots"][0]["concept_id"] == "gradient_descent"
+        assert data["resolved_weak_spots"][0]["resolved_at"] is not None
+        assert data["stats"]["total_resolved_weak_spots"] == 1
+        assert data["stats"]["pending_weak_spots"] == 1
+
+    def test_get_concept_detail_returns_catalog_and_excerpt(self):
+        from app.routers import profile as profile_router
+
+        fake_catalog = {
+            "svm": {
+                "canonical_id": "svm",
+                "display_name": "支持向量机",
+                "chapter": "第6章",
+                "section": "6.2",
+                "aliases": ["支持向量机", "SVM"],
+                "related_concepts": ["svm_kernel"],
+            },
+            "svm_kernel": {
+                "canonical_id": "svm_kernel",
+                "display_name": "核函数",
+                "chapter": "第6章",
+                "section": "6.2",
+                "aliases": ["核函数"],
+                "related_concepts": [],
+            },
+        }
+
+        old_catalog = profile_router._get_concept_catalog
+        old_pdf_extractor = profile_router._extract_textbook_excerpt_from_pdf
+        old_rag_extractor = profile_router._retrieve_textbook_excerpt_with_rag
+        profile_router._get_concept_catalog = lambda: fake_catalog
+        profile_router._extract_textbook_excerpt_from_pdf = lambda concept: (
+            "支持向量机是一种用于分类与回归的监督学习方法。",
+            [{"reference": "《第6章 监督学习常用算法》第123页"}],
+        )
+        profile_router._retrieve_textbook_excerpt_with_rag = lambda concept: (None, [])
+        try:
+            resp = client.get("/api/profile/concepts/svm")
+        finally:
+            profile_router._get_concept_catalog = old_catalog
+            profile_router._extract_textbook_excerpt_from_pdf = old_pdf_extractor
+            profile_router._retrieve_textbook_excerpt_with_rag = old_rag_extractor
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["concept_id"] == "svm"
+        assert data["aliases"] == ["支持向量机", "SVM"]
+        assert data["related_concepts"][0]["concept_id"] == "svm_kernel"
+        assert "支持向量机" in data["textbook_excerpt"]
+
+    def test_get_concept_detail_supports_distinction_concept(self):
+        from app.routers import profile as profile_router
+        from core.agent import AgentService
+
+        service = AgentService.__new__(AgentService)
+        distinction = service._build_distinction_learning_concept(
+            "我感觉我老是搞不懂过拟合和泛化到底有什么差别",
+            [],
+        )
+
+        old_rag_extractor = profile_router._retrieve_distinction_excerpt_with_rag
+        profile_router._retrieve_distinction_excerpt_with_rag = lambda labels: (None, [])
+        try:
+            resp = client.get(f"/api/profile/concepts/{distinction['concept_id']}")
+        finally:
+            profile_router._retrieve_distinction_excerpt_with_rag = old_rag_extractor
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["display_name"] == "泛化 vs 过拟合"
+        assert data["aliases"] == ["泛化", "过拟合"]
+        assert "辨析型知识点" in data["textbook_excerpt"]
+
+    def test_resolve_weak_spot_moves_active_item_to_resolved_history(self):
+        concept_event = build_concept_mentioned_event(
+            session_id="sess_profile",
+            student_id="student004",
+            concept_id="cross_validation",
+            concept_name="交叉验证",
+            chapter="第6章",
+            question_type="概念理解",
+            matched_score=0.92,
+            raw_question="交叉验证是什么？",
+        )
+        concept_event.timestamp = 100.0
+        self.memory.record_event(concept_event)
+
+        clarification_one = build_clarification_event(
+            session_id="sess_profile",
+            student_id="student004",
+            concept_id="cross_validation",
+            parent_event_id=concept_event.event_id,
+            clarification_type="simplify_request",
+        )
+        clarification_one.timestamp = 120.0
+        self.memory.record_event(clarification_one)
+
+        clarification_two = build_clarification_event(
+            session_id="sess_profile",
+            student_id="student004",
+            concept_id="cross_validation",
+            parent_event_id=concept_event.event_id,
+            clarification_type="example_request",
+        )
+        clarification_two.timestamp = 150.0
+        self.memory.record_event(clarification_two)
+
+        self.memory.aggregate_profile("student004")
+
+        resp = client.post("/api/profile/weak-spots/student004/cross_validation/resolve")
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert "已移出" in data["message"]
+        assert data["resolved_weak_spot"]["concept_id"] == "cross_validation"
+        assert data["resolved_weak_spot"]["resolution_note"] == "manual_resolve"
+
+        detail_resp = client.get("/api/profile/detail/student004")
+        assert detail_resp.status_code == 200
+        detail_data = detail_resp.json()
+        assert detail_data["weak_spots"] == []
+        assert detail_data["resolved_weak_spots"][0]["concept_id"] == "cross_validation"

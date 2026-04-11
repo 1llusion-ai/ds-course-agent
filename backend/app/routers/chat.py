@@ -1,22 +1,27 @@
-# 先加载环境变量
 from app.core_bridge import PROJECT_ROOT
 from dotenv import load_dotenv
+from pathlib import Path
+
 env_path = PROJECT_ROOT / ".env"
 if env_path.exists():
     load_dotenv(env_path, override=True)
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
-from fastapi.concurrency import run_in_threadpool
-from typing import AsyncGenerator
-from datetime import datetime
 import asyncio
+import json
+from datetime import datetime
+from typing import AsyncGenerator
 
-from app.schemas.chat import ChatRequest, ChatResponse, ChatMessage, ChatHistoryResponse
-from app.core_bridge import chat_with_history
-from app.state import _chat_history, _save as _save_state
+from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
+
+from app.core_bridge import chat_with_history, stream_chat_with_history
+from app.schemas.chat import ChatHistoryResponse, ChatMessage, ChatRequest, ChatResponse
+from app.state import _chat_history, _save as _save_state, _sessions
 
 router = APIRouter()
+
+_STREAM_SENTINEL = object()
 
 
 def _msg_to_dict(msg: ChatMessage) -> dict:
@@ -40,38 +45,64 @@ def _msg_from_dict(data: dict) -> ChatMessage:
     )
 
 
-@router.post("/send", response_model=ChatResponse)
-async def send_message(data: ChatRequest):
-    """发送消息（调用真实 Agent）"""
-    # 保存用户消息
-    user_msg = ChatMessage(role="user", content=data.message)
-    if data.session_id not in _chat_history:
-        _chat_history[data.session_id] = []
-    _chat_history[data.session_id].append(_msg_to_dict(user_msg))
+def _ensure_session_history(session_id: str) -> None:
+    if session_id not in _chat_history:
+        _chat_history[session_id] = []
+
+
+def _append_message(session_id: str, message: ChatMessage) -> None:
+    _ensure_session_history(session_id)
+    _chat_history[session_id].append(_msg_to_dict(message))
     _save_state()
 
+
+def _update_session_metadata(session_id: str, timestamp: str | None = None) -> None:
+    if session_id not in _sessions:
+        return
+
+    _sessions[session_id]["message_count"] = len(_chat_history.get(session_id, []))
+    _sessions[session_id]["updated_at"] = timestamp or datetime.now().isoformat()
+    _save_state()
+
+
+def _build_stream_error_message(text: str) -> ChatMessage:
+    return ChatMessage(
+        role="assistant",
+        content=f"⚠️ {text}",
+        timestamp=datetime.now(),
+    )
+
+
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+@router.post("/send", response_model=ChatResponse)
+async def send_message(data: ChatRequest):
+    user_msg = ChatMessage(role="user", content=data.message)
+    _append_message(data.session_id, user_msg)
+
     try:
-        # 调用真实 Agent 生成回答
         assistant_result = await run_in_threadpool(
             chat_with_history,
             message=data.message,
             session_id=data.session_id,
-            student_id=data.student_id
+            student_id=data.student_id,
         )
-    except Exception as e:
+    except Exception as exc:
         import traceback
+
         traceback.print_exc()
-        # 清理已添加的用户消息
         _chat_history[data.session_id].pop()
         _save_state()
         raise HTTPException(
             status_code=500,
             detail={
                 "error": "AGENT_ERROR",
-                "message": f"Agent处理失败: {str(e)}",
-                "session_id": data.session_id
-            }
-        )
+                "message": f"Agent处理失败: {str(exc)}",
+                "session_id": data.session_id,
+            },
+        ) from exc
 
     assistant_content = assistant_result.get("content", "") if isinstance(assistant_result, dict) else str(assistant_result)
     assistant_sources = assistant_result.get("sources") if isinstance(assistant_result, dict) else None
@@ -81,15 +112,8 @@ async def send_message(data: ChatRequest):
         content=assistant_content,
         sources=assistant_sources or None,
     )
-    _chat_history[data.session_id].append(_msg_to_dict(assistant_msg))
-    _save_state()
-
-    # 更新会话的元数据（消息数和时间）
-    from app.state import _sessions
-    if data.session_id in _sessions:
-        _sessions[data.session_id]["message_count"] = len(_chat_history[data.session_id])
-        _sessions[data.session_id]["updated_at"] = datetime.now().isoformat()
-        _save_state()
+    _append_message(data.session_id, assistant_msg)
+    _update_session_metadata(data.session_id, assistant_msg.timestamp.isoformat())
 
     return ChatResponse(message=assistant_msg, session_id=data.session_id)
 
@@ -98,43 +122,110 @@ async def send_message(data: ChatRequest):
 async def send_message_stream(
     session_id: str,
     message: str,
-    student_id: str = "default_student"
+    student_id: str = "default_student",
 ):
-    """发送消息（流式/SSE）
+    user_msg = ChatMessage(role="user", content=message)
+    _append_message(session_id, user_msg)
 
-    使用 GET 方法支持 EventSource (SSE)
-    """
     async def generate() -> AsyncGenerator[str, None]:
-        if session_id not in _chat_history:
-            _chat_history[session_id] = []
-        _chat_history[session_id].append(_msg_to_dict(ChatMessage(role="user", content=message)))
-        _save_state()
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[dict | object] = asyncio.Queue()
 
-        # 模拟流式回复
-        words = f"这是关于「{message}」的回答。我会逐步输出，模拟真实的打字机效果。"
-        response_words = []
+        def worker():
+            try:
+                for event in stream_chat_with_history(
+                    message=message,
+                    session_id=session_id,
+                    student_id=student_id,
+                ):
+                    loop.call_soon_threadsafe(queue.put_nowait, event)
+            except Exception as exc:
+                loop.call_soon_threadsafe(
+                    queue.put_nowait,
+                    {
+                        "type": "error",
+                        "message": f"流式响应失败: {str(exc)}",
+                    },
+                )
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, _STREAM_SENTINEL)
 
-        for word in words:
-            response_words.append(word)
-            yield f"data: {''.join(response_words)}\n\n"
-            await asyncio.sleep(0.05)
+        worker_task = asyncio.create_task(run_in_threadpool(worker))
+        final_sent = False
 
-        full_response = "".join(response_words)
-        _chat_history[session_id].append(_msg_to_dict(ChatMessage(role="assistant", content=full_response)))
-        _save_state()
+        try:
+            while True:
+                event = await queue.get()
 
-        yield "data: [DONE]\n\n"
+                if event is _STREAM_SENTINEL:
+                    break
 
-    return StreamingResponse(generate(), media_type="text/event-stream")
+                event_type = event.get("type")
+                if event_type == "delta":
+                    delta = event.get("delta", "")
+                    if delta:
+                        yield _sse({"type": "delta", "delta": delta})
+                    continue
+
+                if event_type == "final":
+                    final_sent = True
+                    assistant_msg = ChatMessage(
+                        role="assistant",
+                        content=event.get("content", ""),
+                        sources=event.get("sources") or None,
+                    )
+                    _append_message(session_id, assistant_msg)
+                    _update_session_metadata(session_id, assistant_msg.timestamp.isoformat())
+                    yield _sse(
+                        {
+                            "type": "final",
+                            "session_id": session_id,
+                            "message": _msg_to_dict(assistant_msg),
+                        }
+                    )
+                    break
+
+                if event_type == "error":
+                    assistant_msg = _build_stream_error_message(event.get("message", "发送失败"))
+                    _append_message(session_id, assistant_msg)
+                    _update_session_metadata(session_id, assistant_msg.timestamp.isoformat())
+                    yield _sse(
+                        {
+                            "type": "final",
+                            "session_id": session_id,
+                            "message": _msg_to_dict(assistant_msg),
+                        }
+                    )
+                    final_sent = True
+                    break
+
+            if not final_sent:
+                assistant_msg = _build_stream_error_message("流式连接已结束，但未收到完整回答。")
+                _append_message(session_id, assistant_msg)
+                _update_session_metadata(session_id, assistant_msg.timestamp.isoformat())
+                yield _sse(
+                    {
+                        "type": "final",
+                        "session_id": session_id,
+                        "message": _msg_to_dict(assistant_msg),
+                    }
+                )
+        finally:
+            await worker_task
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/history/{session_id}", response_model=ChatHistoryResponse)
 async def get_chat_history(session_id: str, student_id: str = "default_student"):
-    """获取会话聊天记录
-
-    需要校验 session 归属 student_id
-    """
-    from app.state import _sessions
     if session_id not in _sessions:
         raise HTTPException(status_code=404, detail="会话不存在")
 
@@ -142,17 +233,16 @@ async def get_chat_history(session_id: str, student_id: str = "default_student")
         raise HTTPException(status_code=403, detail="无权访问此会话")
 
     raw_messages = _chat_history.get(session_id, [])
-    messages = [_msg_from_dict(m) for m in raw_messages]
+    messages = [_msg_from_dict(item) for item in raw_messages]
     return ChatHistoryResponse(
         session_id=session_id,
         messages=messages,
-        total=len(messages)
+        total=len(messages),
     )
 
 
 @router.delete("/history/{session_id}")
 async def clear_chat_history(session_id: str):
-    """清空聊天记录"""
     if session_id in _chat_history:
         del _chat_history[session_id]
         _save_state()

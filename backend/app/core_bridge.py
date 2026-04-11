@@ -85,3 +85,39 @@ def chat_with_history(message: str, session_id: str, student_id: str) -> dict:
         "used_retrieval": trace.used_retrieval,
         "sources": trace.sources,
     }
+
+
+def stream_chat_with_history(message: str, session_id: str, student_id: str):
+    from core.tools import begin_retrieval_trace, end_retrieval_trace
+
+    token = begin_retrieval_trace()
+    final_content = ""
+
+    try:
+        service = get_agent_service()
+        for event in service.stream_chat_with_history(
+            user_input=message,
+            session_id=session_id,
+            student_id=student_id,
+        ):
+            event_type = event.get("type")
+            if event_type == "delta":
+                yield event
+            elif event_type == "done":
+                final_content = event.get("content", "")
+    except Exception as e:
+        print(f"[Agent Stream Error] {e}")
+        traceback.print_exc()
+        final_content = (
+            f"关于“{message}”的问题，我需要查阅课程资料后才能回答。\n\n"
+            f"（流式调用出错：{str(e)[:100]}）"
+        )
+    finally:
+        trace = end_retrieval_trace(token)
+
+    yield {
+        "type": "final",
+        "content": final_content,
+        "used_retrieval": trace.used_retrieval,
+        "sources": trace.sources,
+    }

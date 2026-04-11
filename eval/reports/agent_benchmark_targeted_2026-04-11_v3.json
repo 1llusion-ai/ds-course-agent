@@ -1,0 +1,335 @@
+{
+  "metadata": {
+    "benchmark_name": "agent_task_benchmark",
+    "version": "v1.0",
+    "created_at": "2026-04-11",
+    "description": "30-task benchmark for end-to-end agent evaluation across retrieval, multi-turn context, personalization, and safety handling."
+  },
+  "snapshot": {
+    "generated_at": "2026-04-11T14:44:50.919042",
+    "model": {
+      "use_remote_llm": true,
+      "chat_model": "qwen3:8b",
+      "chat_base_url": "http://localhost:11434",
+      "remote_model_name": "Pro/deepseek-ai/DeepSeek-V3"
+    },
+    "prompt": {
+      "path": "F:\\Projects\\RAG_System\\docs\\prompts\\system_prompt.txt",
+      "sha256": "9034c00b37eeed0844550fa5e094b66b0066763d0dff145f5a0691a0c7dfce9e"
+    },
+    "retrieval": {
+      "collection_name": "course_c37b7b78",
+      "similarity_top_k": 3,
+      "enable_rerank": false,
+      "rerank_top_k": 20,
+      "chunk_size": 1300,
+      "chunk_overlap": 300,
+      "persist_directory": "F:\\Projects\\RAG_System\\chroma_db"
+    },
+    "knowledge_base": {
+      "course_name": "数据科学导论",
+      "knowledge_graph_version": "1.1",
+      "knowledge_graph_sha256": "a151a92e27ba2d13cf83c68496cebe5538aede355b0002150a114cb9ae8f3b19",
+      "chroma_persist_dir": "F:\\Projects\\RAG_System\\chroma_db"
+    },
+    "benchmark": {
+      "path": "F:\\Projects\\RAG_System\\eval\\data\\agent_tasks_v1.json",
+      "sha256": "aa73eb570406ccf4e4cde3ca042d47dc5c000b9d5478c1536dc2ee366f0db0d4"
+    }
+  },
+  "summary": {
+    "total_tasks": 2,
+    "passed_tasks": 2,
+    "agent_task_success_rate": 1.0,
+    "tool_call_success_rate": 1.0,
+    "grounded_answer_rate": 1.0,
+    "context_utilization_rate": 1.0,
+    "personalization_hit_rate": 1.0,
+    "failure_safety_rate": 0.0,
+    "category_counts": {
+      "multi_turn": 1,
+      "personalized": 1
+    }
+  },
+  "by_category": {
+    "multi_turn": {
+      "total": 1,
+      "passed": 1,
+      "success_rate": 1.0
+    },
+    "personalized": {
+      "total": 1,
+      "passed": 1,
+      "success_rate": 1.0
+    }
+  },
+  "results": [
+    {
+      "task": {
+        "id": "multi_002",
+        "category": "multi_turn",
+        "description": "多轮追问：SVM 核函数在线性可分时是否需要",
+        "turns": [
+          "什么是 SVM 的核函数？",
+          "如果数据本来就线性可分，还需要它吗？"
+        ],
+        "must_use_tool": true,
+        "must_use_context": true,
+        "must_personalize": false,
+        "must_fail_safe": false,
+        "required_keyword_groups": [
+          [
+            "核函数"
+          ],
+          [
+            "线性可分"
+          ],
+          [
+            "不一定",
+            "通常不需要",
+            "可以不用"
+          ]
+        ],
+        "context_keyword_groups": [
+          [
+            "核函数"
+          ],
+          [
+            "线性可分"
+          ]
+        ],
+        "personalization_keyword_groups": [],
+        "safety_keyword_groups": [],
+        "forbidden_keywords": [
+          "请再说明你说的它是什么"
+        ],
+        "seed_profile": {},
+        "notes": ""
+      },
+      "turns": [
+        {
+          "user": "什么是 SVM 的核函数？",
+          "assistant": "SVM的核函数是一种用于在高维空间中隐式计算数据点相似性的函数，它通过核技巧避免了显式的高维映射，直接在原始空间完成内积运算。\n\n### 核函数的关键特点\n1. **核心作用**  \n   核函数通过定义核矩阵 \\\\( K \\\\)，其元素 \\\\( k_{ij} = \\\\kappa(x_i, x_j) \\\\)，隐式实现低维到高维的映射，从而避免复杂的高维内积计算。\n\n2. **常用核函数类型**  \n   - **线性核**：\\\\( \\\\kappa(\\\\mathbf{x}_i, \\\\mathbf{x}_j) = \\\\mathbf{x}_i^{\\\\mathrm{T}} \\\\mathbf{x}_j \\\\)（适用于线性可分数据）。  \n   - **多项式核**：\\\\( \\\\kappa(\\\\mathbf{x}_i, \\\\mathbf{x}_j) = (\\\\gamma \\\\mathbf{x}_i^{T} \\\\mathbf{x}_j + r)^d \\\\)（适用于非线性数据）。  \n   - **径向基核（RBF）**：\\\\( \\\\kappa(\\\\mathbf{x}_i, \\\\mathbf{x}_j) = e^{-\\\\gamma \\\\|\\\\mathbf{x}_i - \\\\mathbf{x}_j\\\\|^2} \\\\)（适用于复杂非线性数据，\\\\( \\\\gamma > 0 \\\\)）。  \n   - **Sigmoid核**：\\\\( \\\\kappa(\\\\mathbf{x}_i, \\\\mathbf{x}_j) = \\\\tanh(\\\\gamma \\\\mathbf{x}_i^{\\\\mathrm{T}} \\\\mathbf{x}_j + r) \\\\)（类似神经网络激活函数）。\n\n3. **应用示例**  \n   在SVM分类器中，通过选择不同的核函数（如`SVC(kernel='rbf')`），可以处理非线性可分数据，例如课程中提到的鸢尾花数据集分类任务。\n\n### 进一步学习建议\n- 尝试在不同的数据集上使用不同的核函数，观察其对分类性能的影响。\n- 深入了解核函数的数学原理，例如核技巧的推导和应用场景。",
+          "used_retrieval": true,
+          "sources": [
+            {
+              "reference": "《第7章 无监督学习算法》第154页"
+            },
+            {
+              "reference": "《第4章 数据分析》第69页"
+            },
+            {
+              "reference": "《第4章 数据分析》第68页"
+            }
+          ]
+        },
+        {
+          "user": "如果数据本来就线性可分，还需要它吗？",
+          "assistant": "如果数据本来就是线性可分的，通常不需要使用核函数。直接使用线性核（即不使用核函数或选择`kernel='linear'`）即可高效解决问题。\n\n### 详细解释\n1. **线性可分数据的特性**  \n   - 线性可分数据可以通过一个超平面完美分离，此时线性SVM（即线性核）的计算简单且效果优异。\n   - 线性核的计算复杂度低，模型训练速度快，且泛化性能良好。\n\n2. **核函数的额外成本**  \n   - 使用非线性核（如RBF或多项式核）会增加计算复杂度，且可能导致过拟合（尤其是当数据量较小时）。\n   - 非线性核引入的高维映射对线性可分数据没有实际帮助，反而会浪费计算资源。\n\n3. **例外情况**  \n   - 如果数据的线性可分性是基于噪声或过采样导致的假象，可能需要通过核函数验证其真正的可分性。\n   - 某些任务（如特征选择）可能要求核函数提供额外的灵活性。\n\n### 建议\n- **优先尝试线性核**：在处理线性可分数据时，先使用`kernel='linear'`，观察分类效果。\n- **验证数据可分性**：通过可视化或统计方法确认数据是否真正线性可分，避免盲目选择核函数。",
+          "used_retrieval": false,
+          "sources": []
+        }
+      ],
+      "score": {
+        "success": true,
+        "required_dimensions": [
+          "task_completion",
+          "tool_call_correct",
+          "grounded_answer",
+          "context_utilization"
+        ],
+        "dimension_scores": {
+          "task_completion": true,
+          "tool_call_correct": true,
+          "grounded_answer": true,
+          "context_utilization": true,
+          "personalization_hit": true,
+          "failure_safety": true
+        },
+        "details": {
+          "required_keyword_groups": [
+            {
+              "group": [
+                "核函数"
+              ],
+              "matched": "核函数"
+            },
+            {
+              "group": [
+                "线性可分"
+              ],
+              "matched": "线性可分"
+            },
+            {
+              "group": [
+                "不一定",
+                "通常不需要",
+                "可以不用"
+              ],
+              "matched": "通常不需要"
+            }
+          ],
+          "context_keyword_groups": [
+            {
+              "group": [
+                "核函数"
+              ],
+              "matched": "核函数"
+            },
+            {
+              "group": [
+                "线性可分"
+              ],
+              "matched": "线性可分"
+            }
+          ],
+          "personalization_keyword_groups": [],
+          "safety_keyword_groups": [],
+          "forbidden_hits": [],
+          "retrieval_used_any_turn": true,
+          "sources_present": true
+        }
+      }
+    },
+    {
+      "task": {
+        "id": "personalized_003",
+        "category": "personalized",
+        "description": "个性化讲解：结合已学过的决策树讲随机森林",
+        "turns": [
+          "结合我已经学过的内容，再讲一下随机森林。"
+        ],
+        "must_use_tool": true,
+        "must_use_context": false,
+        "must_personalize": true,
+        "must_fail_safe": false,
+        "required_keyword_groups": [
+          [
+            "随机森林"
+          ],
+          [
+            "决策树"
+          ],
+          [
+            "多棵树",
+            "集成"
+          ]
+        ],
+        "context_keyword_groups": [],
+        "personalization_keyword_groups": [
+          [
+            "你已经学过",
+            "之前学过",
+            "前面学过"
+          ],
+          [
+            "决策树"
+          ]
+        ],
+        "safety_keyword_groups": [],
+        "forbidden_keywords": [],
+        "seed_profile": {
+          "progress": {
+            "current_chapter": "第6章",
+            "covered_chapters": [
+              "第1章",
+              "第2章",
+              "第3章",
+              "第4章",
+              "第5章",
+              "第6章"
+            ]
+          },
+          "recent_concepts": [
+            {
+              "concept_id": "decision_tree",
+              "display_name": "决策树",
+              "chapter": "第6章",
+              "mention_count": 4
+            }
+          ]
+        },
+        "notes": ""
+      },
+      "turns": [
+        {
+          "user": "结合我已经学过的内容，再讲一下随机森林。",
+          "assistant": "结合你现在学到的第6章进度，你已经学过决策树。这次我会把集成学习和你之前学过的决策树连起来讲。我会先讲核心直觉，再讲关键概念或公式，下一步再告诉你该怎么继续学。\n\n结合你现在学到的第6章进度和决策树的基础，以下是关于随机森林的讲解（学习路径建议：先理解集成学习框架，再掌握随机森林的双重扰动机制，最后对比其他集成方法）：\n\n---  \n**核心定义**  \n随机森林是基于决策树的集成学习算法，通过构建多棵\"好而不同\"的决策树来提升预测性能。它与单棵决策树的关系类似于\"委员会决策\"与\"个人决策\"的区别。\n\n**关键要点分解**  \n1. **集成基础**（关联已学的决策树）  \n- 同质集成：所有基学习器都是决策树  \n- 采用Bagging策略：通过有放回抽样（Bootstrap）生成不同训练集，使各树可以并行训练  \n\n2. **构建过程**（重点：双重扰动）  \n- **样本扰动**：每棵树只用约63.2%的原始训练数据（可能有重复）  \n- **属性扰动**：节点分裂时，随机选择k≈log₂d个候选特征（d是总特征数）  \n→ 这两个机制共同保证树的多样性，类似你学过的决策树通过不同划分属性生成不同结构  \n\n3. **预测与优势**  \n- 分类：多数投票 | 回归：结果平均  \n- 天然优势：抗过拟合（单棵树可能过拟合，但多树投票抵消噪声）、支持特征重要性评估  \n\n**对比学习**  \n与梯度提升树（GBDT）的主要区别：  \n- 并行vs串行：随机森林的树独立生成，GBDT的树依赖前一棵树的残差  \n- 方差vs偏差：随机森林降低方差（通过平均多树结果），GBDT降低偏差（通过迭代修正）  \n\n（严格基于《数据科学导论》第6章6.3.1节，无额外补充）",
+          "used_retrieval": true,
+          "sources": [
+            {
+              "reference": "《第6章 监督学习常用算法》第137页"
+            },
+            {
+              "reference": "《第6章 监督学习常用算法》第138页"
+            },
+            {
+              "reference": "《第7章 无监督学习算法》第146页"
+            }
+          ]
+        }
+      ],
+      "score": {
+        "success": true,
+        "required_dimensions": [
+          "task_completion",
+          "tool_call_correct",
+          "grounded_answer",
+          "personalization_hit"
+        ],
+        "dimension_scores": {
+          "task_completion": true,
+          "tool_call_correct": true,
+          "grounded_answer": true,
+          "context_utilization": true,
+          "personalization_hit": true,
+          "failure_safety": true
+        },
+        "details": {
+          "required_keyword_groups": [
+            {
+              "group": [
+                "随机森林"
+              ],
+              "matched": "随机森林"
+            },
+            {
+              "group": [
+                "决策树"
+              ],
+              "matched": "决策树"
+            },
+            {
+              "group": [
+                "多棵树",
+                "集成"
+              ],
+              "matched": "集成"
+            }
+          ],
+          "context_keyword_groups": [],
+          "personalization_keyword_groups": [
+            {
+              "group": [
+                "你已经学过",
+                "之前学过",
+                "前面学过"
+              ],
+              "matched": "你已经学过"
+            },
+            {
+              "group": [
+                "决策树"
+              ],
+              "matched": "决策树"
+            }
+          ],
+          "safety_keyword_groups": [],
+          "forbidden_hits": [],
+          "retrieval_used_any_turn": true,
+          "sources_present": true
+        }
+      }
+    }
+  ]
+}

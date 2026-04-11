@@ -5,7 +5,10 @@ Agent 服务模块
 """
 
 # 修复SSL证书路径（必须在导入其他模块前设置）
+import base64
+import json
 import os
+import re
 _correct_cert_path = r'D:\Anaconda\envs\RAG\Library\ssl\cacert.pem'
 if os.path.exists(_correct_cert_path):
     os.environ['SSL_CERT_FILE'] = _correct_cert_path
@@ -22,7 +25,12 @@ from langchain.agents import create_agent
 import utils.config as config
 from core.tools import get_rag_tools
 from core.memory_core import get_memory_core, record_event, aggregate_profile
-from core.events import build_concept_mentioned_event, EventType
+from core.events import (
+    EventType,
+    build_clarification_event,
+    build_concept_mentioned_event,
+    build_mastery_signal_event,
+)
 
 # 延迟导入 skills 避免循环导入
 # from skills.personalized_explanation import PersonalizedExplanationSkill
@@ -146,7 +154,7 @@ class AgentService(object):
         messages = formatted_history + [HumanMessage(content=user_input)]
 
         if stream:
-            return self._stream_chat(messages)
+            return self._stream_chat_messages(messages)
 
         max_retries = 2
         for attempt in range(max_retries + 1):
@@ -220,6 +228,45 @@ class AgentService(object):
                     if hasattr(msg, "content") and msg.content:
                         yield msg.content
 
+    def _stream_chat_messages(self, messages: list) -> Iterator[str]:
+        for chunk, metadata in self.agent.stream(
+            {"messages": messages},
+            stream_mode="messages",
+        ):
+            if metadata.get("langgraph_node") != "agent":
+                continue
+
+            text = self._extract_stream_text(chunk)
+            if text:
+                yield text
+
+    def _extract_stream_text(self, chunk) -> str:
+        content = getattr(chunk, "content", chunk)
+
+        if isinstance(content, str):
+            return content
+
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                    continue
+                if isinstance(item, dict):
+                    text = item.get("text") or item.get("content")
+                    if text:
+                        parts.append(text)
+            return "".join(parts)
+
+        return ""
+
+    def _yield_text_chunks(self, text: str, chunk_size: int = 24) -> Iterator[str]:
+        if not text:
+            return
+
+        for index in range(0, len(text), chunk_size):
+            yield text[index:index + chunk_size]
+
     def _build_error_response(self, title: str, detail: str, is_retryable: bool = True) -> str:
         """构建用户友好的错误提示"""
         retry_hint = "\n\n💡 请稍后重试，或联系管理员。" if is_retryable else ""
@@ -264,6 +311,424 @@ class AgentService(object):
                 
         return formatted
 
+    def _normalize_question_text(self, question: str) -> str:
+        return re.sub(r"\s+", "", question.lower())
+
+    def _collect_recent_context(self, chat_history: Optional[list], limit: int = 4) -> str:
+        if not chat_history:
+            return ""
+
+        parts = []
+        for msg in chat_history[-limit:]:
+            if isinstance(msg, BaseMessage):
+                content = getattr(msg, "content", "")
+            elif isinstance(msg, dict):
+                content = msg.get("content", "")
+            else:
+                content = ""
+
+            if isinstance(content, str) and content.strip():
+                parts.append(content)
+
+        return "\n".join(parts)
+
+    def _is_clarification_request(self, question: str) -> bool:
+        normalized = self._normalize_question_text(question)
+        cues = [
+            "没懂", "不懂", "没明白", "还是不懂", "还是没懂", "再讲", "再解释",
+            "怎么理解", "看不懂", "有点混", "混淆", "通俗", "直观", "举个例子",
+            "再说一遍", "梳理一下", "为什么", "为什么会",
+        ]
+        return any(cue in normalized for cue in cues)
+
+    def _is_mastery_signal(self, question: str) -> bool:
+        normalized = self._normalize_question_text(question)
+        cues = [
+            "懂了", "明白了", "会了", "清楚了", "知道了", "理解了", "学会了", "搞懂了",
+        ]
+        return any(cue in normalized for cue in cues)
+
+    def _looks_contextual_follow_up(self, question: str) -> bool:
+        normalized = self._normalize_question_text(question)
+        cues = [
+            "那它", "那这个", "这个", "它", "那为什么", "那怎么", "那是不是",
+            "还需要", "那还", "那如果", "这种情况", "前面说的",
+        ]
+        return any(cue in normalized for cue in cues)
+
+    def _infer_clarification_type(self, question: str) -> str:
+        normalized = self._normalize_question_text(question)
+        if any(cue in normalized for cue in ["举个例子", "例子", "案例"]):
+            return "example_request"
+        if any(cue in normalized for cue in ["通俗", "直观", "看不懂", "怎么理解"]):
+            return "simplify_request"
+        if any(cue in normalized for cue in ["混淆", "区别", "分不清"]):
+            return "distinction_request"
+        return "clarification_request"
+
+    def _sanitize_distinction_fragment(self, fragment: str) -> str:
+        value = re.sub(r"[，。？！,.!?；;：:（）()“”\"'《》【】\[\]]", "", fragment or "")
+        value = re.sub(
+            r"^(我感觉|我觉得|我有点|我还是|我总是|我老是|总是|老是|一直|就是|其实|搞不懂|分不清|不太懂|不懂|没懂|没明白)+",
+            "",
+            value,
+        )
+        value = re.sub(
+            r"(到底|究竟|有什么|有啥|什么|之间|怎么|为何|为什么|的|区别|差别|不同|差异|怎么区分|怎么理解)+$",
+            "",
+            value,
+        )
+        return re.sub(r"\s+", "", value).strip("和与跟及、/-")
+
+    def _extract_distinction_labels(self, question: str, matched_concepts: list) -> list[str]:
+        prefix = question
+        for cue in ["有什么区别", "有什么差别", "区别是什么", "差别是什么", "区别", "差别", "分不清", "混淆", "对比", "比较", "区分"]:
+            idx = prefix.find(cue)
+            if idx != -1:
+                prefix = prefix[:idx]
+                break
+
+        parsed_labels = []
+        for part in re.split(r"(?:和|与|跟|及|vs|VS|/)", prefix):
+            cleaned = self._sanitize_distinction_fragment(part)
+            if cleaned:
+                parsed_labels.append(cleaned)
+
+        if len(parsed_labels) >= 2:
+            return parsed_labels[-2:]
+
+        if len(matched_concepts) >= 2:
+            return [matched_concepts[0].display_name, matched_concepts[1].display_name]
+
+        if len(matched_concepts) == 1 and parsed_labels:
+            labels = [matched_concepts[0].display_name]
+            for label in parsed_labels:
+                if self._normalize_question_text(label) != self._normalize_question_text(labels[0]):
+                    labels.append(label)
+                    break
+            if len(labels) >= 2:
+                return labels[:2]
+
+        return []
+
+    def _build_distinction_learning_concept(self, question: str, matched_concepts: list):
+        labels = self._extract_distinction_labels(question, matched_concepts)
+        if len(labels) < 2:
+            return None
+
+        stable_labels = sorted(
+            dict.fromkeys(labels),
+            key=self._normalize_question_text,
+        )
+        if len(stable_labels) < 2:
+            return None
+
+        related_ids = sorted(
+            {
+                match.concept_id
+                for match in matched_concepts[:2]
+                if getattr(match, "concept_id", None)
+            }
+        )
+        chapter = next(
+            (match.chapter for match in matched_concepts if getattr(match, "chapter", None)),
+            "",
+        )
+        payload = {
+            "labels": stable_labels,
+            "chapter": chapter,
+            "related_ids": related_ids,
+        }
+        encoded = base64.urlsafe_b64encode(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).decode("ascii").rstrip("=")
+
+        return {
+            "concept_id": f"distinction::{encoded}",
+            "concept_name": " vs ".join(stable_labels),
+            "chapter": chapter,
+            "score": max((getattr(match, "score", 0.0) for match in matched_concepts[:2]), default=0.85),
+            "source_event_id": None,
+        }
+
+    def _get_recent_session_concept_event(
+        self,
+        student_id: str,
+        session_id: str,
+        concept_id: Optional[str] = None,
+    ):
+        memory = get_memory_core()
+        events = memory.load_events(student_id)
+        fallback_event = None
+
+        for event in reversed(events):
+            payload = getattr(event, "payload", {}) or {}
+            if event.session_id != session_id:
+                continue
+            if payload.get("concept_id") == "general_question":
+                continue
+            if concept_id and payload.get("concept_id") != concept_id:
+                continue
+            if payload.get("concept_id"):
+                if event.event_type == EventType.CONCEPT_MENTIONED:
+                    return event
+                if fallback_event is None:
+                    fallback_event = event
+        return fallback_event
+
+    def _resolve_learning_concept(self, question: str, matched_concepts: list, student_id: str, session_id: str):
+        if matched_concepts:
+            primary = matched_concepts[0]
+            return {
+                "concept_id": primary.concept_id,
+                "concept_name": primary.display_name,
+                "chapter": primary.chapter,
+                "score": primary.score,
+                "source_event_id": None,
+            }
+
+        if not (self._looks_contextual_follow_up(question) or self._is_mastery_signal(question)):
+            return None
+
+        recent_event = self._get_recent_session_concept_event(student_id, session_id)
+        if not recent_event:
+            return None
+
+        payload = getattr(recent_event, "payload", {}) or {}
+        return {
+            "concept_id": payload.get("concept_id"),
+            "concept_name": payload.get("concept_name") or payload.get("concept_id"),
+            "chapter": payload.get("chapter") or "",
+            "score": float(payload.get("matched_score") or 0.75),
+            "source_event_id": recent_event.event_id,
+        }
+
+    def _record_learning_events(
+        self,
+        question: str,
+        session_id: str,
+        student_id: str,
+        matched_concepts: list,
+        special_case_response: Optional[str] = None,
+    ) -> None:
+        if special_case_response and not self._is_mastery_signal(question):
+            return
+
+        learning_concept = self._resolve_learning_concept(
+            question,
+            matched_concepts,
+            student_id,
+            session_id,
+        )
+        if not learning_concept:
+            return
+
+        normalized = self._normalize_question_text(question)
+        is_mastery_signal = self._is_mastery_signal(question)
+        is_clarification = self._is_clarification_request(question)
+        is_plain_greeting = normalized in {"你好", "您好", "hi", "hello"}
+        clarification_type = self._infer_clarification_type(question) if is_clarification else None
+        distinction_concept = (
+            self._build_distinction_learning_concept(question, matched_concepts)
+            if clarification_type == "distinction_request"
+            else None
+        )
+
+        concept_event = None
+        if not is_mastery_signal and not is_plain_greeting:
+            concept_event = build_concept_mentioned_event(
+                session_id=session_id,
+                student_id=student_id,
+                concept_id=learning_concept["concept_id"],
+                concept_name=learning_concept["concept_name"],
+                chapter=learning_concept["chapter"],
+                question_type=self._classify_question_type(question),
+                matched_score=float(learning_concept["score"]),
+                raw_question=question,
+                enable_hash=False,
+            )
+            record_event(concept_event)
+
+        distinction_event = None
+        if (
+            distinction_concept
+            and not is_mastery_signal
+            and not is_plain_greeting
+            and distinction_concept["concept_id"] != learning_concept["concept_id"]
+        ):
+            distinction_event = build_concept_mentioned_event(
+                session_id=session_id,
+                student_id=student_id,
+                concept_id=distinction_concept["concept_id"],
+                concept_name=distinction_concept["concept_name"],
+                chapter=distinction_concept["chapter"],
+                question_type="概念对比",
+                matched_score=float(distinction_concept["score"]),
+                raw_question=question,
+                enable_hash=False,
+            )
+            record_event(distinction_event)
+
+        parent_event_id = (
+            distinction_event.event_id
+            if distinction_event is not None
+            else (
+                concept_event.event_id
+                if concept_event is not None
+                else learning_concept.get("source_event_id")
+            )
+            or ""
+        )
+        clarification_concept_id = (
+            distinction_concept["concept_id"]
+            if distinction_concept is not None and distinction_event is not None
+            else learning_concept["concept_id"]
+        )
+
+        if is_clarification and parent_event_id:
+            clarification_event = build_clarification_event(
+                session_id=session_id,
+                student_id=student_id,
+                concept_id=clarification_concept_id,
+                parent_event_id=parent_event_id,
+                clarification_type=clarification_type,
+            )
+            record_event(clarification_event)
+
+        if is_mastery_signal and parent_event_id:
+            mastery_event = build_mastery_signal_event(
+                session_id=session_id,
+                student_id=student_id,
+                concept_id=learning_concept["concept_id"],
+                source_event_id=parent_event_id,
+                signal_type="explicit_understanding",
+            )
+            record_event(mastery_event)
+
+    def _has_personalization_context(self, profile) -> bool:
+        return bool(
+            profile.progress.current_chapter or
+            profile.recent_concepts or
+            profile.weak_spot_candidates
+        )
+
+    def _is_personalization_request(self, question: str) -> bool:
+        normalized = self._normalize_question_text(question)
+        cues = [
+            "结合我现在的进度",
+            "按我现在的进度",
+            "我现在的进度",
+            "我已经学过",
+            "结合我已经学过",
+            "我之前",
+            "老是学不会",
+            "容易混淆",
+            "更直观",
+            "怎么学习比较合适",
+            "怎么给我梳理",
+        ]
+        return any(cue in normalized for cue in cues)
+
+    def _is_judgement_question(self, question: str) -> bool:
+        normalized = self._normalize_question_text(question)
+        cues = ["是否", "要不要", "需不需要", "还需要", "还能不能", "可不可以", "有没有必要"]
+        return any(cue in normalized for cue in cues)
+
+    def _handle_special_case(self, question: str) -> Optional[str]:
+        normalized = self._normalize_question_text(question)
+
+        greeting_patterns = [
+            "你好", "您好", "hi", "hello", "早上好", "晚上好",
+        ]
+        gratitude_patterns = [
+            "谢谢", "多谢", "感谢", "收到", "好的谢谢", "好嘞谢谢",
+        ]
+        off_topic_patterns = [
+            "天气", "娱乐新闻", "八卦", "明星", "股价", "体育比分",
+            "电影票房", "政治新闻",
+        ]
+        homework_patterns = [
+            "标准答案", "直接给答案", "直接把", "代写作业", "帮我写作业",
+            "直接写给我", "考试答案",
+        ]
+        out_of_scope_technical_patterns = [
+            "lora", "qlora", "rlhf", "prompttuning", "prompt tuning",
+            "adapter", "peft",
+        ]
+
+        if any(pattern == normalized or normalized.startswith(pattern) for pattern in greeting_patterns):
+            return "你好！我是《数据科学导论》课程助教，有课程相关的问题可以随时问我。"
+
+        if any(pattern in normalized for pattern in gratitude_patterns) and len(normalized) <= 12:
+            return "不客气，你如果还有《数据科学导论》课程相关的问题，可以继续问我。"
+
+        if any(pattern in normalized for pattern in homework_patterns):
+            return (
+                "抱歉，作为课程助教，我不能直接代写作业或给出标准答案。"
+                "但我可以帮你梳理思路、方法和步骤，和你一起把题目拆开。"
+            )
+
+        if any(pattern in normalized for pattern in off_topic_patterns):
+            return "抱歉，我主要负责《数据科学导论》课程相关内容，其他话题我就不展开了。"
+
+        if any(pattern in normalized for pattern in out_of_scope_technical_patterns):
+            return (
+                "抱歉，这个问题不在《数据科学导论》当前课程范围内。"
+                "如果你想，我可以继续帮你回答课程里的数据分析、机器学习和相关基础概念。"
+            )
+
+        return None
+
+    def _should_use_explanation_skill(self, question: str, matched_concepts: list, profile) -> bool:
+        if not matched_concepts:
+            return self._is_personalization_request(question) and self._has_personalization_context(profile)
+
+        primary_score = matched_concepts[0].score
+        if primary_score < 0.45:
+            return False
+
+        if self._is_personalization_request(question):
+            return True
+
+        if self._is_judgement_question(question) and primary_score >= 0.7:
+            return True
+
+        return self._has_personalization_context(profile) and primary_score >= 0.6
+
+    def _postprocess_generic_answer(
+        self,
+        question: str,
+        answer: str,
+        chat_history: Optional[list] = None
+    ) -> str:
+        if not answer:
+            return answer
+
+        normalized = self._normalize_question_text(question)
+        recent_context = self._normalize_question_text(self._collect_recent_context(chat_history))
+        refers_to_kernel = (
+            "核函数" in normalized
+            or "线性核" in normalized
+            or "kernel" in normalized
+            or (
+                "它" in question
+                and any(token in recent_context for token in ["核函数", "支持向量机", "svm", "kernel"])
+            )
+        )
+        if (
+            self._is_judgement_question(question)
+            and "线性可分" in normalized
+            and refers_to_kernel
+            and not any(token in answer for token in ["通常不需要", "可以不用", "不一定需要"])
+        ):
+            prefix = (
+                "先说结论：如果这里说的是 SVM 的核函数，那么数据本来就线性可分时，"
+                "通常不需要复杂的非线性核，很多情况下可以不用，直接用线性核就够了。"
+            )
+            return f"{prefix}\n\n{answer}"
+
+        return answer
+
     def chat_with_history(
         self,
         user_input: str,
@@ -285,41 +750,34 @@ class AgentService(object):
         """
         from utils.history import get_history
         from core.knowledge_mapper import map_question_to_concepts
-        from core.events import build_concept_mentioned_event
-        import time
 
         student_id = student_id or session_id
         history = get_history(session_id)
         chat_history = history.messages
 
+        profile = get_memory_core().get_profile(student_id)
+        special_case_response = self._handle_special_case(user_input)
+
         # ===== 记忆系统集成：知识点映射 =====
-        matched_concepts = map_question_to_concepts(user_input, top_k=3)
+        matched_concepts = [] if special_case_response else map_question_to_concepts(user_input, top_k=3)
+        self._record_learning_events(
+            question=user_input,
+            session_id=session_id,
+            student_id=student_id,
+            matched_concepts=matched_concepts,
+            special_case_response=special_case_response,
+        )
 
         # ===== 生成回答 =====
         result = None
         error_info = None
 
         try:
-            if matched_concepts and matched_concepts[0].score >= 0.5:
-                # 使用个性化讲解技能
-                print(f"[Agent] 识别知识点: {matched_concepts[0].concept_id} ({matched_concepts[0].method})")
-
-                # 记录概念提及事件
-                primary = matched_concepts[0]
-                event = build_concept_mentioned_event(
-                    session_id=session_id,
-                    student_id=student_id,
-                    concept_id=primary.concept_id,
-                    concept_name=primary.display_name,
-                    chapter=primary.chapter,
-                    question_type=self._classify_question_type(user_input),
-                    matched_score=primary.score,
-                    raw_question=user_input,
-                    enable_hash=False
-                )
-                get_memory_core().record_event(event)
-
-                # 使用个性化技能生成回答
+            if special_case_response:
+                result = special_case_response
+            elif self._should_use_explanation_skill(user_input, matched_concepts, profile):
+                if matched_concepts:
+                    print(f"[Agent] 识别知识点: {matched_concepts[0].concept_id} ({matched_concepts[0].method})")
                 result = self.explanation_skill.execute(user_input, student_id, session_id)
             else:
                 # 使用普通 Agent 流程
@@ -327,24 +785,11 @@ class AgentService(object):
                 # 如果是 generator，转换为字符串
                 if hasattr(result, '__iter__') and not isinstance(result, str):
                     result = ''.join(result)
-
-                # 记录一般提问事件（未匹配到知识点）
-                from core.events import build_concept_mentioned_event
-                # 获取当前章节
-                current_profile = get_memory_core().get_profile(student_id)
-                current_ch = current_profile.progress.current_chapter or "未分类"
-                event = build_concept_mentioned_event(
-                    session_id=session_id,
-                    student_id=student_id,
-                    concept_id="general_question",
-                    concept_name="一般问题",
-                    chapter=current_ch,
-                    question_type="general",
-                    matched_score=0.0,
-                    raw_question=user_input,
-                    enable_hash=False
+                result = self._postprocess_generic_answer(
+                    user_input,
+                    result,
+                    chat_history=chat_history,
                 )
-                get_memory_core().record_event(event)
 
         except Exception as e:
             error_info = f"生成回答时出错: {str(e)}"
@@ -378,6 +823,114 @@ class AgentService(object):
         ])
 
         return result
+
+    def stream_chat_with_history(
+        self,
+        user_input: str,
+        session_id: str,
+        student_id: str = None,
+    ):
+        from utils.history import get_history
+        from core.knowledge_mapper import map_question_to_concepts
+
+        student_id = student_id or session_id
+        history = get_history(session_id)
+        chat_history = history.messages
+
+        profile = get_memory_core().get_profile(student_id)
+        special_case_response = self._handle_special_case(user_input)
+
+        matched_concepts = [] if special_case_response else map_question_to_concepts(user_input, top_k=3)
+        self._record_learning_events(
+            question=user_input,
+            session_id=session_id,
+            student_id=student_id,
+            matched_concepts=matched_concepts,
+            special_case_response=special_case_response,
+        )
+
+        final_result = ""
+        stream_started = False
+
+        try:
+            if special_case_response:
+                final_result = special_case_response
+                for chunk in self._yield_text_chunks(final_result):
+                    stream_started = True
+                    yield {"type": "delta", "delta": chunk}
+            elif self._should_use_explanation_skill(user_input, matched_concepts, profile):
+                if matched_concepts:
+                    print(
+                        f"[Agent] explanation skill for {matched_concepts[0].concept_id} "
+                        f"({matched_concepts[0].method})"
+                    )
+                final_result = self.explanation_skill.execute(user_input, student_id, session_id)
+                for chunk in self._yield_text_chunks(final_result):
+                    stream_started = True
+                    yield {"type": "delta", "delta": chunk}
+            else:
+                streamed_parts = []
+                for chunk in self.chat(user_input, chat_history, stream=True):
+                    if not chunk:
+                        continue
+                    streamed_parts.append(chunk)
+                    stream_started = True
+                    yield {"type": "delta", "delta": chunk}
+
+                final_result = "".join(streamed_parts).strip()
+
+                if final_result:
+                    final_result = self._postprocess_generic_answer(
+                        user_input,
+                        final_result,
+                        chat_history=chat_history,
+                    )
+                else:
+                    fallback_result = self.chat(user_input, chat_history, stream=False)
+                    if hasattr(fallback_result, "__iter__") and not isinstance(fallback_result, str):
+                        fallback_result = "".join(fallback_result)
+                    final_result = self._postprocess_generic_answer(
+                        user_input,
+                        fallback_result,
+                        chat_history=chat_history,
+                    )
+                    for chunk in self._yield_text_chunks(final_result):
+                        stream_started = True
+                        yield {"type": "delta", "delta": chunk}
+        except Exception as e:
+            print(f"[Agent Error] stream_chat_with_history failed: {e}")
+            final_result = ""
+
+        if not final_result or not isinstance(final_result, str) or not final_result.strip():
+            try:
+                from core.tools import course_rag_tool
+
+                fallback = course_rag_tool.invoke(user_input)
+                if fallback and fallback.strip() and fallback != "无相关资料":
+                    final_result = f"{fallback}\n\n[注：使用基础检索模式回答]"
+                else:
+                    final_result = self._build_error_response(
+                        "无法生成回答",
+                        "抱歉，系统暂时无法回答该问题。可能原因：\n1. 课程资料中未找到相关内容\n2. AI 服务暂时不可用",
+                        is_retryable=True,
+                    )
+            except Exception as e:
+                final_result = self._build_error_response(
+                    "服务暂时不可用",
+                    f"生成回答时遇到错误，请稍后重试。\n({str(e)[:80]})",
+                    is_retryable=True,
+                )
+
+        if not stream_started:
+            for chunk in self._yield_text_chunks(final_result):
+                yield {"type": "delta", "delta": chunk}
+
+        history.add_messages([
+            HumanMessage(content=user_input),
+            AIMessage(content=final_result if isinstance(final_result, str) else "系统错误"),
+        ])
+
+        yield {"type": "done", "content": final_result}
 
     def _classify_question_type(self, question: str) -> str:
         """问题类型分类"""

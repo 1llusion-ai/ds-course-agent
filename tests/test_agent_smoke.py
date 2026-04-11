@@ -56,6 +56,19 @@ class TestAgentServiceMock:
         assert isinstance(result, str)
         assert result == "test answer"
 
+    def test_build_distinction_learning_concept_from_question_text(self):
+        from core.agent import AgentService
+
+        service = AgentService.__new__(AgentService)
+        distinction = service._build_distinction_learning_concept(
+            "我感觉我老是搞不懂过拟合和泛化到底有什么差别",
+            [],
+        )
+
+        assert distinction is not None
+        assert distinction["concept_id"].startswith("distinction::")
+        assert distinction["concept_name"] == "泛化 vs 过拟合"
+
 
 class TestAgentServiceIntegration:
     @pytest.mark.skip(reason="requires full runtime environment")
@@ -253,3 +266,54 @@ class TestChatWithHistory:
         invoke_call = mock_agent.invoke.call_args
         messages = invoke_call[0][0]["messages"]
         assert len(messages) == 3
+
+    @patch("utils.history.get_history")
+    @patch("core.agent.get_memory_core")
+    @patch("core.knowledge_mapper.map_question_to_concepts")
+    @patch("core.agent.record_event")
+    def test_chat_with_history_records_learning_events(
+        self,
+        mock_record_event,
+        mock_map,
+        mock_get_memory_core,
+        mock_get_history,
+    ):
+        from core.agent import AgentService
+        from core.knowledge_mapper import MatchedConcept
+
+        mock_map.return_value = [
+            MatchedConcept(
+                concept_id="svm",
+                display_name="支持向量机",
+                chapter="第6章",
+                method="exact_alias",
+                score=0.95,
+            )
+        ]
+
+        mock_history = MagicMock()
+        mock_history.messages = []
+        mock_get_history.return_value = mock_history
+
+        mock_memory = MagicMock()
+        mock_memory.get_profile.return_value = SimpleNamespace(
+            progress=SimpleNamespace(current_chapter=None),
+            recent_concepts={},
+            weak_spot_candidates=[],
+        )
+        mock_memory.load_events.return_value = []
+        mock_get_memory_core.return_value = mock_memory
+
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {"messages": [AIMessage(content="可以，我再解释一下。")]}
+
+        service = AgentService.__new__(AgentService)
+        service.llm = MagicMock()
+        service.tools = []
+        service.agent = mock_agent
+        service.explanation_skill = MagicMock()
+
+        result = service.chat_with_history("再解释一下 SVM，我还是有点混淆。", "test_session")
+
+        assert isinstance(result, str)
+        assert mock_record_event.call_count >= 2
