@@ -5,10 +5,10 @@
     <div class="chat-main">
       <header class="chat-header">
         <div class="header-content">
-          <div class="logo">助</div>
+          <div class="logo">DS</div>
           <div>
-            <h1>智能课程助教</h1>
-            <p>数据科学基础</p>
+            <h1>数据科学导论教学Agent</h1>
+            <p>数据科学导论</p>
           </div>
         </div>
       </header>

@@ -62,10 +62,18 @@ def get_rag_service() -> RAGService:
 
 
 def begin_retrieval_trace():
+    """Start a retrieval trace. Returns existing token if trace already active (idempotent)."""
+    existing = _retrieval_trace.get()
+    if existing is not None:
+        # Already tracing — return a no-op token that end_retrieval_trace will ignore
+        return None
     return _retrieval_trace.set(RetrievalTrace())
 
 
 def end_retrieval_trace(token) -> RetrievalTrace:
+    if token is None:
+        # Nested/duplicate begin — don't close the outer trace
+        return _retrieval_trace.get() or RetrievalTrace()
     trace = _retrieval_trace.get() or RetrievalTrace()
     _retrieval_trace.reset(token)
     return trace

@@ -4,10 +4,6 @@
       <div>
         <p class="profile-hero__eyebrow">Profile Intelligence</p>
         <h1 class="profile-hero__title">学习画像</h1>
-        <p class="profile-hero__subtitle">
-          这里展示的是结构化学习信号：最近关注点、待观察薄弱点、活跃薄弱点和已克服记录。
-          先把画像做稳，再考虑更精细的知识点详情展示。
-        </p>
       </div>
       <div class="profile-hero__actions">
         <el-button text @click="goBack">
@@ -25,193 +21,203 @@
         <article class="metric-card metric-card--indigo">
           <span class="metric-card__label">当前章节</span>
           <strong class="metric-card__value">{{ detail.progress.current_chapter || '尚未稳定识别' }}</strong>
-          <span class="metric-card__hint">基于最近连续提问聚合</span>
+
         </article>
 
         <article class="metric-card">
           <span class="metric-card__label">最近关注知识点</span>
           <strong class="metric-card__value">{{ detail.recent_concepts.length }}</strong>
-          <span class="metric-card__hint">按最近提及时间排序，同时保留提及次数</span>
         </article>
 
         <article class="metric-card metric-card--sky">
           <span class="metric-card__label">待观察薄弱点</span>
           <strong class="metric-card__value">{{ detail.pending_weak_spots.length }}</strong>
-          <span class="metric-card__hint">出现过一次澄清，后续会继续观察</span>
         </article>
 
         <article class="metric-card metric-card--amber">
           <span class="metric-card__label">活跃薄弱点</span>
           <strong class="metric-card__value">{{ detail.weak_spots.length }}</strong>
-          <span class="metric-card__hint">目前仍需要继续巩固</span>
         </article>
 
         <article class="metric-card metric-card--emerald">
           <span class="metric-card__label">已克服薄弱点</span>
           <strong class="metric-card__value">{{ detail.stats.total_resolved_weak_spots }}</strong>
-          <span class="metric-card__hint">会保留在长期画像里</span>
         </article>
       </section>
 
       <section class="profile-grid">
-        <article class="panel panel--wide">
-          <div class="panel__header">
-            <div>
-              <p class="panel__eyebrow">Recent Concepts</p>
-              <h2 class="panel__title">最近关注点</h2>
+        <!-- 左列：最近章节 + 学习轨迹 -->
+        <div class="profile-col profile-col--left">
+          <article class="panel">
+            <div class="panel__header">
+              <div>
+                <p class="panel__eyebrow">Recent Concepts</p>
+                <h2 class="panel__title">最近知识点</h2>
+              </div>
             </div>
-            <span class="panel__caption">当前只展示稳定的结构化摘要，不再展开教材分块片段</span>
-          </div>
 
-          <div v-if="detail.recent_concepts.length" class="concept-list">
-            <div
-              v-for="concept in detail.recent_concepts"
-              :key="concept.concept_id"
-              class="concept-item"
-            >
-              <div class="concept-item__main">
-                <div class="concept-item__name-row">
-                  <span class="concept-item__name">{{ concept.display_name }}</span>
-                  <el-tag size="small" effect="light" type="primary" round>x{{ concept.mention_count }}</el-tag>
+            <div v-if="detail.recent_concepts.length" class="concept-list">
+              <div
+                v-for="concept in detail.recent_concepts"
+                :key="concept.concept_id"
+                class="concept-item"
+              >
+                <div class="concept-item__main">
+                  <div class="concept-item__name-row">
+                    <span class="concept-item__name">{{ concept.display_name }}</span>
+                    <el-tag size="small" effect="light" type="primary" round>x{{ concept.mention_count }}</el-tag>
+                  </div>
+                  <div class="concept-item__meta">
+                    <span>{{ concept.chapter || '未分类章节' }}</span>
+                    <span v-if="concept.last_question_type">{{ concept.last_question_type }}</span>
+                  </div>
                 </div>
-                <div class="concept-item__meta">
-                  <span>{{ concept.chapter || '未分类章节' }}</span>
-                  <span v-if="concept.last_question_type">{{ concept.last_question_type }}</span>
+                <div class="concept-item__time">{{ formatTime(concept.last_mentioned_at) }}</div>
+              </div>
+            </div>
+            <el-empty v-else description="还没有形成稳定的近期关注点" />
+          </article>
+
+          <article class="panel">
+            <div class="panel__header">
+              <div>
+                <p class="panel__eyebrow">Study Trace</p>
+                <h2 class="panel__title">学习轨迹</h2>
+              </div>
+            </div>
+
+            <div class="chapter-bars">
+              <div
+                v-for="item in chapterStats"
+                :key="item.chapter"
+                class="chapter-bar"
+              >
+                <div class="chapter-bar__meta">
+                  <span>{{ item.chapter }}</span>
+                  <strong>{{ item.count }}</strong>
+                </div>
+                <div class="chapter-bar__track">
+                  <div class="chapter-bar__fill" :style="{ width: `${item.width}%` }" />
                 </div>
               </div>
-              <div class="concept-item__time">{{ formatTime(concept.last_mentioned_at) }}</div>
             </div>
-          </div>
-          <el-empty v-else description="还没有形成稳定的近期关注点" />
-        </article>
+          </article>
 
-        <article class="panel">
-          <div class="panel__header">
-            <div>
-              <p class="panel__eyebrow">Observed Signals</p>
-              <h2 class="panel__title">待观察薄弱点</h2>
-            </div>
-          </div>
-
-          <div v-if="detail.pending_weak_spots.length" class="weakspot-list">
-            <div
-              v-for="spot in detail.pending_weak_spots"
-              :key="spot.concept_id"
-              class="weakspot-item weakspot-item--pending"
-            >
-              <div class="weakspot-item__title">
-                <span>{{ spot.display_name }}</span>
-                <el-tag size="small" type="info" effect="light" round>观察中</el-tag>
-              </div>
-              <div class="weakspot-item__meta">
-                <span>已出现澄清 {{ spot.clarification_count }} 次</span>
-                <span>{{ formatTime(spot.last_triggered_at) }}</span>
+          <article class="panel">
+            <div class="panel__header">
+              <div>
+                <p class="panel__eyebrow">Daily Activity</p>
+                <h2 class="panel__title">每日提问数</h2>
               </div>
             </div>
-          </div>
-          <el-empty v-else description="暂无待观察薄弱点" />
-        </article>
 
-        <article class="panel">
-          <div class="panel__header">
-            <div>
-              <p class="panel__eyebrow">Active Weak Spots</p>
-              <h2 class="panel__title">当前薄弱点</h2>
+            <div class="activity-strip">
+              <div
+                v-for="item in activityItems"
+                :key="item.day"
+                class="activity-strip__item"
+              >
+                <span class="activity-strip__day">{{ item.day }}</span>
+                <strong class="activity-strip__count">{{ item.count }}</strong>
+              </div>
             </div>
-          </div>
+          </article>
+        </div>
 
-          <div v-if="detail.weak_spots.length" class="weakspot-list">
-            <div
-              v-for="spot in detail.weak_spots"
-              :key="spot.concept_id"
-              class="weakspot-item weakspot-item--active"
-            >
-              <div class="weakspot-item__title">
-                <div class="weakspot-item__title-main">
+        <!-- 右列：当前薄弱点 + 待观察 + 已克服 -->
+        <div class="profile-col profile-col--right">
+          <article class="panel">
+            <div class="panel__header">
+              <div>
+                <p class="panel__eyebrow">Active Weak Spots</p>
+                <h2 class="panel__title">当前薄弱点</h2>
+              </div>
+            </div>
+
+            <div v-if="detail.weak_spots.length" class="weakspot-list">
+              <div
+                v-for="spot in detail.weak_spots"
+                :key="spot.concept_id"
+                class="weakspot-item weakspot-item--active"
+              >
+                <div class="weakspot-item__title">
+                  <div class="weakspot-item__title-main">
+                    <span>{{ spot.display_name }}</span>
+                    <strong>{{ Math.round(spot.confidence * 100) }}%</strong>
+                  </div>
+                  <el-button
+                    size="small"
+                    text
+                    type="primary"
+                    :loading="resolvingConceptId === spot.concept_id"
+                    @click="handleResolveWeakSpot(spot)"
+                  >
+                    已掌握
+                  </el-button>
+                </div>
+                <div class="weakspot-item__meta">
+                  <span>讲解次数 {{ spot.clarification_count }}</span>
+                  <span>{{ formatTime(spot.last_triggered_at) }}</span>
+                </div>
+              </div>
+            </div>
+            <el-empty v-else description="暂无活跃薄弱点" />
+          </article>
+
+          <article class="panel">
+            <div class="panel__header">
+              <div>
+                <p class="panel__eyebrow">Observed Signals</p>
+                <h2 class="panel__title">待观察薄弱点</h2>
+              </div>
+            </div>
+
+            <div v-if="detail.pending_weak_spots.length" class="weakspot-list">
+              <div
+                v-for="spot in detail.pending_weak_spots"
+                :key="spot.concept_id"
+                class="weakspot-item weakspot-item--pending"
+              >
+                <div class="weakspot-item__title">
                   <span>{{ spot.display_name }}</span>
-                  <strong>{{ Math.round(spot.confidence * 100) }}%</strong>
+                  <el-tag size="small" type="info" effect="light" round>观察中</el-tag>
                 </div>
-                <el-button
-                  size="small"
-                  text
-                  type="primary"
-                  :loading="resolvingConceptId === spot.concept_id"
-                  @click="handleResolveWeakSpot(spot)"
-                >
-                  手动移除
-                </el-button>
-              </div>
-              <div class="weakspot-item__meta">
-                <span>澄清次数 {{ spot.clarification_count }}</span>
-                <span>{{ formatTime(spot.last_triggered_at) }}</span>
+                <div class="weakspot-item__meta">
+                  <span>已出现讲解 {{ spot.clarification_count }} 次</span>
+                  <span>{{ formatTime(spot.last_triggered_at) }}</span>
+                </div>
               </div>
             </div>
-          </div>
-          <el-empty v-else description="暂无活跃薄弱点" />
-        </article>
+            <el-empty v-else description="暂无待观察薄弱点" />
+          </article>
 
-        <article class="panel">
-          <div class="panel__header">
-            <div>
-              <p class="panel__eyebrow">Resolved History</p>
-              <h2 class="panel__title">已克服薄弱点</h2>
-            </div>
-          </div>
-
-          <div v-if="detail.resolved_weak_spots.length" class="weakspot-list">
-            <div
-              v-for="spot in detail.resolved_weak_spots"
-              :key="`${spot.concept_id}-${spot.resolved_at || spot.last_triggered_at}`"
-              class="weakspot-item weakspot-item--resolved"
-            >
-              <div class="weakspot-item__title">
-                <span>{{ spot.display_name }}</span>
-                <el-tag size="small" type="success" effect="light" round>已克服</el-tag>
-              </div>
-              <div class="weakspot-item__meta">
-                <span>曾澄清 {{ spot.clarification_count }} 次</span>
-                <span>{{ formatTime(spot.resolved_at) }}</span>
+          <article class="panel">
+            <div class="panel__header">
+              <div>
+                <p class="panel__eyebrow">Resolved History</p>
+                <h2 class="panel__title">已克服薄弱点</h2>
               </div>
             </div>
-          </div>
-          <el-empty v-else description="还没有记录到已克服的薄弱点" />
-        </article>
 
-        <article class="panel">
-          <div class="panel__header">
-            <div>
-              <p class="panel__eyebrow">Study Trace</p>
-              <h2 class="panel__title">学习轨迹</h2>
-            </div>
-          </div>
-
-          <div class="chapter-bars">
-            <div
-              v-for="item in chapterStats"
-              :key="item.chapter"
-              class="chapter-bar"
-            >
-              <div class="chapter-bar__meta">
-                <span>{{ item.chapter }}</span>
-                <strong>{{ item.count }}</strong>
-              </div>
-              <div class="chapter-bar__track">
-                <div class="chapter-bar__fill" :style="{ width: `${item.width}%` }" />
+            <div v-if="detail.resolved_weak_spots.length" class="weakspot-list">
+              <div
+                v-for="spot in detail.resolved_weak_spots"
+                :key="`${spot.concept_id}-${spot.resolved_at || spot.last_triggered_at}`"
+                class="weakspot-item weakspot-item--resolved"
+              >
+                <div class="weakspot-item__title">
+                  <span>{{ spot.display_name }}</span>
+                  <el-tag size="small" type="success" effect="light" round>已克服</el-tag>
+                </div>
+                <div class="weakspot-item__meta">
+                  <span>曾讲解 {{ spot.clarification_count }} 次</span>
+                  <span>{{ formatTime(spot.resolved_at) }}</span>
+                </div>
               </div>
             </div>
-          </div>
-
-          <div class="activity-strip">
-            <div
-              v-for="item in activityItems"
-              :key="item.day"
-              class="activity-strip__item"
-            >
-              <span class="activity-strip__day">{{ item.day }}</span>
-              <strong class="activity-strip__count">{{ item.count }}</strong>
-            </div>
-          </div>
-        </article>
+            <el-empty v-else description="还没有记录到已克服的薄弱点" />
+          </article>
+        </div>
       </section>
     </template>
   </div>
@@ -329,6 +335,7 @@ onMounted(async () => {
     radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.10), transparent 24%),
     linear-gradient(180deg, #fafaf9 0%, #f5f5f4 100%);
   color: #1c1917;
+  overflow-y: auto;
 }
 
 .profile-hero {
@@ -430,16 +437,28 @@ onMounted(async () => {
 .profile-grid {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
+  grid-template-rows: 1fr 1fr 1fr;
   gap: 16px;
+  align-items: stretch;
+}
+
+.profile-col {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 3;
+  align-self: stretch;
+  height: 100%;
 }
 
 .panel {
   padding: 18px;
-}
-
-.panel--wide {
-  grid-column: 1 / 2;
-  grid-row: span 2;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+  box-sizing: border-box;
+  /* 限制面板高度，内容超出滚动 */
+  max-height: 320px;
 }
 
 .panel__header {
@@ -447,6 +466,19 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 14px;
+  flex-shrink: 0;
+}
+
+.concept-list {
+  flex: 1;
+  min-height: 0;
+  max-height: 240px; /* 约3个条目高度 */
+}
+
+.weakspot-list {
+  flex: 1;
+  min-height: 0;
+  max-height: 240px; /* 约3个条目高度 */
 }
 
 .panel__caption {
@@ -461,6 +493,23 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* 滚动条样式 */
+.concept-list::-webkit-scrollbar,
+.weakspot-list::-webkit-scrollbar {
+  width: 4px;
+}
+.concept-list::-webkit-scrollbar-track,
+.weakspot-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.concept-list::-webkit-scrollbar-thumb,
+.weakspot-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 999px;
 }
 
 .concept-item,
@@ -544,6 +593,9 @@ onMounted(async () => {
   flex-direction: column;
   gap: 12px;
   margin-bottom: 18px;
+  overflow-y: auto;
+  padding-right: 4px;
+  flex: 1;
 }
 
 .chapter-bar__meta {
@@ -594,11 +646,6 @@ onMounted(async () => {
 @media (max-width: 1080px) {
   .profile-grid {
     grid-template-columns: 1fr 1fr;
-  }
-
-  .panel--wide {
-    grid-column: auto;
-    grid-row: auto;
   }
 }
 

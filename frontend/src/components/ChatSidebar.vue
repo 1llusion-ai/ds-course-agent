@@ -12,7 +12,7 @@
       <div
         v-for="session in sessionStore.sortedSessions"
         :key="session.id"
-        class="rounded-lg p-3 mb-1 cursor-pointer transition-all"
+        class="session-wrapper rounded-lg p-3 mb-1 cursor-pointer transition-all"
         :class="sessionStore.currentSessionId === session.id
           ? 'bg-indigo-50 border-l-4 border-indigo-500'
           : 'hover:bg-stone-50 border-l-4 border-transparent'"
@@ -43,15 +43,23 @@
             >
               {{ sessionStore.unreadCounts[session.id] }}
             </span>
-            <el-button
-              v-show="sessionStore.currentSessionId === session.id"
-              type="danger"
-              link
-              size="small"
-              @click.stop="handleDelete(session.id)"
-            >
-              <el-icon><Delete /></el-icon>
-            </el-button>
+            <el-dropdown trigger="click" @command="(cmd) => handleCommand(cmd, session)" size="small">
+              <el-button type="default" link size="small" class="session-menu-btn">
+                <el-icon><MoreFilled /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="rename">
+                    <el-icon><Edit /></el-icon>
+                    <span>重命名</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="delete">
+                    <el-icon><Delete /></el-icon>
+                    <span>删除</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </div>
 
@@ -95,6 +103,32 @@ async function handleDelete(id) {
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
       ElMessage.error('删除会话失败，请稍后再试')
+    }
+  }
+}
+
+async function handleCommand(cmd, session) {
+  if (cmd === 'delete') {
+    await handleDelete(session.id)
+  } else if (cmd === 'rename') {
+    try {
+      const newTitle = await ElMessageBox.prompt(
+        '请输入新的会话标题',
+        '重命名会话',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          inputValue: session.title,
+          inputPattern: /\S+/,
+          inputErrorMessage: '标题不能为空',
+        }
+      )
+      await sessionStore.updateSession(session.id, { title: newTitle })
+      ElMessage.success('会话已重命名')
+    } catch (error) {
+      if (error !== 'cancel' && error !== 'close') {
+        ElMessage.error('重命名失败，请稍后再试')
+      }
     }
   }
 }
@@ -154,6 +188,28 @@ function formatTime(timeStr) {
 
 .session-status-text {
   line-height: 1;
+}
+
+.session-menu-btn {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.session-wrapper:hover .session-menu-btn,
+.session-menu-btn:focus {
+  opacity: 1;
+}
+
+.session-menu-btn .el-icon {
+  font-size: 16px;
+  color: #57534e;
+}
+
+:deep(.el-dropdown-menu__item) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
 }
 
 .session-spinner {

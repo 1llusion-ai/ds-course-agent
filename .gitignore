@@ -1,0 +1,56 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local agent / editor metadata
+.claude/
+CLAUDE.md
+.vscode/
+.idea/
+
+# Python cache and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
+
+# Runtime state
+chat_history/
+chroma_db/
+utils/chroma_db/
+*.log
+*.pid
+*.sqlite3
+*.db
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+
+# Temporary / debug files
+tmp_*.json
+temp_response.txt
+artifacts/
+data/cache/
+
+# Generated evaluation outputs
+eval/reports/*.json
+eval/reports/*.log
+eval/reports/*.pid
+!eval/reports/.gitkeep
+
+# Raw course assets that are large or may have copyright restrictions
+data/*.pdf
+data/*.docx
+data/*.pptx
+data/*.ppt
+
+# OS files
+.DS_Store
+Thumbs.db
+

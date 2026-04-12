@@ -1,0 +1,19 @@
+{
+  "course_name": "数据科学导论",
+  "semester_start": "2026-03-02",
+  "total_weeks": 8,
+  "weekly_schedule": [
+    {
+      "day": "周二",
+      "period": "第5节-第6节",
+      "room": "庄汉水楼（南强二）305",
+      "weeks": "1-8"
+    },
+    {
+      "day": "周五",
+      "period": "第5节-第6节",
+      "room": "庄汉水楼（南强二）305",
+      "weeks": "1-8"
+    }
+  ]
+}

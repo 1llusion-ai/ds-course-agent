@@ -1,86 +1,78 @@
 # Data Science Course Agent
 
-面向《数据科学导论》课程教学场景的智能教学助手，基于 `LangGraph + LLM + Hybrid RAG` 构建，支持课程问答、个性化讲解、学习记忆与可复现评测。
+A course-focused RAG teaching assistant for an introductory data science class.
+The project combines `FastAPI + Vue 3 + LangGraph + Hybrid RAG` to support:
 
-本项目采用前后端分离架构：
+- course Q&A grounded in textbook content
+- personalized explanations and learning-memory features
+- student profile snapshots for recent topics and weak spots
+- course schedule lookup
+- retrieval and agent benchmark workflows
 
-- `backend/`：FastAPI 后端
-- `frontend/`：Vue 3 + Vite 前端
+## Project Status
+
+This repository is being reorganized incrementally toward a cleaner open-source structure.
+
+- `apps/api/app` is now the primary FastAPI implementation entrypoint.
+- `backend/app` is kept as a compatibility shim so existing imports and tests still work.
+- `frontend/` is still the active Vue application.
+- `packages/` provides compatibility facades for the future package-oriented layout.
+
+The goal is to improve structure without breaking the running system in one large refactor.
+
+## Repository Layout
+
+```text
+apps/                Application layer boundaries
+apps/api/app/        Active FastAPI implementation
+apps/web/            Future home of the web app
+backend/             Compatibility layer, tests, requirements, Docker assets
+frontend/            Active Vue 3 + Vite frontend
+core/                Agent / RAG / retrieval / memory implementation
+skills/              Higher-level skills such as personalized explanation
+kb_builder/          Parsing, cleaning, chunking, and indexing pipeline
+utils/               Shared runtime utilities and storage helpers
+packages/            Compatibility package facades for future migration
+scripts/             CLI and developer entrypoints
+eval/                Evaluation code, datasets, and gitignored reports
+docs/                Architecture notes and migration plans
+tests/               Core logic tests
+backend/tests/       API integration tests
+data/                Structured course data and local content manifests
+pyproject.toml       Project metadata and pytest configuration
+```
+
+Architecture plan:
+
+- [docs/architecture_reorg_plan.md](docs/architecture_reorg_plan.md)
 
 ## Features
 
-- 单智能体教学 Agent：支持多轮对话中的工具调用、异常重试与降级处理
-- Hybrid Retrieval：融合 `BM25 + 向量检索 + RRF`，默认不开启 rerank
-- 学习记忆：记录学习事件、近期关注概念、章节进度与薄弱点候选
-- 个性化讲解 Skill：根据知识点识别与学生状态调整讲解策略
-- 教材知识库构建：支持 PDF 解析、清洗、结构化分块、去重与 Chroma 建库
-- 可复现 benchmark：包含当前 `50` 条人工审核、`50` 条有效 query 的检索评测集
-
-## Architecture
-
-主链路如下：
-
-`User Query -> Agent -> Tool Calling -> Hybrid Retrieval -> LLM Answer / Personalized Skill -> Memory Update`
-
-核心模块：
-
-- `core/agent.py`：单智能体教学 Agent
-- `core/tools.py`：Agent 工具封装
-- `core/rag.py`：RAG 服务编排
-- `core/hybrid_retriever.py`：BM25 + 向量混合检索
-- `core/reranker.py`：Cross-Encoder reranker 抽象
-- `core/memory_core.py`：学习记忆与画像聚合
-- `core/knowledge_mapper.py`：知识点映射
-- `skills/personalized_explanation.py`：个性化讲解 Skill
-- `kb_builder/`：教材知识库构建流水线
-- `eval/`：检索 benchmark 与评测工具
-
-## Latest Benchmark
-
-当前最新报告位于：
-
-- [eval/reports/retrieval_benchmark_report.json](eval/reports/retrieval_benchmark_report.json)
-
-评测设置：
-
-- 数据集：`eval/data/retrieval_qa_pairs_chunk1300.json`
-- query 数量：`50`
-- 有效 query：`50`
-- Top-K：`5`
-- 默认分块参数：`1300 / 300`
-
-最新 Top-5 检索结果：
-
-| Method | Recall@5 | Precision@5 | MRR | NDCG@5 | Hit Rate |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Vector | 0.5600 | 0.2640 | 0.6433 | 0.5220 | 0.8200 |
-| Hybrid | 0.6800 | 0.3320 | 0.6897 | 0.6261 | 0.8600 |
-| Hybrid + Rerank | 0.6733 | 0.3320 | 0.6890 | 0.6180 | 0.8800 |
-
-说明：
-
-- 当前默认推荐配置仍为 `Hybrid`
-- `Rerank` 在 `Hit Rate` 上有增益，但综合排序指标未稳定优于 `Hybrid`
-- 与纯向量检索相比，`Hybrid` 的 `Recall@5` 提升 `12.0` 个百分点，`Hit Rate` 提升 `4.0` 个百分点
+- Agent-based course Q&A with tool use and multi-turn context handling
+- Hybrid retrieval with `BM25 + vector retrieval + RRF`
+- Learning profile aggregation for recent concepts, active weak spots, and resolved weak spots
+- Personalized explanations driven by concept and student context
+- Course schedule tools for next class and weekly schedule queries
+- Benchmark support for retrieval quality and end-to-end agent tasks
 
 ## Quick Start
 
-### 1. Prepare Environment
+### 1. Prepare the Environment
 
-建议使用独立 Python 环境，并准备好：
+Recommended:
 
 - Python 3.10+
-- Node.js 18+（如果要运行前端）
-- 可用的嵌入模型 API
-- 本地 Ollama 或远程聊天模型
+- Node.js 18+
+- an available embedding API
+- a local Ollama model or another compatible chat model endpoint
 
-复制环境变量模板：
+Copy the environment template:
 
 ```bash
 cp .env.example .env
 ```
 
-关键配置项：
+Example settings:
 
 ```env
 EMBEDDING_API_KEY=your_api_key_here
@@ -96,76 +88,165 @@ CHUNK_SIZE=1300
 CHUNK_OVERLAP=300
 ```
 
-### 2. Build Knowledge Base
+### 2. Install Dependencies
 
-将课程 PDF 放到 `data/` 后执行：
+Backend:
+
+```bash
+python -m pip install -r backend/requirements.txt
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+```
+
+### 3. Build the Knowledge Base
+
+Place source materials in `data/` and run:
 
 ```bash
 python main.py build data/
 ```
 
-### 3. Run Backend
+or:
 
 ```bash
-cd backend
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8083 --reload
+python -m scripts.cli build data/
 ```
 
-健康检查：
+### 4. Run the Backend
+
+Recommended entrypoint:
+
+```bash
+python -m scripts.cli api --reload
+```
+
+or:
+
+```bash
+python scripts/run_api.py --reload
+```
+
+Direct uvicorn entrypoint:
+
+```bash
+python -m uvicorn apps.api.app.main:app --host 127.0.0.1 --port 8083 --reload
+```
+
+Health check:
 
 ```bash
 curl http://127.0.0.1:8083/health
 ```
 
-### 4. Run Frontend
+### 5. Run the Frontend
 
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
 
-生产构建：
+Production build:
 
 ```bash
 npm run build
 ```
 
+### 6. Windows One-Click Development
+
+```bat
+start_all.bat
+```
+
+Stop services:
+
+```bat
+stop_all.bat
+```
+
+## CLI
+
+Unified CLI entrypoints:
+
+```bash
+python main.py help
+python -m scripts.cli help
+```
+
+Available commands:
+
+- `build [path]` builds the knowledge base
+- `eval` runs retrieval evaluation
+- `test` runs the repository test suite
+- `api` starts the FastAPI backend
+
 ## Evaluation
 
-运行最新检索 benchmark：
+Run retrieval evaluation:
 
 ```bash
-D:/Anaconda/envs/RAG/python.exe eval/retrieval_benchmark.py ^
-  --top-k 5 ^
-  --dataset eval/data/retrieval_qa_pairs_chunk1300.json ^
-  --review-path eval/data/retrieval_qa_reviews.json ^
-  --output eval/reports/retrieval_benchmark_report.json
+python eval/retrieval_benchmark.py --top-k 5
 ```
 
-运行相关测试：
+Run the agent benchmark:
 
 ```bash
-python -m pytest tests/test_retrieval_benchmark.py tests/test_reranker.py tests/test_agent_smoke.py -q
+python -m eval.agent_benchmark --output eval/reports/agent_benchmark_report.json
 ```
 
-## Repository Layout
+Notes:
 
-```text
-backend/     FastAPI 后端
-frontend/    Vue 3 + Vite 前端
-core/        Agent / RAG / Retrieval / Memory 核心实现
-skills/      Agent 能力模块
-kb_builder/  知识库构建流水线
-eval/        benchmark、数据集与评测脚本
-data/        教材 PDF、知识图谱与数据文件
-tests/       测试
+- `eval/reports/` is intentionally gitignored
+- keep benchmark outputs locally or store them as CI artifacts
+
+## What Should Not Be Committed
+
+The repository is configured to keep the following local:
+
+- `.env`
+- `chat_history/`
+- `chroma_db/`
+- `frontend/node_modules/`
+- `frontend/dist/`
+- `eval/reports/*.json`
+- `eval/reports/*.log`
+- `eval/reports/*.pid`
+- temporary debug files and local scratch outputs
+- raw course PDFs or other large / restricted source assets
+
+Structured JSON manifests in `data/` can be committed when they are safe to share.
+Raw textbooks and other large local assets are intentionally ignored.
+
+## Testing
+
+Run the full test suite:
+
+```bash
+python -m pytest -q
 ```
 
-## Notes
+## Current Reorganization Milestones
 
-- 当前仓库中的主 benchmark 与 README 已对齐到最新 `50/50` 检索评测口径
-- 前后端分离架构：后端 `backend/` 提供 API，前端 `frontend/` 提供交互界面
+Completed so far:
+
+- cleaned `.gitignore` and stopped tracking generated benchmark artifacts
+- centralized CLI and startup scripts under `scripts/`
+- introduced `packages/` compatibility facades
+- introduced `apps/` application boundaries
+- moved the active FastAPI implementation to `apps/api/app`
+- kept `backend/app` as a compatibility layer for imports and tests
+- added repository-level metadata and formatting defaults
+
+Still planned:
+
+- move the active Vue app from `frontend/` into `apps/web`
+- progressively move `core/` into `packages/rag_core`
+- progressively move `kb_builder/` into `packages/kb_pipeline`
+- progressively move `utils/` into `packages/shared`
 
 ## License
 

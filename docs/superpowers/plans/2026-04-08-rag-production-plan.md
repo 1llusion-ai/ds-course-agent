@@ -1796,7 +1796,7 @@ const formattedContent = computed(() => {
     </div>
     
     <div class="text-center text-xs text-stone-400 mt-2">
-      AI 助手基于课程教材回答，仅供参考
+      教学 Agent 基于教材回答，仅供参考。
     </div>
   </div>
 </template>

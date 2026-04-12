@@ -21,7 +21,7 @@
         <span v-else>...</span>
       </button>
     </div>
-    <p class="input-hint">AI 助手基于课程教材回答，仅供参考</p>
+    <p class="input-hint">教学 Agent 基于教材回答，仅供参考。</p>
   </div>
 </template>
 

@@ -26,8 +26,7 @@
       </template>
 
       <div v-if="message.sources?.length" class="message-source">
-        <span>来源</span>
-        <span>{{ renderedSources }}</span>
+        <span>📚来源：</span><span>{{ renderedSources }}</span>
       </div>
     </div>
   </div>
