@@ -4,7 +4,7 @@ import json
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from apps.api.app.main import app
 
 client = TestClient(app)
 
@@ -102,7 +102,7 @@ def test_list_sessions_filter_by_student():
 
 
 def test_restore_legacy_session_file(monkeypatch, tmp_path):
-    from app import state as state_module
+    from apps.api.app import state as state_module
 
     legacy_session_id = "11111111-2222-3333-4444-555555555555"
     legacy_file = tmp_path / legacy_session_id
@@ -130,7 +130,7 @@ def test_restore_legacy_session_file(monkeypatch, tmp_path):
 
 
 def test_restore_legacy_session_file_skips_deleted_sessions(monkeypatch, tmp_path):
-    from app import state as state_module
+    from apps.api.app import state as state_module
 
     legacy_session_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     legacy_file = tmp_path / legacy_session_id
@@ -153,7 +153,7 @@ def test_restore_legacy_session_file_skips_deleted_sessions(monkeypatch, tmp_pat
 
 
 def test_purge_session_removes_legacy_file_and_records_tombstone(monkeypatch, tmp_path):
-    from app import state as state_module
+    from apps.api.app import state as state_module
 
     session_id = "99999999-8888-7777-6666-555555555555"
     legacy_file = tmp_path / session_id

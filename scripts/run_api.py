@@ -31,11 +31,11 @@ def main(argv: list[str] | None = None) -> None:
         sys.path.insert(0, str(PROJECT_ROOT))
 
     uvicorn.run(
-        "apps.api.app.main:app",
+        "app.main:app",
         host=args.host,
         port=args.port,
         reload=args.reload,
-        app_dir=str(PROJECT_ROOT),
+        app_dir=str(BACKEND_DIR),
     )
 
 

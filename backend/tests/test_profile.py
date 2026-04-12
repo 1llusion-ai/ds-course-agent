@@ -2,7 +2,7 @@ import tempfile
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from apps.api.app.main import app
 from core.events import build_clarification_event, build_concept_mentioned_event
 from core.memory_core import MemoryCore
 from core.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
@@ -15,13 +15,13 @@ class TestProfileAPI:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.memory = MemoryCore(base_dir=self.temp_dir.name)
 
-        from app.routers import profile as profile_router
+        from apps.api.app.routers import profile as profile_router
 
         self._old_get_memory = profile_router.get_memory
         profile_router.get_memory = lambda: self.memory
 
     def teardown_method(self):
-        from app.routers import profile as profile_router
+        from apps.api.app.routers import profile as profile_router
 
         profile_router.get_memory = self._old_get_memory
         self.temp_dir.cleanup()
@@ -175,7 +175,7 @@ class TestProfileAPI:
         assert data["stats"]["pending_weak_spots"] == 1
 
     def test_get_concept_detail_returns_catalog_and_excerpt(self):
-        from app.routers import profile as profile_router
+        from apps.api.app.routers import profile as profile_router
 
         fake_catalog = {
             "svm": {
@@ -220,7 +220,7 @@ class TestProfileAPI:
         assert "支持向量机" in data["textbook_excerpt"]
 
     def test_get_concept_detail_supports_distinction_concept(self):
-        from app.routers import profile as profile_router
+        from apps.api.app.routers import profile as profile_router
         from core.agent import AgentService
 
         service = AgentService.__new__(AgentService)

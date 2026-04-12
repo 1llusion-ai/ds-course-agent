@@ -54,7 +54,14 @@ function renderMarkdownWithMath(text) {
   const inlineMath = []
   let content = text
 
+  // 处理块级公式: $$...$$ 和 [\...]...\ (LaTeX 风格)
   content = content.replace(/\$\$([\s\S]*?)\$\$/g, (_, code) => {
+    blockMath.push(code.trim())
+    return `<BLOCK_MATH_${blockMath.length - 1}>`
+  })
+
+  // 处理 LaTeX 风格的 \[\]...\ 块级公式 (AI使用的格式)
+  content = content.replace(/\\\[\s*([\s\S]*?)\\\]\s*/g, (_, code) => {
     blockMath.push(code.trim())
     return `<BLOCK_MATH_${blockMath.length - 1}>`
   })

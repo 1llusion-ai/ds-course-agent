@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-setlocal
+setlocal EnableExtensions
 
 set "BACKEND_PORT=%RAG_API_PORT%"
 if "%BACKEND_PORT%"=="" set "BACKEND_PORT=8083"
@@ -13,16 +13,16 @@ echo    RAG System Stop Services
 echo ============================================
 echo.
 
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%BACKEND_PORT%" ^| findstr "LISTENING"') do (
-    taskkill /F /PID %%a >nul 2>&1
-)
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%FRONTEND_PORT%" ^| findstr "LISTENING"') do (
-    taskkill /F /PID %%a >nul 2>&1
-)
+echo Stopping backend (port %BACKEND_PORT%)...
+powershell -Command "Get-NetTCPConnection -LocalPort %BACKEND_PORT% -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Force -Id $_ -ErrorAction SilentlyContinue }"
 
+echo Stopping frontend (port %FRONTEND_PORT%)...
+powershell -Command "Get-NetTCPConnection -LocalPort %FRONTEND_PORT% -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Force -Id $_ -ErrorAction SilentlyContinue }"
+
+echo Stopping residual window processes...
 taskkill /F /FI "WINDOWTITLE eq RAG-Backend*" >nul 2>&1
 taskkill /F /FI "WINDOWTITLE eq RAG-Frontend*" >nul 2>&1
 
-echo Done.
 echo.
-
+echo All services stopped.
+echo.

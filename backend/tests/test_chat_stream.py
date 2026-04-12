@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
+from apps.api.app.main import app
 
 
 @pytest.fixture
@@ -12,8 +12,7 @@ def client():
 @pytest.fixture
 def fresh_client(monkeypatch):
     """Client with mocked stream function."""
-    from app.routers.sessions import _sessions
-    from app.state import _chat_history
+    from apps.api.app.state import _chat_history, _sessions
 
     _sessions.clear()
     _chat_history.clear()

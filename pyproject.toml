@@ -19,8 +19,8 @@ pythonpath = [
   "backend",
 ]
 addopts = "--import-mode=importlib"
+cache_dir = "pytest_cache"
 testpaths = [
   "tests",
   "backend/tests",
 ]
-

@@ -1,99 +1,78 @@
 # Data Science Course Agent
 
-A course-focused RAG teaching assistant for an introductory data science class.
-The project combines `FastAPI + Vue 3 + LangGraph + Hybrid RAG` to support:
+A course-focused RAG teaching assistant for **Introduction to Data Science**, built with `FastAPI + Vue 3 + LangGraph + Hybrid Retrieval`.
 
-- course Q&A grounded in textbook content
-- personalized explanations and learning-memory features
-- student profile snapshots for recent topics and weak spots
-- course schedule lookup
-- retrieval and agent benchmark workflows
+It supports grounded textbook Q&A, streaming chat, personalized learning memory, student profile views, course schedule tools, and evaluation workflows for both retrieval and agent behavior.
 
-## Project Status
+## Highlights
 
-This repository is being reorganized incrementally toward a cleaner open-source structure.
+- Grounded answers with textbook citations
+- Hybrid retrieval with BM25 + vector search + RRF fusion
+- Multi-turn chat with session persistence
+- SSE streaming responses
+- Student memory for recent concepts, weak spots, and resolved weak spots
+- Personalized explanation scaffolds
+- Agent and retrieval benchmark runners
 
-- `apps/api/app` is now the primary FastAPI implementation entrypoint.
-- `backend/app` is kept as a compatibility shim so existing imports and tests still work.
-- `frontend/` is still the active Vue application.
-- `packages/` provides compatibility facades for the future package-oriented layout.
+## Repository Status
 
-The goal is to improve structure without breaking the running system in one large refactor.
+This repository has been reorganized toward a more standard open-source layout while keeping the system runnable during migration.
 
-## Repository Layout
+- Active backend entrypoint: `apps/api/app/main.py`
+- Legacy backend path kept as compatibility shim: `backend/app`
+- Frontend runtime still lives in `frontend/`
+- Shared package boundaries are being introduced under `packages/`
+
+In other words: the project now has a cleaner backbone, but it is still in an incremental migration rather than a one-shot rewrite.
+
+## Architecture
 
 ```text
-apps/                Application layer boundaries
-apps/api/app/        Active FastAPI implementation
-apps/web/            Future home of the web app
-backend/             Compatibility layer, tests, requirements, Docker assets
-frontend/            Active Vue 3 + Vite frontend
-core/                Agent / RAG / retrieval / memory implementation
-skills/              Higher-level skills such as personalized explanation
-kb_builder/          Parsing, cleaning, chunking, and indexing pipeline
-utils/               Shared runtime utilities and storage helpers
-packages/            Compatibility package facades for future migration
-scripts/             CLI and developer entrypoints
-eval/                Evaluation code, datasets, and gitignored reports
-docs/                Architecture notes and migration plans
-tests/               Core logic tests
-backend/tests/       API integration tests
-data/                Structured course data and local content manifests
-pyproject.toml       Project metadata and pytest configuration
+frontend/                Vue 3 application
+apps/api/app/            Active FastAPI app
+backend/app/             Compatibility shims for legacy imports
+core/                    Current runtime domain logic
+packages/rag_core/       Package-facing wrappers for core capabilities
+packages/kb_pipeline/    Package-facing wrappers for KB build pipeline
+packages/shared/         Shared config/history/vector-store wrappers
+eval/                    Retrieval and agent evaluation code + datasets
+scripts/                 CLI and local run helpers
+data/                    Small tracked metadata and local course assets
+docs/                    Architecture and prompt docs
+tests/                   Core/unit-style tests
+backend/tests/           API integration tests
 ```
 
-Architecture plan:
+Runtime request flow:
 
-- [docs/architecture_reorg_plan.md](docs/architecture_reorg_plan.md)
-
-## Features
-
-- Agent-based course Q&A with tool use and multi-turn context handling
-- Hybrid retrieval with `BM25 + vector retrieval + RRF`
-- Learning profile aggregation for recent concepts, active weak spots, and resolved weak spots
-- Personalized explanations driven by concept and student context
-- Course schedule tools for next class and weekly schedule queries
-- Benchmark support for retrieval quality and end-to-end agent tasks
+1. `frontend/` sends HTTP/SSE requests to the FastAPI app.
+2. `apps/api/app/routers/` handles chat, sessions, and profile APIs.
+3. `apps/api/app/core_bridge.py` bridges the API layer to the current `core/` agent and memory logic.
+4. `core/` uses retrieval, tools, and learning memory to answer or stream results.
 
 ## Quick Start
 
-### 1. Prepare the Environment
-
-Recommended:
+### 1. Prerequisites
 
 - Python 3.10+
 - Node.js 18+
-- an available embedding API
-- a local Ollama model or another compatible chat model endpoint
+- A configured embedding endpoint
+- A configured chat model endpoint or local model
 
-Copy the environment template:
+### 2. Configure environment
 
 ```bash
 cp .env.example .env
 ```
 
-Example settings:
+Fill in the required keys in `.env`.
 
-```env
-EMBEDDING_API_KEY=your_api_key_here
-EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
-EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B
-
-CHAT_MODEL=qwen3:8b
-CHAT_BASE_URL=http://localhost:11434
-
-CHROMA_PERSIST_DIR=chroma_db
-CHAT_HISTORY_DIR=chat_history
-CHUNK_SIZE=1300
-CHUNK_OVERLAP=300
-```
-
-### 2. Install Dependencies
+### 3. Install dependencies
 
 Backend:
 
 ```bash
-python -m pip install -r backend/requirements.txt
+pip install -r backend/requirements.txt
 ```
 
 Frontend:
@@ -103,150 +82,160 @@ cd frontend
 npm install
 ```
 
-### 3. Build the Knowledge Base
+### 4. Build the knowledge base
 
-Place source materials in `data/` and run:
+Put course files under `data/` and run:
 
 ```bash
 python main.py build data/
 ```
 
-or:
+### 5. Start the backend
 
 ```bash
-python -m scripts.cli build data/
+python main.py api --reload
 ```
 
-### 4. Run the Backend
-
-Recommended entrypoint:
-
-```bash
-python -m scripts.cli api --reload
-```
-
-or:
+Or directly:
 
 ```bash
 python scripts/run_api.py --reload
 ```
 
-Direct uvicorn entrypoint:
-
-```bash
-python -m uvicorn apps.api.app.main:app --host 127.0.0.1 --port 8083 --reload
-```
-
-Health check:
-
-```bash
-curl http://127.0.0.1:8083/health
-```
-
-### 5. Run the Frontend
+### 6. Start the frontend
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-Production build:
+### 7. Health check
 
 ```bash
-npm run build
+curl http://127.0.0.1:8083/health
 ```
 
-### 6. Windows One-Click Development
-
-```bat
-start_all.bat
-```
-
-Stop services:
-
-```bat
-stop_all.bat
-```
-
-## CLI
-
-Unified CLI entrypoints:
+## Common Commands
 
 ```bash
 python main.py help
-python -m scripts.cli help
-```
-
-Available commands:
-
-- `build [path]` builds the knowledge base
-- `eval` runs retrieval evaluation
-- `test` runs the repository test suite
-- `api` starts the FastAPI backend
-
-## Evaluation
-
-Run retrieval evaluation:
-
-```bash
-python eval/retrieval_benchmark.py --top-k 5
-```
-
-Run the agent benchmark:
-
-```bash
+python main.py build data/
+python main.py api --reload
+python -m pytest -q
 python -m eval.agent_benchmark --output eval/reports/agent_benchmark_report.json
 ```
 
-Notes:
+## Development Notes
 
-- `eval/reports/` is intentionally gitignored
-- keep benchmark outputs locally or store them as CI artifacts
+### Backend
 
-## What Should Not Be Committed
+- Active ASGI app: `apps.api.app.main:app`
+- Compatibility app import: `backend.app.main:app`
+- API routes:
+  - `apps/api/app/routers/chat.py`
+  - `apps/api/app/routers/sessions.py`
+  - `apps/api/app/routers/profile.py`
 
-The repository is configured to keep the following local:
+### Frontend
+
+- Current runtime app lives in `frontend/`
+- `apps/web/` is currently a boundary marker for the long-term target layout
+
+### Testing
+
+The repository now runs tests with workspace-local temporary directories instead of relying on OS temp directories. This avoids Windows permission issues in restricted environments.
+
+Main suites:
+
+- `tests/`
+- `backend/tests/`
+
+## Data and Git Hygiene
+
+These are intentionally ignored and should usually stay out of GitHub:
 
 - `.env`
 - `chat_history/`
 - `chroma_db/`
 - `frontend/node_modules/`
 - `frontend/dist/`
-- `eval/reports/*.json`
-- `eval/reports/*.log`
-- `eval/reports/*.pid`
-- temporary debug files and local scratch outputs
-- raw course PDFs or other large / restricted source assets
+- `artifacts/`
+- generated benchmark reports in `eval/reports/`
+- raw course PDFs and other large copyrighted assets in `data/`
 
-Structured JSON manifests in `data/` can be committed when they are safe to share.
-Raw textbooks and other large local assets are intentionally ignored.
+Tracked course metadata that is useful for reproducibility can stay in Git, for example:
 
-## Testing
+- `data/course_schedule.json`
+- `data/knowledge_graph.json`
+- `data/目录.json`
+- benchmark datasets under `eval/data/`
 
-Run the full test suite:
+## Evaluation
 
-```bash
-python -m pytest -q
-```
+This repository includes two evaluation layers:
 
-## Current Reorganization Milestones
+- Retrieval evaluation under `eval/`
+- Agent task evaluation under `eval/agent_benchmark.py`
 
-Completed so far:
+Current tracked snapshots in this repository:
 
-- cleaned `.gitignore` and stopped tracking generated benchmark artifacts
-- centralized CLI and startup scripts under `scripts/`
-- introduced `packages/` compatibility facades
-- introduced `apps/` application boundaries
-- moved the active FastAPI implementation to `apps/api/app`
-- kept `backend/app` as a compatibility layer for imports and tests
-- added repository-level metadata and formatting defaults
+### Retrieval benchmark
 
-Still planned:
+Dataset:
 
-- move the active Vue app from `frontend/` into `apps/web`
-- progressively move `core/` into `packages/rag_core`
-- progressively move `kb_builder/` into `packages/kb_pipeline`
-- progressively move `utils/` into `packages/shared`
+- 50 reviewed retrieval queries
+- Top-5 evaluation
+- active dataset: `eval/data/retrieval_qa_pairs_chunk1300.json`
+- review overlay: `eval/data/retrieval_qa_reviews.json`
+
+Latest tracked report: `eval/reports/retrieval_benchmark_report_2026-04-13.json`
+
+| Method | Recall@5 | Precision@5 | MRR | NDCG@5 | Hit@5 |
+|--------|----------|-------------|-----|--------|-------|
+| Vector | 0.5600 | 0.2640 | 0.6433 | 0.5220 | 0.82 |
+| Hybrid | 0.6667 | 0.3240 | 0.6740 | 0.6166 | 0.84 |
+| Hybrid + Rerank | 0.6733 | 0.3320 | 0.6873 | 0.6173 | 0.88 |
+
+### Agent benchmark
+
+Dataset:
+
+- 30 end-to-end agent tasks
+- covers retrieval, multi-turn context, personalization, and safety handling
+- active dataset: `eval/data/agent_tasks_v1.json`
+
+Latest tracked report: `eval/reports/agent_benchmark_report_2026-04-13.json`
+
+| Metric | Value |
+|--------|-------|
+| Agent task success rate | 0.9333 |
+| Tool call success rate | 0.9667 |
+| Grounded answer rate | 0.9583 |
+| Context utilization rate | 0.8750 |
+| Personalization hit rate | 1.0000 |
+| Failure safety rate | 1.0000 |
+
+If you are quoting metrics externally, make sure to distinguish:
+
+- `Hit@5` belongs to the retrieval benchmark
+- `Agent task success rate` belongs to the end-to-end agent benchmark
+- they are not interchangeable
+
+## Migration Notes
+
+The repo has already completed:
+
+- standardized Python project metadata via `pyproject.toml`
+- standardized backend app entrypoint under `apps/api`
+- repository CLI under `scripts/cli.py`
+- compatibility shims for legacy backend imports
+- improved `.gitignore` and artifact boundaries
+
+Still intentionally incremental:
+
+- frontend has not yet been physically moved into `apps/web`
+- core runtime logic still primarily lives in `core/`
+- package wrappers in `packages/` are present, but not every runtime import has been physically migrated yet
 
 ## License
 

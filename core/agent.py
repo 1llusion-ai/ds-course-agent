@@ -695,6 +695,90 @@ class AgentService(object):
 
         return self._has_personalization_context(profile) and primary_score >= 0.6
 
+    def _is_schedule_request(self, question: str) -> bool:
+        import re
+        normalized = self._normalize_question_text(question)
+
+        # 精确关键词匹配
+        exact_cues = [
+            "课表", "课程安排", "上课时间", "什么时候上课",
+            "几点上课", "上课地点", "在哪上课", "教室",
+            "第几周", "周几上课", "第几节",
+            "这周有什么课", "本周有什么课", "今天有课吗",
+            "明天有课吗", "下周有什么课",
+            "下次课", "下一次课", "下节课", "下下节课",
+        ]
+        if any(cue in normalized for cue in exact_cues):
+            return True
+
+        # 匹配"下X节课"模式（支持任意多个"下"字）
+        # 例如：下节课、下下节课、下下下节课、下下周节课
+        if re.search(r'下{1,}节课', normalized):
+            return True
+
+        # 匹配"第X节课"或"第X周"等课程序列查询
+        if re.search(r'第[一二三四五六七八九十百0-9]+[节周]', normalized):
+            return True
+
+        if re.search(r"下.*课.*时间|下次.*上课|什么时候.*上课", question):
+            return True
+
+        return False
+
+    def _build_grounded_tool_query(
+        self,
+        question: str,
+        chat_history: Optional[list] = None,
+    ) -> str:
+        if not self._looks_contextual_follow_up(question):
+            return question
+
+        recent_context = self._collect_recent_context(chat_history)
+        if not recent_context.strip():
+            return question
+
+        return (
+            "最近对话上下文：\n"
+            f"{recent_context}\n\n"
+            "请结合上下文理解学生当前追问，再检索课程资料回答。\n"
+            f"当前问题：{question}"
+        )
+
+    def _build_schedule_tool_query(self, question: str) -> str:
+        normalized = self._normalize_question_text(question)
+        if "下次课" in normalized or "下次上课" in normalized:
+            return "下节课是什么时候？"
+        if re.search(r"下.*课.*时间", question):
+            return "下节课是什么时候？"
+        return question
+
+    def _maybe_force_grounded_answer(
+        self,
+        question: str,
+        chat_history: Optional[list] = None,
+        skip: bool = False,
+    ) -> Optional[str]:
+        if skip:
+            return None
+
+        from core.tools import course_rag_tool, course_schedule_tool, get_retrieval_trace, _track_retrieval
+
+        try:
+            if self._is_schedule_request(question):
+                result = course_schedule_tool.invoke(self._build_schedule_tool_query(question))
+                # Mark as retrieval to prevent re-entry
+                _track_retrieval(sources=[], used=True)
+                return result
+
+            trace = get_retrieval_trace()
+            if trace.used_retrieval:
+                return None
+
+            grounded_query = self._build_grounded_tool_query(question, chat_history)
+            return course_rag_tool.invoke(grounded_query)
+        except Exception:
+            return None
+
     def _postprocess_generic_answer(
         self,
         question: str,
@@ -775,6 +859,11 @@ class AgentService(object):
         try:
             if special_case_response:
                 result = special_case_response
+            elif self._is_schedule_request(user_input):
+                # 课程时间安排相关问题，直接调用 schedule tool
+                from core.tools import course_schedule_tool, _track_retrieval
+                result = course_schedule_tool.invoke(self._build_schedule_tool_query(user_input))
+                _track_retrieval(sources=[], used=True)
             elif self._should_use_explanation_skill(user_input, matched_concepts, profile):
                 if matched_concepts:
                     print(f"[Agent] 识别知识点: {matched_concepts[0].concept_id} ({matched_concepts[0].method})")
@@ -795,12 +884,21 @@ class AgentService(object):
             error_info = f"生成回答时出错: {str(e)}"
             print(f"[Agent Error] {error_info}")
 
+        forced_result = self._maybe_force_grounded_answer(
+            user_input,
+            chat_history=chat_history,
+            skip=bool(special_case_response) or self._is_schedule_request(user_input),
+        )
+        if forced_result and forced_result.strip():
+            result = forced_result
+
         # 检查结果有效性
         if not result or not isinstance(result, str) or not result.strip():
             # 生成失败，尝试回退方案
             try:
                 from core.tools import course_rag_tool
-                fallback = course_rag_tool.invoke(user_input)
+                fallback_query = self._build_grounded_tool_query(user_input, chat_history)
+                fallback = course_rag_tool.invoke(fallback_query)
                 if fallback and fallback.strip() and fallback != "无相关资料":
                     result = f"{fallback}\n\n[注：使用基础检索模式回答]"
                 else:
@@ -858,6 +956,20 @@ class AgentService(object):
                 for chunk in self._yield_text_chunks(final_result):
                     stream_started = True
                     yield {"type": "delta", "delta": chunk}
+            elif self._is_schedule_request(user_input):
+                # 课程时间安排相关问题，直接调用 schedule tool
+                from core.tools import course_schedule_tool, _track_retrieval
+                try:
+                    final_result = course_schedule_tool.invoke(self._build_schedule_tool_query(user_input))
+                    _track_retrieval(sources=[], used=True)
+                    for chunk in self._yield_text_chunks(final_result):
+                        stream_started = True
+                        yield {"type": "delta", "delta": chunk}
+                except Exception as e:
+                    final_result = f"查询课程安排时出错：{str(e)}"
+                    for chunk in self._yield_text_chunks(final_result):
+                        stream_started = True
+                        yield {"type": "delta", "delta": chunk}
             elif self._should_use_explanation_skill(user_input, matched_concepts, profile):
                 if matched_concepts:
                     print(
@@ -901,11 +1013,20 @@ class AgentService(object):
             print(f"[Agent Error] stream_chat_with_history failed: {e}")
             final_result = ""
 
+        forced_result = self._maybe_force_grounded_answer(
+            user_input,
+            chat_history=chat_history,
+            skip=bool(special_case_response) or self._is_schedule_request(user_input),
+        )
+        if forced_result and forced_result.strip():
+            final_result = forced_result
+
         if not final_result or not isinstance(final_result, str) or not final_result.strip():
             try:
                 from core.tools import course_rag_tool
 
-                fallback = course_rag_tool.invoke(user_input)
+                fallback_query = self._build_grounded_tool_query(user_input, chat_history)
+                fallback = course_rag_tool.invoke(fallback_query)
                 if fallback and fallback.strip() and fallback != "无相关资料":
                     final_result = f"{fallback}\n\n[注：使用基础检索模式回答]"
                 else:

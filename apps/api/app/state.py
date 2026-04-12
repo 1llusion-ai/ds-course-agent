@@ -26,6 +26,8 @@ STATE_FILE = Path(config.CHAT_HISTORY_DIR) / "backend_state.json"
 _sessions: Dict[str, dict] = {}
 _chat_history: Dict[str, List[dict]] = {}
 _deleted_session_ids: set[str] = set()
+_save_lock: bool = False  # 简单锁防止并发写入
+_last_save_time: float = 0.0
 
 _UUID_PATTERN = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -113,7 +115,7 @@ def _derive_session_metadata(session_id: str, messages: List[dict], fallback_ts:
         for message in messages
         if message.get("role") == "user" and message.get("content")
     ]
-    title = (user_messages[0][:20] if user_messages else "") or DEFAULT_SESSION_TITLE
+    title = (user_messages[0][:10] if user_messages else "") or DEFAULT_SESSION_TITLE
     created_at = _parse_timestamp(messages[0].get("timestamp"), fallback_ts) if messages else fallback_ts
     updated_at = _parse_timestamp(messages[-1].get("timestamp"), fallback_ts) if messages else fallback_ts
 
@@ -223,6 +225,7 @@ def _load():
         _chat_history = {}
         _deleted_session_ids = set()
 
+    # 清理 _deleted_session_ids 中不存在的 session（只做内存清理，不修改文件）
     for session_id in list(_deleted_session_ids):
         if session_id in _sessions:
             del _sessions[session_id]
@@ -231,6 +234,9 @@ def _load():
             del _chat_history[session_id]
             changed = True
 
+    # 只在内存中清理，不在文件中也删除（避免大量 deleted_session_ids 积累）
+    # 注意：_deleted_session_ids 的主要作用是防止恢复旧文件，不要清理它
+
     changed = _restore_sessions_from_legacy_files() or changed
     changed = _repair_session_metadata() or changed
     if changed:
@@ -238,19 +244,27 @@ def _load():
 
 
 def _save():
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(
-        json.dumps(
-            {
-                "sessions": _sessions,
-                "chat_history": _chat_history,
-                "deleted_session_ids": sorted(_deleted_session_ids),
-            },
-            ensure_ascii=False,
-            default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else str(obj),
-        ),
-        encoding="utf-8",
-    )
+    global _save_lock
+    # 如果正在保存，直接返回（丢弃这次写入，由下一次保存覆盖）
+    if _save_lock:
+        return
+    _save_lock = True
+    try:
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        STATE_FILE.write_text(
+            json.dumps(
+                {
+                    "sessions": _sessions,
+                    "chat_history": _chat_history,
+                    "deleted_session_ids": sorted(_deleted_session_ids),
+                },
+                ensure_ascii=False,
+                default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else str(obj),
+            ),
+            encoding="utf-8",
+        )
+    finally:
+        _save_lock = False
 
 
 _load()

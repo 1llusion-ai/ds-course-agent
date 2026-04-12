@@ -79,6 +79,11 @@ def end_retrieval_trace(token) -> RetrievalTrace:
     return trace
 
 
+def get_retrieval_trace() -> RetrievalTrace:
+    """Return the currently active retrieval trace, if any."""
+    return _retrieval_trace.get() or RetrievalTrace()
+
+
 def _merge_sources(existing: list[dict], incoming: list[dict]) -> list[dict]:
     merged = list(existing)
     seen = {

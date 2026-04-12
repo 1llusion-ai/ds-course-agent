@@ -147,23 +147,31 @@ async function loadSession(sessionId) {
 async function handleSend(message) {
   const streamOptions = { onProgress: scrollToBottom }
   const currentSessionId = sessionStore.currentSessionId
+  let targetSessionId = currentSessionId
+  let shouldRefreshTitle = false
 
   if (!currentSessionId) {
-    const newSession = await sessionStore.createSession(message.slice(0, 20))
+    const newSession = await sessionStore.createSession()
+    targetSessionId = newSession.id
+    shouldRefreshTitle = true
     chatStore.setActiveSession(newSession.id)
     await router.push(`/chat/${newSession.id}`)
     await chatStore.sendMessage(newSession.id, message, undefined, streamOptions)
   } else {
-    if (sessionStore.shouldAutoTitle(currentSessionId)) {
-      try {
-        await sessionStore.updateSession(currentSessionId, { title: message.slice(0, 20) })
-      } catch (error) {
-        console.error('更新会话标题失败:', error)
-      }
-    }
-
+    shouldRefreshTitle = sessionStore.shouldAutoTitle(currentSessionId)
     chatStore.setActiveSession(currentSessionId)
     await chatStore.sendMessage(currentSessionId, message, undefined, streamOptions)
+  }
+
+  if (shouldRefreshTitle) {
+    try {
+      await sessionStore.fetchSessions()
+      if (targetSessionId) {
+        sessionStore.setCurrentSession(targetSessionId)
+      }
+    } catch (error) {
+      console.error('同步会话标题失败:', error)
+    }
   }
 
   await profileStore.fetchSummary()

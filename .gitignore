@@ -13,6 +13,11 @@ CLAUDE.md
 __pycache__/
 *.py[cod]
 .pytest_cache/
+pytest_cache/
+pytest_tmp/
+session_smoke_tmp/
+tests_tmp_manual/
+manual_*/
 .mypy_cache/
 .ruff_cache/
 .coverage
@@ -53,4 +58,3 @@ data/*.ppt
 # OS files
 .DS_Store
 Thumbs.db
-

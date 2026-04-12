@@ -112,7 +112,7 @@ async function handleCommand(cmd, session) {
     await handleDelete(session.id)
   } else if (cmd === 'rename') {
     try {
-      const newTitle = await ElMessageBox.prompt(
+      const { value } = await ElMessageBox.prompt(
         '请输入新的会话标题',
         '重命名会话',
         {
@@ -123,7 +123,7 @@ async function handleCommand(cmd, session) {
           inputErrorMessage: '标题不能为空',
         }
       )
-      await sessionStore.updateSession(session.id, { title: newTitle })
+      await sessionStore.updateSession(session.id, { title: value.trim() })
       ElMessage.success('会话已重命名')
     } catch (error) {
       if (error !== 'cancel' && error !== 'close') {

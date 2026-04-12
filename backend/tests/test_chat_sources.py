@@ -2,15 +2,14 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from apps.api.app.main import app
 
 
 client = TestClient(app)
 
 
 def setup_function():
-    from app.routers.sessions import _sessions
-    from app.state import _chat_history
+    from apps.api.app.state import _chat_history, _sessions
 
     _sessions.clear()
     _chat_history.clear()
@@ -28,7 +27,7 @@ def _create_session(student_id: str = "student001") -> str:
     return response.json()["id"]
 
 
-@patch("app.routers.chat.chat_with_history")
+@patch("apps.api.app.routers.chat.chat_with_history")
 def test_send_message_omits_sources_when_agent_skips_retrieval(mock_chat_with_history):
     mock_chat_with_history.return_value = {
         "content": "你好！我是课程助教。",
@@ -52,7 +51,7 @@ def test_send_message_omits_sources_when_agent_skips_retrieval(mock_chat_with_hi
     assert payload["message"]["sources"] is None
 
 
-@patch("app.routers.chat.chat_with_history")
+@patch("apps.api.app.routers.chat.chat_with_history")
 def test_send_message_keeps_sources_from_agent_retrieval(mock_chat_with_history):
     mock_chat_with_history.return_value = {
         "content": "PCA 通过协方差矩阵的特征分解找到主成分。",

@@ -4,52 +4,53 @@ Knowledge Mapper 回归测试
 """
 import sys
 from pathlib import Path
+
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.knowledge_mapper import map_question_to_concepts
 
 
-def test_questions():
-    """
-    真实学生问题测试集
-    格式: (问题, 期望匹配的概念ID列表, 备注)
-    """
-    test_cases = [
-        # === 精确匹配测试 ===
-        ("什么是支持向量机？", ["svm"], "display_name 精确匹配"),
-        ("SVM是什么？", ["svm"], "别名精确匹配"),
-        ("核函数怎么选？", ["svm_kernel"], "核函数别名匹配"),
-        ("kernel trick是什么？", ["svm_kernel"], "英文别名匹配"),
+QUESTION_CASES = [
+    ("什么是支持向量机？", ["svm"], "display_name 精确匹配"),
+    ("SVM是什么？", ["svm"], "别名精确匹配"),
+    ("核函数怎么选？", ["svm_kernel"], "核函数别名匹配"),
+    ("kernel trick是什么？", ["svm_kernel"], "英文别名匹配"),
+    ("SVM的核函数怎么选择？", ["svm_kernel"], "正则规则: SVM.*核"),
+    ("支持向量机里的核技巧怎么用？", ["svm_kernel"], "正则规则: 支持向量机.*核"),
+    ("过拟合怎么处理？", ["overfitting"], "正则规则: 过拟合.*怎么"),
+    ("模型泛化能力差怎么办？", ["overfitting"], "正则规则: 泛化.*差"),
+    ("梯度下降的学习率怎么调？", ["gradient_descent"], "正则规则: 梯度下降.*怎么"),
+    ("交叉验证怎么做？", ["cross_validation"], "正则规则: 交叉验证.*怎么"),
+    ("决策树剪枝的方法？", ["decision_tree"], "正则规则: 决策树.*剪枝"),
+    ("L1正则和L2正则的区别？", ["regularization"], "正则规则: L1正则|L2正则"),
+    ("SVM里的那个核是什么原理？", ["svm_kernel"], "需要embedding匹配到核函数"),
+    ("怎么防止模型在训练集上记住数据？", ["overfitting"], "语义匹配到"),
+    ("我想让模型在没见过数据上表现好", ["overfitting", "cross_validation"], "语义匹配泛化/验证概念"),
+    ("神经网络和SVM哪个好？", ["svm", "neural_network"], "多概念，SVM应被识别"),
+    ("Python里怎么实现核函数？", ["svm_kernel"], "可能误判为代码实现而非概念"),
+    ("什么是核技巧？kernel function的原理？", ["svm_kernel"], "中英混合，应识别"),
+    ("数据清洗怎么做？", ["data_cleaning"], "基础概念，应精确匹配"),
+    ("过拟合和欠拟合的区别？", ["overfitting"], "概念对比，应识别过拟合"),
+]
 
-        # === 规则匹配测试 ===
-        ("SVM的核函数怎么选择？", ["svm_kernel"], "正则规则: SVM.*核"),
-        ("支持向量机里的核技巧怎么用？", ["svm_kernel"], "正则规则: 支持向量机.*核"),
-        ("过拟合怎么处理？", ["overfitting"], "正则规则: 过拟合.*怎么"),
-        ("模型泛化能力差怎么办？", ["overfitting"], "正则规则: 泛化.*差"),
-        ("梯度下降的学习率怎么调？", ["gradient_descent"], "正则规则: 梯度下降.*怎么"),
-        ("交叉验证怎么做？", ["cross_validation"], "正则规则: 交叉验证.*怎么"),
-        ("决策树剪枝的方法？", ["decision_tree"], "正则规则: 决策树.*剪枝"),
-        ("L1正则和L2正则的区别？", ["regularization"], "正则规则: L1正则|L2正则"),
 
-        # === 语义/Embedding 兜底测试 ===
-        ("SVM里的那个核是什么原理？", ["svm_kernel"], "需要embedding匹配到核函数"),
-        ("怎么防止模型在训练集上记住数据？", ["overfitting"], "语义匹配到"),
-        ("我想让模型在没见过数据上表现好", ["overfitting", "cross_validation"], "语义匹配泛化/验证概念"),
-
-        # === 可能误判的边界测试 ===
-        ("神经网络和SVM哪个好？", ["svm", "neural_network"], "多概念，SVM应被识别"),
-        ("Python里怎么实现核函数？", ["svm_kernel"], "可能误判为代码实现而非概念"),
-        ("什么是核技巧？kernel function的原理？", ["svm_kernel"], "中英混合，应识别"),
-        ("数据清洗怎么做？", ["data_cleaning"], "基础概念，应精确匹配"),
-        ("过拟合和欠拟合的区别？", ["overfitting"], "概念对比，应识别过拟合"),
-    ]
-
-    return test_cases
+@pytest.mark.parametrize(
+    ("question", "expected_ids", "note"),
+    QUESTION_CASES,
+    ids=[case[0] for case in QUESTION_CASES],
+)
+def test_question_mapping(question, expected_ids, note):
+    matches = map_question_to_concepts(question, top_k=3)
+    actual_ids = [m.concept_id for m in matches]
+    for expected_id in expected_ids:
+        assert expected_id in actual_ids, f"{note}: {question} -> {actual_ids}"
 
 
 def run_regression_test():
     """运行回归测试"""
-    test_cases = test_questions()
+    test_cases = QUESTION_CASES
 
     print("=" * 80)
     print("Knowledge Mapper 回归测试")

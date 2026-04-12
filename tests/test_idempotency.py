@@ -59,29 +59,20 @@ def test_record_event_idempotency():
             print("  [OK] 重复事件有相同ID，可去重")
         else:
             print("  [WARN] 重复记录产生了不同ID")
+        assert len(unique_ids) == 1
 
         # 聚合后检查
         core.aggregate_profile("stu_001")
         profile = core.get_profile("stu_001")
 
         svm_concept = profile.get_concept_focus("svm")
-        if svm_concept:
-            print(f"  SVM mention_count: {svm_concept.mention_count}")
-            print(f"  SVM evidence数量: {len(svm_concept.evidence)}")
-
-            # 关键检查：mention_count 应为 1（去重后）
-            if svm_concept.mention_count == 1:
-                print("  [PASS] mention_count 正确（去重后）")
-                return True
-            else:
-                print(f"  [FAIL] mention_count 错误: 期望 1, 实际 {svm_concept.mention_count}")
-                return False
-        else:
-            print("  [FAIL] 未找到 SVM 概念记录")
-            return False
+        assert svm_concept is not None, "未找到 SVM 概念记录"
+        print(f"  SVM mention_count: {svm_concept.mention_count}")
+        print(f"  SVM evidence数量: {len(svm_concept.evidence)}")
+        assert svm_concept.mention_count == 1
 
     finally:
-        shutil.rmtree(tmpdir)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def test_aggregate_profile_idempotency():
@@ -137,15 +128,10 @@ def test_aggregate_profile_idempotency():
         count3 = profile3.get_concept_focus("svm").mention_count if profile3.get_concept_focus("svm") else 0
         print(f"  第三次聚合后 SVM mention_count: {count3}")
 
-        if count1 == count2 == count3 == 2:  # 2个svm事件
-            print("  [PASS] 重复聚合未重复记账")
-            return True
-        else:
-            print(f"  [FAIL] 计数变化: {count1} -> {count2} -> {count3}")
-            return False
+        assert count1 == count2 == count3 == 2, f"计数变化: {count1} -> {count2} -> {count3}"
 
     finally:
-        shutil.rmtree(tmpdir)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def test_full_recalc_correctness():
@@ -186,23 +172,18 @@ def test_full_recalc_correctness():
         count2 = profile2.get_concept_focus("overfitting").mention_count
         print(f"  全量重算 mention_count: {count2}")
 
-        if count1 == count2 == 5:
-            print("  [PASS] 重复聚合结果一致")
-            return True
-        else:
-            print(f"  [FAIL] 结果不一致: {count1} vs {count2}")
-            return False
+        assert count1 == count2 == 5, f"结果不一致: {count1} vs {count2}"
 
     finally:
-        shutil.rmtree(tmpdir)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def test_daily_counter_consistency():
+def test_concept_focus_keeps_lifetime_count_and_latest_timestamp():
     """
-    测试：日计数器滑动窗口逻辑正确
+    测试：概念关注统计保留累计计数，但最近时间戳应更新为最新事件
     """
     print("\n" + "=" * 60)
-    print("测试 4: 日计数器滑动窗口一致性")
+    print("测试 4: 概念关注累计计数与最近时间戳")
     print("=" * 60)
 
     tmpdir = tempfile.mkdtemp()
@@ -245,22 +226,15 @@ def test_daily_counter_consistency():
         profile = core.get_profile("stu_004")
 
         pca_focus = profile.get_concept_focus("pca")
-        if pca_focus:
-            print(f"  PCA mention_count: {pca_focus.mention_count}")
-            print(f"  期望: 1 (旧事件被滑动窗口排除)")
-
-            if pca_focus.mention_count == 1:
-                print("  [PASS] 滑动窗口正确排除了旧事件")
-                return True
-            else:
-                print(f"  [FAIL] 计数错误")
-                return False
-        else:
-            print("  [FAIL] 未找到 PCA 记录")
-            return False
+        assert pca_focus is not None, "未找到 PCA 记录"
+        print(f"  PCA mention_count: {pca_focus.mention_count}")
+        print(f"  PCA last_mentioned_at: {pca_focus.last_mentioned_at}")
+        assert pca_focus.mention_count == 2
+        assert pca_focus.last_mentioned_at is not None
+        assert int(pca_focus.last_mentioned_at) >= int(new_event.timestamp)
 
     finally:
-        shutil.rmtree(tmpdir)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def main():
@@ -269,7 +243,7 @@ def main():
     results.append(("record_event 幂等性", test_record_event_idempotency()))
     results.append(("aggregate_profile 幂等性", test_aggregate_profile_idempotency()))
     results.append(("full_recalc 正确性", test_full_recalc_correctness()))
-    results.append(("日计数器滑动窗口", test_daily_counter_consistency()))
+    results.append(("概念关注时间戳", test_concept_focus_keeps_lifetime_count_and_latest_timestamp()))
 
     print("\n" + "=" * 60)
     print("汇总结果")

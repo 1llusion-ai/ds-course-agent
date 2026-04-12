@@ -4,7 +4,7 @@
 """
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app
+from apps.api.app.main import app
 
 client = TestClient(app)
 
@@ -15,8 +15,7 @@ class TestChatAPI:
     def setup_method(self):
         """每个测试前清理数据"""
         # 清理 sessions 和 chat history
-        from app.routers.sessions import _sessions
-        from app.state import _chat_history
+        from apps.api.app.state import _chat_history, _sessions
         _sessions.clear()
         _chat_history.clear()
 
@@ -149,7 +148,7 @@ class TestChatCascadeDelete:
 
     def test_delete_session_clears_history(self):
         """测试删除会话时级联清理聊天记录"""
-        from app.state import _chat_history
+        from apps.api.app.state import _chat_history
 
         # 创建会话并发送消息
         session_resp = client.post("/api/sessions", json={
