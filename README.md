@@ -50,6 +50,22 @@ Runtime request flow:
 3. `apps/api/app/core_bridge.py` bridges the API layer to the current `core/` agent and memory logic.
 4. `core/` uses retrieval, tools, and learning memory to answer or stream results.
 
+## Capability Model
+
+This repo intentionally uses a mixed capability architecture:
+
+- `tools` for deterministic queries or external/data-backed access
+- a small number of `skills` for user-facing teaching strategies
+- normal modules/services for internal ranking, mapping, and memory logic
+
+Current examples:
+
+- tools: textbook retrieval, KB status check, course schedule query
+- skills: `learning-path`, `personalized-explanation`
+- internal modules: weak-spot detection, concept mapping, route ranking
+
+The detailed boundary document is in `docs/capability_model.md`.
+
 ## Quick Start
 
 ### 1. Prerequisites

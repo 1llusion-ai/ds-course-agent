@@ -73,7 +73,7 @@ Recommended mapping from the current directories:
 - `core` -> `packages/rag_core`
 - `kb_builder` -> `packages/kb_pipeline`
 - `utils/config.py`, `utils/history.py`, `utils/vector_store.py` -> `packages/shared` and `packages/rag_core`
-- `skills/personalized_explanation.py` -> `packages/rag_core/skills`
+- `skills/personalized-explanation/` -> `packages/rag_core/skills`
 - `eval/*` -> keep under `eval`, but split code from generated reports
 
 ## Recommended Python Package Boundaries
@@ -244,4 +244,3 @@ If we continue from here, the best practical order is:
 2. move startup scripts into `scripts/`
 3. move `core`, `kb_builder`, and `utils` into clearer package boundaries
 4. update README commands after the move
-

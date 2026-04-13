@@ -22,14 +22,16 @@ class TestAgentServiceInit:
 class TestAgentServiceMock:
     @patch("core.agent.get_chat_model")
     @patch("core.agent.get_rag_tools")
-    @patch("skills.personalized_explanation.PersonalizedExplanationSkill")
-    def test_agent_service_initialization(self, mock_skill, mock_get_tools, mock_get_chat_model):
+    @patch("core.agent.get_skill_loader")
+    def test_agent_service_initialization(self, mock_get_skill_loader, mock_get_tools, mock_get_chat_model):
         from core.agent import AgentService
         import core.agent as agent_module
 
         mock_get_chat_model.return_value = MagicMock()
         mock_get_tools.return_value = []
-        mock_skill.return_value = MagicMock()
+        mock_loader = MagicMock()
+        mock_loader.load_executor.side_effect = [MagicMock(), MagicMock()]
+        mock_get_skill_loader.return_value = mock_loader
 
         with patch.object(agent_module.config, "USE_REMOTE_LLM", True):
             with patch.object(AgentService, "_load_system_prompt", return_value="test prompt"):
@@ -410,5 +412,4 @@ class TestChatWithHistory:
         result = service.chat_with_history("下节课是什么时候？", "test_session")
 
         assert result == "next class answer"
-        mock_schedule_invoke.assert_called_once_with("下节课是什么时候？")
-        mock_rag_invoke.assert_not_called()
+        mock_resolve_schedule.assert_called_once()

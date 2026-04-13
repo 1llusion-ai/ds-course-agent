@@ -16,13 +16,14 @@ if os.path.exists(_correct_cert_path):
 
 import time
 from typing import Optional, Iterator
-from pathlib import Path
 
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import create_agent
 
 import utils.config as config
+from core.prompt import get_system_prompt
+from core.skill_system import get_skill_loader
 from core.tools import get_rag_tools
 from core.memory_core import get_memory_core, record_event, aggregate_profile
 from core.events import (
@@ -33,7 +34,7 @@ from core.events import (
 )
 
 # 延迟导入 skills 避免循环导入
-# from skills.personalized_explanation import PersonalizedExplanationSkill
+# Skills are discovered from the `skills/` directory and loaded on demand.
 
 def get_chat_model():
     """获取聊天模型（支持本地Ollama和远程API）"""
@@ -59,14 +60,19 @@ class AgentService(object):
         self.system_prompt = self._load_system_prompt()
 
         # 延迟导入避免循环导入
-        from skills.personalized_explanation import PersonalizedExplanationSkill
-        self.explanation_skill = PersonalizedExplanationSkill()
+        self.skill_loader = get_skill_loader()
+        self.explanation_skill = self.skill_loader.load_executor("personalized-explanation")
+        self.learning_path_skill = self.skill_loader.load_executor("learning-path")
 
         # 如果使用本地Ollama，检查连接
         if not config.USE_REMOTE_LLM:
             self._check_ollama_connection()
 
         self.agent = self._create_agent()
+
+    def _load_system_prompt(self) -> str:
+        """Compatibility wrapper around the centralized prompt loader."""
+        return get_system_prompt()
 
     def _check_ollama_connection(self, max_retries: int = 3, timeout: int = 30):
         """检查 Ollama 服务是否可用，带重试机制"""
@@ -104,29 +110,12 @@ class AgentService(object):
 
         return False
 
-    def _load_system_prompt(self) -> str:
-        """加载系统提示词"""
-        prompt_path = Path(__file__).parent.parent / "docs" / "prompts" / "system_prompt.txt"
-        if prompt_path.exists():
-            return prompt_path.read_text(encoding="utf-8")
-        return self._get_default_prompt()
-
-    def _get_default_prompt(self) -> str:
-        """获取默认系统提示词"""
-        return f"""你是一位专业的《{config.COURSE_NAME}》课程助教。
-你的职责是帮助学生理解课程内容，回答与课程相关的问题。
-当学生提出与课程内容相关的问题时，请使用 course_rag_tool 检索课程资料并回答。
-如果问题与课程无关，请礼貌地告知学生你只能回答课程相关问题。
-"""
-
     def _create_agent(self):
         """创建 ReAct Agent - 使用 LangGraph"""
-        from langgraph.prebuilt import create_react_agent
-
-        agent = create_react_agent(
+        agent = create_agent(
             model=self.llm,
             tools=self.tools,
-            prompt=self.system_prompt,
+            system_prompt=self.system_prompt,
         )
         return agent
 
@@ -629,6 +618,55 @@ class AgentService(object):
         ]
         return any(cue in normalized for cue in cues)
 
+    def _is_learning_path_request(self, question: str) -> bool:
+        normalized = self._normalize_question_text(question)
+        direct_cues = [
+            "学习路线",
+            "学习路径",
+            "学习计划",
+            "复习路线",
+            "复习计划",
+            "学习顺序",
+            "复习顺序",
+            "路线图",
+        ]
+        if any(cue in normalized for cue in direct_cues):
+            return True
+
+        soft_cues = [
+            "怎么学",
+            "如何学",
+            "先学什么",
+            "后学什么",
+            "先看什么",
+            "怎么复习",
+            "如何复习",
+            "怎么安排",
+            "如何安排",
+            "怎么入门",
+        ]
+        return any(cue in normalized for cue in soft_cues)
+
+    def _should_use_learning_path_skill(
+        self,
+        question: str,
+        matched_concepts: list,
+        profile,
+        candidate_keys: Optional[set[str]] = None,
+    ) -> bool:
+        if candidate_keys is not None and "learning-path" not in candidate_keys:
+            return False
+
+        if not self._is_learning_path_request(question):
+            return False
+
+        return True
+
+    def _select_skill_candidates(self, question: str) -> set[str]:
+        loader = getattr(self, "skill_loader", None) or get_skill_loader()
+        matches = loader.select_candidates(question)
+        return {item.skill.key for item in matches}
+
     def _is_judgement_question(self, question: str) -> bool:
         normalized = self._normalize_question_text(question)
         cues = ["是否", "要不要", "需不需要", "还需要", "还能不能", "可不可以", "有没有必要"]
@@ -679,7 +717,16 @@ class AgentService(object):
 
         return None
 
-    def _should_use_explanation_skill(self, question: str, matched_concepts: list, profile) -> bool:
+    def _should_use_explanation_skill(
+        self,
+        question: str,
+        matched_concepts: list,
+        profile,
+        candidate_keys: Optional[set[str]] = None,
+    ) -> bool:
+        if candidate_keys is not None and "personalized-explanation" not in candidate_keys:
+            return False
+
         if not matched_concepts:
             return self._is_personalization_request(question) and self._has_personalization_context(profile)
 
@@ -841,6 +888,7 @@ class AgentService(object):
 
         profile = get_memory_core().get_profile(student_id)
         special_case_response = self._handle_special_case(user_input)
+        skill_candidate_keys = self._select_skill_candidates(user_input)
 
         # ===== 记忆系统集成：知识点映射 =====
         matched_concepts = [] if special_case_response else map_question_to_concepts(user_input, top_k=3)
@@ -864,10 +912,12 @@ class AgentService(object):
                 from core.tools import course_schedule_tool, _track_retrieval
                 result = course_schedule_tool.invoke(self._build_schedule_tool_query(user_input))
                 _track_retrieval(sources=[], used=True)
-            elif self._should_use_explanation_skill(user_input, matched_concepts, profile):
+            elif getattr(self, "learning_path_skill", None) and self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
+                result = self.learning_path_skill(user_input, student_id, session_id)
+            elif self._should_use_explanation_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
                 if matched_concepts:
                     print(f"[Agent] 识别知识点: {matched_concepts[0].concept_id} ({matched_concepts[0].method})")
-                result = self.explanation_skill.execute(user_input, student_id, session_id)
+                result = self.explanation_skill(user_input, student_id, session_id)
             else:
                 # 使用普通 Agent 流程
                 result = self.chat(user_input, chat_history, stream=False)
@@ -887,7 +937,11 @@ class AgentService(object):
         forced_result = self._maybe_force_grounded_answer(
             user_input,
             chat_history=chat_history,
-            skip=bool(special_case_response) or self._is_schedule_request(user_input),
+            skip=(
+                bool(special_case_response)
+                or self._is_schedule_request(user_input)
+                or self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys)
+            ),
         )
         if forced_result and forced_result.strip():
             result = forced_result
@@ -937,6 +991,7 @@ class AgentService(object):
 
         profile = get_memory_core().get_profile(student_id)
         special_case_response = self._handle_special_case(user_input)
+        skill_candidate_keys = self._select_skill_candidates(user_input)
 
         matched_concepts = [] if special_case_response else map_question_to_concepts(user_input, top_k=3)
         self._record_learning_events(
@@ -970,13 +1025,18 @@ class AgentService(object):
                     for chunk in self._yield_text_chunks(final_result):
                         stream_started = True
                         yield {"type": "delta", "delta": chunk}
-            elif self._should_use_explanation_skill(user_input, matched_concepts, profile):
+            elif getattr(self, "learning_path_skill", None) and self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
+                final_result = self.learning_path_skill(user_input, student_id, session_id)
+                for chunk in self._yield_text_chunks(final_result):
+                    stream_started = True
+                    yield {"type": "delta", "delta": chunk}
+            elif self._should_use_explanation_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
                 if matched_concepts:
                     print(
                         f"[Agent] explanation skill for {matched_concepts[0].concept_id} "
                         f"({matched_concepts[0].method})"
                     )
-                final_result = self.explanation_skill.execute(user_input, student_id, session_id)
+                final_result = self.explanation_skill(user_input, student_id, session_id)
                 for chunk in self._yield_text_chunks(final_result):
                     stream_started = True
                     yield {"type": "delta", "delta": chunk}
@@ -1016,7 +1076,11 @@ class AgentService(object):
         forced_result = self._maybe_force_grounded_answer(
             user_input,
             chat_history=chat_history,
-            skip=bool(special_case_response) or self._is_schedule_request(user_input),
+            skip=(
+                bool(special_case_response)
+                or self._is_schedule_request(user_input)
+                or self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys)
+            ),
         )
         if forced_result and forced_result.strip():
             final_result = forced_result
