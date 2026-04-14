@@ -5,7 +5,7 @@
     <div class="chat-main">
       <header class="chat-header">
         <div class="header-content">
-          <div class="logo">DS</div>
+          <img src="/icon/thought_logo.png" alt="logo" class="logo" />
           <div>
             <h1>数据科学导论教学Agent</h1>
             <p>数据科学导论</p>
@@ -17,7 +17,7 @@
         <div ref="messagesContainer" class="messages-area">
           <div v-if="chatStore.messages.length === 0" class="empty-state">
             <div class="empty-content">
-              <div class="robot-icon">AI</div>
+              <img src="/avatar/Assistant.png" alt="AI助手" class="robot-icon" />
               <h2>开始一段新的学习对话</h2>
               <p>
                 可以直接提问课程概念、公式推导、案例理解，
@@ -236,13 +236,7 @@ onMounted(async () => {
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(135deg, #1d4ed8 0%, #f97316 100%);
+  object-fit: contain;
   box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24);
 }
 
@@ -301,13 +295,7 @@ onMounted(async () => {
   height: 68px;
   margin: 0 auto 16px;
   border-radius: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(135deg, #0f766e 0%, #f59e0b 100%);
+  object-fit: cover;
 }
 
 .empty-content h2 {

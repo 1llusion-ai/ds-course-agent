@@ -98,3 +98,42 @@ class TestAgentGroundedFallback:
         assert result == "next class answer"
         mock_resolve_schedule.assert_called_once()
         assert mock_resolve_schedule.call_args[0][0] == "\u4e0b\u8282\u8bfe\u662f\u4ec0\u4e48\u65f6\u5019\uff1f"
+
+    @patch("utils.history.get_history")
+    @patch("core.knowledge_mapper.map_question_to_concepts", return_value=[])
+    @patch("core.agent.get_memory_core")
+    @patch("core.tools.current_datetime_tool")
+    def test_datetime_question_falls_back_to_datetime_tool(
+        self,
+        mock_datetime_tool,
+        mock_get_memory_core,
+        _mock_map,
+        mock_get_history,
+    ):
+        from core.agent import AgentService
+
+        question = "\u4eca\u5929\u661f\u671f\u51e0\uff1f"
+
+        mock_history = MagicMock()
+        mock_history.messages = []
+        mock_get_history.return_value = mock_history
+
+        mock_memory = MagicMock()
+        mock_memory.get_profile.return_value = SimpleNamespace(
+            progress=SimpleNamespace(current_chapter=None),
+        )
+        mock_get_memory_core.return_value = mock_memory
+
+        mock_datetime_tool.invoke.return_value = "当前时间：2026-04-14 10:00:00（星期二，UTC+08:00）"
+
+        service = AgentService.__new__(AgentService)
+        service.llm = MagicMock()
+        service.tools = []
+        service.agent = MagicMock()
+        service.explanation_skill = MagicMock()
+        service.chat = MagicMock(return_value="let me think")
+
+        result = service.chat_with_history(question, "test_session")
+
+        assert result == "当前时间：2026-04-14 10:00:00（星期二，UTC+08:00）"
+        mock_datetime_tool.invoke.assert_called_once_with(question)

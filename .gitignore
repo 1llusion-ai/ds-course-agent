@@ -58,3 +58,6 @@ data/*.ppt
 # OS files
 .DS_Store
 Thumbs.db
+
+#gsd
+.planning/

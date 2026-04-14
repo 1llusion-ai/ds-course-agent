@@ -17,7 +17,7 @@ BACKEND_DIR = PROJECT_ROOT / "backend"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the RAG System FastAPI backend.")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8083)
+    parser.add_argument("--port", type=int, default=8084)
     parser.add_argument("--reload", action="store_true")
     return parser
 

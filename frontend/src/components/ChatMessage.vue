@@ -1,7 +1,8 @@
 <template>
   <div class="message-wrapper" :class="{ 'user-message': message.role === 'user' }">
     <div class="avatar" :class="message.role === 'user' ? 'user-avatar' : 'ai-avatar'">
-      {{ message.role === 'user' ? '我' : 'AI' }}
+      <img v-if="message.role === 'user'" src="/avatar/Student.png" alt="学生" class="avatar-img" />
+      <img v-else src="/avatar/Assistant.png" alt="AI助手" class="avatar-img" />
     </div>
 
     <div class="message-bubble" :class="message.role === 'user' ? 'user-bubble' : 'ai-bubble'">
@@ -125,8 +126,14 @@ const renderedSources = computed(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  overflow: hidden;
+}
+
+.avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .user-avatar {

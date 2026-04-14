@@ -751,8 +751,9 @@ class AgentService(object):
             "课表", "课程安排", "上课时间", "什么时候上课",
             "几点上课", "上课地点", "在哪上课", "教室",
             "第几周", "周几上课", "第几节",
-            "这周有什么课", "本周有什么课", "今天有课吗",
-            "明天有课吗", "下周有什么课",
+            "这周有什么课", "本周有什么课", "今天有课吗", "今天有没有课",
+            "明天有课吗", "明天有没有课", "后天有课吗", "后天有没有课",
+            "今天上课吗", "明天上课吗", "后天上课吗", "下周有什么课",
             "下次课", "下一次课", "下节课", "下下节课",
         ]
         if any(cue in normalized for cue in exact_cues):
@@ -767,10 +768,37 @@ class AgentService(object):
         if re.search(r'第[一二三四五六七八九十百0-9]+[节周]', normalized):
             return True
 
+        if re.search(r"(今天|明天|后天).*(有课|上课|课程安排|几节课)", normalized):
+            return True
+
         if re.search(r"下.*课.*时间|下次.*上课|什么时候.*上课", question):
             return True
 
         return False
+
+    def _is_datetime_request(self, question: str) -> bool:
+        normalized = self._normalize_question_text(question)
+        if self._is_schedule_request(question):
+            return False
+
+        exact_cues = [
+            "现在几点",
+            "当前时间",
+            "现在时间",
+            "现在几号",
+            "今天几号",
+            "今天几月几日",
+            "今天星期几",
+            "今天周几",
+            "今天礼拜几",
+            "几号了",
+            "星期几",
+            "周几",
+            "礼拜几",
+            "日期",
+            "几月几日",
+        ]
+        return any(cue in normalized for cue in exact_cues)
 
     def _build_grounded_tool_query(
         self,
@@ -808,22 +836,39 @@ class AgentService(object):
         if skip:
             return None
 
-        from core.tools import course_rag_tool, course_schedule_tool, get_retrieval_trace, _track_retrieval
+        from core.query_trace import trace_step, trace_error
+        from core.tools import (
+            course_rag_tool,
+            course_schedule_tool,
+            current_datetime_tool,
+            get_retrieval_trace,
+            _track_retrieval,
+        )
 
         try:
             if self._is_schedule_request(question):
+                trace_step("agent.force_grounded", branch="schedule")
                 result = course_schedule_tool.invoke(self._build_schedule_tool_query(question))
                 # Mark as retrieval to prevent re-entry
                 _track_retrieval(sources=[], used=True)
                 return result
 
+            if self._is_datetime_request(question):
+                trace_step("agent.force_grounded", branch="datetime")
+                result = current_datetime_tool.invoke(question)
+                _track_retrieval(sources=[], used=True)
+                return result
+
             trace = get_retrieval_trace()
             if trace.used_retrieval:
+                trace_step("agent.force_grounded", branch="skip_already_retrieved")
                 return None
 
+            trace_step("agent.force_grounded", branch="rag")
             grounded_query = self._build_grounded_tool_query(question, chat_history)
             return course_rag_tool.invoke(grounded_query)
-        except Exception:
+        except Exception as e:
+            trace_error("agent.force_grounded", e)
             return None
 
     def _postprocess_generic_answer(
@@ -901,25 +946,38 @@ class AgentService(object):
         )
 
         # ===== 生成回答 =====
+        from core.query_trace import trace_step, trace_error
+
         result = None
         error_info = None
 
         try:
             if special_case_response:
+                trace_step("agent.branch", branch="special_case")
                 result = special_case_response
             elif self._is_schedule_request(user_input):
                 # 课程时间安排相关问题，直接调用 schedule tool
+                trace_step("agent.branch", branch="schedule")
                 from core.tools import course_schedule_tool, _track_retrieval
                 result = course_schedule_tool.invoke(self._build_schedule_tool_query(user_input))
                 _track_retrieval(sources=[], used=True)
+            elif self._is_datetime_request(user_input):
+                # 时间日期相关问题，直接调用 datetime tool
+                trace_step("agent.branch", branch="datetime")
+                from core.tools import current_datetime_tool, _track_retrieval
+                result = current_datetime_tool.invoke(user_input)
+                _track_retrieval(sources=[], used=True)
             elif getattr(self, "learning_path_skill", None) and self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
+                trace_step("agent.branch", branch="learning_path_skill")
                 result = self.learning_path_skill(user_input, student_id, session_id)
             elif self._should_use_explanation_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
+                trace_step("agent.branch", branch="explanation_skill")
                 if matched_concepts:
                     print(f"[Agent] 识别知识点: {matched_concepts[0].concept_id} ({matched_concepts[0].method})")
                 result = self.explanation_skill(user_input, student_id, session_id)
             else:
                 # 使用普通 Agent 流程
+                trace_step("agent.branch", branch="generic_agent")
                 result = self.chat(user_input, chat_history, stream=False)
                 # 如果是 generator，转换为字符串
                 if hasattr(result, '__iter__') and not isinstance(result, str):
@@ -932,6 +990,7 @@ class AgentService(object):
 
         except Exception as e:
             error_info = f"生成回答时出错: {str(e)}"
+            trace_error("agent.generate", e)
             print(f"[Agent Error] {error_info}")
 
         forced_result = self._maybe_force_grounded_answer(
@@ -940,6 +999,7 @@ class AgentService(object):
             skip=(
                 bool(special_case_response)
                 or self._is_schedule_request(user_input)
+                or self._is_datetime_request(user_input)
                 or self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys)
             ),
         )
@@ -1002,16 +1062,20 @@ class AgentService(object):
             special_case_response=special_case_response,
         )
 
+        from core.query_trace import trace_step, trace_error
+
         final_result = ""
         stream_started = False
 
         try:
             if special_case_response:
+                trace_step("agent.branch", branch="special_case")
                 final_result = special_case_response
                 for chunk in self._yield_text_chunks(final_result):
                     stream_started = True
                     yield {"type": "delta", "delta": chunk}
             elif self._is_schedule_request(user_input):
+                trace_step("agent.branch", branch="schedule")
                 # 课程时间安排相关问题，直接调用 schedule tool
                 from core.tools import course_schedule_tool, _track_retrieval
                 try:
@@ -1021,16 +1085,35 @@ class AgentService(object):
                         stream_started = True
                         yield {"type": "delta", "delta": chunk}
                 except Exception as e:
+                    trace_error("agent.schedule_tool", e)
                     final_result = f"查询课程安排时出错：{str(e)}"
                     for chunk in self._yield_text_chunks(final_result):
                         stream_started = True
                         yield {"type": "delta", "delta": chunk}
+            elif self._is_datetime_request(user_input):
+                trace_step("agent.branch", branch="datetime")
+                # 时间日期相关问题，直接调用 datetime tool
+                from core.tools import current_datetime_tool, _track_retrieval
+                try:
+                    final_result = current_datetime_tool.invoke(user_input)
+                    _track_retrieval(sources=[], used=True)
+                    for chunk in self._yield_text_chunks(final_result):
+                        stream_started = True
+                        yield {"type": "delta", "delta": chunk}
+                except Exception as e:
+                    trace_error("agent.datetime_tool", e)
+                    final_result = f"查询当前时间时出错：{str(e)}"
+                    for chunk in self._yield_text_chunks(final_result):
+                        stream_started = True
+                        yield {"type": "delta", "delta": chunk}
             elif getattr(self, "learning_path_skill", None) and self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
+                trace_step("agent.branch", branch="learning_path_skill")
                 final_result = self.learning_path_skill(user_input, student_id, session_id)
                 for chunk in self._yield_text_chunks(final_result):
                     stream_started = True
                     yield {"type": "delta", "delta": chunk}
             elif self._should_use_explanation_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
+                trace_step("agent.branch", branch="explanation_skill")
                 if matched_concepts:
                     print(
                         f"[Agent] explanation skill for {matched_concepts[0].concept_id} "
@@ -1041,6 +1124,7 @@ class AgentService(object):
                     stream_started = True
                     yield {"type": "delta", "delta": chunk}
             else:
+                trace_step("agent.branch", branch="generic_agent")
                 streamed_parts = []
                 for chunk in self.chat(user_input, chat_history, stream=True):
                     if not chunk:
@@ -1070,6 +1154,7 @@ class AgentService(object):
                         stream_started = True
                         yield {"type": "delta", "delta": chunk}
         except Exception as e:
+            trace_error("agent.stream_generate", e)
             print(f"[Agent Error] stream_chat_with_history failed: {e}")
             final_result = ""
 
@@ -1079,6 +1164,7 @@ class AgentService(object):
             skip=(
                 bool(special_case_response)
                 or self._is_schedule_request(user_input)
+                or self._is_datetime_request(user_input)
                 or self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys)
             ),
         )

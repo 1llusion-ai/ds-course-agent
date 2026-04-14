@@ -53,6 +53,8 @@ def _get_chapter_start_pages() -> dict[str, int]:
 _CHAPTER_START_PAGES: dict[str, int] = {}
 _SCHEDULE_CACHE: Optional[dict] = None
 _rag_service: Optional[RAGService] = None
+_SCHEDULE_DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y年%m月%d日")
+_WEEKDAY_CN = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
 
 
 @dataclass
@@ -203,6 +205,8 @@ def build_sources_from_documents(documents) -> list[dict]:
 @tool
 def course_rag_tool(question: str) -> str:
     """课程资料检索与问答工具。用于基于教材内容回答课程相关问题。"""
+    from core.query_trace import trace_step, trace_error
+    trace_step("tool.invoke", tool="course_rag_tool", question=question)
     try:
         service = get_rag_service()
         result = service.retrieve(question)
@@ -210,6 +214,7 @@ def course_rag_tool(question: str) -> str:
         _track_retrieval(sources, used=True)
 
         if not result.has_results:
+            trace_step("tool.result", tool="course_rag_tool", status="no_results")
             return (
                 f"抱歉，在《{config.COURSE_NAME}》课程资料中未找到与你问题直接相关的内容。\n"
                 "建议你：\n"
@@ -219,8 +224,10 @@ def course_rag_tool(question: str) -> str:
             )
 
         answer_result = service.answer_with_context(question, result.formatted_context)
+        trace_step("tool.result", tool="course_rag_tool", status="ok")
         return answer_result.answer
     except Exception as exc:
+        trace_error("tool.invoke", exc, tool="course_rag_tool")
         return f"检索过程中发生错误：{exc}。请稍后重试。"
 
 
@@ -254,8 +261,33 @@ def _load_course_schedule() -> dict:
     return _SCHEDULE_CACHE or {}
 
 
+def _parse_schedule_date(value: str) -> Optional[datetime]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+
+    for date_format in _SCHEDULE_DATE_FORMATS:
+        try:
+            return datetime.strptime(text, date_format)
+        except ValueError:
+            continue
+    return None
+
+
+def _format_weekday_cn(value: datetime) -> str:
+    return _WEEKDAY_CN[value.weekday()]
+
+
+def _format_cn_date_with_weekday(value: datetime) -> str:
+    return f"{value.strftime('%Y年%m月%d日')}（{_format_weekday_cn(value)}）"
+
+
 def _get_week_start(semester_start: str, week: int) -> datetime:
-    start = datetime.strptime(semester_start, "%Y-%m-%d")
+    start = _parse_schedule_date(semester_start)
+    if start is None:
+        raise ValueError(
+            "semester_start 日期格式无效，支持 YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD / YYYY年MM月DD日"
+        )
     return start + timedelta(days=7 * (week - 1))
 
 
@@ -380,6 +412,53 @@ def _schedule_build_week_classes_v2(semester_start: str, weekly_schedule: list[d
     return classes
 
 
+def _schedule_build_all_classes_v2(
+    semester_start: str,
+    weekly_schedule: list[dict],
+    total_weeks: int,
+) -> list[dict]:
+    classes: list[dict] = []
+    for week in range(1, total_weeks + 1):
+        classes.extend(_schedule_build_week_classes_v2(semester_start, weekly_schedule, week))
+    classes.sort(key=lambda item: item["datetime"])
+    return classes
+
+
+def _schedule_query_day_offset_v2(normalized_query: str) -> Optional[int]:
+    if "今天" in normalized_query:
+        return 0
+    if "明天" in normalized_query:
+        return 1
+    if "后天" in normalized_query:
+        return 2
+    return None
+
+
+def _schedule_is_day_query_v2(normalized_query: str) -> bool:
+    offset = _schedule_query_day_offset_v2(normalized_query)
+    if offset is None:
+        return False
+
+    day_intent_cues = [
+        "有课",
+        "有没有课",
+        "是否有课",
+        "上课",
+        "课程安排",
+        "几节课",
+        "课吗",
+        "课嘛",
+    ]
+    return any(cue in normalized_query for cue in day_intent_cues)
+
+
+def _format_next_class_v2(class_info: dict) -> str:
+    return (
+        f"下节课是第{class_info['week']}周 {class_info['day']}（{class_info['date']}）"
+        f"{class_info['period']}，教室：{class_info['room']}。"
+    )
+
+
 def _resolve_schedule_query_v2(query: str, schedule: dict, now: Optional[datetime] = None) -> str:
     if not schedule:
         return "抱歉，课程安排信息暂未配置。"
@@ -392,14 +471,23 @@ def _resolve_schedule_query_v2(query: str, schedule: dict, now: Optional[datetim
         return "课程安排数据不完整，请联系助教补充。"
 
     today = now or datetime.now()
-    start_date = datetime.strptime(semester_start, "%Y-%m-%d")
+    start_date = _parse_schedule_date(semester_start)
+    if start_date is None:
+        return (
+            "课程安排中的 semester_start 日期格式不正确。"
+            "请使用 YYYY-MM-DD（也支持 YYYY/MM/DD、YYYY.MM.DD、YYYY年MM月DD日）。"
+        )
+
+    semester_start_display = start_date.strftime("%Y-%m-%d")
     current_week = max(1, (today.date() - start_date.date()).days // 7 + 1)
     current_week = min(current_week, total_weeks) if total_weeks > 0 else current_week
+    all_classes = _schedule_build_all_classes_v2(semester_start, weekly_schedule, total_weeks)
+    upcoming = [item for item in all_classes if item["datetime"] >= today]
 
     q = re.sub(r"\s+", "", query.lower())
 
     if any(keyword in q for keyword in ["上几周", "多少周", "总周数", "到第几周"]):
-        return f"《{config.COURSE_NAME}》本学期共 {total_weeks} 周，从 {semester_start} 开始。"
+        return f"《{config.COURSE_NAME}》本学期共 {total_weeks} 周，从 {semester_start_display} 开始。"
 
     for week in range(1, total_weeks + 1):
         if f"第{week}周" not in q:
@@ -429,24 +517,52 @@ def _resolve_schedule_query_v2(query: str, schedule: dict, now: Optional[datetim
         "教室",
         "课程安排",
         "课表",
+        "今天有课吗",
+        "今天有没有课",
+        "明天有课吗",
+        "明天有没有课",
+        "后天有课吗",
+        "后天有没有课",
     ]
     if any(keyword in q for keyword in schedule_keywords):
-        upcoming: list[dict] = []
-        for week in range(current_week, total_weeks + 1):
-            future_classes = [
-                item
-                for item in _schedule_build_week_classes_v2(semester_start, weekly_schedule, week)
-                if item["datetime"] >= today
+        if _schedule_is_day_query_v2(q):
+            day_offset = _schedule_query_day_offset_v2(q) or 0
+            day_label = ("今天", "明天", "后天")[day_offset] if day_offset <= 2 else "当天"
+            target_day = (today + timedelta(days=day_offset)).replace(
+                hour=0,
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
+            target_classes = [
+                item for item in all_classes if item["datetime"].date() == target_day.date()
             ]
-            if future_classes:
-                upcoming = future_classes
-                break
+
+            lines = [f"{day_label}是{_format_cn_date_with_weekday(target_day)}。"]
+            if target_classes:
+                lines.append(f"{day_label}有 {len(target_classes)} 节课：")
+                for class_info in target_classes:
+                    lines.append(
+                        f"- 第{class_info['week']}周 {class_info['day']}（{class_info['date']}）"
+                        f"{class_info['period']}，教室：{class_info['room']}"
+                    )
+                return "\n".join(lines)
+
+            lines.append(f"{day_label}没有课程安排。")
+            next_after_target = next(
+                (item for item in all_classes if item["datetime"] >= target_day),
+                None,
+            )
+            if next_after_target:
+                lines.append(_format_next_class_v2(next_after_target))
+            elif upcoming:
+                lines.append(_format_next_class_v2(upcoming[0]))
+            return "\n".join(lines)
 
         if not upcoming:
             return f"本学期课程已结束（共 {total_weeks} 周）。"
 
-        next_class = upcoming[0]
-        if any(keyword in q for keyword in ["这周", "本周", "今天", "明天", "后天"]):
+        if any(keyword in q for keyword in ["这周", "本周"]):
             this_week_classes = _schedule_build_week_classes_v2(semester_start, weekly_schedule, current_week)
             if not this_week_classes:
                 return f"本周（第{current_week}周）没有课程安排。"
@@ -458,10 +574,7 @@ def _resolve_schedule_query_v2(query: str, schedule: dict, now: Optional[datetim
                 )
             return "\n".join(lines)
 
-        return (
-            f"下节课是第{next_class['week']}周 {next_class['day']}（{next_class['date']}）"
-            f"{next_class['period']}，教室：{next_class['room']}。"
-        )
+        return _format_next_class_v2(upcoming[0])
 
     lines = [f"《{config.COURSE_NAME}》课程安排（共 {total_weeks} 周）："]
     for item in weekly_schedule:
@@ -479,15 +592,40 @@ def _resolve_schedule_query(query: str, schedule: dict) -> str:
 @tool
 def course_schedule_tool(query: str) -> str:
     """课程时间查询工具。用于回答上课时间、教室、周次安排等问题。"""
+    from core.query_trace import trace_step, trace_error
+    trace_step("tool.invoke", tool="course_schedule_tool", query=query)
     try:
         schedule = _load_course_schedule()
-        return _resolve_schedule_query_v2(query, schedule)
+        result = _resolve_schedule_query_v2(query, schedule)
+        trace_step("tool.result", tool="course_schedule_tool", result_preview=result[:40])
+        return result
     except Exception as exc:
+        trace_error("tool.invoke", exc, tool="course_schedule_tool")
         return f"查询课程安排时出错：{exc}。请稍后重试。"
 
 
+@tool
+def current_datetime_tool(query: str = "") -> str:
+    """当前日期时间查询工具。用于回答今天几号、星期几、现在几点。"""
+    from core.query_trace import trace_step
+    trace_step("tool.invoke", tool="current_datetime_tool")
+    now = datetime.now().astimezone()
+    offset = now.strftime("%z")
+    if offset:
+        offset_display = f"UTC{offset[:3]}:{offset[3:]}"
+    else:
+        offset_display = "本地时区"
+
+    result = (
+        f"当前时间：{now.strftime('%Y-%m-%d %H:%M:%S')}（{_format_weekday_cn(now)}，{offset_display}）\n"
+        f"今天是 {now.strftime('%Y年%m月%d日')}。"
+    )
+    trace_step("tool.result", tool="current_datetime_tool")
+    return result
+
+
 def get_rag_tools():
-    return [course_rag_tool, check_knowledge_base_status, course_schedule_tool]
+    return [course_rag_tool, check_knowledge_base_status, course_schedule_tool, current_datetime_tool]
 
 
 if __name__ == "__main__":

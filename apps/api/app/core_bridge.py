@@ -77,7 +77,9 @@ def get_agent_service():
 
 def chat_with_history(message: str, session_id: str, student_id: str) -> dict:
     from core.tools import begin_retrieval_trace, end_retrieval_trace
+    from core.query_trace import begin_query_trace, end_query_trace, trace_error
 
+    q_token = begin_query_trace(meta={"session_id": session_id, "student_id": student_id})
     token = begin_retrieval_trace()
 
     try:
@@ -90,20 +92,27 @@ def chat_with_history(message: str, session_id: str, student_id: str) -> dict:
     except Exception as e:
         print(f"[Agent Error] {e}")
         traceback.print_exc()
+        trace_error("core_bridge.chat", e)
         content = f"关于「{message}」的问题，我需要查阅课程资料后才能回答。\n\n（Agent调用出错：{str(e)[:100]}）"
     finally:
         trace = end_retrieval_trace(token)
+
+    q_trace = end_query_trace(q_token, status="error" if not content or "调用出错" in content else "ok")
+    print(f"[QueryTrace] {q_trace}")
 
     return {
         "content": content,
         "used_retrieval": trace.used_retrieval,
         "sources": trace.sources,
+        "query_trace": q_trace,
     }
 
 
 def stream_chat_with_history(message: str, session_id: str, student_id: str):
     from core.tools import begin_retrieval_trace, end_retrieval_trace
+    from core.query_trace import begin_query_trace, end_query_trace, trace_error
 
+    q_token = begin_query_trace(meta={"session_id": session_id, "student_id": student_id})
     token = begin_retrieval_trace()
     final_content = ""
 
@@ -122,6 +131,7 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str):
     except Exception as e:
         print(f"[Agent Stream Error] {e}")
         traceback.print_exc()
+        trace_error("core_bridge.stream", e)
         final_content = (
             f"关于“{message}”的问题，我需要查阅课程资料后才能回答。\n\n"
             f"（流式调用出错：{str(e)[:100]}）"
@@ -129,9 +139,13 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str):
     finally:
         trace = end_retrieval_trace(token)
 
+    q_trace = end_query_trace(q_token, status="error" if not final_content or "调用出错" in final_content else "ok")
+    print(f"[QueryTrace] {q_trace}")
+
     yield {
         "type": "final",
         "content": final_content,
         "used_retrieval": trace.used_retrieval,
         "sources": trace.sources,
+        "query_trace": q_trace,
     }

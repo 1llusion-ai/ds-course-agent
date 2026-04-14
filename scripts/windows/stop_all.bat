@@ -14,6 +14,7 @@ echo ============================================
 echo.
 
 echo Stopping backend (port %BACKEND_PORT%)...
+powershell -Command "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -match 'scripts\\run_api.py' -and $_.CommandLine -match '--port %BACKEND_PORT%' } | ForEach-Object { Stop-Process -Force -Id $_.ProcessId -ErrorAction SilentlyContinue }"
 powershell -Command "Get-NetTCPConnection -LocalPort %BACKEND_PORT% -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Force -Id $_ -ErrorAction SilentlyContinue }"
 
 echo Stopping frontend (port %FRONTEND_PORT%)...
