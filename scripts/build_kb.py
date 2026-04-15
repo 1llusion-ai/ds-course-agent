@@ -238,6 +238,18 @@ def build_knowledge_base(
     print(f"  影子分块: {chunk_result.shadow_chunks}")
     print(f"质量评分: {quality_metrics['overall_score']:.1f}/100")
 
+    # 预计算知识点映射 embedding
+    try:
+        from core.knowledge_mapper import precompute_knowledge_graph_embeddings
+        graph_path = Path(PROJECT_ROOT) / "data" / "knowledge_graph.json"
+        cache_path = Path(PROJECT_ROOT) / "data" / "knowledge_graph_embeddings.json"
+        precompute_knowledge_graph_embeddings(
+            graph_path=str(graph_path),
+            embedding_cache_path=str(cache_path),
+        )
+    except Exception as e:
+        print(f"[Build] 知识点 embedding 预计算失败: {e}")
+
     return report
 
 

@@ -22,10 +22,11 @@ def test_core_bridge_chat_includes_query_trace(monkeypatch):
     result = core_bridge.chat_with_history("hello", "sess_1", "stu_1")
 
     assert result["content"] == "assistant reply"
-    assert "trace" in result
-    assert result["trace"]["meta"]["entrypoint"] == "chat_with_history"
-    assert result["trace"]["status"] in {"ok", "error"}
-    assert any(item["stage"] == "bridge.chat_with_history.service_ready" for item in result["trace"]["events"])
+    assert "query_trace" in result
+    assert result["query_trace"]["meta"]["session_id"] == "sess_1"
+    assert result["query_trace"]["status"] in {"ok", "error"}
+    assert any(item["stage"] == "trace.start" for item in result["query_trace"]["events"])
+    assert any(item["stage"] == "trace.end" for item in result["query_trace"]["events"])
 
 
 def test_core_bridge_chat_trace_records_errors(monkeypatch):
@@ -38,9 +39,9 @@ def test_core_bridge_chat_trace_records_errors(monkeypatch):
     result = core_bridge.chat_with_history("hello", "sess_1", "stu_1")
 
     assert "Agent调用出错" in result["content"]
-    trace = result["trace"]
+    trace = result["query_trace"]
     assert trace["errors"]
-    assert trace["errors"][0]["stage"] == "bridge.chat_with_history.failed"
+    assert trace["errors"][0]["stage"] == "core_bridge.chat"
     assert trace["errors"][0]["type"] == "ValueError"
 
 
@@ -52,6 +53,5 @@ def test_core_bridge_stream_final_includes_query_trace(monkeypatch):
     assert events[0]["type"] == "delta"
     assert events[-1]["type"] == "final"
     assert events[-1]["content"] == "AB"
-    assert "trace" in events[-1]
-    assert events[-1]["trace"]["meta"]["entrypoint"] == "stream_chat_with_history"
-
+    assert "query_trace" in events[-1]
+    assert events[-1]["query_trace"]["meta"]["session_id"] == "sess_1"

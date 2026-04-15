@@ -61,3 +61,6 @@ Thumbs.db
 
 #gsd
 .planning/
+
+# Technical documentation (local only)
+docs/technical_documentation.md

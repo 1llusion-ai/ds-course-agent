@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal EnableExtensions
 
 set "BACKEND_PORT=%RAG_API_PORT%"
-if "%BACKEND_PORT%"=="" set "BACKEND_PORT=8083"
+if "%BACKEND_PORT%"=="" set "BACKEND_PORT=8084"
 
 set "FRONTEND_PORT=%RAG_WEB_PORT%"
 if "%FRONTEND_PORT%"=="" set "FRONTEND_PORT=5185"

@@ -85,9 +85,25 @@ class KnowledgeGraph:
         return rules
 
     def _precompute_embeddings(self):
-        """预计算知识图谱中所有概念的 embedding"""
+        """预计算/加载知识图谱中所有概念的 embedding"""
+        # 优先尝试加载离线缓存
+        cache_path = Path(__file__).parent.parent / "data" / "knowledge_graph_embeddings.json"
+        env_cache = __import__("os").environ.get("KNOWLEDGE_MAPPER_EMBEDDING_CACHE")
+        if env_cache:
+            cache_path = Path(env_cache)
+
+        if cache_path.exists():
+            try:
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    cache_data = json.load(f)
+                for cid, vec in cache_data.items():
+                    self.embeddings[cid] = np.array(vec)
+                print(f"[KnowledgeGraph] Loaded {len(self.embeddings)} embeddings from cache ({cache_path})")
+                return
+            except Exception as e:
+                print(f"[KnowledgeGraph] Cache load failed: {e}, falling back to online embedding")
+
         try:
-            # 尝试使用本地 embedding 模型
             from utils.config import MODEL_EMBEDDING, API_KEY, BASE_URL
             from langchain_openai import OpenAIEmbeddings
 
@@ -99,9 +115,7 @@ class KnowledgeGraph:
                 check_embedding_ctx_length=False,
             )
 
-            # 为每个概念的 display_name + aliases 生成 embedding
             for cid, concept in self.concepts.items():
-                # 组合文本：display_name + 主要别名
                 text = concept["display_name"] + " " + " ".join(concept["aliases"][:3])
                 try:
                     embedding = embedding_model.embed_query(text)
@@ -121,6 +135,68 @@ class KnowledgeGraph:
     def get_embedding(self, concept_id: str) -> Optional[np.ndarray]:
         """获取概念预计算embedding"""
         return self.embeddings.get(concept_id)
+
+
+def precompute_knowledge_graph_embeddings(
+    graph_path: str,
+    embedding_cache_path: str,
+    force: bool = False,
+) -> int:
+    """离线预计算知识图谱 embedding 并写入缓存文件。
+
+    Args:
+        graph_path: 知识图谱 JSON 路径
+        embedding_cache_path: 输出缓存路径
+        force: 是否强制重建（即使已有缓存）
+
+    Returns:
+        成功缓存的 embedding 数量
+    """
+    import os
+
+    out_path = Path(embedding_cache_path)
+    if not force and out_path.exists():
+        try:
+            with open(out_path, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+            print(f"[Precompute] Cache already exists with {len(existing)} entries. Use --force to rebuild.")
+            return len(existing)
+        except Exception:
+            pass
+
+    with open(graph_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    concepts = {c["canonical_id"]: c for c in data["concepts"]}
+
+    from utils.config import MODEL_EMBEDDING, API_KEY, BASE_URL
+    from langchain_openai import OpenAIEmbeddings
+
+    embedding_model = OpenAIEmbeddings(
+        model=MODEL_EMBEDDING,
+        api_key=API_KEY,
+        base_url=BASE_URL,
+        tiktoken_enabled=False,
+        check_embedding_ctx_length=False,
+    )
+
+    embeddings: Dict[str, List[float]] = {}
+    for cid, concept in concepts.items():
+        text = concept["display_name"] + " " + " ".join(concept["aliases"][:3])
+        try:
+            vec = embedding_model.embed_query(text)
+            embeddings[cid] = [float(v) for v in vec]
+        except Exception as e:
+            print(f"[Precompute] Failed for {cid}: {e}")
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(embeddings, f, ensure_ascii=False, indent=2)
+
+    # 同时设置环境变量，使同进程后续加载能命中缓存
+    os.environ["KNOWLEDGE_MAPPER_EMBEDDING_CACHE"] = str(out_path)
+    print(f"[Precompute] Cached {len(embeddings)} embeddings -> {out_path}")
+    return len(embeddings)
 
 
 class KnowledgeMapper:

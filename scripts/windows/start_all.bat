@@ -12,7 +12,17 @@ set "FRONTEND_PORT=%RAG_WEB_PORT%"
 if "%FRONTEND_PORT%"=="" set "FRONTEND_PORT=5185"
 
 set "PYTHON_EXE=%RAG_PYTHON%"
-if "%PYTHON_EXE%"=="" set "PYTHON_EXE=python"
+if "%PYTHON_EXE%"=="" (
+    if exist "%USERPROFILE%\anaconda3\envs\RAG\python.exe" (
+        set "PYTHON_EXE=%USERPROFILE%\anaconda3\envs\RAG\python.exe"
+    ) else if exist "C:\ProgramData\anaconda3\envs\RAG\python.exe" (
+        set "PYTHON_EXE=C:\ProgramData\anaconda3\envs\RAG\python.exe"
+    ) else if exist "D:\Anaconda\envs\RAG\python.exe" (
+        set "PYTHON_EXE=D:\Anaconda\envs\RAG\python.exe"
+    ) else (
+        set "PYTHON_EXE=python"
+    )
+)
 
 set "API_RELOAD=%RAG_API_RELOAD%"
 set "BACKEND_EXTRA_ARGS="
@@ -29,6 +39,15 @@ echo ============================================
 echo    RAG System One-Click Start
 echo ============================================
 echo.
+
+if not "%CONDA_DEFAULT_ENV%"=="RAG" (
+    echo [INFO] Activating conda environment 'RAG'...
+    call conda activate RAG 2>nul
+    if not "%CONDA_DEFAULT_ENV%"=="RAG" (
+        echo [WARN] Could not auto-activate 'RAG' environment.
+        echo        Make sure conda is initialized for cmd.exe.
+    )
+)
 
 echo Stopping existing services...
 powershell -Command "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -match 'scripts\\run_api.py' -and $_.CommandLine -match '--port %BACKEND_PORT%' } | ForEach-Object { Stop-Process -Force -Id $_.ProcessId -ErrorAction SilentlyContinue }"

@@ -26,6 +26,42 @@ _STREAM_SENTINEL = object()
 _title_gen_cache: dict[str, bool] = {}  # session_id -> title generated flag
 
 
+def _clean_generated_title(raw: str) -> str:
+    """清理 LLM 生成的标题：去除常见前缀、引号、多余空格。"""
+    title = str(raw or "").strip()
+    # 循环去除前缀模式
+    while True:
+        new_title = title
+        for prefix in ["标题：", "标题:", "标题"]:
+            if new_title.startswith(prefix):
+                new_title = new_title[len(prefix):].strip()
+                break
+        if new_title == title:
+            break
+        title = new_title
+    # 去除两侧引号
+    for quote in ["'", '"', "「", "」", "『", "』"]:
+        if title.startswith(quote):
+            title = title[1:].strip()
+        if title.endswith(quote):
+            title = title[:-1].strip()
+    # 去除中间所有空格
+    title = "".join(title.split())
+    return title
+
+
+def _finalize_title(question: str, raw_title: str) -> str:
+    """后处理生成的标题：保留周次模式、截断到 10 字。"""
+    title = _clean_generated_title(raw_title)
+    # 如果问题包含"第X周"但标题丢了，补回去
+    import re
+    week_match = re.search(r"第[一二三四五六七八九十百0-9]+周", question)
+    if week_match and not re.search(r"第[一二三四五六七八九十百0-9]+周", title):
+        title = week_match.group(0) + title
+    # 截断到 10 字符
+    return title[:10]
+
+
 async def _generate_session_title(question: str) -> str:
     """用 LLM 将问题概括为标题，限制 10 字以内。"""
     prompt = f"""请把下面这个问题概括成一个会话标题，必须满足以下要求：
@@ -48,8 +84,7 @@ async def _generate_session_title(question: str) -> str:
             title = response.strip()
         else:
             title = str(response).strip()
-        # 截断到10字
-        return title[:10]
+        return _finalize_title(question, title)
     except Exception:
         # 降级：直接取前10字
         return question[:10]
@@ -117,7 +152,8 @@ async def send_message(data: ChatRequest):
     _append_message(data.session_id, user_msg)
 
     # 首次消息：LLM 生成标题
-    if is_first_message:
+    if is_first_message and not _title_gen_cache.get(data.session_id):
+        _title_gen_cache[data.session_id] = True
         generated_title = await _generate_session_title(data.message)
         if data.session_id in _sessions:
             _sessions[data.session_id]["title"] = generated_title
@@ -171,12 +207,20 @@ async def send_message_stream(
     user_msg = ChatMessage(role="user", content=message)
     _append_message(session_id, user_msg)
 
-    # 首次消息：LLM 生成标题
-    if is_first_message:
-        generated_title = await _generate_session_title(message)
-        if session_id in _sessions:
-            _sessions[session_id]["title"] = generated_title
-            _save_state()
+    # 首次消息：异步后台生成标题，不阻塞流式响应
+    if is_first_message and not _title_gen_cache.get(session_id):
+        _title_gen_cache[session_id] = True
+
+        async def _bg_generate_title():
+            try:
+                generated_title = await _generate_session_title(message)
+                if session_id in _sessions:
+                    _sessions[session_id]["title"] = generated_title
+                    _save_state()
+            except Exception:
+                pass
+
+        asyncio.create_task(_bg_generate_title())
 
     async def generate() -> AsyncGenerator[str, None]:
         loop = asyncio.get_running_loop()

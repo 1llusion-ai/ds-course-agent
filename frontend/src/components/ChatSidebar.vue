@@ -16,7 +16,7 @@
         :class="sessionStore.currentSessionId === session.id
           ? 'bg-indigo-50 border-l-4 border-indigo-500'
           : 'hover:bg-stone-50 border-l-4 border-transparent'"
-        @click="selectSession(session.id)"
+        @click="handleSessionClick(session.id, $event)"
       >
         <div class="flex justify-between items-center gap-3">
           <div class="flex items-center gap-2 min-w-0">
@@ -86,6 +86,14 @@ const chatStore = useChatStore()
 function selectSession(id) {
   sessionStore.setCurrentSession(id)
   router.push(`/chat/${id}`)
+}
+
+function handleSessionClick(id, event) {
+  // 如果点击来自 dropdown 内部（按钮或菜单项），不触发会话切换
+  if (event.target.closest('.el-dropdown') || event.target.closest('.el-dropdown-menu')) {
+    return
+  }
+  selectSession(id)
 }
 
 async function handleCreate() {

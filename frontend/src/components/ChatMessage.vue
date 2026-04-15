@@ -19,7 +19,9 @@
       </template>
 
       <template v-else>
-        <div class="message-content markdown-body" v-html="renderedContent"></div>
+        <!-- 流式生成期间显示纯文本，避免频繁重渲染 markdown/katex -->
+        <div v-if="message.isLoading" class="message-content">{{ message.content }}</div>
+        <div v-else class="message-content markdown-body" v-html="renderedContent"></div>
         <div v-if="message.isLoading" class="streaming-status">
           <span class="streaming-pulse"></span>
           <span>生成中</span>
