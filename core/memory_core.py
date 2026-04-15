@@ -282,6 +282,33 @@ class MemoryCore:
                         )
                     cycle = None
 
+                if event.event_type == EventType.MISCONCEPTION:
+                    target_bucket = payload.get("target_bucket", "weakness")
+                    misconception_type = payload.get("misconception_type", "")
+                    severity = payload.get("severity", "medium")
+                    signals = [
+                        {
+                            "type": "MISCONCEPTION",
+                            "event_id": event.event_id,
+                            "misconception_type": misconception_type,
+                            "severity": severity,
+                            "timestamp": timestamp,
+                        }
+                    ]
+                    spot = self._build_weak_spot(
+                        profile,
+                        concept_id=concept_id,
+                        clarification_count=1 if target_bucket == "pending_weakness" else 2,
+                        signals=signals,
+                        first_detected_at=timestamp,
+                        last_triggered_at=timestamp,
+                    )
+                    if target_bucket == "pending_weakness":
+                        pending_spots.append(spot)
+                    else:
+                        active_spots.append(spot)
+                    continue
+
             if cycle:
                 target = (
                     active_spots

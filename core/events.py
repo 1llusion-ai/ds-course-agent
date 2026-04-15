@@ -16,6 +16,7 @@ class EventType(str, Enum):
     CLARIFICATION = "clarification"
     FOLLOW_UP = "follow_up"
     MASTERY_SIGNAL = "mastery_signal"
+    MISCONCEPTION = "misconception"
 
 
 @dataclass
@@ -58,6 +59,8 @@ class BaseEvent:
             return FollowUpEvent(payload=payload, **base_kwargs)
         if event_type == EventType.MASTERY_SIGNAL:
             return MasterySignalEvent(payload=payload, **base_kwargs)
+        if event_type == EventType.MISCONCEPTION:
+            return MisconceptionEvent(payload=payload, **base_kwargs)
         return BaseEvent(**base_kwargs)
 
 
@@ -127,6 +130,32 @@ class MasterySignalEvent(BaseEvent):
 
     def __post_init__(self):
         required = ["concept_id", "source_event_id", "signal_type"]
+        for key in required:
+            if key not in self.payload:
+                self.payload[key] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        base = super().to_dict()
+        base["payload"] = self.payload
+        return base
+
+
+@dataclass
+class MisconceptionEvent(BaseEvent):
+    """学生 misconception 被识别并记录的事件。"""
+
+    event_type: Literal[EventType.MISCONCEPTION] = EventType.MISCONCEPTION
+    payload: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        required = [
+            "concept_id",
+            "misconception_text",
+            "correct_answer",
+            "misconception_type",
+            "severity",
+            "target_bucket",
+        ]
         for key in required:
             if key not in self.payload:
                 self.payload[key] = None
@@ -234,11 +263,43 @@ def build_mastery_signal_event(
     )
 
 
+def build_misconception_event(
+    session_id: str,
+    student_id: str,
+    concept_id: str,
+    misconception_text: str,
+    correct_answer: str,
+    misconception_type: str,
+    severity: str,
+    target_bucket: str,
+    source_evidence: str = "",
+    raw_user_question: str = "",
+    turn_id: str = "0",
+) -> MisconceptionEvent:
+    return MisconceptionEvent(
+        event_id=create_event_id(),
+        session_id=session_id,
+        student_id=student_id,
+        payload={
+            "concept_id": concept_id,
+            "misconception_text": misconception_text,
+            "correct_answer": correct_answer,
+            "misconception_type": misconception_type,
+            "severity": severity,
+            "target_bucket": target_bucket,
+            "source_evidence": source_evidence,
+            "raw_user_question": raw_user_question,
+            "turn_id": turn_id,
+        },
+    )
+
+
 LEARNING_RELATED_EVENT_TYPES = {
     EventType.CONCEPT_MENTIONED,
     EventType.CLARIFICATION,
     EventType.FOLLOW_UP,
     EventType.MASTERY_SIGNAL,
+    EventType.MISCONCEPTION,
 }
 
 

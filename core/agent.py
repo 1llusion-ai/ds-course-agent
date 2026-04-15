@@ -63,6 +63,7 @@ class AgentService(object):
         self.skill_loader = get_skill_loader()
         self.explanation_skill = self.skill_loader.load_executor("personalized-explanation")
         self.learning_path_skill = self.skill_loader.load_executor("learning-path")
+        self.misconception_skill = self.skill_loader.load_executor("misconception-handling")
 
         # 如果使用本地Ollama，检查连接
         if not config.USE_REMOTE_LLM:
@@ -662,6 +663,15 @@ class AgentService(object):
 
         return True
 
+    def _should_use_misconception_skill(
+        self,
+        question: str,
+        candidate_keys: Optional[set[str]] = None,
+    ) -> bool:
+        if candidate_keys is not None and "misconception-handling" not in candidate_keys:
+            return False
+        return True
+
     def _select_skill_candidates(self, question: str) -> set[str]:
         loader = getattr(self, "skill_loader", None) or get_skill_loader()
         matches = loader.select_candidates(question)
@@ -970,6 +980,9 @@ class AgentService(object):
             elif getattr(self, "learning_path_skill", None) and self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
                 trace_step("agent.branch", branch="learning_path_skill")
                 result = self.learning_path_skill(user_input, student_id, session_id)
+            elif getattr(self, "misconception_skill", None) and self._should_use_misconception_skill(user_input, candidate_keys=skill_candidate_keys):
+                trace_step("agent.branch", branch="misconception_skill")
+                result = self.misconception_skill(user_input, student_id, session_id, "0")
             elif self._should_use_explanation_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
                 trace_step("agent.branch", branch="explanation_skill")
                 if matched_concepts:
@@ -1001,6 +1014,7 @@ class AgentService(object):
                 or self._is_schedule_request(user_input)
                 or self._is_datetime_request(user_input)
                 or self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys)
+                or self._should_use_misconception_skill(user_input, skill_candidate_keys)
             ),
         )
         if forced_result and forced_result.strip():
@@ -1112,6 +1126,12 @@ class AgentService(object):
                 for chunk in self._yield_text_chunks(final_result):
                     stream_started = True
                     yield {"type": "delta", "delta": chunk}
+            elif getattr(self, "misconception_skill", None) and self._should_use_misconception_skill(user_input, candidate_keys=skill_candidate_keys):
+                trace_step("agent.branch", branch="misconception_skill")
+                final_result = self.misconception_skill(user_input, student_id, session_id, "0")
+                for chunk in self._yield_text_chunks(final_result):
+                    stream_started = True
+                    yield {"type": "delta", "delta": chunk}
             elif self._should_use_explanation_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
                 trace_step("agent.branch", branch="explanation_skill")
                 if matched_concepts:
@@ -1166,6 +1186,7 @@ class AgentService(object):
                 or self._is_schedule_request(user_input)
                 or self._is_datetime_request(user_input)
                 or self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys)
+                or self._should_use_misconception_skill(user_input, skill_candidate_keys)
             ),
         )
         if forced_result and forced_result.strip():

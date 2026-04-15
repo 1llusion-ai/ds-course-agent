@@ -30,7 +30,7 @@ class TestAgentServiceMock:
         mock_get_chat_model.return_value = MagicMock()
         mock_get_tools.return_value = []
         mock_loader = MagicMock()
-        mock_loader.load_executor.side_effect = [MagicMock(), MagicMock()]
+        mock_loader.load_executor.side_effect = [MagicMock(), MagicMock(), MagicMock()]
         mock_get_skill_loader.return_value = mock_loader
 
         with patch.object(agent_module.config, "USE_REMOTE_LLM", True):
