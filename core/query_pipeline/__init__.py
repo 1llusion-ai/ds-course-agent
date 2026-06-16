@@ -16,6 +16,7 @@ from .preprocessor import QueryPreprocessor, get_preprocessor
 from .router import QueryRouter, get_router
 from .executor import RouteExecutor, get_executor
 from .postprocessor import QueryPostprocessor, get_postprocessor
+from .rewriter import QueryRewriter, RewriteResult, get_rewriter
 
 __all__ = [
     "QueryContext",
@@ -32,4 +33,7 @@ __all__ = [
     "get_executor",
     "QueryPostprocessor",
     "get_postprocessor",
+    "QueryRewriter",
+    "RewriteResult",
+    "get_rewriter",
 ]

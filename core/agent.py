@@ -839,7 +839,7 @@ class AgentService(object):
         """
         from utils.history import get_history
         from core.knowledge_mapper import map_question_to_concepts
-        from core.query_pipeline import get_preprocessor, get_router, DetectedConcept
+        from core.query_pipeline import get_preprocessor, get_rewriter, get_router, DetectedConcept
         from core.query_trace import trace_step
 
         student_id = student_id or session_id
@@ -875,9 +875,10 @@ class AgentService(object):
             for item in matched_concepts
         ]
         context.skill_candidate_keys = skill_candidate_keys
-        context.enriched_query = self._build_grounded_tool_query(user_input, chat_history)
+
+        rewrite_result = get_rewriter().rewrite(context)
         context.metadata["schedule_tool_query"] = self._build_schedule_tool_query(user_input)
-        context.metadata["grounded_tool_query"] = context.enriched_query
+        context.metadata["grounded_tool_query"] = rewrite_result.enriched_query
 
         decision = get_router().route(context)
         trace_step(

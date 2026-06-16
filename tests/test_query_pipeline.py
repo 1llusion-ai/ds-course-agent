@@ -659,3 +659,104 @@ class TestAgentStreamPostprocessRegressions:
 
         assert sync_result == "个性化解释结果"
         assert stream_events[-1]["content"] == "个性化解释结果"
+
+
+class TestQueryRewriter:
+    """保守版 Query Rewriter 回归测试。"""
+
+    def _context(self, user_input, history=None):
+        from core.query_pipeline import get_preprocessor
+
+        return get_preprocessor(enable_concept_detection=False).process(
+            user_input=user_input,
+            session_id="session-1",
+            student_id="student-1",
+            chat_history=history or [],
+        )
+
+    def test_followup_pronoun_rewrite_uses_recent_topic_without_changing_original(self):
+        from langchain_core.messages import AIMessage, HumanMessage
+        from core.query_pipeline import get_rewriter
+
+        history = [
+            HumanMessage(content="SVM 的核函数有什么作用？"),
+            AIMessage(content="核函数可以处理非线性可分数据。"),
+        ]
+        context = self._context("线性可分时它还需要吗？", history)
+
+        result = get_rewriter().rewrite(context)
+
+        assert context.original_query == "线性可分时它还需要吗？"
+        assert result.rewritten_query == "SVM 的核函数在线性可分时还需要吗？"
+        assert result.changed is True
+        assert result.strategy == "svm_kernel_followup"
+        assert result.rewritten_query in context.enriched_query
+        assert context.metadata["rewrite"]["changed"] is True
+
+    def test_contextual_followup_builds_grounded_query_when_no_specific_template(self):
+        from langchain_core.messages import AIMessage, HumanMessage
+        from core.query_pipeline import get_rewriter
+
+        history = [
+            HumanMessage(content="PCA 的主成分是什么？"),
+            AIMessage(content="主成分是数据方差最大的方向。"),
+        ]
+        context = self._context("能再解释一下吗？", history)
+
+        result = get_rewriter().rewrite(context)
+
+        assert result.changed is True
+        assert result.strategy == "contextual_followup"
+        assert result.rewritten_query == "能再解释一下吗？"
+        assert "最近对话上下文" in context.enriched_query
+        assert "PCA 的主成分" in context.enriched_query
+        assert "当前问题：能再解释一下吗？" in context.enriched_query
+
+    def test_rewriter_skips_schedule_and_datetime_queries(self):
+        from langchain_core.messages import AIMessage, HumanMessage
+        from core.query_pipeline import get_rewriter
+
+        history = [
+            HumanMessage(content="上次我们聊了 SVM 的核函数。"),
+            AIMessage(content="好的。"),
+        ]
+        schedule_context = self._context("下次课是什么时候？", history)
+        datetime_context = self._context("现在几点？", history)
+
+        schedule_result = get_rewriter().rewrite(schedule_context)
+        datetime_result = get_rewriter().rewrite(datetime_context)
+
+        assert schedule_result.changed is False
+        assert datetime_result.changed is False
+        assert schedule_context.enriched_query == "下次课是什么时候？"
+        assert datetime_context.enriched_query == "现在几点？"
+
+    def test_prepare_query_route_runs_rewriter_before_router(self, monkeypatch):
+        from core.agent import AgentService
+        from core.profile_models import StudentProfile
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        service = object.__new__(AgentService)
+        service.skill_loader = None
+
+        class FakeHistory:
+            messages = [
+                HumanMessage(content="SVM 的核函数有什么作用？"),
+                AIMessage(content="核函数可以处理非线性可分数据。"),
+            ]
+
+        class FakeMemory:
+            def get_profile(self, student_id):
+                return StudentProfile(student_id=student_id)
+
+        monkeypatch.setattr("utils.history.get_history", lambda session_id: FakeHistory())
+        monkeypatch.setattr("core.agent.get_memory_core", lambda: FakeMemory())
+        monkeypatch.setattr("core.knowledge_mapper.map_question_to_concepts", lambda question, top_k=3: [])
+        monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
+        monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
+        monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
+
+        state = service._prepare_query_route("线性可分时它还需要吗？", "session-1", "student-1")
+
+        assert state["context"].metadata["rewrite"]["rewritten_query"] == "SVM 的核函数在线性可分时还需要吗？"
+        assert state["context"].metadata["grounded_tool_query"] == state["context"].enriched_query
