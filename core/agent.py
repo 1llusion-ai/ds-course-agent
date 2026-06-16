@@ -300,7 +300,10 @@ class AgentService(object):
                 elif role == "assistant":
                     formatted.append(AIMessage(content=content))
                 elif role == "system":
-                    formatted.append(SystemMessage(content=content))
+                    formatted.append(SystemMessage(
+                        content=content,
+                        additional_kwargs=msg.get("additional_kwargs", {}),
+                    ))
                 
         return formatted
 
@@ -313,8 +316,31 @@ class AgentService(object):
         if not chat_history:
             return ""
 
+        def is_summary(msg) -> bool:
+            if isinstance(msg, SystemMessage):
+                return bool(getattr(msg, "additional_kwargs", {}).get("short_memory_summary"))
+            if isinstance(msg, dict):
+                return (
+                    msg.get("role") == "system"
+                    and bool(msg.get("additional_kwargs", {}).get("short_memory_summary"))
+                )
+            return False
+
+        summary_messages = [msg for msg in chat_history if is_summary(msg)]
+        regular_messages = [msg for msg in chat_history if not is_summary(msg)]
+
         parts = []
-        for msg in chat_history[-limit:]:
+        if summary_messages:
+            summary = summary_messages[-1]
+            summary_content = (
+                getattr(summary, "content", "")
+                if isinstance(summary, BaseMessage)
+                else summary.get("content", "")
+            )
+            if isinstance(summary_content, str) and summary_content.strip():
+                parts.append(summary_content)
+
+        for msg in regular_messages[-limit:]:
             if isinstance(msg, BaseMessage):
                 content = getattr(msg, "content", "")
             elif isinstance(msg, dict):

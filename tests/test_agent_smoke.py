@@ -461,3 +461,84 @@ class TestChatWithHistory:
 
         assert result == "next class answer"
         mock_resolve_schedule.assert_called_once()
+
+class TestAgentShortTermMemory:
+    def test_format_chat_history_keeps_summary_before_recent_window(self):
+        from core.agent import AgentService
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+        service = AgentService.__new__(AgentService)
+        summary = SystemMessage(
+            content="短期记忆摘要：之前讨论了 SVM 核函数。",
+            additional_kwargs={"short_memory_summary": True},
+        )
+        history = [
+            summary,
+            HumanMessage(content="上一问"),
+            AIMessage(content="上一答"),
+        ]
+
+        result = service._format_chat_history(history)
+
+        assert result[0] is summary
+        assert isinstance(result[1], HumanMessage)
+        assert isinstance(result[2], AIMessage)
+
+    def test_collect_recent_context_includes_summary_and_recent_messages(self):
+        from core.agent import AgentService
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+        service = AgentService.__new__(AgentService)
+        history = [
+            SystemMessage(
+                content="短期记忆摘要：之前讨论了 SVM 核函数。",
+                additional_kwargs={"short_memory_summary": True},
+            ),
+            HumanMessage(content="上一问"),
+            AIMessage(content="上一答"),
+        ]
+
+        context = service._collect_recent_context(history, limit=2)
+
+        assert "短期记忆摘要" in context
+        assert "上一问" in context
+        assert "上一答" in context
+
+    def test_prepare_query_route_uses_compacted_history(self, monkeypatch):
+        from core.agent import AgentService
+        from core.profile_models import StudentProfile
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+        service = object.__new__(AgentService)
+        service.skill_loader = None
+
+        compacted = [
+            SystemMessage(
+                content="短期记忆摘要：之前讨论了 PCA。",
+                additional_kwargs={"short_memory_summary": True},
+            ),
+            HumanMessage(content="上一问"),
+            AIMessage(content="上一答"),
+        ]
+
+        class FakeHistory:
+            @property
+            def messages(self):
+                return compacted
+
+        class FakeMemory:
+            def get_profile(self, student_id):
+                return StudentProfile(student_id=student_id)
+
+        monkeypatch.setattr("utils.history.get_history", lambda session_id: FakeHistory())
+        monkeypatch.setattr("core.agent.get_memory_core", lambda: FakeMemory())
+        monkeypatch.setattr("core.knowledge_mapper.map_question_to_concepts", lambda question, top_k=3: [])
+        monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
+        monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
+        monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
+
+        state = service._prepare_query_route("继续讲", "session-1", "student-1")
+
+        assert state["chat_history"] == compacted
+        assert state["context"].chat_history == compacted
+        assert "短期记忆摘要" in state["context"].recent_context

@@ -103,8 +103,18 @@ class QueryPreprocessor:
         if not chat_history:
             return ""
         
-        recent = chat_history[-limit:]
+        summary_messages = [
+            msg for msg in chat_history
+            if getattr(msg, 'type', 'unknown') == 'system'
+            and getattr(msg, 'additional_kwargs', {}).get('short_memory_summary')
+            and getattr(msg, 'content', '')
+        ]
+        regular_messages = [msg for msg in chat_history if msg not in summary_messages]
+        recent = regular_messages[-limit:]
         context_parts = []
+
+        if summary_messages:
+            context_parts.append(str(getattr(summary_messages[-1], 'content', '')).strip())
         
         for msg in recent:
             role = getattr(msg, 'type', 'unknown')
@@ -117,7 +127,7 @@ class QueryPreprocessor:
                 content_preview = content[:200] if len(content) > 200 else content
                 context_parts.append(f"助手: {content_preview}")
         
-        return "\n".join(context_parts)
+        return "\n".join(part for part in context_parts if part)
     
     def _detect_concepts(
         self,
