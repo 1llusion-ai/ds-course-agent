@@ -4,6 +4,7 @@ Query Preprocessor
 负责将用户输入和上下文信息整理成标准的 QueryContext
 """
 import logging
+import threading
 from typing import List, Optional, Dict, Any
 
 from .models import QueryContext, DetectedConcept
@@ -262,6 +263,7 @@ class QueryPreprocessor:
 
 
 _preprocessor: Optional[QueryPreprocessor] = None
+_preprocessor_lock = threading.Lock()
 
 
 def get_preprocessor(enable_concept_detection: bool = True) -> QueryPreprocessor:
@@ -276,5 +278,10 @@ def get_preprocessor(enable_concept_detection: bool = True) -> QueryPreprocessor
         _preprocessor is None
         or _preprocessor.enable_concept_detection != enable_concept_detection
     ):
-        _preprocessor = QueryPreprocessor(enable_concept_detection=enable_concept_detection)
+        with _preprocessor_lock:
+            if (
+                _preprocessor is None
+                or _preprocessor.enable_concept_detection != enable_concept_detection
+            ):
+                _preprocessor = QueryPreprocessor(enable_concept_detection=enable_concept_detection)
     return _preprocessor

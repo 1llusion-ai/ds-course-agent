@@ -2,10 +2,47 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+import inspect
+import os
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
+
+os.environ.setdefault("KNOWLEDGE_MAPPER_DISABLE_ONLINE_EMBEDDINGS", "1")
+
+
+def _patch_httpx_client_app_kwarg_for_starlette_testclient() -> None:
+    """Make Starlette 0.35 TestClient work with httpx >= 0.28 in tests.
+
+    Starlette's TestClient in the FastAPI version used by this project still
+    passes an ``app=`` keyword to ``httpx.Client``. httpx 0.28 removed that
+    keyword, which breaks backend test collection before fixtures can run.
+    The TestClient already passes the ASGI transport separately, so dropping
+    this obsolete keyword preserves the intended test behavior.
+    """
+    try:
+        import httpx
+    except ImportError:  # pragma: no cover - tests requiring TestClient need httpx
+        return
+
+    if "app" in inspect.signature(httpx.Client.__init__).parameters:
+        return
+
+    original_init = httpx.Client.__init__
+    if getattr(original_init, "_ds_course_agent_app_kwarg_patch", False):
+        return
+
+    def patched_init(self, *args, **kwargs):
+        kwargs.pop("app", None)
+        return original_init(self, *args, **kwargs)
+
+    patched_init._ds_course_agent_app_kwarg_patch = True
+    httpx.Client.__init__ = patched_init
+
+
+_patch_httpx_client_app_kwarg_for_starlette_testclient()
 
 
 _TEST_TMP_ROOT = Path(__file__).resolve().parent / "artifacts" / "test_tmp"

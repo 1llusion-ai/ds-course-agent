@@ -442,3 +442,220 @@ class TestQueryRouterRegressions:
 
         assert result.success
         assert captured["query"] == "下节课是什么时候？"
+
+
+class TestQueryPostprocessor:
+    """测试 Query Pipeline 后处理最小闭环。"""
+
+    def test_postprocessor_accepts_string_result(self):
+        from core.query_pipeline import QueryContext, RouteDecision, RouteType, get_postprocessor
+
+        context = QueryContext(
+            original_query="你叫什么名字？",
+            normalized_query="你叫什么名字？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        decision = RouteDecision(
+            route=RouteType.GENERIC_AGENT,
+            confidence=0.6,
+            reasons=["fallback"],
+        )
+
+        response = get_postprocessor().process(context, decision, "我是课程助教。")
+
+        assert response.content == "我是课程助教。"
+        assert response.route == RouteType.GENERIC_AGENT
+        assert response.trace["route"] == RouteType.GENERIC_AGENT.value
+        assert response.trace["confidence"] == 0.6
+        assert response.trace["reasons"] == ["fallback"]
+
+    def test_postprocessor_accepts_route_result(self):
+        from core.query_pipeline import QueryContext, RouteDecision, RouteResult, RouteType, get_postprocessor
+
+        context = QueryContext(
+            original_query="什么是过拟合？",
+            normalized_query="什么是过拟合？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        decision = RouteDecision(
+            route=RouteType.GROUNDED_RAG,
+            confidence=0.8,
+            reasons=["课程相关知识问答"],
+            retrieval_policy="required",
+        )
+        result = RouteResult(
+            raw_answer="grounded answer",
+            route=RouteType.GROUNDED_RAG,
+            success=True,
+            sources=[{"title": "source"}],
+            used_retrieval=True,
+            metadata={"executor": "test"},
+        )
+
+        response = get_postprocessor().process(context, decision, result)
+
+        assert response.content == "grounded answer"
+        assert response.sources == [{"title": "source"}]
+        assert response.used_retrieval is True
+        assert response.metadata["executor"] == "test"
+        assert response.metadata["retrieval_policy"] == "required"
+
+    def test_postprocessor_preserves_svm_kernel_judgement_contract(self):
+        from core.query_pipeline import QueryContext, RouteDecision, RouteType, get_postprocessor
+
+        context = QueryContext(
+            original_query="线性可分时还需要核函数吗？",
+            normalized_query="线性可分时还需要核函数吗？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        decision = RouteDecision(
+            route=RouteType.GENERIC_AGENT,
+            confidence=0.6,
+            reasons=["fallback"],
+        )
+
+        response = get_postprocessor().process(context, decision, "可以结合数据分布判断。")
+
+        assert response.content.startswith("先说结论：如果这里说的是 SVM 的核函数")
+        assert "通常不需要复杂的非线性核" in response.content
+
+
+class TestAgentStreamPostprocessRegressions:
+    """锁定 stream/sync 后处理一致性回归。"""
+
+    def _make_service(self, monkeypatch, *, chat_stream_chunks, chat_sync_result=None, route=None):
+        from core.agent import AgentService
+        from core.profile_models import StudentProfile
+        from core.query_pipeline import RouteType
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        service = object.__new__(AgentService)
+        service.llm = None
+        service.tools = []
+        service.agent = None
+        service.explanation_skill = lambda *_args: "个性化解释结果"
+
+        class FakeHistory:
+            messages = [
+                HumanMessage(content="SVM 的核函数有什么作用？"),
+                AIMessage(content="核函数可以处理非线性可分数据。"),
+            ]
+
+            def __init__(self):
+                self.added = []
+
+            def add_messages(self, messages):
+                self.added.extend(messages)
+
+        fake_history = FakeHistory()
+
+        class FakeMemory:
+            def get_profile(self, student_id):
+                return StudentProfile(student_id=student_id)
+
+        selected_route = route or RouteType.GENERIC_AGENT
+        monkeypatch.setattr("utils.history.get_history", lambda session_id: fake_history)
+        monkeypatch.setattr("core.agent.get_memory_core", lambda: FakeMemory())
+        monkeypatch.setattr("core.knowledge_mapper.map_question_to_concepts", lambda question, top_k=3: [])
+        monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
+        monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
+        monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
+
+        original_prepare = service._prepare_query_route
+
+        def fake_prepare(user_input, session_id, student_id=None):
+            state = original_prepare(user_input, session_id, student_id)
+            state["decision"].route = selected_route
+            return state
+
+        monkeypatch.setattr(service, "_prepare_query_route", fake_prepare)
+
+        def fake_chat(user_input, chat_history=None, stream=False):
+            if stream:
+                return iter(chat_stream_chunks)
+            return chat_sync_result if chat_sync_result is not None else "".join(chat_stream_chunks)
+
+        monkeypatch.setattr(service, "chat", fake_chat)
+        monkeypatch.setattr(service, "_maybe_force_grounded_answer", lambda *args, **kwargs: None)
+        return service, fake_history
+
+    def test_stream_generic_sends_postprocessed_svm_prefix_before_done(self, monkeypatch):
+        service, history = self._make_service(
+            monkeypatch,
+            chat_stream_chunks=["要结合数据分布判断。"],
+        )
+
+        events = list(service.stream_chat_with_history(
+            "如果线性可分，它还需要吗？",
+            "session-1",
+            student_id="student-1",
+        ))
+
+        deltas = "".join(event.get("delta", "") for event in events if event["type"] == "delta")
+        done = events[-1]
+
+        assert deltas.startswith("先说结论：如果这里说的是 SVM 的核函数")
+        assert done["content"] == deltas
+        assert history.added[-1].content == deltas
+
+    def test_stream_generic_whitespace_only_uses_same_fallback_as_sync(self, monkeypatch):
+        from core.tools import RetrievalTrace
+
+        service, _history = self._make_service(
+            monkeypatch,
+            chat_stream_chunks=["\n\n"],
+            chat_sync_result="\n\n",
+        )
+        monkeypatch.setattr("core.tools.get_retrieval_trace", lambda: RetrievalTrace(used_retrieval=True))
+
+        class FakeRagTool:
+            def invoke(self, query):
+                return "无相关资料"
+
+        monkeypatch.setattr("core.tools.course_rag_tool", FakeRagTool())
+
+        sync_result = service.chat_with_history("你叫什么名字？", "session-sync", student_id="student-1")
+        stream_events = list(service.stream_chat_with_history("你叫什么名字？", "session-stream", student_id="student-1"))
+
+        assert sync_result.startswith("⚠️ **无法生成回答**")
+        assert stream_events[-1]["content"] == sync_result
+
+    def test_stream_generic_forced_grounding_is_sent_as_delta_and_done(self, monkeypatch):
+        service, history = self._make_service(
+            monkeypatch,
+            chat_stream_chunks=["agent 原始回答"],
+        )
+        monkeypatch.setattr(service, "_maybe_force_grounded_answer", lambda *args, **kwargs: "RAG 修正回答")
+
+        events = list(service.stream_chat_with_history("什么是数据科学？", "session-1", student_id="student-1"))
+        deltas = "".join(event.get("delta", "") for event in events if event["type"] == "delta")
+
+        assert deltas == "RAG 修正回答"
+        assert events[-1]["content"] == "RAG 修正回答"
+        assert history.added[-1].content == "RAG 修正回答"
+
+    def test_personalized_explanation_route_skips_forced_grounding(self, monkeypatch):
+        from core.query_pipeline import RouteType
+
+        service, _history = self._make_service(
+            monkeypatch,
+            chat_stream_chunks=[],
+            route=RouteType.PERSONALIZED_EXPLANATION_SKILL,
+        )
+        monkeypatch.setattr(
+            service,
+            "_maybe_force_grounded_answer",
+            lambda *args, **kwargs: None if kwargs.get("skip") else "RAG 覆盖",
+        )
+
+        sync_result = service.chat_with_history("结合我的进度解释 SVM", "session-sync", student_id="student-1")
+        stream_events = list(service.stream_chat_with_history("结合我的进度解释 SVM", "session-stream", student_id="student-1"))
+
+        assert sync_result == "个性化解释结果"
+        assert stream_events[-1]["content"] == "个性化解释结果"

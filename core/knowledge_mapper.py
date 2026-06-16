@@ -5,6 +5,7 @@
 """
 import json
 import logging
+import os
 import re
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
@@ -91,7 +92,7 @@ class KnowledgeGraph:
         """预计算/加载知识图谱中所有概念的 embedding"""
         # 优先尝试加载离线缓存
         cache_path = Path(__file__).parent.parent / "data" / "knowledge_graph_embeddings.json"
-        env_cache = __import__("os").environ.get("KNOWLEDGE_MAPPER_EMBEDDING_CACHE")
+        env_cache = os.environ.get("KNOWLEDGE_MAPPER_EMBEDDING_CACHE")
         if env_cache:
             cache_path = Path(env_cache)
 
@@ -105,6 +106,10 @@ class KnowledgeGraph:
                 return
             except Exception as e:
                 logger.warning("Cache load failed: %s, falling back to online embedding", e)
+
+        if os.environ.get("KNOWLEDGE_MAPPER_DISABLE_ONLINE_EMBEDDINGS") == "1":
+            logger.info("Online knowledge mapper embeddings disabled by environment")
+            return
 
         try:
             from utils.config import MODEL_EMBEDDING, API_KEY, BASE_URL

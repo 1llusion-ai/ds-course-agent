@@ -69,3 +69,5 @@ Thumbs.db
 
 # Technical documentation (local only)
 docs/technical_documentation.md
+
+.omx/

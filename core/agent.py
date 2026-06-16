@@ -305,7 +305,9 @@ class AgentService(object):
         return formatted
 
     def _normalize_question_text(self, question: str) -> str:
-        return re.sub(r"\s+", "", question.lower())
+        from core.query_pipeline.utils import normalize_query_text
+
+        return normalize_query_text(question)
 
     def _collect_recent_context(self, chat_history: Optional[list], limit: int = 4) -> str:
         if not chat_history:
@@ -598,92 +600,10 @@ class AgentService(object):
             )
             record_event(mastery_event)
 
-    def _has_personalization_context(self, profile) -> bool:
-        return bool(
-            profile.progress.current_chapter or
-            profile.recent_concepts or
-            profile.weak_spot_candidates
-        )
-
-    def _is_personalization_request(self, question: str) -> bool:
-        normalized = self._normalize_question_text(question)
-        cues = [
-            "结合我现在的进度",
-            "按我现在的进度",
-            "我现在的进度",
-            "我已经学过",
-            "结合我已经学过",
-            "我之前",
-            "老是学不会",
-            "容易混淆",
-            "更直观",
-            "怎么学习比较合适",
-            "怎么给我梳理",
-        ]
-        return any(cue in normalized for cue in cues)
-
-    def _is_learning_path_request(self, question: str) -> bool:
-        normalized = self._normalize_question_text(question)
-        direct_cues = [
-            "学习路线",
-            "学习路径",
-            "学习计划",
-            "复习路线",
-            "复习计划",
-            "学习顺序",
-            "复习顺序",
-            "路线图",
-        ]
-        if any(cue in normalized for cue in direct_cues):
-            return True
-
-        soft_cues = [
-            "怎么学",
-            "如何学",
-            "先学什么",
-            "后学什么",
-            "先看什么",
-            "怎么复习",
-            "如何复习",
-            "怎么安排",
-            "如何安排",
-            "怎么入门",
-        ]
-        return any(cue in normalized for cue in soft_cues)
-
-    def _should_use_learning_path_skill(
-        self,
-        question: str,
-        matched_concepts: list,
-        profile,
-        candidate_keys: Optional[set[str]] = None,
-    ) -> bool:
-        if candidate_keys is not None and "learning-path" not in candidate_keys:
-            return False
-
-        if not self._is_learning_path_request(question):
-            return False
-
-        return True
-
-    def _should_use_misconception_skill(
-        self,
-        question: str,
-        candidate_keys: Optional[set[str]] = None,
-    ) -> bool:
-        if candidate_keys is not None and "misconception-handling" not in candidate_keys:
-            return False
-        return True
-
     def _select_skill_candidates(self, question: str) -> set[str]:
         loader = getattr(self, "skill_loader", None) or get_skill_loader()
         matches = loader.select_candidates(question)
         return {item.skill.key for item in matches}
-
-    def _is_judgement_question(self, question: str) -> bool:
-        normalized = self._normalize_question_text(question)
-        cues = ["是否", "要不要", "需不需要", "还需要", "还能不能", "可不可以", "有没有必要"]
-        return any(cue in normalized for cue in cues)
 
     def _handle_special_case(self, question: str) -> Optional[str]:
         normalized = self._normalize_question_text(question)
@@ -729,31 +649,6 @@ class AgentService(object):
             )
 
         return None
-
-    def _should_use_explanation_skill(
-        self,
-        question: str,
-        matched_concepts: list,
-        profile,
-        candidate_keys: Optional[set[str]] = None,
-    ) -> bool:
-        if candidate_keys is not None and "personalized-explanation" not in candidate_keys:
-            return False
-
-        if not matched_concepts:
-            return self._is_personalization_request(question) and self._has_personalization_context(profile)
-
-        primary_score = matched_concepts[0].score
-        if primary_score < 0.45:
-            return False
-
-        if self._is_personalization_request(question):
-            return True
-
-        if self._is_judgement_question(question) and primary_score >= 0.7:
-            return True
-
-        return self._has_personalization_context(profile) and primary_score >= 0.6
 
     def _is_schedule_request(self, question: str) -> bool:
         import re
@@ -897,33 +792,13 @@ class AgentService(object):
         answer: str,
         chat_history: Optional[list] = None
     ) -> str:
-        if not answer:
-            return answer
+        from core.query_pipeline import get_postprocessor
 
-        normalized = self._normalize_question_text(question)
-        recent_context = self._normalize_question_text(self._collect_recent_context(chat_history))
-        refers_to_kernel = (
-            "核函数" in normalized
-            or "线性核" in normalized
-            or "kernel" in normalized
-            or (
-                "它" in question
-                and any(token in recent_context for token in ["核函数", "支持向量机", "svm", "kernel"])
-            )
+        return get_postprocessor().postprocess_generic_answer(
+            question,
+            answer,
+            chat_history=chat_history,
         )
-        if (
-            self._is_judgement_question(question)
-            and "线性可分" in normalized
-            and refers_to_kernel
-            and not any(token in answer for token in ["通常不需要", "可以不用", "不一定需要"])
-        ):
-            prefix = (
-                "先说结论：如果这里说的是 SVM 的核函数，那么数据本来就线性可分时，"
-                "通常不需要复杂的非线性核，很多情况下可以不用，直接用线性核就够了。"
-            )
-            return f"{prefix}\n\n{answer}"
-
-        return answer
 
     def _prepare_query_route(
         self,
@@ -1012,24 +887,21 @@ class AgentService(object):
             "decision": decision,
         }
 
-    def _execute_route_sync(self, route_state: dict) -> str:
-        """按统一 RouteDecision 执行非流式回答，尽量保持旧行为不变。"""
-        from core.query_pipeline import RouteType
+    def _execute_route(self, route_state: dict, stream: bool = False) -> str:
+        """按统一 RouteDecision 执行回答；sync/stream 共享此执行核心。"""
+        from core.query_pipeline import RouteType, get_postprocessor
         from core.query_trace import trace_step, trace_error
 
         user_input = route_state["context"].original_query
         session_id = route_state["context"].session_id
         student_id = route_state["student_id"]
         chat_history = route_state["chat_history"]
-        profile = route_state["profile"]
         special_case_response = route_state["special_case_response"]
         matched_concepts = route_state["matched_concepts"]
-        skill_candidate_keys = route_state["skill_candidate_keys"]
         decision = route_state["decision"]
         route = decision.route
 
         result = None
-        error_info = None
 
         try:
             if special_case_response:
@@ -1038,11 +910,13 @@ class AgentService(object):
             elif route == RouteType.COURSE_SCHEDULE:
                 trace_step("agent.branch", branch="schedule")
                 from core.tools import course_schedule_tool, _track_retrieval
+
                 result = course_schedule_tool.invoke(self._build_schedule_tool_query(user_input))
                 _track_retrieval(sources=[], used=True)
             elif route == RouteType.CURRENT_DATETIME:
                 trace_step("agent.branch", branch="datetime")
                 from core.tools import current_datetime_tool, _track_retrieval
+
                 result = current_datetime_tool.invoke(user_input)
                 _track_retrieval(sources=[], used=True)
             elif route == RouteType.LEARNING_PATH_SKILL and getattr(self, "learning_path_skill", None):
@@ -1054,23 +928,42 @@ class AgentService(object):
             elif route == RouteType.PERSONALIZED_EXPLANATION_SKILL and getattr(self, "explanation_skill", None):
                 trace_step("agent.branch", branch="explanation_skill")
                 if matched_concepts:
-                    logger.info("识别知识点: %s (%s)", matched_concepts[0].concept_id, matched_concepts[0].method)
+                    logger.info(
+                        "识别知识点: %s (%s)",
+                        matched_concepts[0].concept_id,
+                        matched_concepts[0].method,
+                    )
                 result = self.explanation_skill(user_input, student_id, session_id)
             else:
                 trace_step("agent.branch", branch="generic_agent")
-                result = self.chat(user_input, chat_history, stream=False)
-                if hasattr(result, '__iter__') and not isinstance(result, str):
-                    result = ''.join(result)
-                result = self._postprocess_generic_answer(
-                    user_input,
+                if stream:
+                    streamed_parts = [
+                        chunk
+                        for chunk in self.chat(user_input, chat_history, stream=True)
+                        if chunk
+                    ]
+                    result = "".join(streamed_parts)
+                    if result == "":
+                        result = self.chat(user_input, chat_history, stream=False)
+                else:
+                    result = self.chat(user_input, chat_history, stream=False)
+
+                if hasattr(result, "__iter__") and not isinstance(result, str):
+                    result = "".join(result)
+
+                final_response = get_postprocessor().process(
+                    route_state["context"],
+                    decision,
                     result,
                     chat_history=chat_history,
                 )
+                result = final_response.content
 
         except Exception as e:
-            error_info = f"生成回答时出错: {str(e)}"
-            trace_error("agent.generate", e)
-            logger.error(error_info)
+            stage = "agent.stream_generate" if stream else "agent.generate"
+            trace_error(stage, e)
+            logger.error("%s failed: %s", stage, e, exc_info=stream)
+            result = ""
 
         forced_result = self._maybe_force_grounded_answer(
             user_input,
@@ -1081,6 +974,7 @@ class AgentService(object):
                 or route == RouteType.CURRENT_DATETIME
                 or route == RouteType.LEARNING_PATH_SKILL
                 or route == RouteType.MISCONCEPTION_SKILL
+                or route == RouteType.PERSONALIZED_EXPLANATION_SKILL
             ),
         )
         if forced_result and forced_result.strip():
@@ -1089,6 +983,7 @@ class AgentService(object):
         if not result or not isinstance(result, str) or not result.strip():
             try:
                 from core.tools import course_rag_tool
+
                 fallback_query = self._build_grounded_tool_query(user_input, chat_history)
                 fallback = course_rag_tool.invoke(fallback_query)
                 if fallback and fallback.strip() and fallback != "无相关资料":
@@ -1096,37 +991,41 @@ class AgentService(object):
                 else:
                     result = self._build_error_response(
                         "无法生成回答",
-                        "抱歉，系统暂时无法回答该问题。可能原因：\n1. 课程资料中未找到相关内容\n2. AI服务暂时不可用",
-                        is_retryable=True
+                        "抱歉，系统暂时无法回答该问题。可能原因：\n1. 课程资料中未找到相关内容\n2. AI 服务暂时不可用",
+                        is_retryable=True,
                     )
             except Exception as e:
                 result = self._build_error_response(
                     "服务暂时不可用",
                     f"生成回答时遇到错误，请稍后重试。\n({str(e)[:80]})",
-                    is_retryable=True
+                    is_retryable=True,
                 )
 
         return result
+
+    def _execute_route_sync(self, route_state: dict) -> str:
+        """Compatibility wrapper for non-streaming route execution."""
+        return self._execute_route(route_state, stream=False)
 
     def chat_with_history(
         self,
         user_input: str,
         session_id: str,
         stream: bool = False,
-        student_id: str = None
+        student_id: str = None,
     ):
         """
-        带会话历史的对话（集成文件存储和记忆系统）。
+        带历史记录的聊天。
 
         现在 sync / stream 共用 _prepare_query_route() 的 QueryContext + RouteDecision。
         """
+        from langchain_core.messages import HumanMessage, AIMessage
+
         if stream:
             return self.stream_chat_with_history(user_input, session_id, student_id=student_id)
 
-        from langchain_core.messages import HumanMessage, AIMessage
-
         route_state = self._prepare_query_route(user_input, session_id, student_id)
-        result = self._execute_route_sync(route_state)
+        result = self._execute_route(route_state, stream=False)
 
         route_state["history"].add_messages([
             HumanMessage(content=user_input),
@@ -1141,159 +1040,19 @@ class AgentService(object):
         session_id: str,
         student_id: str = None,
     ):
+        """流式聊天，复用 sync 路由准备和执行核心。"""
         from langchain_core.messages import HumanMessage, AIMessage
-        from core.query_pipeline import RouteType
-        from core.query_trace import trace_step, trace_error
 
         route_state = self._prepare_query_route(user_input, session_id, student_id)
-
-        history = route_state["history"]
-        chat_history = route_state["chat_history"]
-        student_id = route_state["student_id"]
-        special_case_response = route_state["special_case_response"]
-        matched_concepts = route_state["matched_concepts"]
         decision = route_state["decision"]
         route = decision.route
 
-        final_result = ""
-        stream_started = False
+        final_result = self._execute_route(route_state, stream=True)
 
-        try:
-            if special_case_response:
-                trace_step("agent.branch", branch="special_case")
-                final_result = special_case_response
-                for chunk in self._yield_text_chunks(final_result):
-                    stream_started = True
-                    yield {"type": "delta", "delta": chunk}
-            elif route == RouteType.COURSE_SCHEDULE:
-                trace_step("agent.branch", branch="schedule")
-                from core.tools import course_schedule_tool, _track_retrieval
-                try:
-                    final_result = course_schedule_tool.invoke(self._build_schedule_tool_query(user_input))
-                    _track_retrieval(sources=[], used=True)
-                    for chunk in self._yield_text_chunks(final_result):
-                        stream_started = True
-                        yield {"type": "delta", "delta": chunk}
-                except Exception as e:
-                    trace_error("agent.schedule_tool", e)
-                    final_result = f"查询课程安排时出错：{str(e)}"
-                    for chunk in self._yield_text_chunks(final_result):
-                        stream_started = True
-                        yield {"type": "delta", "delta": chunk}
-            elif route == RouteType.CURRENT_DATETIME:
-                trace_step("agent.branch", branch="datetime")
-                from core.tools import current_datetime_tool, _track_retrieval
-                try:
-                    final_result = current_datetime_tool.invoke(user_input)
-                    _track_retrieval(sources=[], used=True)
-                    for chunk in self._yield_text_chunks(final_result):
-                        stream_started = True
-                        yield {"type": "delta", "delta": chunk}
-                except Exception as e:
-                    trace_error("agent.datetime_tool", e)
-                    final_result = f"查询当前时间时出错：{str(e)}"
-                    for chunk in self._yield_text_chunks(final_result):
-                        stream_started = True
-                        yield {"type": "delta", "delta": chunk}
-            elif route == RouteType.LEARNING_PATH_SKILL and getattr(self, "learning_path_skill", None):
-                trace_step("agent.branch", branch="learning_path_skill")
-                final_result = self.learning_path_skill(user_input, student_id, session_id)
-                for chunk in self._yield_text_chunks(final_result):
-                    stream_started = True
-                    yield {"type": "delta", "delta": chunk}
-            elif route == RouteType.MISCONCEPTION_SKILL and getattr(self, "misconception_skill", None):
-                trace_step("agent.branch", branch="misconception_skill")
-                final_result = self.misconception_skill(user_input, student_id, session_id, "0")
-                for chunk in self._yield_text_chunks(final_result):
-                    stream_started = True
-                    yield {"type": "delta", "delta": chunk}
-            elif route == RouteType.PERSONALIZED_EXPLANATION_SKILL and getattr(self, "explanation_skill", None):
-                trace_step("agent.branch", branch="explanation_skill")
-                if matched_concepts:
-                    logger.info(
-                        "explanation skill for %s (%s)",
-                        matched_concepts[0].concept_id,
-                        matched_concepts[0].method,
-                    )
-                final_result = self.explanation_skill(user_input, student_id, session_id)
-                for chunk in self._yield_text_chunks(final_result):
-                    stream_started = True
-                    yield {"type": "delta", "delta": chunk}
-            else:
-                trace_step("agent.branch", branch="generic_agent")
-                streamed_parts = []
-                for chunk in self.chat(user_input, chat_history, stream=True):
-                    if not chunk:
-                        continue
-                    streamed_parts.append(chunk)
-                    stream_started = True
-                    yield {"type": "delta", "delta": chunk}
+        for chunk in self._yield_text_chunks(final_result):
+            yield {"type": "delta", "delta": chunk}
 
-                final_result = "".join(streamed_parts).strip()
-
-                if final_result:
-                    final_result = self._postprocess_generic_answer(
-                        user_input,
-                        final_result,
-                        chat_history=chat_history,
-                    )
-                else:
-                    fallback_result = self.chat(user_input, chat_history, stream=False)
-                    if hasattr(fallback_result, "__iter__") and not isinstance(fallback_result, str):
-                        fallback_result = "".join(fallback_result)
-                    final_result = self._postprocess_generic_answer(
-                        user_input,
-                        fallback_result,
-                        chat_history=chat_history,
-                    )
-                    for chunk in self._yield_text_chunks(final_result):
-                        stream_started = True
-                        yield {"type": "delta", "delta": chunk}
-        except Exception as e:
-            trace_error("agent.stream_generate", e)
-            logger.error("stream_chat_with_history failed: %s", e, exc_info=True)
-            final_result = ""
-
-        forced_result = self._maybe_force_grounded_answer(
-            user_input,
-            chat_history=chat_history,
-            skip=(
-                bool(special_case_response)
-                or route == RouteType.COURSE_SCHEDULE
-                or route == RouteType.CURRENT_DATETIME
-                or route == RouteType.LEARNING_PATH_SKILL
-                or route == RouteType.MISCONCEPTION_SKILL
-            ),
-        )
-        if forced_result and forced_result.strip():
-            final_result = forced_result
-
-        if not final_result or not isinstance(final_result, str) or not final_result.strip():
-            try:
-                from core.tools import course_rag_tool
-
-                fallback_query = self._build_grounded_tool_query(user_input, chat_history)
-                fallback = course_rag_tool.invoke(fallback_query)
-                if fallback and fallback.strip() and fallback != "无相关资料":
-                    final_result = f"{fallback}\n\n[注：使用基础检索模式回答]"
-                else:
-                    final_result = self._build_error_response(
-                        "无法生成回答",
-                        "抱歉，系统暂时无法回答该问题。可能原因：\n1. 课程资料中未找到相关内容\n2. AI 服务暂时不可用",
-                        is_retryable=True,
-                    )
-            except Exception as e:
-                final_result = self._build_error_response(
-                    "服务暂时不可用",
-                    f"生成回答时遇到错误，请稍后重试。\n({str(e)[:80]})",
-                    is_retryable=True,
-                )
-
-        if not stream_started:
-            for chunk in self._yield_text_chunks(final_result):
-                yield {"type": "delta", "delta": chunk}
-
-        history.add_messages([
+        route_state["history"].add_messages([
             HumanMessage(content=user_input),
             AIMessage(content=final_result if isinstance(final_result, str) else "系统错误"),
         ])

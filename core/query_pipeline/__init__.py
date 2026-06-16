@@ -15,6 +15,7 @@ from .models import (
 from .preprocessor import QueryPreprocessor, get_preprocessor
 from .router import QueryRouter, get_router
 from .executor import RouteExecutor, get_executor
+from .postprocessor import QueryPostprocessor, get_postprocessor
 
 __all__ = [
     "QueryContext",
@@ -29,4 +30,6 @@ __all__ = [
     "get_router",
     "RouteExecutor",
     "get_executor",
+    "QueryPostprocessor",
+    "get_postprocessor",
 ]

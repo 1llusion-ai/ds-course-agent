@@ -8,6 +8,7 @@ import re
 from typing import Optional
 
 from .models import QueryContext, RouteDecision, RouteType
+from .utils import is_judgement_question, normalize_query_text
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class QueryRouter:
         中文用户输入中常见有被输入法插入的空格；旧逻辑会去除所有空白，
         Router 也必须保持一致，否则会出现静默路由漂移。
         """
-        return re.sub(r"\s+", "", (query or "").lower())
+        return normalize_query_text(query)
 
     def route(self, context: QueryContext) -> RouteDecision:
         """
@@ -353,9 +354,7 @@ class QueryRouter:
 
     def _is_judgement_question(self, query: str) -> bool:
         """判断是否是判断型问题。"""
-        normalized = self._normalize(query)
-        cues = ["是否", "要不要", "需不需要", "还需要", "还能不能", "可不可以", "有没有必要"]
-        return any(cue in normalized for cue in cues)
+        return is_judgement_question(query)
     
     # ========== 课程知识判断 ==========
     

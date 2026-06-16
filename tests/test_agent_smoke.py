@@ -72,6 +72,54 @@ class TestAgentServiceMock:
         assert distinction["concept_name"] == "泛化 vs 过拟合"
 
 
+class TestAgentGenericPostprocess:
+    def test_svm_linearly_separable_kernel_judgement_gets_direct_prefix(self):
+        from core.agent import AgentService
+
+        service = AgentService.__new__(AgentService)
+        answer = service._postprocess_generic_answer(
+            "线性可分时还需要核函数吗？",
+            "可以考虑模型复杂度和数据分布。",
+            chat_history=[],
+        )
+
+        assert answer.startswith("先说结论：如果这里说的是 SVM 的核函数")
+        assert "通常不需要复杂的非线性核" in answer
+        assert answer.endswith("可以考虑模型复杂度和数据分布。")
+
+    def test_svm_linearly_separable_followup_uses_recent_kernel_context(self):
+        from core.agent import AgentService
+
+        service = AgentService.__new__(AgentService)
+        history = [
+            HumanMessage(content="SVM 的核函数有什么作用？"),
+            AIMessage(content="核函数可以把数据映射到更高维空间。"),
+        ]
+
+        answer = service._postprocess_generic_answer(
+            "如果线性可分，它还需要吗？",
+            "要结合泛化能力判断。",
+            chat_history=history,
+        )
+
+        assert answer.startswith("先说结论：如果这里说的是 SVM 的核函数")
+        assert "通常不需要复杂的非线性核" in answer
+
+    def test_svm_linearly_separable_postprocess_is_idempotent_when_answer_has_prefix(self):
+        from core.agent import AgentService
+
+        service = AgentService.__new__(AgentService)
+        original = "通常不需要复杂的非线性核，线性核通常够用。"
+
+        answer = service._postprocess_generic_answer(
+            "SVM 在线性可分时还需要核函数吗？",
+            original,
+            chat_history=[],
+        )
+
+        assert answer == original
+
+
 class TestAgentServiceIntegration:
     @pytest.mark.skip(reason="requires full runtime environment")
     def test_agent_service_can_answer_question(self):
