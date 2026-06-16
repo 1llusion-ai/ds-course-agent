@@ -8,6 +8,7 @@
 CLAUDE.md
 .vscode/
 .idea/
+.agents/
 
 # Python cache and test artifacts
 __pycache__/
@@ -28,6 +29,7 @@ htmlcov/
 chat_history/
 chroma_db/
 utils/chroma_db/
+logs/
 *.log
 *.pid
 *.sqlite3
@@ -42,6 +44,9 @@ tmp_*.json
 temp_response.txt
 artifacts/
 data/cache/
+
+# Generated/precomputed data (can be regenerated)
+data/knowledge_graph_embeddings.json
 
 # Generated evaluation outputs
 eval/reports/*.json

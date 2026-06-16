@@ -2,6 +2,7 @@
 重排序模块 - 基于 CrossEncoder 的精排层
 接收粗排候选文档，计算 query-doc 相关性分数，返回重排后的结果
 """
+import logging
 import warnings
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
@@ -9,6 +10,8 @@ from typing import List, Optional, Tuple
 from langchain_core.documents import Document
 
 import utils.config as config
+
+logger = logging.getLogger(__name__)
 
 
 class BaseReranker(ABC):
@@ -45,7 +48,7 @@ class CrossEncoderReranker(BaseReranker):
             from sentence_transformers import CrossEncoder
             # CrossEncoder 不接受 'auto' 作为 device，需要转换为 None 让库自动推断
             device = None if self.device == "auto" else self.device
-            print(f"[Reranker] 加载模型: {self.model_name} (device={self.device})")
+            logger.info("加载模型: %s (device=%s)", self.model_name, self.device)
             self._model = CrossEncoder(self.model_name, device=device, max_length=512)
         except Exception as e:
             warnings.warn(f"[Reranker] 加载模型失败: {e}. 将自动禁用重排序功能。")

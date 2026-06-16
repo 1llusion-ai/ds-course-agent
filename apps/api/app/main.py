@@ -1,18 +1,27 @@
 """FastAPI application entrypoint."""
+import logging
 
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from utils.logging_config import setup_logging
+import utils.config as config
+
+# 在应用启动时初始化日志（必须在导入其他业务模块之前）
+setup_logging(level=config.LOG_LEVEL)
+
 from .routers import chat, profile, sessions
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("[START] RAG Tutor Backend Service starting...")
+    logger.info("RAG Tutor Backend Service starting...")
     yield
-    print("[STOP] RAG Tutor Backend Service stopped")
+    logger.info("RAG Tutor Backend Service stopped")
 
 
 app = FastAPI(

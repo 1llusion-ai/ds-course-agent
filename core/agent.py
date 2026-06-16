@@ -7,6 +7,7 @@ Agent 服务模块
 # 修复SSL证书路径（必须在导入其他模块前设置）
 import base64
 import json
+import logging
 import os
 import re
 _correct_cert_path = r'D:\Anaconda\envs\RAG\Library\ssl\cacert.pem'
@@ -35,6 +36,8 @@ from core.events import (
 
 # 延迟导入 skills 避免循环导入
 # Skills are discovered from the `skills/` directory and loaded on demand.
+
+logger = logging.getLogger(__name__)
 
 def get_chat_model():
     """获取聊天模型（支持本地Ollama和远程API）"""
@@ -986,7 +989,7 @@ class AgentService(object):
             elif self._should_use_explanation_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
                 trace_step("agent.branch", branch="explanation_skill")
                 if matched_concepts:
-                    print(f"[Agent] 识别知识点: {matched_concepts[0].concept_id} ({matched_concepts[0].method})")
+                    logger.info("识别知识点: %s (%s)", matched_concepts[0].concept_id, matched_concepts[0].method)
                 result = self.explanation_skill(user_input, student_id, session_id)
             else:
                 # 使用普通 Agent 流程
@@ -1004,7 +1007,7 @@ class AgentService(object):
         except Exception as e:
             error_info = f"生成回答时出错: {str(e)}"
             trace_error("agent.generate", e)
-            print(f"[Agent Error] {error_info}")
+            logger.error(error_info)
 
         forced_result = self._maybe_force_grounded_answer(
             user_input,
@@ -1135,9 +1138,10 @@ class AgentService(object):
             elif self._should_use_explanation_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
                 trace_step("agent.branch", branch="explanation_skill")
                 if matched_concepts:
-                    print(
-                        f"[Agent] explanation skill for {matched_concepts[0].concept_id} "
-                        f"({matched_concepts[0].method})"
+                    logger.info(
+                        "explanation skill for %s (%s)",
+                        matched_concepts[0].concept_id,
+                        matched_concepts[0].method,
                     )
                 final_result = self.explanation_skill(user_input, student_id, session_id)
                 for chunk in self._yield_text_chunks(final_result):
@@ -1175,7 +1179,7 @@ class AgentService(object):
                         yield {"type": "delta", "delta": chunk}
         except Exception as e:
             trace_error("agent.stream_generate", e)
-            print(f"[Agent Error] stream_chat_with_history failed: {e}")
+            logger.error("stream_chat_with_history failed: %s", e, exc_info=True)
             final_result = ""
 
         forced_result = self._maybe_force_grounded_answer(
@@ -1243,7 +1247,7 @@ class AgentService(object):
         会话结束处理
         触发画像聚合
         """
-        print(f"[Agent] 会话结束，聚合画像: {student_id}")
+        logger.info("会话结束，聚合画像: %s", student_id)
         get_memory_core().aggregate_profile(student_id)
 
     def get_student_profile(self, student_id: str):

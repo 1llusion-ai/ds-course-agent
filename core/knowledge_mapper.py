@@ -4,12 +4,15 @@
 采用三层匹配策略：精确匹配 -> 规则匹配 -> Embedding兜底
 """
 import json
+import logging
 import re
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -98,10 +101,10 @@ class KnowledgeGraph:
                     cache_data = json.load(f)
                 for cid, vec in cache_data.items():
                     self.embeddings[cid] = np.array(vec)
-                print(f"[KnowledgeGraph] Loaded {len(self.embeddings)} embeddings from cache ({cache_path})")
+                logger.info("Loaded %d embeddings from cache (%s)", len(self.embeddings), cache_path)
                 return
             except Exception as e:
-                print(f"[KnowledgeGraph] Cache load failed: {e}, falling back to online embedding")
+                logger.warning("Cache load failed: %s, falling back to online embedding", e)
 
         try:
             from utils.config import MODEL_EMBEDDING, API_KEY, BASE_URL
@@ -121,12 +124,12 @@ class KnowledgeGraph:
                     embedding = embedding_model.embed_query(text)
                     self.embeddings[cid] = np.array(embedding)
                 except Exception as e:
-                    print(f"[KnowledgeGraph] Embedding failed for {cid}: {e}")
+                    logger.warning("Embedding failed for %s: %s", cid, e)
 
-            print(f"[KnowledgeGraph] Precomputed {len(self.embeddings)} embeddings")
+            logger.info("Precomputed %d embeddings", len(self.embeddings))
 
         except Exception as e:
-            print(f"[KnowledgeGraph] Embedding model not available: {e}")
+            logger.warning("Embedding model not available: %s", e)
 
     def get_concept(self, concept_id: str) -> Optional[Dict]:
         """获取概念详情"""
@@ -159,7 +162,7 @@ def precompute_knowledge_graph_embeddings(
         try:
             with open(out_path, "r", encoding="utf-8") as f:
                 existing = json.load(f)
-            print(f"[Precompute] Cache already exists with {len(existing)} entries. Use --force to rebuild.")
+            logger.info("Cache already exists with %d entries. Use --force to rebuild.", len(existing))
             return len(existing)
         except Exception:
             pass
@@ -187,7 +190,7 @@ def precompute_knowledge_graph_embeddings(
             vec = embedding_model.embed_query(text)
             embeddings[cid] = [float(v) for v in vec]
         except Exception as e:
-            print(f"[Precompute] Failed for {cid}: {e}")
+            logger.warning("Precompute failed for %s: %s", cid, e)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
@@ -195,7 +198,7 @@ def precompute_knowledge_graph_embeddings(
 
     # 同时设置环境变量，使同进程后续加载能命中缓存
     os.environ["KNOWLEDGE_MAPPER_EMBEDDING_CACHE"] = str(out_path)
-    print(f"[Precompute] Cached {len(embeddings)} embeddings -> {out_path}")
+    logger.info("Cached %d embeddings -> %s", len(embeddings), out_path)
     return len(embeddings)
 
 
@@ -346,7 +349,7 @@ class KnowledgeMapper:
                 matches.extend(embedding_matches[:top_k - len(matches)])
 
             except Exception as e:
-                print(f"[KnowledgeMapper] Embedding match failed: {e}")
+                logger.warning("Embedding match failed: %s", e)
 
         # 最终排序，取 top_k
         matches.sort(key=lambda x: x.score, reverse=True)

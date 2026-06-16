@@ -1,14 +1,16 @@
 """
-课程 PDF 解析模块 - Marker 单一路经
+课程 PDF 解析模块
 
 解析策略：
-- 统一使用 Marker 解析 PDF
+- 默认使用本地 Marker 解析（避免未显式授权时上传 PDF）
+- 可显式选择 Datalab 云端 API（Marker 云端版，无需本地 GPU），并支持 auto 回退
 - 支持页码范围选择
 - 输出 Markdown 格式，保留结构信息
 """
 import os
 import re
 import json
+import time
 import tempfile
 import subprocess
 import shutil
@@ -110,6 +112,127 @@ def check_marker_available() -> bool:
         return False
 
 
+def parse_with_datalab(
+    pdf_path: str,
+    api_key: str | None = None,
+    max_pages: int = 0,
+    page_start: int = 1,
+    mode: str = "balanced"
+) -> tuple[bool, str, dict]:
+    """
+    使用 Datalab 云端 API 解析 PDF（Marker 云端版）
+
+    Args:
+        pdf_path: PDF 文件路径
+        api_key: Datalab API Key，为 None 时从环境变量读取
+        max_pages: 最大解析页数，0 表示全部
+        page_start: 起始页码（1-based）
+        mode: 解析模式 - fast / balanced / accurate
+
+    Returns:
+        tuple[bool, str, dict]: (成功标志, JSON 字符串, 结构化数据)
+        结构化数据与本地 Marker JSON 格式一致，可直接复用逐页解析逻辑。
+    """
+    if api_key is None:
+        try:
+            import utils.config as config
+            api_key = config.DATALAB_API_KEY
+        except Exception:
+            api_key = os.getenv("DATALAB_API_KEY", "")
+
+    if not api_key or api_key == "your_datalab_api_key_here":
+        return False, "DATALAB_API_KEY not set", {}
+
+    if not os.path.exists(pdf_path):
+        return False, f"File not found: {pdf_path}", {}
+
+    try:
+        import requests
+    except ImportError:
+        return False, "requests package is not installed", {}
+
+    headers = {"X-API-Key": api_key}
+    submit_url = "https://www.datalab.to/api/v1/convert"
+
+    # 使用 JSON 格式，与本地 Marker 输出结构一致，支持逐页解析
+    form_data = {
+        "output_format": "json",
+        "mode": mode,
+    }
+
+    if max_pages > 0:
+        page_start_idx = page_start - 1
+        page_end_idx = page_start_idx + max_pages - 1
+        form_data["page_range"] = f"{page_start_idx}-{page_end_idx}"
+
+    try:
+        # 1. 提交文件
+        print(f"  [Datalab] 上传并提交解析请求 (JSON 格式)...")
+        with open(pdf_path, "rb") as f:
+            response = requests.post(
+                submit_url,
+                headers=headers,
+                files={"file": (os.path.basename(pdf_path), f, "application/pdf")},
+                data=form_data,
+                timeout=60,
+            )
+
+        if response.status_code != 200:
+            return False, f"Datalab API error {response.status_code}: {response.text}", {}
+
+        submit_data = response.json()
+        if not submit_data.get("success"):
+            return False, f"Datalab submit failed: {submit_data}", {}
+
+        check_url = submit_data["request_check_url"]
+        print(f"  [Datalab] 请求已提交，轮询结果...")
+
+        # 2. 轮询等待结果
+        poll_interval = 3
+        max_wait = 600
+        elapsed = 0
+
+        while elapsed < max_wait:
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+
+            poll_resp = requests.get(check_url, headers=headers, timeout=30)
+            if poll_resp.status_code != 200:
+                return False, f"Datalab poll error {poll_resp.status_code}: {poll_resp.text}", {}
+
+            result = poll_resp.json()
+            status = result.get("status", "")
+
+            if status == "complete":
+                if not result.get("success"):
+                    return False, f"Datalab conversion failed: {result.get('error', 'unknown')}", {}
+
+                page_count = result.get("page_count", 0)
+                quality = result.get("parse_quality_score", 0)
+                print(f"  [Datalab] 解析完成: {page_count} 页, 质量评分: {quality}")
+
+                # Datalab JSON 格式与 Marker 一致：{"children": [...Page objects...]}
+                data = result.get("json", {})
+                if not data:
+                    return False, "Datalab returned empty JSON", {}
+
+                return True, json.dumps(data, ensure_ascii=False), data
+
+            elif status == "failed":
+                return False, f"Datalab processing failed: {result.get('error', 'unknown')}", {}
+
+            # 仍在处理中
+            if elapsed % 15 == 0:
+                print(f"  [Datalab] 仍在处理... ({elapsed}s)")
+
+        return False, "Datalab timeout after 600s", {}
+
+    except requests.exceptions.Timeout:
+        return False, "Datalab request timeout", {}
+    except Exception as e:
+        return False, f"Datalab error: {str(e)}", {}
+
+
 def parse_with_marker(
     pdf_path: str,
     output_dir: str = None,
@@ -172,6 +295,82 @@ def parse_with_marker(
         return False, f"Marker error: {str(e)}", {}
 
 
+def _extract_page_text(page_data: dict) -> str:
+    """从 Marker/Datalab JSON 的 Page 节点中提取纯文本"""
+    def extract_text_from_node(node):
+        texts = []
+        if isinstance(node, dict):
+            html = node.get("html", "")
+            if html and not html.startswith("<content-ref"):
+                extractor = HTMLTextExtractor()
+                try:
+                    extractor.feed(html)
+                    text = extractor.get_text()
+                    if text:
+                        texts.append(text)
+                except Exception:
+                    pass
+            for child in node.get("children") or []:
+                texts.extend(extract_text_from_node(child))
+        return texts
+
+    return "\n".join(extract_text_from_node(page_data))
+
+
+def _extract_pages_from_json(data: dict, max_pages: int = 0, parser: str = "marker") -> list[PageResult]:
+    """
+    从 Marker/Datalab JSON 结构中提取逐页内容。
+
+    支持两种 JSON 格式：
+    - 旧格式: {"pages": [...]}
+    - 新格式: {"children": [...], 其中 block_type="Page" 的为页面}
+    """
+    all_pages = []
+    if isinstance(data, dict):
+        if "pages" in data:
+            all_pages = data["pages"]
+        elif "children" in data:
+            all_pages = [c for c in data["children"]
+                         if isinstance(c, dict) and c.get("block_type") == "Page"]
+
+    if max_pages > 0 and len(all_pages) > max_pages:
+        all_pages = all_pages[:max_pages]
+
+    pages_results = []
+    for idx, page_data in enumerate(all_pages):
+        page_text = ""
+        if isinstance(page_data, dict):
+            page_text = _extract_page_text(page_data)
+
+        pages_results.append(PageResult(
+            page_num=idx + 1,
+            text=page_text,
+            parser=parser,
+            char_count=len(page_text),
+            original_char_count=len(page_text)
+        ))
+
+    return pages_results
+
+
+def _build_result(file_name: str, pages: list[PageResult], parser_mode: str) -> PDFParseResult:
+    """从 PageResult 列表构建 PDFParseResult"""
+    full_text_parts = []
+    for p in pages:
+        if p.text:
+            full_text_parts.append(f"[第 {p.page_num} 页]\n{p.text}")
+
+    return PDFParseResult(
+        file_name=file_name,
+        total_pages=len(pages),
+        pages=pages,
+        marker_pages=len(pages),
+        success_rate=1.0 if pages else 0.0,
+        full_text="\n\n".join(full_text_parts),
+        parser_mode=parser_mode
+    )
+
+
 def parse_pdf_file(
     pdf_path: str,
     max_pages: int = 0,
@@ -180,112 +379,88 @@ def parse_pdf_file(
 ) -> PDFParseResult:
     """
     解析 PDF 文件
-    
+
     Args:
         pdf_path: PDF 文件路径
         max_pages: 最大解析页数，0 表示全部解析
         save_trace: 是否保存解析追踪记录
-        parser_mode: 解析模式（保留参数兼容性，仅支持 marker）
+        parser_mode: 解析模式 - marker / auto / datalab
+            marker: 使用本地 Marker（默认，避免未显式授权时上传 PDF）
+            auto: 优先 Datalab 云端，失败回退本地 Marker
+            datalab: 仅用 Datalab
     """
     file_name = os.path.basename(pdf_path)
-    
+
     print(f"\n[PDF] {file_name}: 开始解析...")
-    print(f"  解析器: Marker")
-    
+
+    # === 尝试 Datalab 云端 API ===
+    if parser_mode in ("auto", "datalab"):
+        try:
+            import utils.config as config
+            datalab_key = config.DATALAB_API_KEY
+        except Exception:
+            datalab_key = os.getenv("DATALAB_API_KEY", "")
+
+        if datalab_key and datalab_key != "your_datalab_api_key_here":
+            print(f"  解析器: Datalab 云端 (balanced)")
+            success, content, data = parse_with_datalab(
+                pdf_path,
+                api_key=datalab_key,
+                max_pages=max_pages,
+                mode="balanced"
+            )
+
+            if success:
+                pages = _extract_pages_from_json(data, max_pages, parser="datalab")
+                print(f"[PDF] {file_name}: 解析完成")
+                print(f"  Datalab: {len(pages)} 页")
+
+                result = _build_result(file_name, pages, "datalab")
+                if save_trace:
+                    save_parse_trace(result)
+                return result
+            else:
+                print(f"  [Datalab 失败] {content}")
+                if parser_mode == "datalab":
+                    return PDFParseResult(
+                        file_name=file_name, total_pages=0,
+                        pages=[], parser_mode="datalab"
+                    )
+                print(f"  回退到本地 Marker...")
+        elif parser_mode == "datalab":
+            print(f"  [ERROR] DATALAB_API_KEY 未设置")
+            return PDFParseResult(
+                file_name=file_name, total_pages=0,
+                pages=[], parser_mode="datalab"
+            )
+
+    # === 本地 Marker 解析 ===
+    print(f"  解析器: 本地 Marker")
     output_dir = tempfile.mkdtemp()
-    
+
     try:
         success, content, data = parse_with_marker(
             pdf_path,
             output_dir=output_dir,
             max_pages=max_pages
         )
-        
+
         if not success:
             print(f"  [ERROR] {content}")
             return PDFParseResult(
-                file_name=file_name,
-                total_pages=0,
-                pages=[],
-                parser_mode="marker"
+                file_name=file_name, total_pages=0,
+                pages=[], parser_mode="marker"
             )
-        
-        pages_results: list[PageResult] = []
 
-        # Handle Marker JSON structure: Document -> children (Pages)
-        all_pages = []
-        if isinstance(data, dict):
-            if "pages" in data:
-                # Old format
-                all_pages = data["pages"]
-            elif "children" in data:
-                # New Marker format: Document -> children -> Page objects
-                all_pages = [c for c in data["children"] if isinstance(c, dict) and c.get("block_type") == "Page"]
-
-        if max_pages > 0 and len(all_pages) > max_pages:
-            all_pages = all_pages[:max_pages]
-
-        for idx, page_data in enumerate(all_pages):
-            page_text = ""
-
-            if isinstance(page_data, dict):
-                # Extract text from Marker Page structure
-                def extract_text_from_node(node):
-                    texts = []
-                    if isinstance(node, dict):
-                        # Try to get HTML content
-                        html = node.get("html", "")
-                        if html and not html.startswith("<content-ref"):
-                            extractor = HTMLTextExtractor()
-                            try:
-                                extractor.feed(html)
-                                text = extractor.get_text()
-                                if text:
-                                    texts.append(text)
-                            except Exception:
-                                pass
-
-                        # Recurse into children
-                        for child in node.get("children") or []:
-                            texts.extend(extract_text_from_node(child))
-                    return texts
-
-                extracted_texts = extract_text_from_node(page_data)
-                page_text = "\n".join(extracted_texts)
-
-            pages_results.append(PageResult(
-                page_num=idx + 1,
-                text=page_text,
-                parser="marker",
-                char_count=len(page_text),
-                original_char_count=len(page_text)
-            ))
-        
-        full_text_parts = []
-        for result in pages_results:
-            if result.text:
-                full_text_parts.append(f"[第 {result.page_num} 页]\n{result.text}")
-        
-        full_text = "\n\n".join(full_text_parts)
-        
+        pages_results = _extract_pages_from_json(data, max_pages, parser="marker")
         print(f"[PDF] {file_name}: 解析完成")
         print(f"  Marker: {len(pages_results)} 页")
-        
-        result = PDFParseResult(
-            file_name=file_name,
-            total_pages=len(pages_results),
-            pages=pages_results,
-            marker_pages=len(pages_results),
-            success_rate=1.0 if pages_results else 0.0,
-            full_text=full_text,
-            parser_mode="marker"
-        )
-        
+
+        result = _build_result(file_name, pages_results, "marker")
         if save_trace:
             save_parse_trace(result)
-        
         return result
-        
+
     finally:
         if os.path.exists(output_dir):
             try:

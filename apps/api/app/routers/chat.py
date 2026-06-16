@@ -8,6 +8,7 @@ if env_path.exists():
 
 import asyncio
 import json
+import logging
 from datetime import datetime
 from typing import AsyncGenerator
 
@@ -18,6 +19,8 @@ from fastapi.responses import StreamingResponse
 from ..core_bridge import chat_with_history, stream_chat_with_history
 from ..schemas.chat import ChatHistoryResponse, ChatMessage, ChatRequest, ChatResponse
 from ..state import _chat_history, _save as _save_state, _sessions
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -167,9 +170,7 @@ async def send_message(data: ChatRequest):
             student_id=data.student_id,
         )
     except Exception as exc:
-        import traceback
-
-        traceback.print_exc()
+        logger.error("Agent处理失败: %s", exc, exc_info=True)
         _chat_history[data.session_id].pop()
         _save_state()
         raise HTTPException(

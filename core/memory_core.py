@@ -7,12 +7,15 @@ Memory Core 核心模块。
 3. 聚合更新（按事件重建画像）
 """
 import json
+import logging
 from typing import List, Dict, Optional
 from pathlib import Path
 from collections import Counter, defaultdict
 
 from core.events import BaseEvent, EventType, build_mastery_signal_event
 from core.profile_models import StudentProfile, ConceptFocus, WeakSpotCandidate
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryCore:
@@ -59,7 +62,7 @@ class MemoryCore:
                         continue
                     events.append(event)
                 except Exception as e:
-                    print(f"[MemoryCore] Failed to parse event: {e}")
+                    logger.warning("Failed to parse event: %s", e)
 
         return events
 

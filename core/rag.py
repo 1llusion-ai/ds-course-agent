@@ -3,6 +3,7 @@ RAG 服务模块
 提供检索和问答能力，支持被 Tool 和 Agent 调用
 支持纯向量检索和BM25混合检索
 """
+import logging
 from typing import Optional
 from dataclasses import dataclass
 
@@ -16,6 +17,8 @@ import utils.config as config
 from utils.vector_store import VectorStoreService
 from utils.history import get_history
 from core.hybrid_retriever import HybridRetriever
+
+logger = logging.getLogger(__name__)
 
 
 # 根据配置选择LLM类
@@ -75,19 +78,19 @@ class RAGService(object):
 
         # 初始化检索器
         if use_hybrid:
-            print("[RAGService] 使用BM25混合检索")
+            logger.info("使用BM25混合检索")
             if self.use_rerank:
-                print("[RAGService] 启用重排序")
+                logger.info("启用重排序")
             self.hybrid_retriever = HybridRetriever(
                 k=config.similarity_top_k,
                 use_rerank=self.use_rerank
             )
             self.use_rerank = self.hybrid_retriever.use_rerank
             if use_rerank and not self.use_rerank:
-                print("[RAGService] Rerank 不可用，已回退为纯 Hybrid")
+                logger.warning("Rerank 不可用，已回退为纯 Hybrid")
             self.vector_store_service = None
         else:
-            print("[RAGService] 使用纯向量检索")
+            logger.info("使用纯向量检索")
             self.hybrid_retriever = None
             self.vector_store_service = VectorStoreService(embedding=self.embedding)
 

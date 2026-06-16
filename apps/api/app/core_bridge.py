@@ -1,6 +1,7 @@
 """
 桥接现有 core/ 模块与 FastAPI
 """
+import logging
 import sys
 import os
 try:
@@ -24,9 +25,10 @@ def _configure_ssl_cert_path() -> None:
 # 修复SSL证书路径（必须在导入其他模块前设置）
 _configure_ssl_cert_path()
 
-import traceback
 from pathlib import Path
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # 确定项目根目录（处理worktree情况）
 _current_file = Path(__file__).resolve()
@@ -42,10 +44,10 @@ if (_main_project_root / ".worktrees").exists() or not (_main_project_root / ".e
 _main_env_path = _main_project_root / ".env"
 if _main_env_path.exists():
     load_dotenv(_main_env_path, override=True)
-    print(f"[CoreBridge] Loaded .env from {_main_env_path}")
+    logger.info("Loaded .env from %s", _main_env_path)
 else:
     load_dotenv(PROJECT_ROOT / ".env", override=True)
-    print(f"[CoreBridge] Loaded .env from {PROJECT_ROOT / '.env'}")
+    logger.info("Loaded .env from %s", PROJECT_ROOT / ".env")
 
 sys.path.insert(0, str(_main_project_root))
 if str(PROJECT_ROOT) != str(_main_project_root):
@@ -90,15 +92,14 @@ def chat_with_history(message: str, session_id: str, student_id: str) -> dict:
             student_id=student_id
         )
     except Exception as e:
-        print(f"[Agent Error] {e}")
-        traceback.print_exc()
+        logger.error("Agent调用出错: %s", e, exc_info=True)
         trace_error("core_bridge.chat", e)
         content = f"关于「{message}」的问题，我需要查阅课程资料后才能回答。\n\n（Agent调用出错：{str(e)[:100]}）"
     finally:
         trace = end_retrieval_trace(token)
 
     q_trace = end_query_trace(q_token, status="error" if not content or "调用出错" in content else "ok")
-    print(f"[QueryTrace] {q_trace}")
+    logger.info("QueryTrace: %s", q_trace)
 
     return {
         "content": content,
@@ -129,18 +130,17 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str):
             elif event_type == "done":
                 final_content = event.get("content", "")
     except Exception as e:
-        print(f"[Agent Stream Error] {e}")
-        traceback.print_exc()
+        logger.error("流式Agent调用出错: %s", e, exc_info=True)
         trace_error("core_bridge.stream", e)
         final_content = (
-            f"关于“{message}”的问题，我需要查阅课程资料后才能回答。\n\n"
-            f"（流式调用出错：{str(e)[:100]}）"
+            f'关于"{message}"的问题，我需要查阅课程资料后才能回答。\n\n'
+            f'（流式调用出错：{str(e)[:100]}）'
         )
     finally:
         trace = end_retrieval_trace(token)
 
     q_trace = end_query_trace(q_token, status="error" if not final_content or "调用出错" in final_content else "ok")
-    print(f"[QueryTrace] {q_trace}")
+    logger.info("QueryTrace: %s", q_trace)
 
     yield {
         "type": "final",

@@ -6,6 +6,7 @@
 2. 向量语义检索: 基于embedding的语义相似度
 3. 融合排序: RR (Reciprocal Rank Fusion)
 """
+import logging
 import re
 import jieba
 import numpy as np
@@ -18,6 +19,8 @@ from langchain_openai import OpenAIEmbeddings
 import chromadb
 
 import utils.config as config
+
+logger = logging.getLogger(__name__)
 from core.reranker import get_reranker
 
 
@@ -113,7 +116,7 @@ class HybridRetriever:
             if reranker.is_available:
                 self.reranker = reranker
             else:
-                print("[HybridRetriever] Rerank requested but unavailable, fallback to hybrid only")
+                logger.warning("Rerank requested but unavailable, fallback to hybrid only")
                 self.reranker = None
                 self.use_rerank = False
         else:
@@ -149,7 +152,7 @@ class HybridRetriever:
         self.bm25_retriever.add_documents(documents)
         self.documents = documents
 
-        print(f"[HybridRetriever] 加载了 {len(documents)} 个文档到BM25索引")
+        logger.info("加载了 %d 个文档到BM25索引", len(documents))
 
     def _vector_search(self, query: str, top_k: int = 10) -> List[tuple[int, float]]:
         """向量语义检索 - 使用ChromaDB"""
@@ -239,15 +242,15 @@ class HybridRetriever:
 
         # BM25检索
         bm25_results = self.bm25_retriever.retrieve(query, top_k=rerank_top_k)
-        print(f"[Hybrid] BM25返回 {len(bm25_results)} 个结果")
+        logger.debug("BM25返回 %d 个结果", len(bm25_results))
 
         # 向量检索
         vector_results = self._vector_search(query, top_k=rerank_top_k)
-        print(f"[Hybrid] Vector返回 {len(vector_results)} 个结果")
+        logger.debug("Vector返回 %d 个结果", len(vector_results))
 
         # RRF融合
         fused_results = self._reciprocal_rank_fusion(bm25_results, vector_results)
-        print(f"[Hybrid] 融合后 {len(fused_results)} 个结果")
+        logger.debug("融合后 %d 个结果", len(fused_results))
 
         # 获取候选文档（若启用rerank，取rerank_top_k；否则取k）
         candidate_count = rerank_top_k if (self.use_rerank and self.reranker) else k
@@ -261,12 +264,12 @@ class HybridRetriever:
 
         # 重排序
         if self.use_rerank and self.reranker and candidate_docs:
-            print(f"[Hybrid] 进入Rerank阶段，候选数={len(candidate_docs)}")
+            logger.debug("进入Rerank阶段，候选数=%d", len(candidate_docs))
             reranked = self.reranker.rerank(query, candidate_docs)
             documents = [doc for doc, score in reranked[:k]]
             for doc, score in reranked[:k]:
                 doc.metadata['rerank_score'] = score
-            print(f"[Hybrid] Rerank后返回 Top-{k}")
+            logger.debug("Rerank后返回 Top-%d", k)
         else:
             documents = candidate_docs[:k]
 

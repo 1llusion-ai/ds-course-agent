@@ -25,6 +25,8 @@ def _get_path_env(key: str, default: str) -> str:
     return path
 
 
+DATALAB_API_KEY = _get_env("DATALAB_API_KEY", "")
+
 EMBEDDING_API_KEY = _get_env("EMBEDDING_API_KEY", "")
 EMBEDDING_BASE_URL = _get_env("EMBEDDING_BASE_URL", "https://api.siliconflow.cn/v1")
 EMBEDDING_MODEL = _get_env("EMBEDDING_MODEL", "BAAI/bge-large-zh-v1.5")
@@ -64,6 +66,8 @@ RERANK_DEVICE = _get_env("RERANK_DEVICE", "auto")
 SEPARATORS = ["\n\n", "\n", " ", "", ".", "?", "!", ",", "，", "。", "？", "！"]
 
 DEFAULT_SESSION_ID = _get_env("DEFAULT_SESSION_ID", "user_001")
+
+LOG_LEVEL = _get_env("LOG_LEVEL", "INFO").upper()
 
 session_config = {
     "configurable": {
