@@ -767,6 +767,10 @@ class AgentService(object):
             "这周有什么课", "本周有什么课", "今天有课吗", "今天有没有课",
             "明天有课吗", "明天有没有课", "后天有课吗", "后天有没有课",
             "今天上课吗", "明天上课吗", "后天上课吗", "下周有什么课",
+            "这学期什么时候有课", "本学期什么时候有课",
+            "这学期有哪些课", "本学期有哪些课",
+            "这学期课程安排", "本学期课程安排",
+            "这学期上课安排", "本学期上课安排",
             "下次课", "下一次课", "下节课", "下下节课",
         ]
         if any(cue in normalized for cue in exact_cues):
@@ -784,7 +788,10 @@ class AgentService(object):
         if re.search(r"(今天|明天|后天).*(有课|上课|课程安排|几节课)", normalized):
             return True
 
-        if re.search(r"下.*课.*时间|下次.*上课|什么时候.*上课", question):
+        if re.search(r"(这学期|本学期|本课程|这门课).*(有课|上课|课程安排|上课安排|课表)", normalized):
+            return True
+
+        if re.search(r"什么时候.*(有课|上课)|下.*课.*时间|下次.*上课", normalized):
             return True
 
         return False
@@ -918,38 +925,73 @@ class AgentService(object):
 
         return answer
 
-    def chat_with_history(
+    def _prepare_query_route(
         self,
         user_input: str,
         session_id: str,
-        stream: bool = False,
-        student_id: str = None
-    ):
+        student_id: str = None,
+    ) -> dict:
         """
-        带会话历史的对话（集成文件存储和记忆系统）
+        构建 QueryContext 并执行统一路由决策。
 
-        Args:
-            user_input: 用户输入
-            session_id: 会话ID
-            stream: 是否流式输出
-            student_id: 学生ID（用于记忆系统，默认使用 session_id）
-
-        Returns:
-            Agent 的响应
+        这是 sync / stream 共享的唯一路由入口，避免两条路径行为漂移。
         """
         from utils.history import get_history
         from core.knowledge_mapper import map_question_to_concepts
+        from core.query_pipeline import get_preprocessor, get_router, DetectedConcept
+        from core.query_trace import trace_step
 
         student_id = student_id or session_id
         history = get_history(session_id)
         chat_history = history.messages
-
         profile = get_memory_core().get_profile(student_id)
         special_case_response = self._handle_special_case(user_input)
+
+        # 保持与旧逻辑一致：学习事件和路由概念都复用 map_question_to_concepts。
+        matched_concepts = [] if special_case_response else map_question_to_concepts(user_input, top_k=3)
         skill_candidate_keys = self._select_skill_candidates(user_input)
 
-        # ===== 记忆系统集成：知识点映射 =====
-        matched_concepts = [] if special_case_response else map_question_to_concepts(user_input, top_k=3)
+        # 这里禁用 preprocessor 内部的概念识别，避免重复调用 heavy mapper；
+        # 随后把旧逻辑得到的 matched_concepts 注入到 context。
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        context = preprocessor.process(
+            user_input=user_input,
+            session_id=session_id,
+            student_id=student_id,
+            chat_history=chat_history,
+            profile=profile,
+        )
+        context.detected_concepts = [
+            DetectedConcept(
+                concept_id=item.concept_id,
+                method=item.method,
+                confidence=float(item.score),
+                metadata={
+                    "display_name": item.display_name,
+                    "chapter": item.chapter,
+                },
+            )
+            for item in matched_concepts
+        ]
+        context.skill_candidate_keys = skill_candidate_keys
+        context.enriched_query = self._build_grounded_tool_query(user_input, chat_history)
+        context.metadata["schedule_tool_query"] = self._build_schedule_tool_query(user_input)
+        context.metadata["grounded_tool_query"] = context.enriched_query
+
+        decision = get_router().route(context)
+        trace_step(
+            "query_pipeline.route",
+            route=decision.route.value,
+            confidence=decision.confidence,
+            reasons=decision.reasons,
+        )
+        logger.info(
+            "路由决策: %s (confidence=%.2f, reasons=%s)",
+            decision.route.value,
+            decision.confidence,
+            ", ".join(decision.reasons),
+        )
+
         self._record_learning_events(
             question=user_input,
             session_id=session_id,
@@ -958,8 +1000,33 @@ class AgentService(object):
             special_case_response=special_case_response,
         )
 
-        # ===== 生成回答 =====
+        return {
+            "student_id": student_id,
+            "history": history,
+            "chat_history": chat_history,
+            "profile": profile,
+            "special_case_response": special_case_response,
+            "matched_concepts": matched_concepts,
+            "skill_candidate_keys": skill_candidate_keys,
+            "context": context,
+            "decision": decision,
+        }
+
+    def _execute_route_sync(self, route_state: dict) -> str:
+        """按统一 RouteDecision 执行非流式回答，尽量保持旧行为不变。"""
+        from core.query_pipeline import RouteType
         from core.query_trace import trace_step, trace_error
+
+        user_input = route_state["context"].original_query
+        session_id = route_state["context"].session_id
+        student_id = route_state["student_id"]
+        chat_history = route_state["chat_history"]
+        profile = route_state["profile"]
+        special_case_response = route_state["special_case_response"]
+        matched_concepts = route_state["matched_concepts"]
+        skill_candidate_keys = route_state["skill_candidate_keys"]
+        decision = route_state["decision"]
+        route = decision.route
 
         result = None
         error_info = None
@@ -968,34 +1035,30 @@ class AgentService(object):
             if special_case_response:
                 trace_step("agent.branch", branch="special_case")
                 result = special_case_response
-            elif self._is_schedule_request(user_input):
-                # 课程时间安排相关问题，直接调用 schedule tool
+            elif route == RouteType.COURSE_SCHEDULE:
                 trace_step("agent.branch", branch="schedule")
                 from core.tools import course_schedule_tool, _track_retrieval
                 result = course_schedule_tool.invoke(self._build_schedule_tool_query(user_input))
                 _track_retrieval(sources=[], used=True)
-            elif self._is_datetime_request(user_input):
-                # 时间日期相关问题，直接调用 datetime tool
+            elif route == RouteType.CURRENT_DATETIME:
                 trace_step("agent.branch", branch="datetime")
                 from core.tools import current_datetime_tool, _track_retrieval
                 result = current_datetime_tool.invoke(user_input)
                 _track_retrieval(sources=[], used=True)
-            elif getattr(self, "learning_path_skill", None) and self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
+            elif route == RouteType.LEARNING_PATH_SKILL and getattr(self, "learning_path_skill", None):
                 trace_step("agent.branch", branch="learning_path_skill")
                 result = self.learning_path_skill(user_input, student_id, session_id)
-            elif getattr(self, "misconception_skill", None) and self._should_use_misconception_skill(user_input, candidate_keys=skill_candidate_keys):
+            elif route == RouteType.MISCONCEPTION_SKILL and getattr(self, "misconception_skill", None):
                 trace_step("agent.branch", branch="misconception_skill")
                 result = self.misconception_skill(user_input, student_id, session_id, "0")
-            elif self._should_use_explanation_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
+            elif route == RouteType.PERSONALIZED_EXPLANATION_SKILL and getattr(self, "explanation_skill", None):
                 trace_step("agent.branch", branch="explanation_skill")
                 if matched_concepts:
                     logger.info("识别知识点: %s (%s)", matched_concepts[0].concept_id, matched_concepts[0].method)
                 result = self.explanation_skill(user_input, student_id, session_id)
             else:
-                # 使用普通 Agent 流程
                 trace_step("agent.branch", branch="generic_agent")
                 result = self.chat(user_input, chat_history, stream=False)
-                # 如果是 generator，转换为字符串
                 if hasattr(result, '__iter__') and not isinstance(result, str):
                     result = ''.join(result)
                 result = self._postprocess_generic_answer(
@@ -1014,18 +1077,16 @@ class AgentService(object):
             chat_history=chat_history,
             skip=(
                 bool(special_case_response)
-                or self._is_schedule_request(user_input)
-                or self._is_datetime_request(user_input)
-                or self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys)
-                or self._should_use_misconception_skill(user_input, skill_candidate_keys)
+                or route == RouteType.COURSE_SCHEDULE
+                or route == RouteType.CURRENT_DATETIME
+                or route == RouteType.LEARNING_PATH_SKILL
+                or route == RouteType.MISCONCEPTION_SKILL
             ),
         )
         if forced_result and forced_result.strip():
             result = forced_result
 
-        # 检查结果有效性
         if not result or not isinstance(result, str) or not result.strip():
-            # 生成失败，尝试回退方案
             try:
                 from core.tools import course_rag_tool
                 fallback_query = self._build_grounded_tool_query(user_input, chat_history)
@@ -1045,8 +1106,29 @@ class AgentService(object):
                     is_retryable=True
                 )
 
-        # 保存到历史
-        history.add_messages([
+        return result
+
+    def chat_with_history(
+        self,
+        user_input: str,
+        session_id: str,
+        stream: bool = False,
+        student_id: str = None
+    ):
+        """
+        带会话历史的对话（集成文件存储和记忆系统）。
+
+        现在 sync / stream 共用 _prepare_query_route() 的 QueryContext + RouteDecision。
+        """
+        if stream:
+            return self.stream_chat_with_history(user_input, session_id, student_id=student_id)
+
+        from langchain_core.messages import HumanMessage, AIMessage
+
+        route_state = self._prepare_query_route(user_input, session_id, student_id)
+        result = self._execute_route_sync(route_state)
+
+        route_state["history"].add_messages([
             HumanMessage(content=user_input),
             AIMessage(content=result if isinstance(result, str) else "系统错误"),
         ])
@@ -1059,27 +1141,19 @@ class AgentService(object):
         session_id: str,
         student_id: str = None,
     ):
-        from utils.history import get_history
-        from core.knowledge_mapper import map_question_to_concepts
-
-        student_id = student_id or session_id
-        history = get_history(session_id)
-        chat_history = history.messages
-
-        profile = get_memory_core().get_profile(student_id)
-        special_case_response = self._handle_special_case(user_input)
-        skill_candidate_keys = self._select_skill_candidates(user_input)
-
-        matched_concepts = [] if special_case_response else map_question_to_concepts(user_input, top_k=3)
-        self._record_learning_events(
-            question=user_input,
-            session_id=session_id,
-            student_id=student_id,
-            matched_concepts=matched_concepts,
-            special_case_response=special_case_response,
-        )
-
+        from langchain_core.messages import HumanMessage, AIMessage
+        from core.query_pipeline import RouteType
         from core.query_trace import trace_step, trace_error
+
+        route_state = self._prepare_query_route(user_input, session_id, student_id)
+
+        history = route_state["history"]
+        chat_history = route_state["chat_history"]
+        student_id = route_state["student_id"]
+        special_case_response = route_state["special_case_response"]
+        matched_concepts = route_state["matched_concepts"]
+        decision = route_state["decision"]
+        route = decision.route
 
         final_result = ""
         stream_started = False
@@ -1091,9 +1165,8 @@ class AgentService(object):
                 for chunk in self._yield_text_chunks(final_result):
                     stream_started = True
                     yield {"type": "delta", "delta": chunk}
-            elif self._is_schedule_request(user_input):
+            elif route == RouteType.COURSE_SCHEDULE:
                 trace_step("agent.branch", branch="schedule")
-                # 课程时间安排相关问题，直接调用 schedule tool
                 from core.tools import course_schedule_tool, _track_retrieval
                 try:
                     final_result = course_schedule_tool.invoke(self._build_schedule_tool_query(user_input))
@@ -1107,9 +1180,8 @@ class AgentService(object):
                     for chunk in self._yield_text_chunks(final_result):
                         stream_started = True
                         yield {"type": "delta", "delta": chunk}
-            elif self._is_datetime_request(user_input):
+            elif route == RouteType.CURRENT_DATETIME:
                 trace_step("agent.branch", branch="datetime")
-                # 时间日期相关问题，直接调用 datetime tool
                 from core.tools import current_datetime_tool, _track_retrieval
                 try:
                     final_result = current_datetime_tool.invoke(user_input)
@@ -1123,19 +1195,19 @@ class AgentService(object):
                     for chunk in self._yield_text_chunks(final_result):
                         stream_started = True
                         yield {"type": "delta", "delta": chunk}
-            elif getattr(self, "learning_path_skill", None) and self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
+            elif route == RouteType.LEARNING_PATH_SKILL and getattr(self, "learning_path_skill", None):
                 trace_step("agent.branch", branch="learning_path_skill")
                 final_result = self.learning_path_skill(user_input, student_id, session_id)
                 for chunk in self._yield_text_chunks(final_result):
                     stream_started = True
                     yield {"type": "delta", "delta": chunk}
-            elif getattr(self, "misconception_skill", None) and self._should_use_misconception_skill(user_input, candidate_keys=skill_candidate_keys):
+            elif route == RouteType.MISCONCEPTION_SKILL and getattr(self, "misconception_skill", None):
                 trace_step("agent.branch", branch="misconception_skill")
                 final_result = self.misconception_skill(user_input, student_id, session_id, "0")
                 for chunk in self._yield_text_chunks(final_result):
                     stream_started = True
                     yield {"type": "delta", "delta": chunk}
-            elif self._should_use_explanation_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys):
+            elif route == RouteType.PERSONALIZED_EXPLANATION_SKILL and getattr(self, "explanation_skill", None):
                 trace_step("agent.branch", branch="explanation_skill")
                 if matched_concepts:
                     logger.info(
@@ -1187,10 +1259,10 @@ class AgentService(object):
             chat_history=chat_history,
             skip=(
                 bool(special_case_response)
-                or self._is_schedule_request(user_input)
-                or self._is_datetime_request(user_input)
-                or self._should_use_learning_path_skill(user_input, matched_concepts, profile, candidate_keys=skill_candidate_keys)
-                or self._should_use_misconception_skill(user_input, skill_candidate_keys)
+                or route == RouteType.COURSE_SCHEDULE
+                or route == RouteType.CURRENT_DATETIME
+                or route == RouteType.LEARNING_PATH_SKILL
+                or route == RouteType.MISCONCEPTION_SKILL
             ),
         )
         if forced_result and forced_result.strip():
@@ -1226,7 +1298,16 @@ class AgentService(object):
             AIMessage(content=final_result if isinstance(final_result, str) else "系统错误"),
         ])
 
-        yield {"type": "done", "content": final_result}
+        yield {
+            "type": "done",
+            "content": final_result,
+            "route": route.value,
+            "trace": {
+                "route": route.value,
+                "confidence": decision.confidence,
+                "reasons": decision.reasons,
+            },
+        }
 
     def _classify_question_type(self, question: str) -> str:
         """问题类型分类"""

@@ -1,0 +1,444 @@
+"""
+测试 Query Pipeline
+
+验证 QueryContext, Router, Executor 的基本功能
+"""
+import pytest
+from core.query_pipeline import (
+    get_preprocessor,
+    get_router,
+    get_executor,
+    RouteType,
+)
+
+
+class TestQueryPreprocessor:
+    """测试 QueryPreprocessor"""
+    
+    def test_basic_preprocessing(self):
+        """测试基础预处理"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        
+        context = preprocessor.process(
+            user_input="  什么是决策树？  ",
+            session_id="test_session",
+            student_id="test_student",
+            chat_history=[],
+            profile=None,
+        )
+        
+        assert context.original_query == "  什么是决策树？  "
+        assert context.normalized_query == "什么是决策树？"
+        assert context.session_id == "test_session"
+        assert context.student_id == "test_student"
+    
+    def test_intent_detection(self):
+        """测试意图识别"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        
+        # 时间查询
+        context = preprocessor.process(
+            user_input="现在几点了？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        assert "datetime" in context.detected_intents
+        
+        # 课程安排
+        context = preprocessor.process(
+            user_input="第3周讲什么？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        assert "schedule" in context.detected_intents
+        
+        # 概念解释
+        context = preprocessor.process(
+            user_input="什么是过拟合？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        assert "concept_explanation" in context.detected_intents
+
+
+class TestQueryRouter:
+    """测试 QueryRouter"""
+    
+    def test_datetime_route(self):
+        """测试时间查询路由"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+        
+        context = preprocessor.process(
+            user_input="现在几点？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        
+        decision = router.route(context)
+        assert decision.route == RouteType.CURRENT_DATETIME
+        assert decision.confidence > 0.9
+    
+    def test_schedule_route(self):
+        """测试课程安排路由"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+        
+        context = preprocessor.process(
+            user_input="第三周讲什么内容？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        
+        decision = router.route(context)
+        assert decision.route == RouteType.COURSE_SCHEDULE
+        assert decision.confidence > 0.9
+    
+    def test_learning_path_route(self):
+        """测试学习路径路由"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+        
+        context = preprocessor.process(
+            user_input="决策树应该怎么学？学习路线是什么？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        
+        decision = router.route(context)
+        assert decision.route == RouteType.LEARNING_PATH_SKILL
+        assert "learning-path" in context.skill_candidate_keys
+    
+    def test_misconception_route(self):
+        """测试错误理解路由"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+        
+        context = preprocessor.process(
+            user_input="我还是不太懂决策树和随机森林的区别",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        # Step 1 重构应保持旧行为：misconception route 由现有 SkillLoader 候选驱动。
+        context.skill_candidate_keys.add("misconception-handling")
+
+        decision = router.route(context)
+        assert decision.route == RouteType.MISCONCEPTION_SKILL
+        assert context.is_clarification_signal
+    
+    def test_grounded_rag_route(self):
+        """测试 grounded RAG 路由"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+        
+        # 模拟有概念识别的场景
+        context = preprocessor.process(
+            user_input="什么是过拟合？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        
+        # 如果概念识别成功，应该路由到 GROUNDED_RAG 或 EXPLANATION
+        decision = router.route(context)
+        assert decision.route in [
+            RouteType.GROUNDED_RAG,
+            RouteType.PERSONALIZED_EXPLANATION_SKILL,
+            RouteType.GENERIC_AGENT,
+        ]
+    
+    def test_route_reasons(self):
+        """测试路由原因"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+        
+        context = preprocessor.process(
+            user_input="决策树怎么学？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        
+        decision = router.route(context)
+        assert len(decision.reasons) > 0
+        assert isinstance(decision.reasons, list)
+        assert all(isinstance(r, str) for r in decision.reasons)
+
+
+class TestRouteExecutor:
+    """测试 RouteExecutor"""
+    
+    def test_datetime_execution(self):
+        """测试时间查询执行"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+        executor = get_executor()
+        
+        context = preprocessor.process(
+            user_input="现在几点？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        
+        decision = router.route(context)
+        result = executor.execute(context, decision, stream=False)
+        
+        assert result.success
+        assert result.route == RouteType.CURRENT_DATETIME
+        assert len(result.raw_answer) > 0
+    
+    def test_schedule_execution(self):
+        """测试课程安排执行"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+        executor = get_executor()
+        
+        context = preprocessor.process(
+            user_input="第1周讲什么？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        
+        decision = router.route(context)
+        result = executor.execute(context, decision, stream=False)
+        
+        assert result.success
+        assert result.route == RouteType.COURSE_SCHEDULE
+        assert len(result.raw_answer) > 0
+
+
+class TestEndToEnd:
+    """端到端测试"""
+    
+    def test_full_pipeline_datetime(self):
+        """完整 pipeline 测试：时间查询"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+        executor = get_executor()
+        
+        # Step 1: Preprocess
+        context = preprocessor.process(
+            user_input="现在几点了？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        
+        # Step 2: Route
+        decision = router.route(context)
+        assert decision.route == RouteType.CURRENT_DATETIME
+        
+        # Step 3: Execute
+        result = executor.execute(context, decision, stream=False)
+        assert result.success
+        assert "datetime" in context.detected_intents or decision.route == RouteType.CURRENT_DATETIME
+    
+    def test_full_pipeline_course_question(self):
+        """完整 pipeline 测试：课程问题"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+        executor = get_executor()
+        
+        # Step 1: Preprocess
+        context = preprocessor.process(
+            user_input="什么是梯度下降？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        
+        # Step 2: Route
+        decision = router.route(context)
+        
+        # 应该路由到某种处理方式（不是 OFF_TOPIC）
+        assert decision.route != RouteType.OFF_TOPIC
+        assert decision.confidence > 0.5
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
+
+
+class TestAgentRouteSharing:
+    """测试 AgentService 的 sync/stream 是否共享同一路由准备逻辑"""
+
+    def test_chat_with_history_stream_delegates_to_stream_method(self, monkeypatch):
+        """chat_with_history(stream=True) 应委托给 stream_chat_with_history。"""
+        from core.agent import AgentService
+
+        service = object.__new__(AgentService)
+        called = {}
+
+        def fake_stream(user_input, session_id, student_id=None):
+            called["args"] = (user_input, session_id, student_id)
+            yield {"type": "done", "content": "ok"}
+
+        monkeypatch.setattr(service, "stream_chat_with_history", fake_stream)
+
+        events = list(service.chat_with_history(
+            "现在几点？",
+            "session-1",
+            stream=True,
+            student_id="student-1",
+        ))
+
+        assert called["args"] == ("现在几点？", "session-1", "student-1")
+        assert events == [{"type": "done", "content": "ok"}]
+
+    def test_prepare_query_route_returns_route_decision(self, monkeypatch):
+        """_prepare_query_route 应返回 QueryContext 和 RouteDecision。"""
+        from core.agent import AgentService
+        from core.profile_models import StudentProfile
+        from core.query_pipeline import RouteType
+        from langchain_core.messages import HumanMessage
+
+        service = object.__new__(AgentService)
+        service.skill_loader = None
+
+        class FakeHistory:
+            messages = [HumanMessage(content="你好")]
+
+        class FakeMemory:
+            def get_profile(self, student_id):
+                return StudentProfile(student_id=student_id)
+
+        monkeypatch.setattr("utils.history.get_history", lambda session_id: FakeHistory())
+        monkeypatch.setattr("core.agent.get_memory_core", lambda: FakeMemory())
+        monkeypatch.setattr("core.knowledge_mapper.map_question_to_concepts", lambda question, top_k=3: [])
+        monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
+        monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
+        monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
+
+        state = service._prepare_query_route(
+            user_input="现在几点？",
+            session_id="session-1",
+            student_id="student-1",
+        )
+
+        assert state["context"].original_query == "现在几点？"
+        assert state["context"].session_id == "session-1"
+        assert state["context"].student_id == "student-1"
+        assert state["decision"].route == RouteType.CURRENT_DATETIME
+
+
+class TestQueryRouterRegressions:
+    """针对 code review findings 的回归测试。"""
+
+
+    def test_semester_schedule_route(self):
+        """学期级课程时间问题应走 schedule tool，而不是 RAG。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input="这学期什么时候有课？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+
+        decision = router.route(context)
+        assert decision.route == RouteType.COURSE_SCHEDULE
+
+    def test_schedule_route_ignores_internal_spaces(self):
+        """中文输入中插入空格时，schedule 路由仍应命中。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input="第 三 周 讲什么",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+
+        decision = router.route(context)
+        assert decision.route == RouteType.COURSE_SCHEDULE
+
+    def test_datetime_route_ignores_internal_spaces(self):
+        """时间查询也应使用与旧逻辑一致的去空白归一化。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input="现 在 几 点",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+
+        decision = router.route(context)
+        assert decision.route == RouteType.CURRENT_DATETIME
+
+    def test_learning_path_uses_full_legacy_cues(self):
+        """learning-path 关键词应覆盖旧 _is_learning_path_request 的 cue。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input="复习计划怎么安排？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        context.skill_candidate_keys.add("learning-path")
+
+        decision = router.route(context)
+        assert decision.route == RouteType.LEARNING_PATH_SKILL
+
+    def test_generic_agent_is_reachable(self):
+        """非课程、非工具、非 skill 查询不应被恒定路由到 GROUNDED_RAG。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input="你叫什么名字？",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        context.skill_candidate_keys = set()
+        context.detected_concepts = []
+        context.detected_intents = []
+
+        decision = router.route(context)
+        assert decision.route == RouteType.GENERIC_AGENT
+
+    def test_executor_schedule_uses_enriched_query(self, monkeypatch):
+        """Executor 的 schedule 调用应优先使用 metadata/enriched query，而不是原始 query。"""
+        from core.query_pipeline import RouteDecision
+        from core.query_pipeline.models import QueryContext
+
+        captured = {}
+
+        class FakeTool:
+            def invoke(self, query):
+                captured["query"] = query
+                return "ok"
+
+        monkeypatch.setattr("core.tools.course_schedule_tool", FakeTool())
+
+        context = QueryContext(
+            original_query="下次课",
+            normalized_query="下次课",
+            session_id="test",
+            student_id="test",
+            enriched_query="最近对话上下文...",
+            chat_history=[],
+            metadata={"schedule_tool_query": "下节课是什么时候？"},
+        )
+        decision = RouteDecision(route=RouteType.COURSE_SCHEDULE, confidence=1.0)
+
+        result = get_executor().execute(context, decision, stream=False)
+
+        assert result.success
+        assert captured["query"] == "下节课是什么时候？"
