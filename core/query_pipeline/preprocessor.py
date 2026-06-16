@@ -8,6 +8,7 @@ import threading
 from typing import List, Optional, Dict, Any
 
 from .models import QueryContext, DetectedConcept
+from .utils import collect_recent_context, is_contextual_followup
 
 logger = logging.getLogger(__name__)
 
@@ -100,34 +101,12 @@ class QueryPreprocessor:
     
     def _collect_recent_context(self, chat_history: List[Any], limit: int = 4) -> str:
         """收集最近的对话上下文"""
-        if not chat_history:
-            return ""
-        
-        summary_messages = [
-            msg for msg in chat_history
-            if getattr(msg, 'type', 'unknown') == 'system'
-            and getattr(msg, 'additional_kwargs', {}).get('short_memory_summary')
-            and getattr(msg, 'content', '')
-        ]
-        regular_messages = [msg for msg in chat_history if msg not in summary_messages]
-        recent = regular_messages[-limit:]
-        context_parts = []
-
-        if summary_messages:
-            context_parts.append(str(getattr(summary_messages[-1], 'content', '')).strip())
-        
-        for msg in recent:
-            role = getattr(msg, 'type', 'unknown')
-            content = getattr(msg, 'content', '')
-            
-            if role == 'human':
-                context_parts.append(f"用户: {content}")
-            elif role == 'ai':
-                # 截断长回答
-                content_preview = content[:200] if len(content) > 200 else content
-                context_parts.append(f"助手: {content_preview}")
-        
-        return "\n".join(part for part in context_parts if part)
+        return collect_recent_context(
+            chat_history,
+            limit=limit,
+            include_roles=True,
+            ai_truncate_chars=200,
+        )
     
     def _detect_concepts(
         self,
@@ -244,13 +223,7 @@ class QueryPreprocessor:
     
     def _is_followup_question(self, query: str, chat_history: List[Any]) -> bool:
         """判断是否是后续问题"""
-        if not chat_history:
-            return False
-        
-        # 简单规则：如果包含指代词且历史不为空
-        pronouns = ["这个", "那个", "它", "他", "她", "上面", "刚才"]
-        q = query.lower()
-        return any(p in q for p in pronouns)
+        return bool(chat_history) and is_contextual_followup(query, allow_short_question=False)
     
     def _build_profile_snapshot(self, profile: Optional[Any]) -> Optional[Dict[str, Any]]:
         """构建画像快照"""

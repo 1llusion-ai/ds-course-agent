@@ -760,3 +760,49 @@ class TestQueryRewriter:
 
         assert state["context"].metadata["rewrite"]["rewritten_query"] == "SVM 的核函数在线性可分时还需要吗？"
         assert state["context"].metadata["grounded_tool_query"] == state["context"].enriched_query
+
+
+class TestQueryPipelineUtils:
+    """共享 query utils 的回归测试，防止各模块再次分叉。"""
+
+    def test_collect_recent_context_is_summary_aware_and_dict_compatible(self):
+        from core.query_pipeline.utils import collect_recent_context
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+        history = [
+            SystemMessage(
+                content="短期记忆摘要：之前讨论了 SVM。",
+                additional_kwargs={"short_memory_summary": True},
+            ),
+            {"role": "user", "content": "上一问"},
+            {"role": "assistant", "content": "上一答很长"},
+            HumanMessage(content="当前前一问"),
+            AIMessage(content="当前前一答"),
+        ]
+
+        context = collect_recent_context(
+            history,
+            limit=2,
+            include_roles=True,
+            ai_truncate_chars=3,
+        )
+
+        assert context.splitlines() == [
+            "短期记忆摘要：之前讨论了 SVM。",
+            "用户: 当前前一问",
+            "助手: 当前前",
+        ]
+
+    def test_public_system_query_predicates(self):
+        from core.query_pipeline.utils import is_datetime_request, is_schedule_request
+
+        assert is_schedule_request("下次课是什么时候？") is True
+        assert is_datetime_request("现在几点？") is True
+        assert is_datetime_request("下次课是什么时候？") is False
+
+    def test_shared_followup_predicate(self):
+        from core.query_pipeline.utils import is_contextual_followup
+
+        assert is_contextual_followup("这个为什么？") is True
+        assert is_contextual_followup("能再解释一下吗？") is True
+        assert is_contextual_followup("PCA") is False

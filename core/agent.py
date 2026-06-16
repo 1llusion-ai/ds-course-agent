@@ -24,6 +24,13 @@ from langchain.agents import create_agent
 
 import utils.config as config
 from core.prompt import get_system_prompt
+from core.query_pipeline.utils import (
+    build_grounded_context_query,
+    collect_recent_context,
+    is_contextual_followup,
+    is_datetime_request,
+    is_schedule_request,
+)
 from core.skill_system import get_skill_loader
 from core.tools import get_rag_tools
 from core.memory_core import get_memory_core, record_event, aggregate_profile
@@ -313,45 +320,7 @@ class AgentService(object):
         return normalize_query_text(question)
 
     def _collect_recent_context(self, chat_history: Optional[list], limit: int = 4) -> str:
-        if not chat_history:
-            return ""
-
-        def is_summary(msg) -> bool:
-            if isinstance(msg, SystemMessage):
-                return bool(getattr(msg, "additional_kwargs", {}).get("short_memory_summary"))
-            if isinstance(msg, dict):
-                return (
-                    msg.get("role") == "system"
-                    and bool(msg.get("additional_kwargs", {}).get("short_memory_summary"))
-                )
-            return False
-
-        summary_messages = [msg for msg in chat_history if is_summary(msg)]
-        regular_messages = [msg for msg in chat_history if not is_summary(msg)]
-
-        parts = []
-        if summary_messages:
-            summary = summary_messages[-1]
-            summary_content = (
-                getattr(summary, "content", "")
-                if isinstance(summary, BaseMessage)
-                else summary.get("content", "")
-            )
-            if isinstance(summary_content, str) and summary_content.strip():
-                parts.append(summary_content)
-
-        for msg in regular_messages[-limit:]:
-            if isinstance(msg, BaseMessage):
-                content = getattr(msg, "content", "")
-            elif isinstance(msg, dict):
-                content = msg.get("content", "")
-            else:
-                content = ""
-
-            if isinstance(content, str) and content.strip():
-                parts.append(content)
-
-        return "\n".join(parts)
+        return collect_recent_context(chat_history, limit=limit, include_roles=False)
 
     def _is_clarification_request(self, question: str) -> bool:
         normalized = self._normalize_question_text(question)
@@ -370,12 +339,7 @@ class AgentService(object):
         return any(cue in normalized for cue in cues)
 
     def _looks_contextual_follow_up(self, question: str) -> bool:
-        normalized = self._normalize_question_text(question)
-        cues = [
-            "那它", "那这个", "这个", "它", "那为什么", "那怎么", "那是不是",
-            "还需要", "那还", "那如果", "这种情况", "前面说的",
-        ]
-        return any(cue in normalized for cue in cues)
+        return is_contextual_followup(question, allow_short_question=False)
 
     def _infer_clarification_type(self, question: str) -> str:
         normalized = self._normalize_question_text(question)
@@ -677,69 +641,10 @@ class AgentService(object):
         return None
 
     def _is_schedule_request(self, question: str) -> bool:
-        import re
-        normalized = self._normalize_question_text(question)
-
-        # 精确关键词匹配
-        exact_cues = [
-            "课表", "课程安排", "上课时间", "什么时候上课",
-            "几点上课", "上课地点", "在哪上课", "教室",
-            "第几周", "周几上课", "第几节",
-            "这周有什么课", "本周有什么课", "今天有课吗", "今天有没有课",
-            "明天有课吗", "明天有没有课", "后天有课吗", "后天有没有课",
-            "今天上课吗", "明天上课吗", "后天上课吗", "下周有什么课",
-            "这学期什么时候有课", "本学期什么时候有课",
-            "这学期有哪些课", "本学期有哪些课",
-            "这学期课程安排", "本学期课程安排",
-            "这学期上课安排", "本学期上课安排",
-            "下次课", "下一次课", "下节课", "下下节课",
-        ]
-        if any(cue in normalized for cue in exact_cues):
-            return True
-
-        # 匹配"下X节课"模式（支持任意多个"下"字）
-        # 例如：下节课、下下节课、下下下节课、下下周节课
-        if re.search(r'下{1,}节课', normalized):
-            return True
-
-        # 匹配"第X节课"或"第X周"等课程序列查询
-        if re.search(r'第[一二三四五六七八九十百0-9]+[节周]', normalized):
-            return True
-
-        if re.search(r"(今天|明天|后天).*(有课|上课|课程安排|几节课)", normalized):
-            return True
-
-        if re.search(r"(这学期|本学期|本课程|这门课).*(有课|上课|课程安排|上课安排|课表)", normalized):
-            return True
-
-        if re.search(r"什么时候.*(有课|上课)|下.*课.*时间|下次.*上课", normalized):
-            return True
-
-        return False
+        return is_schedule_request(question)
 
     def _is_datetime_request(self, question: str) -> bool:
-        normalized = self._normalize_question_text(question)
-        if self._is_schedule_request(question):
-            return False
-
-        exact_cues = [
-            "现在几点",
-            "当前时间",
-            "现在时间",
-            "现在几号",
-            "今天几号",
-            "今天几月几日",
-            "今天星期几",
-            "今天周几",
-            "今天礼拜几",
-            "几号了",
-            "星期几",
-            "周几",
-            "礼拜几",
-            "日期",
-            "几月几日",
-        ]
-        return any(cue in normalized for cue in exact_cues)
+        return is_datetime_request(question)
 
     def _build_grounded_tool_query(
         self,
@@ -753,12 +658,7 @@ class AgentService(object):
         if not recent_context.strip():
             return question
 
-        return (
-            "最近对话上下文：\n"
-            f"{recent_context}\n\n"
-            "请结合上下文理解学生当前追问，再检索课程资料回答。\n"
-            f"当前问题：{question}"
-        )
+        return build_grounded_context_query(question, recent_context)
 
     def _build_schedule_tool_query(self, question: str) -> str:
         normalized = self._normalize_question_text(question)

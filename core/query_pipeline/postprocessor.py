@@ -6,10 +6,8 @@ Query Postprocessor
 """
 from typing import Any, Optional, Union
 
-from langchain_core.messages import BaseMessage
-
 from .models import FinalResponse, QueryContext, RouteDecision, RouteResult, RouteType
-from .utils import is_judgement_question, normalize_query_text
+from .utils import collect_recent_context, is_judgement_question, normalize_query_text
 
 
 class QueryPostprocessor:
@@ -106,22 +104,7 @@ class QueryPostprocessor:
         return normalize_query_text(question)
 
     def _collect_recent_context(self, chat_history: Optional[list[Any]], limit: int = 4) -> str:
-        if not chat_history:
-            return ""
-
-        parts = []
-        for msg in chat_history[-limit:]:
-            if isinstance(msg, BaseMessage):
-                content = getattr(msg, "content", "")
-            elif isinstance(msg, dict):
-                content = msg.get("content", "")
-            else:
-                content = ""
-
-            if isinstance(content, str) and content.strip():
-                parts.append(content)
-
-        return "\n".join(parts)
+        return collect_recent_context(chat_history, limit=limit, include_roles=False)
 
     def _is_judgement_question(self, question: str) -> bool:
         return is_judgement_question(question)

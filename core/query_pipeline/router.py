@@ -6,9 +6,8 @@ Query Router
 import logging
 import re
 from typing import Optional
-
 from .models import QueryContext, RouteDecision, RouteType
-from .utils import is_judgement_question, normalize_query_text
+from .utils import is_datetime_request, is_judgement_question, is_schedule_request, normalize_query_text
 
 logger = logging.getLogger(__name__)
 
@@ -119,65 +118,22 @@ class QueryRouter:
     
     # ========== 系统工具判断 ==========
     
+    def is_datetime_request(self, query: str) -> bool:
+        """Public datetime-query predicate shared with rewriter/agent."""
+        return is_datetime_request(query)
+
+    def is_schedule_request(self, query: str) -> bool:
+        """Public schedule-query predicate shared with rewriter/agent."""
+        return is_schedule_request(query)
+
     def _is_datetime_request(self, query: str) -> bool:
-        """判断是否是时间查询。"""
-        if self._is_schedule_request(query):
-            return False
+        """Compatibility wrapper for existing tests/callers."""
+        return self.is_datetime_request(query)
 
-        exact_cues = [
-            "现在几点",
-            "当前时间",
-            "现在时间",
-            "现在几号",
-            "今天几号",
-            "今天几月几日",
-            "今天星期几",
-            "今天周几",
-            "今天礼拜几",
-            "几号了",
-            "星期几",
-            "周几",
-            "礼拜几",
-            "日期",
-            "几月几日",
-        ]
-        q = self._normalize(query)
-        return any(cue in q for cue in exact_cues)
-    
     def _is_schedule_request(self, query: str) -> bool:
-        """判断是否是课程安排查询。
+        """Compatibility wrapper for existing tests/callers."""
+        return self.is_schedule_request(query)
 
-        规则尽量与 AgentService._is_schedule_request 保持一致，
-        以保证 Step 1 重构基本不改变行为。
-        """
-        q = self._normalize(query)
-        exact_cues = [
-            "课表", "课程安排", "上课时间", "什么时候上课",
-            "几点上课", "上课地点", "在哪上课", "教室",
-            "第几周", "周几上课", "第几节",
-            "这周有什么课", "本周有什么课", "今天有课吗", "今天有没有课",
-            "明天有课吗", "明天有没有课", "后天有课吗", "后天有没有课",
-            "今天上课吗", "明天上课吗", "后天上课吗", "下周有什么课",
-            "这学期什么时候有课", "本学期什么时候有课",
-            "这学期有哪些课", "本学期有哪些课",
-            "这学期课程安排", "本学期课程安排",
-            "这学期上课安排", "本学期上课安排",
-            "下次课", "下一次课", "下节课", "下下节课",
-        ]
-        if any(cue in q for cue in exact_cues):
-            return True
-        if re.search(r"下{1,}节课", q):
-            return True
-        if re.search(r"第[一二三四五六七八九十百0-9]+[节周]", q):
-            return True
-        if re.search(r"(今天|明天|后天).*(有课|上课|课程安排|几节课)", q):
-            return True
-        if re.search(r"(这学期|本学期|本课程|这门课).*(有课|上课|课程安排|上课安排|课表)", q):
-            return True
-        if re.search(r"什么时候.*(有课|上课)|下.*课.*时间|下次.*上课", q):
-            return True
-        return False
-    
     # ========== 教学策略判断 ==========
     
     def _should_use_learning_path_skill(self, context: QueryContext) -> bool:

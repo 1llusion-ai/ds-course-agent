@@ -6,15 +6,18 @@ follow-up 理解的 enriched_query，并把改写轨迹写入 context.metadata["
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
-from typing import Any, Optional
-
-from langchain_core.messages import BaseMessage
+from typing import Optional
 
 from .models import QueryContext
-from .router import QueryRouter
-from .utils import normalize_query_text
+from .utils import (
+    build_grounded_context_query,
+    collect_recent_context,
+    is_contextual_followup,
+    is_datetime_request,
+    is_schedule_request,
+    normalize_query_text,
+)
 
 
 @dataclass
@@ -30,9 +33,6 @@ class RewriteResult:
 
 class QueryRewriter:
     """规则优先、零外部调用的保守 Query Rewriter。"""
-
-    def __init__(self, router: Optional[QueryRouter] = None):
-        self._router = router or QueryRouter()
 
     def rewrite(self, context: QueryContext) -> RewriteResult:
         original_query = context.original_query
@@ -107,10 +107,7 @@ class QueryRewriter:
 
     def _should_skip(self, query: str) -> bool:
         normalized = normalize_query_text(query)
-        return (
-            self._router._is_datetime_request(normalized)
-            or self._router._is_schedule_request(normalized)
-        )
+        return is_datetime_request(normalized) or is_schedule_request(normalized)
 
     def _rewrite_specific_followup(self, query: str, recent_context: str) -> Optional[str]:
         normalized_query = normalize_query_text(query)
@@ -133,89 +130,18 @@ class QueryRewriter:
         return None
 
     def _looks_contextual_followup(self, query: str) -> bool:
-        normalized = normalize_query_text(query)
-        cues = [
-            "它", "这个", "那个", "上述", "刚才", "前面", "继续", "再解释",
-            "再讲", "展开", "详细说", "为什么", "还需要吗", "需要吗",
-            "能再解释一下吗", "再解释一下", "什么意思", "怎么理解",
-        ]
-        if any(cue in normalized for cue in cues):
-            return True
-        return len(normalized) <= 12 and normalized.endswith(("吗", "呢", "？", "?"))
+        return is_contextual_followup(query, allow_short_question=True)
 
-    def _collect_recent_context(self, chat_history: Optional[list[Any]], limit: int = 4) -> str:
-        if not chat_history:
-            return ""
-
-        summary_messages = [msg for msg in chat_history if self._is_summary_message(msg)]
-        regular_messages = [msg for msg in chat_history if not self._is_summary_message(msg)]
-        parts = []
-
-        if summary_messages:
-            summary_content = self._message_content(summary_messages[-1])
-            if summary_content:
-                parts.append(summary_content)
-
-        for msg in regular_messages[-limit:]:
-            content = self._message_content(msg)
-            if not content:
-                continue
-            role = self._message_role(msg)
-            if role == "human":
-                parts.append(f"用户: {content}")
-            elif role == "ai":
-                parts.append(f"助手: {content[:240]}")
-            else:
-                parts.append(content[:240])
-
-        return "\n".join(parts)
-
-    def _is_summary_message(self, msg: Any) -> bool:
-        if isinstance(msg, BaseMessage):
-            return getattr(msg, "type", "") == "system" and bool(
-                getattr(msg, "additional_kwargs", {}).get("short_memory_summary")
-            )
-        if isinstance(msg, dict):
-            return msg.get("role") == "system" and bool(
-                msg.get("additional_kwargs", {}).get("short_memory_summary")
-            )
-        return False
-
-    def _message_role(self, msg: Any) -> str:
-        if isinstance(msg, BaseMessage):
-            return getattr(msg, "type", "")
-        if isinstance(msg, dict):
-            role = msg.get("role", "")
-            return {"user": "human", "assistant": "ai", "system": "system"}.get(role, role)
-        return ""
-
-    def _message_content(self, msg: Any) -> str:
-        content = getattr(msg, "content", None) if isinstance(msg, BaseMessage) else None
-        if isinstance(msg, dict):
-            content = msg.get("content", "")
-        if isinstance(content, str):
-            return re.sub(r"\s+", " ", content).strip()
-        if isinstance(content, list):
-            parts = []
-            for item in content:
-                if isinstance(item, str):
-                    parts.append(item)
-                elif isinstance(item, dict):
-                    text = item.get("text") or item.get("content")
-                    if text:
-                        parts.append(str(text))
-            return re.sub(r"\s+", " ", " ".join(parts)).strip()
-        return re.sub(r"\s+", " ", str(content or "")).strip()
+    def _collect_recent_context(self, chat_history, limit: int = 4) -> str:
+        return collect_recent_context(
+            chat_history,
+            limit=limit,
+            include_roles=True,
+            ai_truncate_chars=240,
+        )
 
     def _build_grounded_query(self, rewritten_query: str, recent_context: str) -> str:
-        if not recent_context.strip():
-            return rewritten_query
-        return (
-            "最近对话上下文：\n"
-            f"{recent_context}\n\n"
-            "请结合上下文理解学生当前追问，再检索课程资料回答。\n"
-            f"当前问题：{rewritten_query}"
-        )
+        return build_grounded_context_query(rewritten_query, recent_context)
 
 
 _rewriter: Optional[QueryRewriter] = None
