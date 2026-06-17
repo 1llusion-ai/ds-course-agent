@@ -30,6 +30,7 @@ from core.query_pipeline.utils import (
     is_contextual_followup,
     is_datetime_request,
     is_schedule_request,
+    normalize_query_text,
 )
 from core.skill_system import get_skill_loader
 from core.tools import get_rag_tools
@@ -314,16 +315,8 @@ class AgentService(object):
                 
         return formatted
 
-    def _normalize_question_text(self, question: str) -> str:
-        from core.query_pipeline.utils import normalize_query_text
-
-        return normalize_query_text(question)
-
-    def _collect_recent_context(self, chat_history: Optional[list], limit: int = 4) -> str:
-        return collect_recent_context(chat_history, limit=limit, include_roles=False)
-
     def _is_clarification_request(self, question: str) -> bool:
-        normalized = self._normalize_question_text(question)
+        normalized = normalize_query_text(question)
         cues = [
             "没懂", "不懂", "没明白", "还是不懂", "还是没懂", "再讲", "再解释",
             "怎么理解", "看不懂", "有点混", "混淆", "通俗", "直观", "举个例子",
@@ -332,17 +325,14 @@ class AgentService(object):
         return any(cue in normalized for cue in cues)
 
     def _is_mastery_signal(self, question: str) -> bool:
-        normalized = self._normalize_question_text(question)
+        normalized = normalize_query_text(question)
         cues = [
             "懂了", "明白了", "会了", "清楚了", "知道了", "理解了", "学会了", "搞懂了",
         ]
         return any(cue in normalized for cue in cues)
 
-    def _looks_contextual_follow_up(self, question: str) -> bool:
-        return is_contextual_followup(question, allow_short_question=False)
-
     def _infer_clarification_type(self, question: str) -> str:
-        normalized = self._normalize_question_text(question)
+        normalized = normalize_query_text(question)
         if any(cue in normalized for cue in ["举个例子", "例子", "案例"]):
             return "example_request"
         if any(cue in normalized for cue in ["通俗", "直观", "看不懂", "怎么理解"]):
@@ -388,7 +378,7 @@ class AgentService(object):
         if len(matched_concepts) == 1 and parsed_labels:
             labels = [matched_concepts[0].display_name]
             for label in parsed_labels:
-                if self._normalize_question_text(label) != self._normalize_question_text(labels[0]):
+                if normalize_query_text(label) != normalize_query_text(labels[0]):
                     labels.append(label)
                     break
             if len(labels) >= 2:
@@ -403,7 +393,7 @@ class AgentService(object):
 
         stable_labels = sorted(
             dict.fromkeys(labels),
-            key=self._normalize_question_text,
+            key=normalize_query_text,
         )
         if len(stable_labels) < 2:
             return None
@@ -472,7 +462,7 @@ class AgentService(object):
                 "source_event_id": None,
             }
 
-        if not (self._looks_contextual_follow_up(question) or self._is_mastery_signal(question)):
+        if not (is_contextual_followup(question, allow_short_question=False) or self._is_mastery_signal(question)):
             return None
 
         recent_event = self._get_recent_session_concept_event(student_id, session_id)
@@ -508,7 +498,7 @@ class AgentService(object):
         if not learning_concept:
             return
 
-        normalized = self._normalize_question_text(question)
+        normalized = normalize_query_text(question)
         is_mastery_signal = self._is_mastery_signal(question)
         is_clarification = self._is_clarification_request(question)
         is_plain_greeting = normalized in {"你好", "您好", "hi", "hello"}
@@ -596,7 +586,7 @@ class AgentService(object):
         return {item.skill.key for item in matches}
 
     def _handle_special_case(self, question: str) -> Optional[str]:
-        normalized = self._normalize_question_text(question)
+        normalized = normalize_query_text(question)
 
         greeting_patterns = [
             "你好", "您好", "hi", "hello", "早上好", "晚上好",
@@ -640,28 +630,22 @@ class AgentService(object):
 
         return None
 
-    def _is_schedule_request(self, question: str) -> bool:
-        return is_schedule_request(question)
-
-    def _is_datetime_request(self, question: str) -> bool:
-        return is_datetime_request(question)
-
     def _build_grounded_tool_query(
         self,
         question: str,
         chat_history: Optional[list] = None,
     ) -> str:
-        if not self._looks_contextual_follow_up(question):
+        if not is_contextual_followup(question, allow_short_question=False):
             return question
 
-        recent_context = self._collect_recent_context(chat_history)
+        recent_context = collect_recent_context(chat_history, include_roles=False)
         if not recent_context.strip():
             return question
 
         return build_grounded_context_query(question, recent_context)
 
     def _build_schedule_tool_query(self, question: str) -> str:
-        normalized = self._normalize_question_text(question)
+        normalized = normalize_query_text(question)
         if "下次课" in normalized or "下次上课" in normalized:
             return "下节课是什么时候？"
         if re.search(r"下.*课.*时间", question):
@@ -687,14 +671,14 @@ class AgentService(object):
         )
 
         try:
-            if self._is_schedule_request(question):
+            if is_schedule_request(question):
                 trace_step("agent.force_grounded", branch="schedule")
                 result = course_schedule_tool.invoke(self._build_schedule_tool_query(question))
                 # Mark as retrieval to prevent re-entry
                 _track_retrieval(sources=[], used=True)
                 return result
 
-            if self._is_datetime_request(question):
+            if is_datetime_request(question):
                 trace_step("agent.force_grounded", branch="datetime")
                 result = current_datetime_tool.invoke(question)
                 _track_retrieval(sources=[], used=True)

@@ -19,7 +19,7 @@ class QueryRouter:
         pass
 
     def _normalize(self, query: str) -> str:
-        """与 AgentService._normalize_question_text 保持一致的路由归一化。
+        """与 query_pipeline.utils.normalize_query_text 保持一致的路由归一化。
 
         中文用户输入中常见有被输入法插入的空格；旧逻辑会去除所有空白，
         Router 也必须保持一致，否则会出现静默路由漂移。

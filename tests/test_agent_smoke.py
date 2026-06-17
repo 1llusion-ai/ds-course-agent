@@ -485,10 +485,9 @@ class TestAgentShortTermMemory:
         assert isinstance(result[2], AIMessage)
 
     def test_collect_recent_context_includes_summary_and_recent_messages(self):
-        from core.agent import AgentService
+        from core.query_pipeline.utils import collect_recent_context
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-        service = AgentService.__new__(AgentService)
         history = [
             SystemMessage(
                 content="短期记忆摘要：之前讨论了 SVM 核函数。",
@@ -498,7 +497,7 @@ class TestAgentShortTermMemory:
             AIMessage(content="上一答"),
         ]
 
-        context = service._collect_recent_context(history, limit=2)
+        context = collect_recent_context(history, limit=2, include_roles=False)
 
         assert "短期记忆摘要" in context
         assert "上一问" in context
