@@ -2,7 +2,7 @@
 Query Postprocessor
 
 将路由执行结果标准化为 FinalResponse，并承载迁移中的回答级后处理逻辑。
-当前阶段保持最小闭环：兼容 RouteResult 或 str 输入，不强制改造 Executor/stream。
+当前阶段保持最小闭环：兼容 RouteResult 或 str 输入，不强制改造 Agent 执行/stream。
 """
 from typing import Any, Optional, Union
 

@@ -1,13 +1,12 @@
 """
 测试 Query Pipeline
 
-验证 QueryContext, Router, Executor 的基本功能
+验证 QueryContext、Router、Postprocessor、Rewriter 的基本功能
 """
 import pytest
 from core.query_pipeline import (
     get_preprocessor,
     get_router,
-    get_executor,
     RouteType,
 )
 
@@ -172,50 +171,6 @@ class TestQueryRouter:
         assert all(isinstance(r, str) for r in decision.reasons)
 
 
-class TestRouteExecutor:
-    """测试 RouteExecutor"""
-    
-    def test_datetime_execution(self):
-        """测试时间查询执行"""
-        preprocessor = get_preprocessor(enable_concept_detection=False)
-        router = get_router()
-        executor = get_executor()
-        
-        context = preprocessor.process(
-            user_input="现在几点？",
-            session_id="test",
-            student_id="test",
-            chat_history=[],
-        )
-        
-        decision = router.route(context)
-        result = executor.execute(context, decision, stream=False)
-        
-        assert result.success
-        assert result.route == RouteType.CURRENT_DATETIME
-        assert len(result.raw_answer) > 0
-    
-    def test_schedule_execution(self):
-        """测试课程安排执行"""
-        preprocessor = get_preprocessor(enable_concept_detection=False)
-        router = get_router()
-        executor = get_executor()
-        
-        context = preprocessor.process(
-            user_input="第1周讲什么？",
-            session_id="test",
-            student_id="test",
-            chat_history=[],
-        )
-        
-        decision = router.route(context)
-        result = executor.execute(context, decision, stream=False)
-        
-        assert result.success
-        assert result.route == RouteType.COURSE_SCHEDULE
-        assert len(result.raw_answer) > 0
-
-
 class TestEndToEnd:
     """端到端测试"""
     
@@ -223,7 +178,6 @@ class TestEndToEnd:
         """完整 pipeline 测试：时间查询"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
-        executor = get_executor()
         
         # Step 1: Preprocess
         context = preprocessor.process(
@@ -237,16 +191,12 @@ class TestEndToEnd:
         decision = router.route(context)
         assert decision.route == RouteType.CURRENT_DATETIME
         
-        # Step 3: Execute
-        result = executor.execute(context, decision, stream=False)
-        assert result.success
         assert "datetime" in context.detected_intents or decision.route == RouteType.CURRENT_DATETIME
     
     def test_full_pipeline_course_question(self):
         """完整 pipeline 测试：课程问题"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
-        executor = get_executor()
         
         # Step 1: Preprocess
         context = preprocessor.process(
@@ -413,35 +363,6 @@ class TestQueryRouterRegressions:
         decision = router.route(context)
         assert decision.route == RouteType.GENERIC_AGENT
 
-    def test_executor_schedule_uses_enriched_query(self, monkeypatch):
-        """Executor 的 schedule 调用应优先使用 metadata/enriched query，而不是原始 query。"""
-        from core.query_pipeline import RouteDecision
-        from core.query_pipeline.models import QueryContext
-
-        captured = {}
-
-        class FakeTool:
-            def invoke(self, query):
-                captured["query"] = query
-                return "ok"
-
-        monkeypatch.setattr("core.tools.course_schedule_tool", FakeTool())
-
-        context = QueryContext(
-            original_query="下次课",
-            normalized_query="下次课",
-            session_id="test",
-            student_id="test",
-            enriched_query="最近对话上下文...",
-            chat_history=[],
-            metadata={"schedule_tool_query": "下节课是什么时候？"},
-        )
-        decision = RouteDecision(route=RouteType.COURSE_SCHEDULE, confidence=1.0)
-
-        result = get_executor().execute(context, decision, stream=False)
-
-        assert result.success
-        assert captured["query"] == "下节课是什么时候？"
 
 
 class TestQueryPostprocessor:

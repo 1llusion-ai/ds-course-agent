@@ -2,7 +2,7 @@
 Query Pipeline 模块
 
 提供统一的查询处理流程：
-  Query → Preprocessor → Router → Executor → Postprocessor → Response
+  Query → Preprocessor → Router → Inline Execution → Postprocessor → Response
 """
 from .models import (
     QueryContext,
@@ -14,7 +14,6 @@ from .models import (
 )
 from .preprocessor import QueryPreprocessor, get_preprocessor
 from .router import QueryRouter, get_router
-from .executor import RouteExecutor, get_executor
 from .postprocessor import QueryPostprocessor, get_postprocessor
 from .rewriter import QueryRewriter, RewriteResult, get_rewriter
 
@@ -29,8 +28,6 @@ __all__ = [
     "get_preprocessor",
     "QueryRouter",
     "get_router",
-    "RouteExecutor",
-    "get_executor",
     "QueryPostprocessor",
     "get_postprocessor",
     "QueryRewriter",

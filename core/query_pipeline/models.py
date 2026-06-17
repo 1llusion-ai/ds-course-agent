@@ -97,7 +97,7 @@ class RouteResult:
     """
     路由执行结果
     
-    Executor 的输出
+    路由执行结果；当前生产路径由 AgentService._execute_route 生成 str，测试/过渡层仍可使用该结构。
     """
     raw_answer: str
     route: RouteType
