@@ -614,6 +614,41 @@ class TestQueryRewriter:
         assert result.rewritten_query in context.enriched_query
         assert context.metadata["rewrite"]["changed"] is True
 
+
+    def test_svm_kernel_followup_rewrites_generic_pronoun_quality_question(self):
+        from langchain_core.messages import AIMessage, HumanMessage
+        from core.query_pipeline import get_rewriter
+
+        history = [
+            HumanMessage(content="SVM 的核函数有什么作用？"),
+            AIMessage(content="核函数可以处理非线性可分数据。"),
+        ]
+        context = self._context("它效果怎么样？", history)
+
+        result = get_rewriter().rewrite(context)
+
+        assert result.changed is True
+        assert result.strategy == "entity_followup"
+        assert result.rewritten_query == "SVM 的核函数效果怎么样？"
+        assert "当前问题：SVM 的核函数效果怎么样？" in context.enriched_query
+
+    def test_course_entity_followup_rewrites_overfitting_solution_question(self):
+        from langchain_core.messages import AIMessage, HumanMessage
+        from core.query_pipeline import get_rewriter
+
+        history = [
+            HumanMessage(content="决策树容易过拟合吗？"),
+            AIMessage(content="决策树如果深度太大，确实容易过拟合。"),
+        ]
+        context = self._context("过拟合怎么解决？", history)
+
+        result = get_rewriter().rewrite(context)
+
+        assert result.changed is True
+        assert result.strategy == "entity_followup"
+        assert result.rewritten_query == "决策树过拟合怎么解决？"
+        assert "当前问题：决策树过拟合怎么解决？" in context.enriched_query
+
     def test_contextual_followup_builds_grounded_query_when_no_specific_template(self):
         from langchain_core.messages import AIMessage, HumanMessage
         from core.query_pipeline import get_rewriter

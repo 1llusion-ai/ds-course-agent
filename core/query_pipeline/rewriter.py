@@ -19,6 +19,21 @@ from .utils import (
     normalize_query_text,
 )
 
+COURSE_ENTITY_ALIASES = [
+    ("SVM 的核函数", ["svm的核函数", "支持向量机的核函数", "核函数", "线性核", "kernel"]),
+    ("支持向量机", ["svm", "支持向量机"]),
+    ("决策树", ["决策树", "decisiontree", "decision tree"]),
+    ("随机森林", ["随机森林", "randomforest", "random forest"]),
+    ("PCA", ["pca", "主成分分析", "主成分"]),
+    ("梯度下降", ["梯度下降", "gradientdescent", "gradient descent"]),
+    ("逻辑回归", ["逻辑回归", "logisticregression", "logistic regression"]),
+    ("线性回归", ["线性回归", "linearregression", "linear regression"]),
+    ("朴素贝叶斯", ["朴素贝叶斯", "naivebayes", "naive bayes", "贝叶斯"]),
+    ("KNN", ["knn", "k近邻", "k近邻算法"]),
+]
+
+PRONOUN_PREFIXES = ["它", "这个", "那个", "上述", "刚才那个", "前面那个", "前面说的"]
+
 
 @dataclass
 class RewriteResult:
@@ -52,17 +67,32 @@ class QueryRewriter:
             return result
 
         recent_context = self._collect_recent_context(context.chat_history)
-        rewritten_query = self._rewrite_specific_followup(normalized_query, recent_context)
-        if rewritten_query and rewritten_query != normalized_query:
-            enriched_query = self._build_grounded_query(rewritten_query, recent_context)
+        specific_rewrite = self._rewrite_specific_followup(normalized_query, recent_context)
+        if specific_rewrite and specific_rewrite != normalized_query:
+            enriched_query = self._build_grounded_query(specific_rewrite, recent_context)
             result = RewriteResult(
                 original_query=original_query,
-                rewritten_query=rewritten_query,
+                rewritten_query=specific_rewrite,
                 enriched_query=enriched_query,
                 changed=True,
                 strategy="svm_kernel_followup",
                 reason="根据最近 SVM/核函数上下文消解指代",
                 confidence=0.90,
+            )
+            self._apply(context, result)
+            return result
+
+        entity_rewrite = self._rewrite_entity_followup(normalized_query, recent_context)
+        if entity_rewrite and entity_rewrite != normalized_query:
+            enriched_query = self._build_grounded_query(entity_rewrite, recent_context)
+            result = RewriteResult(
+                original_query=original_query,
+                rewritten_query=entity_rewrite,
+                enriched_query=enriched_query,
+                changed=True,
+                strategy="entity_followup",
+                reason="根据最近课程实体补全追问",
+                confidence=0.78,
             )
             self._apply(context, result)
             return result
@@ -128,6 +158,64 @@ class QueryRewriter:
             return "SVM 的核函数在线性可分时还需要吗？"
 
         return None
+
+
+    def _rewrite_entity_followup(self, query: str, recent_context: str) -> Optional[str]:
+        if not recent_context.strip():
+            return None
+
+        entity = self._latest_context_entity(recent_context)
+        if not entity:
+            return None
+
+        normalized_query = normalize_query_text(query)
+        normalized_entity = normalize_query_text(entity)
+        if normalized_entity in normalized_query:
+            return None
+
+        # 指代型短追问：它效果怎么样？ -> SVM 的核函数效果怎么样？
+        pronoun_rewrite = self._replace_pronoun_prefix(query, entity)
+        if pronoun_rewrite:
+            return pronoun_rewrite
+
+        # 保守主题补全：仅在问题包含跨实体常见属性时补全最近实体。
+        if self._should_prefix_recent_entity(normalized_query, normalized_entity):
+            return f"{entity}{query}"
+
+        return None
+
+    def _latest_context_entity(self, recent_context: str) -> Optional[str]:
+        normalized_context = normalize_query_text(recent_context)
+        latest: tuple[int, str] | None = None
+        for canonical, aliases in COURSE_ENTITY_ALIASES:
+            positions = [normalized_context.rfind(normalize_query_text(alias)) for alias in aliases]
+            position = max(positions) if positions else -1
+            if position < 0:
+                continue
+            if latest is None or position > latest[0]:
+                latest = (position, canonical)
+        return latest[1] if latest else None
+
+    def _replace_pronoun_prefix(self, query: str, entity: str) -> Optional[str]:
+        stripped = query.strip()
+        for pronoun in PRONOUN_PREFIXES:
+            if stripped.startswith(pronoun):
+                suffix = stripped[len(pronoun):].lstrip("的")
+                return f"{entity}{suffix}" if suffix else entity
+        return None
+
+    def _should_prefix_recent_entity(self, normalized_query: str, normalized_entity: str) -> bool:
+        if len(normalized_query) > 24:
+            return False
+        if normalized_entity in normalized_query:
+            return False
+
+        topic_cues = [
+            "过拟合", "欠拟合", "正则化", "剪枝", "泛化", "效果", "优缺点",
+            "优点", "缺点", "怎么解决", "如何解决", "怎么办", "怎么处理",
+            "为什么", "适用场景", "应用场景", "参数", "复杂度",
+        ]
+        return any(cue in normalized_query for cue in topic_cues)
 
     def _looks_contextual_followup(self, query: str) -> bool:
         return is_contextual_followup(query, allow_short_question=True)
