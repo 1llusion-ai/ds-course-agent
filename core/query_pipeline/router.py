@@ -98,7 +98,12 @@ class QueryRouter:
                 fallback_route=RouteType.GROUNDED_RAG,
             )
         
-        # 3. 课程知识问答类 - 默认使用 grounded RAG
+        # 3. Query rewrite 指向明确课程追问时，优先进入 grounded RAG。
+        rewrite_decision = self._route_rewritten_followup(context)
+        if rewrite_decision is not None:
+            return rewrite_decision
+
+        # 4. 课程知识问答类 - 默认使用 grounded RAG
         if self._is_likely_course_question(context):
             return RouteDecision(
                 route=RouteType.GROUNDED_RAG,
@@ -116,6 +121,34 @@ class QueryRouter:
             retrieval_policy="optional",
         )
     
+    def _route_rewritten_followup(self, context: QueryContext) -> Optional[RouteDecision]:
+        rewrite = context.metadata.get("rewrite") if context.metadata else None
+        if not isinstance(rewrite, dict):
+            return None
+        if not rewrite.get("changed"):
+            return None
+
+        confidence = float(rewrite.get("confidence") or 0.0)
+        strategy = rewrite.get("strategy") or "unknown"
+        rewritten_query = rewrite.get("rewritten_query") or context.enriched_query or context.normalized_query
+
+        # 只提升高置信、实体级补全；普通 contextual_followup 仍交给原路由。
+        if confidence < 0.75 or strategy not in {"entity_followup", "svm_kernel_followup"}:
+            return None
+
+        return RouteDecision(
+            route=RouteType.GROUNDED_RAG,
+            confidence=max(0.82, min(0.90, confidence)),
+            reasons=["query rewrite 指向课程追问", f"rewrite_strategy={strategy}"],
+            retrieval_policy="required",
+            fallback_route=RouteType.GENERIC_AGENT,
+            metadata={
+                "rewrite_strategy": strategy,
+                "rewrite_confidence": confidence,
+                "rewritten_query": rewritten_query,
+            },
+        )
+
     # ========== 系统工具判断 ==========
     
     def is_datetime_request(self, query: str) -> bool:

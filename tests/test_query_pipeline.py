@@ -345,6 +345,64 @@ class TestQueryRouterRegressions:
         decision = router.route(context)
         assert decision.route == RouteType.LEARNING_PATH_SKILL
 
+
+    def test_router_uses_high_confidence_rewrite_as_course_followup_signal(self):
+        from langchain_core.messages import AIMessage, HumanMessage
+        from core.query_pipeline import get_rewriter
+
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+        history = [
+            HumanMessage(content="决策树容易过拟合吗？"),
+            AIMessage(content="决策树如果深度太大，确实容易过拟合。"),
+        ]
+        context = preprocessor.process(
+            user_input="过拟合怎么解决？",
+            session_id="test",
+            student_id="test",
+            chat_history=history,
+        )
+        context.skill_candidate_keys = set()
+        context.detected_concepts = []
+        context.detected_intents = []
+
+        rewrite = get_rewriter().rewrite(context)
+        decision = router.route(context)
+
+        assert rewrite.changed is True
+        assert decision.route == RouteType.GROUNDED_RAG
+        assert decision.confidence == 0.82
+        assert "query rewrite 指向课程追问" in decision.reasons
+        assert decision.metadata["rewrite_strategy"] == "entity_followup"
+        assert decision.metadata["rewritten_query"] == "决策树过拟合怎么解决？"
+
+    def test_router_does_not_promote_low_confidence_contextual_rewrite(self):
+        from langchain_core.messages import AIMessage, HumanMessage
+        from core.query_pipeline import get_rewriter
+
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+        history = [
+            HumanMessage(content="PCA 的主成分是什么？"),
+            AIMessage(content="主成分是数据方差最大的方向。"),
+        ]
+        context = preprocessor.process(
+            user_input="能再解释一下吗？",
+            session_id="test",
+            student_id="test",
+            chat_history=history,
+        )
+        context.skill_candidate_keys = set()
+        context.detected_concepts = []
+        context.detected_intents = []
+
+        rewrite = get_rewriter().rewrite(context)
+        decision = router.route(context)
+
+        assert rewrite.strategy == "contextual_followup"
+        assert rewrite.confidence == 0.70
+        assert decision.route == RouteType.GENERIC_AGENT
+
     def test_generic_agent_is_reachable(self):
         """非课程、非工具、非 skill 查询不应被恒定路由到 GROUNDED_RAG。"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
