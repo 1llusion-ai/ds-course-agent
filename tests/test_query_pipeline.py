@@ -607,6 +607,54 @@ class TestAgentStreamPostprocessRegressions:
         assert sync_result == "个性化解释结果"
         assert stream_events[-1]["content"] == "个性化解释结果"
 
+    def test_grounded_rag_route_uses_rewritten_grounded_tool_query(self, monkeypatch):
+        from core.agent import AgentService
+        from core.profile_models import StudentProfile
+        from core.query_pipeline import RouteType
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        service = object.__new__(AgentService)
+        service.llm = None
+        service.tools = []
+        service.agent = None
+        service.explanation_skill = lambda *_args: "个性化解释结果"
+        captured = {}
+
+        class FakeHistory:
+            messages = [
+                HumanMessage(content="决策树容易过拟合吗？"),
+                AIMessage(content="决策树如果深度太大，确实容易过拟合。"),
+            ]
+
+            def add_messages(self, messages):
+                pass
+
+        class FakeMemory:
+            def get_profile(self, student_id):
+                return StudentProfile(student_id=student_id)
+
+        monkeypatch.setattr("utils.history.get_history", lambda session_id: FakeHistory())
+        monkeypatch.setattr("core.agent.get_memory_core", lambda: FakeMemory())
+        monkeypatch.setattr("core.knowledge_mapper.map_question_to_concepts", lambda question, top_k=3: [])
+        monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
+        monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
+        monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
+        monkeypatch.setattr(service, "_maybe_force_grounded_answer", lambda *args, **kwargs: None)
+
+        def fake_chat(user_input, chat_history=None, stream=False):
+            captured["user_input"] = user_input
+            return "grounded answer"
+
+        monkeypatch.setattr(service, "chat", fake_chat)
+
+        state = service._prepare_query_route("过拟合怎么解决？", "session-1", "student-1")
+        state["decision"].route = RouteType.GROUNDED_RAG
+        result = service._execute_route(state, stream=False)
+
+        assert result == "grounded answer"
+        assert captured["user_input"] == state["context"].metadata["grounded_tool_query"]
+        assert "当前问题：决策树过拟合怎么解决？" in captured["user_input"]
+
 
 class TestQueryRewriter:
     """保守版 Query Rewriter 回归测试。"""

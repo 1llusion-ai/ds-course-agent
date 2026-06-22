@@ -638,6 +638,26 @@ class AgentService(object):
             return "下节课是什么时候？"
         return question
 
+    def _route_execution_query(self, context, decision) -> str:
+        """Return the query text that should be sent into the executing branch.
+
+        The user-facing/original query stays unchanged for history and
+        postprocessing, but grounded RAG routes must execute against the
+        rewritten/enriched tool query produced by the pipeline.
+        """
+        from core.query_pipeline import RouteType
+
+        if decision.route != RouteType.GROUNDED_RAG:
+            return context.original_query
+
+        metadata = context.metadata or {}
+        return (
+            metadata.get("grounded_tool_query")
+            or context.enriched_query
+            or context.normalized_query
+            or context.original_query
+        )
+
     def _maybe_force_grounded_answer(
         self,
         question: str,
@@ -797,6 +817,7 @@ class AgentService(object):
         matched_concepts = route_state["matched_concepts"]
         decision = route_state["decision"]
         route = decision.route
+        execution_query = self._route_execution_query(route_state["context"], decision)
 
         result = None
 
@@ -836,14 +857,14 @@ class AgentService(object):
                 if stream:
                     streamed_parts = [
                         chunk
-                        for chunk in self.chat(user_input, chat_history, stream=True)
+                        for chunk in self.chat(execution_query, chat_history, stream=True)
                         if chunk
                     ]
                     result = "".join(streamed_parts)
                     if result == "":
-                        result = self.chat(user_input, chat_history, stream=False)
+                        result = self.chat(execution_query, chat_history, stream=False)
                 else:
-                    result = self.chat(user_input, chat_history, stream=False)
+                    result = self.chat(execution_query, chat_history, stream=False)
 
                 if hasattr(result, "__iter__") and not isinstance(result, str):
                     result = "".join(result)
