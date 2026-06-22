@@ -248,6 +248,28 @@ class TestFormatChatHistory:
         assert result[2].content == "q2"
 
 
+
+    def test_build_grounded_query_from_history_uses_shared_context_template(self):
+        from core.query_pipeline.utils import build_grounded_query_from_history
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        history = [
+            HumanMessage(content="SVM 的核函数有什么作用？"),
+            AIMessage(content="核函数可以处理非线性可分数据。"),
+        ]
+
+        query = build_grounded_query_from_history("那它还需要吗？", history)
+
+        assert query.startswith("最近对话上下文：")
+        assert "SVM 的核函数有什么作用" in query
+        assert "当前问题：那它还需要吗？" in query
+
+    def test_build_grounded_query_from_history_leaves_standalone_question_unchanged(self):
+        from core.query_pipeline.utils import build_grounded_query_from_history
+
+        assert build_grounded_query_from_history("什么是数据科学？", []) == "什么是数据科学？"
+
+
 class TestChatWithHistory:
     @patch("utils.history.get_history")
     @patch("core.knowledge_mapper.map_question_to_concepts", return_value=[])

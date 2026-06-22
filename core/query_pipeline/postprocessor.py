@@ -2,11 +2,11 @@
 Query Postprocessor
 
 将路由执行结果标准化为 FinalResponse，并承载迁移中的回答级后处理逻辑。
-当前阶段保持最小闭环：兼容 RouteResult 或 str 输入，不强制改造 Agent 执行/stream。
+当前阶段保持最小闭环：将 Agent 执行得到的字符串标准化为 FinalResponse。
 """
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
-from .models import FinalResponse, QueryContext, RouteDecision, RouteResult, RouteType
+from .models import FinalResponse, QueryContext, RouteDecision, RouteType
 from .utils import collect_recent_context, is_judgement_question, normalize_query_text
 
 
@@ -17,15 +17,14 @@ class QueryPostprocessor:
         self,
         context: QueryContext,
         decision: RouteDecision,
-        result: Union[RouteResult, str],
+        result: str,
         *,
         chat_history: Optional[list[Any]] = None,
     ) -> FinalResponse:
-        """把 RouteResult 或旧式 str 回答标准化为 FinalResponse。"""
-        route_result = self._coerce_route_result(result, decision)
-        content = route_result.raw_answer or ""
+        """把 Agent 执行得到的字符串回答标准化为 FinalResponse。"""
+        content = str(result or "")
 
-        if route_result.route == RouteType.GENERIC_AGENT:
+        if decision.route == RouteType.GENERIC_AGENT:
             content = self.postprocess_generic_answer(
                 context.original_query,
                 content,
@@ -33,26 +32,24 @@ class QueryPostprocessor:
             )
 
         trace = {
-            "route": route_result.route.value,
+            "route": decision.route.value,
             "confidence": decision.confidence,
             "reasons": list(decision.reasons),
-            "success": route_result.success,
+            "success": bool(content),
         }
-        if route_result.error:
-            trace["error"] = route_result.error
 
-        metadata = dict(route_result.metadata or {})
+        metadata = dict(decision.metadata or {})
         metadata.setdefault("retrieval_policy", decision.retrieval_policy)
         if decision.skill_name:
             metadata.setdefault("skill_name", decision.skill_name)
 
         return FinalResponse(
             content=content,
-            sources=list(route_result.sources or []),
-            route=route_result.route,
+            sources=[],
+            route=decision.route,
             trace=trace,
             metadata=metadata,
-            used_retrieval=route_result.used_retrieval,
+            used_retrieval=decision.retrieval_policy == "required",
         )
 
     def postprocess_generic_answer(
@@ -89,16 +86,6 @@ class QueryPostprocessor:
             return f"{prefix}\n\n{answer}"
 
         return answer
-
-    def _coerce_route_result(self, result: Union[RouteResult, str], decision: RouteDecision) -> RouteResult:
-        if isinstance(result, RouteResult):
-            return result
-
-        return RouteResult(
-            raw_answer=str(result or ""),
-            route=decision.route,
-            success=bool(result),
-        )
 
     def _normalize_question_text(self, question: str) -> str:
         return normalize_query_text(question)

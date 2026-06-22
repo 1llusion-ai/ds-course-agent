@@ -1,7 +1,7 @@
 """
 Query Pipeline 数据模型
 
-定义 QueryContext, RouteDecision, RouteResult, FinalResponse 等核心数据结构
+定义 QueryContext, RouteDecision, FinalResponse 等核心数据结构
 """
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
@@ -87,31 +87,6 @@ class RouteDecision:
     
     # 降级路由
     fallback_route: Optional[RouteType] = None
-    
-    # 元数据
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class RouteResult:
-    """
-    路由执行结果
-    
-    路由执行结果；当前生产路径由 AgentService._execute_route 生成 str，测试/过渡层仍可使用该结构。
-    """
-    raw_answer: str
-    route: RouteType
-    success: bool = True
-    
-    # 检索相关
-    sources: List[Dict[str, Any]] = field(default_factory=list)
-    used_retrieval: bool = False
-    
-    # 工具调用
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
-    
-    # 错误信息
-    error: Optional[str] = None
     
     # 元数据
     metadata: Dict[str, Any] = field(default_factory=dict)

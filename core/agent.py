@@ -25,7 +25,7 @@ from langchain.agents import create_agent
 import utils.config as config
 from core.prompt import get_system_prompt
 from core.query_pipeline.utils import (
-    build_grounded_context_query,
+    build_grounded_query_from_history,
     collect_recent_context,
     is_contextual_followup,
     is_datetime_request,
@@ -630,20 +630,6 @@ class AgentService(object):
 
         return None
 
-    def _build_grounded_tool_query(
-        self,
-        question: str,
-        chat_history: Optional[list] = None,
-    ) -> str:
-        if not is_contextual_followup(question, allow_short_question=False):
-            return question
-
-        recent_context = collect_recent_context(chat_history, include_roles=False)
-        if not recent_context.strip():
-            return question
-
-        return build_grounded_context_query(question, recent_context)
-
     def _build_schedule_tool_query(self, question: str) -> str:
         normalized = normalize_query_text(question)
         if "下次课" in normalized or "下次上课" in normalized:
@@ -690,7 +676,7 @@ class AgentService(object):
                 return None
 
             trace_step("agent.force_grounded", branch="rag")
-            grounded_query = self._build_grounded_tool_query(question, chat_history)
+            grounded_query = build_grounded_query_from_history(question, chat_history)
             return course_rag_tool.invoke(grounded_query)
         except Exception as e:
             trace_error("agent.force_grounded", e)
@@ -895,7 +881,7 @@ class AgentService(object):
             try:
                 from core.tools import course_rag_tool
 
-                fallback_query = self._build_grounded_tool_query(user_input, chat_history)
+                fallback_query = build_grounded_query_from_history(user_input, chat_history)
                 fallback = course_rag_tool.invoke(fallback_query)
                 if fallback and fallback.strip() and fallback != "无相关资料":
                     result = f"{fallback}\n\n[注：使用基础检索模式回答]"

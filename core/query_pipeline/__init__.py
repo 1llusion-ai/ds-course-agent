@@ -7,7 +7,6 @@ Query Pipeline 模块
 from .models import (
     QueryContext,
     RouteDecision,
-    RouteResult,
     FinalResponse,
     RouteType,
     DetectedConcept,
@@ -20,7 +19,6 @@ from .rewriter import QueryRewriter, RewriteResult, get_rewriter
 __all__ = [
     "QueryContext",
     "RouteDecision",
-    "RouteResult",
     "FinalResponse",
     "RouteType",
     "DetectedConcept",

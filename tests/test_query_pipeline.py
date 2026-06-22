@@ -450,38 +450,6 @@ class TestQueryPostprocessor:
         assert response.trace["confidence"] == 0.6
         assert response.trace["reasons"] == ["fallback"]
 
-    def test_postprocessor_accepts_route_result(self):
-        from core.query_pipeline import QueryContext, RouteDecision, RouteResult, RouteType, get_postprocessor
-
-        context = QueryContext(
-            original_query="什么是过拟合？",
-            normalized_query="什么是过拟合？",
-            session_id="test",
-            student_id="test",
-            chat_history=[],
-        )
-        decision = RouteDecision(
-            route=RouteType.GROUNDED_RAG,
-            confidence=0.8,
-            reasons=["课程相关知识问答"],
-            retrieval_policy="required",
-        )
-        result = RouteResult(
-            raw_answer="grounded answer",
-            route=RouteType.GROUNDED_RAG,
-            success=True,
-            sources=[{"title": "source"}],
-            used_retrieval=True,
-            metadata={"executor": "test"},
-        )
-
-        response = get_postprocessor().process(context, decision, result)
-
-        assert response.content == "grounded answer"
-        assert response.sources == [{"title": "source"}]
-        assert response.used_retrieval is True
-        assert response.metadata["executor"] == "test"
-        assert response.metadata["retrieval_policy"] == "required"
 
     def test_postprocessor_preserves_svm_kernel_judgement_contract(self):
         from core.query_pipeline import QueryContext, RouteDecision, RouteType, get_postprocessor

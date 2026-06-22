@@ -186,3 +186,18 @@ def build_grounded_context_query(question: str, recent_context: str) -> str:
         "请结合上下文理解学生当前追问，再检索课程资料回答。\n"
         f"当前问题：{question}"
     )
+
+
+def build_grounded_query_from_history(
+    question: str,
+    chat_history: Optional[list[Any]],
+    *,
+    allow_short_question: bool = False,
+    include_roles: bool = False,
+) -> str:
+    """Build contextual grounded query directly from chat history when needed."""
+    if not is_contextual_followup(question, allow_short_question=allow_short_question):
+        return question
+
+    recent_context = collect_recent_context(chat_history, include_roles=include_roles)
+    return build_grounded_context_query(question, recent_context)
