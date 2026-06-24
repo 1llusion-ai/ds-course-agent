@@ -729,29 +729,102 @@ class AgentService(object):
         """
         from utils.history import get_history
         from core.knowledge_mapper import map_question_to_concepts
-        from core.query_pipeline import get_preprocessor, get_rewriter, get_router, DetectedConcept
-        from core.query_trace import trace_step
+        from core.query_pipeline import QueryContext, RouteDecision, get_preprocessor, get_rewriter, get_router, DetectedConcept
+        from core.query_trace import trace_step, trace_span
 
         student_id = student_id or session_id
-        history = get_history(session_id)
-        chat_history = history.messages
-        profile = get_memory_core().get_profile(student_id)
+        with trace_span("prepare.history_load"):
+            history = get_history(session_id)
+            chat_history = history.messages
+
         special_case_response = self._handle_special_case(user_input)
 
+        def lightweight_state(route, confidence, reasons, *, required_tools=None, retrieval_policy="disabled"):
+            context = QueryContext(
+                original_query=user_input,
+                normalized_query=user_input.strip(),
+                session_id=session_id,
+                student_id=student_id,
+                enriched_query=user_input.strip(),
+                chat_history=chat_history,
+                metadata={
+                    "schedule_tool_query": self._build_schedule_tool_query(user_input),
+                    "fast_path": True,
+                },
+            )
+            decision = RouteDecision(
+                route=route,
+                confidence=confidence,
+                reasons=reasons,
+                required_tools=required_tools or [],
+                retrieval_policy=retrieval_policy,
+            )
+            trace_step(
+                "query_pipeline.route",
+                route=decision.route.value,
+                confidence=decision.confidence,
+                reasons=decision.reasons,
+                fast_path=True,
+            )
+            return {
+                "student_id": student_id,
+                "history": history,
+                "chat_history": chat_history,
+                "profile": None,
+                "special_case_response": special_case_response,
+                "matched_concepts": [],
+                "skill_candidate_keys": set(),
+                "context": context,
+                "decision": decision,
+            }
+
+        from core.query_pipeline import RouteType
+
+        # Fast path: system/special-case requests do not need profile, concept map, or rewrite.
+        if special_case_response:
+            return lightweight_state(
+                RouteType.GENERIC_AGENT,
+                1.0,
+                ["特殊问候/致谢/范围保护响应"],
+                retrieval_policy="disabled",
+            )
+        if is_datetime_request(user_input):
+            return lightweight_state(
+                RouteType.CURRENT_DATETIME,
+                0.98,
+                ["fast path: 当前日期时间查询"],
+                required_tools=["current_datetime"],
+                retrieval_policy="disabled",
+            )
+        if is_schedule_request(user_input):
+            return lightweight_state(
+                RouteType.COURSE_SCHEDULE,
+                0.98,
+                ["fast path: 课程安排查询"],
+                required_tools=["course_schedule"],
+                retrieval_policy="optional",
+            )
+
+        with trace_span("prepare.profile_load"):
+            profile = get_memory_core().get_profile(student_id)
+
         # 保持与旧逻辑一致：学习事件和路由概念都复用 map_question_to_concepts。
-        matched_concepts = [] if special_case_response else map_question_to_concepts(user_input, top_k=3)
-        skill_candidate_keys = self._select_skill_candidates(user_input)
+        with trace_span("prepare.concept_map"):
+            matched_concepts = map_question_to_concepts(user_input, top_k=3)
+        with trace_span("prepare.skill_select"):
+            skill_candidate_keys = self._select_skill_candidates(user_input)
 
         # 这里禁用 preprocessor 内部的概念识别，避免重复调用 heavy mapper；
         # 随后把旧逻辑得到的 matched_concepts 注入到 context。
         preprocessor = get_preprocessor(enable_concept_detection=False)
-        context = preprocessor.process(
-            user_input=user_input,
-            session_id=session_id,
-            student_id=student_id,
-            chat_history=chat_history,
-            profile=profile,
-        )
+        with trace_span("prepare.preprocess"):
+            context = preprocessor.process(
+                user_input=user_input,
+                session_id=session_id,
+                student_id=student_id,
+                chat_history=chat_history,
+                profile=profile,
+            )
         context.detected_concepts = [
             DetectedConcept(
                 concept_id=item.concept_id,
@@ -766,11 +839,13 @@ class AgentService(object):
         ]
         context.skill_candidate_keys = skill_candidate_keys
 
-        rewrite_result = get_rewriter().rewrite(context)
+        with trace_span("prepare.rewrite"):
+            rewrite_result = get_rewriter().rewrite(context)
         context.metadata["schedule_tool_query"] = self._build_schedule_tool_query(user_input)
         context.metadata["grounded_tool_query"] = rewrite_result.enriched_query
 
-        decision = get_router().route(context)
+        with trace_span("prepare.router"):
+            decision = get_router().route(context)
         trace_step(
             "query_pipeline.route",
             route=decision.route.value,
@@ -784,13 +859,14 @@ class AgentService(object):
             ", ".join(decision.reasons),
         )
 
-        self._record_learning_events(
-            question=user_input,
-            session_id=session_id,
-            student_id=student_id,
-            matched_concepts=matched_concepts,
-            special_case_response=special_case_response,
-        )
+        with trace_span("prepare.record_learning_events"):
+            self._record_learning_events(
+                question=user_input,
+                session_id=session_id,
+                student_id=student_id,
+                matched_concepts=matched_concepts,
+                special_case_response=special_case_response,
+            )
 
         return {
             "student_id": student_id,
@@ -807,7 +883,7 @@ class AgentService(object):
     def _execute_route(self, route_state: dict, stream: bool = False) -> str:
         """按统一 RouteDecision 执行回答；sync/stream 共享此执行核心。"""
         from core.query_pipeline import RouteType, get_postprocessor
-        from core.query_trace import trace_step, trace_error
+        from core.query_trace import trace_step, trace_error, trace_span
 
         user_input = route_state["context"].original_query
         session_id = route_state["context"].session_id
@@ -837,6 +913,24 @@ class AgentService(object):
 
                 result = current_datetime_tool.invoke(user_input)
                 _track_retrieval(sources=[], used=True)
+            elif route == RouteType.PYTHON_EXEC:
+                trace_step("agent.branch", branch="python_exec")
+                from core.code_executor import (
+                    PythonSandbox,
+                    extract_python_code,
+                    format_python_execution_answer,
+                )
+
+                code = extract_python_code(user_input)
+                if not code:
+                    result = (
+                        "没有检测到可执行的 Python 代码。"
+                        "请把代码放在 ```python ... ``` 代码块中，或直接发送要运行的代码。"
+                    )
+                else:
+                    with trace_span("execute.python_sandbox"):
+                        execution_result = PythonSandbox().execute(code)
+                    result = format_python_execution_answer(code, execution_result)
             elif route == RouteType.LEARNING_PATH_SKILL and getattr(self, "learning_path_skill", None):
                 trace_step("agent.branch", branch="learning_path_skill")
                 result = self.learning_path_skill(user_input, student_id, session_id)
@@ -855,16 +949,19 @@ class AgentService(object):
             else:
                 trace_step("agent.branch", branch="generic_agent")
                 if stream:
-                    streamed_parts = [
-                        chunk
-                        for chunk in self.chat(execution_query, chat_history, stream=True)
-                        if chunk
-                    ]
+                    with trace_span("execute.agent_chat_stream"):
+                        streamed_parts = [
+                            chunk
+                            for chunk in self.chat(execution_query, chat_history, stream=True)
+                            if chunk
+                        ]
                     result = "".join(streamed_parts)
                     if result == "":
-                        result = self.chat(execution_query, chat_history, stream=False)
+                        with trace_span("execute.agent_chat"):
+                            result = self.chat(execution_query, chat_history, stream=False)
                 else:
-                    result = self.chat(execution_query, chat_history, stream=False)
+                    with trace_span("execute.agent_chat"):
+                        result = self.chat(execution_query, chat_history, stream=False)
 
                 if hasattr(result, "__iter__") and not isinstance(result, str):
                     result = "".join(result)
@@ -890,6 +987,7 @@ class AgentService(object):
                 bool(special_case_response)
                 or route == RouteType.COURSE_SCHEDULE
                 or route == RouteType.CURRENT_DATETIME
+                or route == RouteType.PYTHON_EXEC
                 or route == RouteType.LEARNING_PATH_SKILL
                 or route == RouteType.MISCONCEPTION_SKILL
                 or route == RouteType.PERSONALIZED_EXPLANATION_SKILL

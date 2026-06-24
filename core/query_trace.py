@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 import traceback
 import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -65,6 +66,24 @@ def trace_step(stage: str, status: str = "ok", **data) -> None:
             "data": data or {},
         }
     )
+
+
+@contextmanager
+def trace_span(stage: str, **data):
+    """Record a lightweight duration event for a code block."""
+    start = time.perf_counter()
+    error: Exception | None = None
+    try:
+        yield
+    except Exception as exc:
+        error = exc
+        raise
+    finally:
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        payload = {"duration_ms": duration_ms, **(data or {})}
+        if error is not None:
+            payload.update({"error": str(error), "error_type": type(error).__name__})
+        trace_step(stage, status="error" if error else "ok", **payload)
 
 
 def trace_error(stage: str, exc: Exception | str, **data) -> None:

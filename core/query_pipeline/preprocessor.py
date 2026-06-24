@@ -4,6 +4,7 @@ Query Preprocessor
 负责将用户输入和上下文信息整理成标准的 QueryContext
 """
 import logging
+import re
 import threading
 from typing import List, Optional, Dict, Any
 
@@ -163,12 +164,56 @@ class QueryPreprocessor:
         # 代码请求
         if any(kw in q for kw in ["代码", "实现", "python", "怎么写", "示例"]):
             intents.append("code_request")
+
+        if self._is_python_execution_request(query):
+            intents.append("python_execution")
         
         # 应用场景
         if any(kw in q for kw in ["应用", "例子", "场景", "实际", "用途"]):
             intents.append("application")
         
         return intents
+
+    def _is_python_execution_request(self, query: str) -> bool:
+        """判断用户是否明确要求运行/调试一段 Python 代码。"""
+        q = query.lower()
+        compact = "".join(q.split())
+
+        execution_cues = [
+            "运行",
+            "执行",
+            "跑一下",
+            "跑下",
+            "算一下输出",
+            "输出结果",
+            "告诉我输出",
+            "调试",
+            "报错",
+            "debug",
+            "run",
+            "execute",
+            "python_exec_tool",
+        ]
+        has_execution_cue = any(cue in compact for cue in execution_cues)
+
+        code_patterns = [
+            r"```(?:python|py)?\s*[\s\S]+?```",
+            r"\bprint\s*\(",
+            r"\bimport\s+[a-zA-Z_]",
+            r"\bfrom\s+[a-zA-Z_][\w.]*\s+import\b",
+            r"\b(def|class|for|while|if)\s+.+:",
+            r"\b[a-zA-Z_]\w*\s*=\s*[^=]",
+        ]
+        has_code = any(re.search(pattern, q, flags=re.IGNORECASE) for pattern in code_patterns)
+
+        # 整条消息本身就是简短 Python 语句时，也应直接进入执行路由。
+        looks_like_standalone_code = bool(
+            has_code
+            and not any(cue in compact for cue in ["什么是", "是什么", "解释", "怎么写", "示例"])
+            and len(query.strip().splitlines()) <= 8
+        )
+
+        return (has_execution_cue and has_code) or looks_like_standalone_code
     
     def _is_clarification_signal(self, query: str) -> bool:
         """判断是否是澄清请求"""

@@ -44,7 +44,18 @@ class QueryRouter:
         """
         query = self._normalize(context.normalized_query)
 
-        # 1. 系统工具类
+        # 1. 明确 Python 代码执行请求：直接走运行时工具，不查教材、不附来源。
+        # 放在系统工具前，避免代码字符串里的“今天/第3周”等词误触发时间/课表。
+        if "python_execution" in context.detected_intents:
+            return RouteDecision(
+                route=RouteType.PYTHON_EXEC,
+                confidence=0.95,
+                reasons=["检测到明确 Python 代码执行请求"],
+                required_tools=["python_exec_tool"],
+                retrieval_policy="disabled",
+            )
+
+        # 2. 系统工具类
         if self._is_datetime_request(query):
             return RouteDecision(
                 route=RouteType.CURRENT_DATETIME,
@@ -63,9 +74,9 @@ class QueryRouter:
                 retrieval_policy="optional",
             )
         
-        # 2. 教学策略类
+        # 3. 教学策略类
         
-        # 2.1 学习路径 skill
+        # 3.1 学习路径 skill
         if self._should_use_learning_path_skill(context):
             return RouteDecision(
                 route=RouteType.LEARNING_PATH_SKILL,
@@ -76,7 +87,7 @@ class QueryRouter:
                 fallback_route=RouteType.GROUNDED_RAG,
             )
         
-        # 2.2 错误理解 / misconception skill
+        # 3.2 错误理解 / misconception skill
         if self._should_use_misconception_skill(context):
             return RouteDecision(
                 route=RouteType.MISCONCEPTION_SKILL,
@@ -87,7 +98,7 @@ class QueryRouter:
                 fallback_route=RouteType.GROUNDED_RAG,
             )
         
-        # 2.3 个性化解释 skill
+        # 3.3 个性化解释 skill
         if self._should_use_explanation_skill(context):
             return RouteDecision(
                 route=RouteType.PERSONALIZED_EXPLANATION_SKILL,
@@ -98,12 +109,12 @@ class QueryRouter:
                 fallback_route=RouteType.GROUNDED_RAG,
             )
         
-        # 3. Query rewrite 指向明确课程追问时，优先进入 grounded RAG。
+        # 4. Query rewrite 指向明确课程追问时，优先进入 grounded RAG。
         rewrite_decision = self._route_rewritten_followup(context)
         if rewrite_decision is not None:
             return rewrite_decision
 
-        # 4. 课程知识问答类 - 默认使用 grounded RAG
+        # 5. 课程知识问答类 - 默认使用 grounded RAG
         if self._is_likely_course_question(context):
             return RouteDecision(
                 route=RouteType.GROUNDED_RAG,
@@ -113,7 +124,7 @@ class QueryRouter:
                 fallback_route=RouteType.GENERIC_AGENT,
             )
         
-        # 4. 通用 agent fallback
+        # 6. 通用 agent fallback
         return RouteDecision(
             route=RouteType.GENERIC_AGENT,
             confidence=0.60,
@@ -359,7 +370,6 @@ class QueryRouter:
         course_related_intents = [
             "concept_explanation",
             "comparison",
-            "code_request",
             "application",
         ]
         if any(intent in context.detected_intents for intent in course_related_intents):

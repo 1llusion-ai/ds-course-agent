@@ -119,19 +119,40 @@ def _ensure_session_history(session_id: str) -> None:
         _chat_history[session_id] = []
 
 
-def _append_message(session_id: str, message: ChatMessage) -> None:
+def _append_message(session_id: str, message: ChatMessage, *, save: bool = True) -> None:
     _ensure_session_history(session_id)
     _chat_history[session_id].append(_msg_to_dict(message))
-    _save_state()
+    if save:
+        _save_state()
 
 
-def _update_session_metadata(session_id: str, timestamp: str | None = None) -> None:
+def _update_session_metadata(session_id: str, timestamp: str | None = None, *, save: bool = True) -> None:
     if session_id not in _sessions:
         return
 
     _sessions[session_id]["message_count"] = len(_chat_history.get(session_id, []))
     _sessions[session_id]["updated_at"] = timestamp or datetime.now().isoformat()
-    _save_state()
+    if save:
+        _save_state()
+
+
+def _schedule_title_generation(session_id: str, message: str) -> None:
+    """Generate the first-turn title in the background without blocking replies."""
+    if _title_gen_cache.get(session_id):
+        return
+
+    _title_gen_cache[session_id] = True
+
+    async def _bg_generate_title():
+        try:
+            generated_title = await _generate_session_title(message)
+            if session_id in _sessions:
+                _sessions[session_id]["title"] = generated_title
+                _save_state()
+        except Exception:
+            logger.debug("会话标题生成失败", exc_info=True)
+
+    asyncio.create_task(_bg_generate_title())
 
 
 def _build_stream_error_message(text: str) -> ChatMessage:
@@ -152,15 +173,11 @@ async def send_message(data: ChatRequest):
     is_first_message = len(_chat_history.get(data.session_id, [])) == 0
 
     user_msg = ChatMessage(role="user", content=data.message)
-    _append_message(data.session_id, user_msg)
+    _append_message(data.session_id, user_msg, save=False)
 
-    # 首次消息：LLM 生成标题
-    if is_first_message and not _title_gen_cache.get(data.session_id):
-        _title_gen_cache[data.session_id] = True
-        generated_title = await _generate_session_title(data.message)
-        if data.session_id in _sessions:
-            _sessions[data.session_id]["title"] = generated_title
-            _save_state()
+    # 首次消息：后台生成标题，不阻塞回答。
+    if is_first_message:
+        _schedule_title_generation(data.session_id, data.message)
 
     try:
         assistant_result = await run_in_threadpool(
@@ -190,8 +207,9 @@ async def send_message(data: ChatRequest):
         content=assistant_content,
         sources=assistant_sources or None,
     )
-    _append_message(data.session_id, assistant_msg)
-    _update_session_metadata(data.session_id, assistant_msg.timestamp.isoformat())
+    _append_message(data.session_id, assistant_msg, save=False)
+    _update_session_metadata(data.session_id, assistant_msg.timestamp.isoformat(), save=False)
+    _save_state()
 
     return ChatResponse(message=assistant_msg, session_id=data.session_id)
 
@@ -206,22 +224,11 @@ async def send_message_stream(
     is_first_message = len(_chat_history.get(session_id, [])) == 0
 
     user_msg = ChatMessage(role="user", content=message)
-    _append_message(session_id, user_msg)
+    _append_message(session_id, user_msg, save=False)
 
     # 首次消息：异步后台生成标题，不阻塞流式响应
-    if is_first_message and not _title_gen_cache.get(session_id):
-        _title_gen_cache[session_id] = True
-
-        async def _bg_generate_title():
-            try:
-                generated_title = await _generate_session_title(message)
-                if session_id in _sessions:
-                    _sessions[session_id]["title"] = generated_title
-                    _save_state()
-            except Exception:
-                pass
-
-        asyncio.create_task(_bg_generate_title())
+    if is_first_message:
+        _schedule_title_generation(session_id, message)
 
     async def generate() -> AsyncGenerator[str, None]:
         loop = asyncio.get_running_loop()
@@ -270,8 +277,9 @@ async def send_message_stream(
                         content=event.get("content", ""),
                         sources=event.get("sources") or None,
                     )
-                    _append_message(session_id, assistant_msg)
-                    _update_session_metadata(session_id, assistant_msg.timestamp.isoformat())
+                    _append_message(session_id, assistant_msg, save=False)
+                    _update_session_metadata(session_id, assistant_msg.timestamp.isoformat(), save=False)
+                    _save_state()
                     yield _sse(
                         {
                             "type": "final",
@@ -283,8 +291,9 @@ async def send_message_stream(
 
                 if event_type == "error":
                     assistant_msg = _build_stream_error_message(event.get("message", "发送失败"))
-                    _append_message(session_id, assistant_msg)
-                    _update_session_metadata(session_id, assistant_msg.timestamp.isoformat())
+                    _append_message(session_id, assistant_msg, save=False)
+                    _update_session_metadata(session_id, assistant_msg.timestamp.isoformat(), save=False)
+                    _save_state()
                     yield _sse(
                         {
                             "type": "final",
@@ -297,8 +306,9 @@ async def send_message_stream(
 
             if not final_sent:
                 assistant_msg = _build_stream_error_message("流式连接已结束，但未收到完整回答。")
-                _append_message(session_id, assistant_msg)
-                _update_session_metadata(session_id, assistant_msg.timestamp.isoformat())
+                _append_message(session_id, assistant_msg, save=False)
+                _update_session_metadata(session_id, assistant_msg.timestamp.isoformat(), save=False)
+                _save_state()
                 yield _sse(
                     {
                         "type": "final",

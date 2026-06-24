@@ -205,11 +205,12 @@ def build_sources_from_documents(documents) -> list[dict]:
 @tool
 def course_rag_tool(question: str) -> str:
     """课程资料检索与问答工具。用于基于教材内容回答课程相关问题。"""
-    from core.query_trace import trace_step, trace_error
+    from core.query_trace import trace_step, trace_error, trace_span
     trace_step("tool.invoke", tool="course_rag_tool", question=question)
     try:
         service = get_rag_service()
-        result = service.retrieve(question)
+        with trace_span("tool.course_rag.retrieve"):
+            result = service.retrieve(question)
         sources = build_sources_from_documents(result.documents)
         _track_retrieval(sources, used=True)
 
@@ -223,7 +224,8 @@ def course_rag_tool(question: str) -> str:
                 "3. 如果是课程外问题，我也可以先帮你判断是否属于本课程范围"
             )
 
-        answer_result = service.answer_with_context(question, result.formatted_context)
+        with trace_span("tool.course_rag.answer"):
+            answer_result = service.answer_with_context(question, result.formatted_context)
         trace_step("tool.result", tool="course_rag_tool", status="ok")
         return answer_result.answer
     except Exception as exc:
@@ -245,6 +247,52 @@ def check_knowledge_base_status() -> str:
         )
     except Exception as exc:
         return f"知识库状态异常：{exc}"
+
+
+def _python_exec_error_hint(stderr: str) -> str:
+    if "IndentationError" in stderr:
+        return "提示：请检查代码缩进是否一致。"
+    if "NameError" in stderr:
+        return "提示：请检查变量或函数名是否已定义。"
+    if "SyntaxError" in stderr:
+        return "提示：请检查 Python 语法是否完整、括号/冒号是否匹配。"
+    if "ModuleNotFoundError" in stderr:
+        return "提示：当前运行环境缺少该模块，请改用已安装库或提供替代实现。"
+    return ""
+
+
+@tool
+def python_exec_tool(code: str) -> str:
+    """执行 Python 代码并返回输出。用于验证代码、演示数据科学操作、调试学生代码。可以运行 pandas/numpy/sklearn/matplotlib 等数据科学库的代码。"""
+    from core.code_executor import PythonSandbox
+    from core.query_trace import trace_step, trace_error
+
+    trace_step("tool.invoke", tool="python_exec_tool")
+    try:
+        result = PythonSandbox().execute(code)
+        stdout = str(result.get("stdout") or "").rstrip()
+        stderr = str(result.get("stderr") or "").rstrip()
+        exit_code = int(result.get("exit_code", -1))
+        truncated = bool(result.get("truncated"))
+
+        lines = [f"exit_code: {exit_code}"]
+        if stdout:
+            lines.append("stdout:\n" + stdout)
+        if stderr:
+            hint = _python_exec_error_hint(stderr)
+            if hint:
+                lines.append(hint)
+            lines.append("stderr:\n" + stderr)
+        if not stdout and not stderr:
+            lines.append("（程序执行完成，无输出）")
+        if truncated:
+            lines.append("（输出已截断到 4000 字符）")
+
+        trace_step("tool.result", tool="python_exec_tool", exit_code=exit_code, truncated=truncated)
+        return "\n".join(lines)
+    except Exception as exc:  # pragma: no cover - defensive guard around tool formatting
+        trace_error("tool.invoke", exc, tool="python_exec_tool")
+        return f"执行 Python 代码时出错：{exc}"
 
 
 def _load_course_schedule() -> dict:
@@ -663,7 +711,13 @@ def record_misconception_event(
 
 
 def get_rag_tools():
-    return [course_rag_tool, check_knowledge_base_status, course_schedule_tool, current_datetime_tool]
+    return [
+        course_rag_tool,
+        check_knowledge_base_status,
+        course_schedule_tool,
+        current_datetime_tool,
+        python_exec_tool,
+    ]
 
 
 if __name__ == "__main__":

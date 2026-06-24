@@ -22,6 +22,7 @@ import utils.config as config
 
 logger = logging.getLogger(__name__)
 from core.reranker import get_reranker
+from core.query_trace import trace_span
 
 
 def _normalize_latin_tokens(text: str) -> str:
@@ -132,21 +133,26 @@ class HybridRetriever:
 
         # 初始化BM25检索器
         self.bm25_retriever = BM25Retriever()
+        self.chroma_client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
+        self.collection = self.chroma_client.get_collection(self.collection_name)
+        self._doc_text_to_index: dict[str, int] = {}
+        self._doc_prefix_to_index: dict[str, int] = {}
 
         # 连接ChromaDB并加载所有文档
         self._load_documents()
 
     def _load_documents(self):
         """从ChromaDB加载所有文档到BM25"""
-        client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
-        collection = client.get_collection(self.collection_name)
-
         # 获取所有文档
-        results = collection.get(include=["documents", "metadatas"])
+        results = self.collection.get(include=["documents", "metadatas"])
 
         documents = []
-        for text, meta in zip(results['documents'], results['metadatas']):
+        self._doc_text_to_index = {}
+        self._doc_prefix_to_index = {}
+        for idx, (text, meta) in enumerate(zip(results['documents'], results['metadatas'])):
             documents.append(Document(page_content=text, metadata=meta))
+            self._doc_text_to_index.setdefault(text, idx)
+            self._doc_prefix_to_index.setdefault(text[:200], idx)
 
         # 添加到BM25索引
         self.bm25_retriever.add_documents(documents)
@@ -157,27 +163,26 @@ class HybridRetriever:
     def _vector_search(self, query: str, top_k: int = 10) -> List[tuple[int, float]]:
         """向量语义检索 - 使用ChromaDB"""
         query = _normalize_latin_tokens(query)
-        query_embedding = self.embedding.embed_query(query)
+        with trace_span("retriever.embedding_query"):
+            query_embedding = self.embedding.embed_query(query)
 
-        client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
-        collection = client.get_collection(self.collection_name)
-
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=min(top_k * 3, len(self.documents)),
-            include=["documents", "distances"]
-        )
+        with trace_span("retriever.chroma_query"):
+            results = self.collection.query(
+                query_embeddings=[query_embedding],
+                n_results=min(top_k * 3, len(self.documents)),
+                include=["documents", "distances"]
+            )
 
         # 通过内容匹配找到对应的文档索引
         results_list = []
         if results['documents'] and results['documents'][0]:
             for doc_text, distance in zip(results['documents'][0], results['distances'][0]):
-                # 在已加载的文档中查找匹配的文档
                 similarity = 1.0 - float(distance)
-                for idx, doc in enumerate(self.documents):
-                    if doc.page_content == doc_text or doc.page_content[:200] == doc_text[:200]:
-                        results_list.append((idx, similarity))
-                        break
+                idx = self._doc_text_to_index.get(doc_text)
+                if idx is None:
+                    idx = self._doc_prefix_to_index.get(doc_text[:200])
+                if idx is not None:
+                    results_list.append((idx, similarity))
 
         # 去重并排序
         seen = set()
@@ -241,15 +246,18 @@ class HybridRetriever:
         rerank_top_k = config.RERANK_TOP_K
 
         # BM25检索
-        bm25_results = self.bm25_retriever.retrieve(query, top_k=rerank_top_k)
+        with trace_span("retriever.bm25"):
+            bm25_results = self.bm25_retriever.retrieve(query, top_k=rerank_top_k)
         logger.debug("BM25返回 %d 个结果", len(bm25_results))
 
         # 向量检索
-        vector_results = self._vector_search(query, top_k=rerank_top_k)
+        with trace_span("retriever.vector"):
+            vector_results = self._vector_search(query, top_k=rerank_top_k)
         logger.debug("Vector返回 %d 个结果", len(vector_results))
 
         # RRF融合
-        fused_results = self._reciprocal_rank_fusion(bm25_results, vector_results)
+        with trace_span("retriever.rrf"):
+            fused_results = self._reciprocal_rank_fusion(bm25_results, vector_results)
         logger.debug("融合后 %d 个结果", len(fused_results))
 
         # 获取候选文档（若启用rerank，取rerank_top_k；否则取k）

@@ -79,18 +79,20 @@ def get_agent_service():
 
 def chat_with_history(message: str, session_id: str, student_id: str) -> dict:
     from core.tools import begin_retrieval_trace, end_retrieval_trace
-    from core.query_trace import begin_query_trace, end_query_trace, trace_error
+    from core.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
 
     q_token = begin_query_trace(meta={"session_id": session_id, "student_id": student_id})
     token = begin_retrieval_trace()
 
     try:
-        service = get_agent_service()
-        content = service.chat_with_history(
-            user_input=message,
-            session_id=session_id,
-            student_id=student_id
-        )
+        with trace_span("core_bridge.get_agent_service"):
+            service = get_agent_service()
+        with trace_span("core_bridge.agent_chat"):
+            content = service.chat_with_history(
+                user_input=message,
+                session_id=session_id,
+                student_id=student_id
+            )
     except Exception as e:
         logger.error("Agent调用出错: %s", e, exc_info=True)
         trace_error("core_bridge.chat", e)
@@ -111,24 +113,26 @@ def chat_with_history(message: str, session_id: str, student_id: str) -> dict:
 
 def stream_chat_with_history(message: str, session_id: str, student_id: str):
     from core.tools import begin_retrieval_trace, end_retrieval_trace
-    from core.query_trace import begin_query_trace, end_query_trace, trace_error
+    from core.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
 
     q_token = begin_query_trace(meta={"session_id": session_id, "student_id": student_id})
     token = begin_retrieval_trace()
     final_content = ""
 
     try:
-        service = get_agent_service()
-        for event in service.stream_chat_with_history(
-            user_input=message,
-            session_id=session_id,
-            student_id=student_id,
-        ):
-            event_type = event.get("type")
-            if event_type == "delta":
-                yield event
-            elif event_type == "done":
-                final_content = event.get("content", "")
+        with trace_span("core_bridge.get_agent_service"):
+            service = get_agent_service()
+        with trace_span("core_bridge.agent_stream"):
+            for event in service.stream_chat_with_history(
+                user_input=message,
+                session_id=session_id,
+                student_id=student_id,
+            ):
+                event_type = event.get("type")
+                if event_type == "delta":
+                    yield event
+                elif event_type == "done":
+                    final_content = event.get("content", "")
     except Exception as e:
         logger.error("流式Agent调用出错: %s", e, exc_info=True)
         trace_error("core_bridge.stream", e)

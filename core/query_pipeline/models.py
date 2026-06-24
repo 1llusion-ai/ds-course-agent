@@ -15,6 +15,7 @@ class RouteType(str, Enum):
     LEARNING_PATH_SKILL = "learning_path_skill"
     MISCONCEPTION_SKILL = "misconception_skill"
     PERSONALIZED_EXPLANATION_SKILL = "personalized_explanation_skill"
+    PYTHON_EXEC = "python_exec"
     GROUNDED_RAG = "grounded_rag"
     GENERIC_AGENT = "generic_agent"
     OFF_TOPIC = "off_topic"

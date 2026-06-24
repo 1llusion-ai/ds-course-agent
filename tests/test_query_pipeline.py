@@ -62,6 +62,15 @@ class TestQueryPreprocessor:
         )
         assert "concept_explanation" in context.detected_intents
 
+        # 明确代码执行
+        context = preprocessor.process(
+            user_input="请运行这段代码并告诉我输出：print(1 + 1)",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        assert "python_execution" in context.detected_intents
+
 
 class TestQueryRouter:
     """测试 QueryRouter"""
@@ -131,6 +140,23 @@ class TestQueryRouter:
         decision = router.route(context)
         assert decision.route == RouteType.MISCONCEPTION_SKILL
         assert context.is_clarification_signal
+
+    def test_python_exec_route(self):
+        """明确运行 Python 代码时应进入代码执行路由，而不是 RAG。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input="请运行这段代码并告诉我输出：print(1 + 1)",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+
+        decision = router.route(context)
+        assert decision.route == RouteType.PYTHON_EXEC
+        assert decision.retrieval_policy == "disabled"
+        assert decision.required_tools == ["python_exec_tool"]
     
     def test_grounded_rag_route(self):
         """测试 grounded RAG 路由"""
@@ -152,6 +178,24 @@ class TestQueryRouter:
             RouteType.PERSONALIZED_EXPLANATION_SKILL,
             RouteType.GENERIC_AGENT,
         ]
+
+    def test_plain_code_request_without_execution_is_not_forced_to_rag(self):
+        """普通写代码请求不再因 code_request 自动进入课程 RAG。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input="帮我写一段 Python 示例代码",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        context.detected_concepts = []
+
+        decision = router.route(context)
+        assert "code_request" in context.detected_intents
+        assert "python_execution" not in context.detected_intents
+        assert decision.route == RouteType.GENERIC_AGENT
     
     def test_route_reasons(self):
         """测试路由原因"""
@@ -278,6 +322,39 @@ class TestAgentRouteSharing:
         assert state["context"].session_id == "session-1"
         assert state["context"].student_id == "student-1"
         assert state["decision"].route == RouteType.CURRENT_DATETIME
+
+    def test_datetime_fast_path_skips_concept_map_and_profile(self, monkeypatch):
+        """系统工具 fast path 不应触发概念映射或画像读取。"""
+        from core.agent import AgentService
+        from core.query_pipeline import RouteType
+
+        service = object.__new__(AgentService)
+        service.skill_loader = None
+
+        class FakeHistory:
+            messages = []
+
+        monkeypatch.setattr("utils.history.get_history", lambda session_id: FakeHistory())
+
+        def fail_get_memory_core():
+            raise AssertionError("profile should not load for datetime fast path")
+
+        def fail_concept_map(question, top_k=3):
+            raise AssertionError("concept map should not run for datetime fast path")
+
+        monkeypatch.setattr("core.agent.get_memory_core", fail_get_memory_core)
+        monkeypatch.setattr("core.knowledge_mapper.map_question_to_concepts", fail_concept_map)
+        monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
+        monkeypatch.setattr(service, "_build_schedule_tool_query", lambda question: question)
+
+        state = service._prepare_query_route(
+            user_input="现在几点？",
+            session_id="session-1",
+            student_id="student-1",
+        )
+
+        assert state["decision"].route == RouteType.CURRENT_DATETIME
+        assert state["context"].metadata["fast_path"] is True
 
 
 class TestQueryRouterRegressions:
@@ -606,6 +683,33 @@ class TestAgentStreamPostprocessRegressions:
 
         assert sync_result == "个性化解释结果"
         assert stream_events[-1]["content"] == "个性化解释结果"
+
+    def test_python_exec_route_executes_tool_and_skips_forced_grounding(self, monkeypatch):
+        from core.query_pipeline import RouteType
+
+        service, history = self._make_service(
+            monkeypatch,
+            chat_stream_chunks=["agent should not run"],
+            route=RouteType.PYTHON_EXEC,
+        )
+        monkeypatch.setattr(
+            service,
+            "_maybe_force_grounded_answer",
+            lambda *args, **kwargs: None if kwargs.get("skip") else "RAG 覆盖",
+        )
+
+        result = service.chat_with_history(
+            "请运行这段代码并告诉我输出：print(1 + 1)",
+            "session-python",
+            student_id="student-1",
+        )
+
+        assert "运行成功" in result
+        assert "输出结果" in result
+        assert "2" in result
+        assert "exit_code:" not in result
+        assert "stdout:" not in result
+        assert history.added[-1].content == result
 
     def test_grounded_rag_route_uses_rewritten_grounded_tool_query(self, monkeypatch):
         from core.agent import AgentService
