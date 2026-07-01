@@ -38,7 +38,13 @@ CHAT_BASE_URL = _get_env("CHAT_BASE_URL", "http://localhost:11434")
 
 # 远程API配置（如硅基流动）
 USE_REMOTE_LLM = _get_env("USE_REMOTE_LLM", "false").lower() == "true"
-REMOTE_MODEL_NAME = _get_env("REMOTE_MODEL_NAME", "Pro/deepseek-ai/DeepSeek-V3")
+REMOTE_MODEL_NAME = _get_env("REMOTE_MODEL_NAME", "Qwen/Qwen3-8B")
+CHAT_MAX_TOKENS = int(_get_env("CHAT_MAX_TOKENS", "512"))
+CHAT_TIMEOUT_SECONDS = float(_get_env("CHAT_TIMEOUT_SECONDS", "45"))
+CHAT_MAX_RETRIES = int(_get_env("CHAT_MAX_RETRIES", "1"))
+CHAT_DISABLE_THINKING = _get_env("CHAT_DISABLE_THINKING", "true").lower() == "true"
+CHAT_SYSTEM_SUFFIX = _get_env("CHAT_SYSTEM_SUFFIX", "/no_think")
+
 
 COURSE_NAME = _get_env("COURSE_NAME", "数据科学导论")
 COURSE_DESCRIPTION = _get_env("COURSE_DESCRIPTION", "概念答疑、课程资料问答、学习建议")
@@ -98,3 +104,8 @@ rerank_model = RERANK_MODEL
 rerank_top_k = RERANK_TOP_K
 rerank_batch_size = RERANK_BATCH_SIZE
 rerank_device = RERANK_DEVICE
+chat_max_tokens = CHAT_MAX_TOKENS
+chat_timeout_seconds = CHAT_TIMEOUT_SECONDS
+chat_max_retries = CHAT_MAX_RETRIES
+chat_disable_thinking = CHAT_DISABLE_THINKING
+chat_system_suffix = CHAT_SYSTEM_SUFFIX

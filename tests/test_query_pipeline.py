@@ -927,6 +927,71 @@ class TestQueryPipelineUtils:
             "助手: 当前前",
         ]
 
+    def test_grounded_rag_stream_yields_before_slow_second_chunk(self, monkeypatch):
+        import time
+
+        from core.agent import AgentService
+        from core.query_pipeline import QueryContext, RouteDecision, RouteType
+
+        service = object.__new__(AgentService)
+
+        class FakeHistory:
+            def __init__(self):
+                self.added = []
+
+            def add_messages(self, messages):
+                self.added.extend(messages)
+
+        history = FakeHistory()
+        context = QueryContext(
+            original_query="什么是机器学习？",
+            normalized_query="什么是机器学习？",
+            session_id="session-rag-stream",
+            student_id="student-1",
+            chat_history=[],
+            enriched_query="什么是机器学习？",
+        )
+        decision = RouteDecision(
+            route=RouteType.GROUNDED_RAG,
+            confidence=0.8,
+            reasons=["课程相关知识问答"],
+            retrieval_policy="required",
+        )
+        state = {
+            "student_id": "student-1",
+            "history": history,
+            "chat_history": [],
+            "special_case_response": None,
+            "matched_concepts": [],
+            "context": context,
+            "decision": decision,
+        }
+
+        def fake_prepare(user_input, session_id, student_id=None):
+            return state
+
+        def fake_stream(_state):
+            yield "第一段"
+            time.sleep(0.25)
+            yield "第二段"
+
+        monkeypatch.setattr(service, "_prepare_query_route", fake_prepare)
+        monkeypatch.setattr(service, "_iter_grounded_rag_response", fake_stream)
+
+        events = service.stream_chat_with_history("什么是机器学习？", "session-rag-stream", student_id="student-1")
+
+        started = time.perf_counter()
+        first = next(events)
+        first_elapsed = time.perf_counter() - started
+        rest = list(events)
+
+        assert first == {"type": "delta", "delta": "第一段"}
+        assert first_elapsed < 0.1
+        assert rest[0] == {"type": "delta", "delta": "第二段"}
+        assert rest[-1]["type"] == "done"
+        assert rest[-1]["content"] == "第一段第二段"
+        assert history.added[-1].content == "第一段第二段"
+
     def test_public_system_query_predicates(self):
         from core.query_pipeline.utils import is_datetime_request, is_schedule_request
 

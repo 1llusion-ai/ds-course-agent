@@ -1,0 +1,182 @@
+{
+  "course_name": "数据科学导论",
+  "version": "0.1",
+  "nodes": [
+    {
+      "id": "data_thinking",
+      "name": "数据思维",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "将工作对象表征作为数据，运用数据工程与技术，开展算法研究，综合实施应用方案，从而获得有效成果的一种解决问题的思考方式。",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.95
+    },
+    {
+      "id": "digital_economy",
+      "name": "数字经济",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "以数据资源作为关键生产要素、以现代信息网络作为重要载体、以信息通信技术的有效使用作为效率提升和经济结构优化的重要推动力的一系列经济活动。",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.95
+    },
+    {
+      "id": "data_resource",
+      "name": "数据资源",
+      "type": "Concept",
+      "aliases": [
+        "大数据"
+      ],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "数量巨大、类型繁多、价值密度低、产生和流通速度快的数据。",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.95
+    },
+    {
+      "id": "digital_technology",
+      "name": "数字技术",
+      "type": "Concept",
+      "aliases": [
+        "新一代信息技术"
+      ],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "包括云计算、大数据、人工智能、区块链、元宇宙等快速迭代的新兴技术。",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.95
+    },
+    {
+      "id": "data_engineering",
+      "name": "数据工程",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "产业市场需求驱动技术公司的工程化落地，形成可重复使用的工具和解决方案。",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.95
+    },
+    {
+      "id": "data_science",
+      "name": "数据科学",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "架构完整的交叉学科体系，涵盖数字素养、数字技能和数字领导力三个层次。",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.95
+    }
+  ],
+  "edges": [
+    {
+      "source": "data_thinking",
+      "target": "digital_economy",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.9,
+      "rationale": "数据思维催生了新的经济范式，也就是数字经济。"
+    },
+    {
+      "source": "data_resource",
+      "target": "data_thinking",
+      "type": "part_of",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.9,
+      "rationale": "数据思维主要讨论数据资源。"
+    },
+    {
+      "source": "digital_technology",
+      "target": "data_thinking",
+      "type": "part_of",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.9,
+      "rationale": "数据思维主要讨论数字技术（新一代信息技术）。"
+    },
+    {
+      "source": "data_engineering",
+      "target": "data_thinking",
+      "type": "part_of",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.9,
+      "rationale": "数据思维主要讨论数据工程。"
+    },
+    {
+      "source": "data_science",
+      "target": "data_thinking",
+      "type": "part_of",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.9,
+      "rationale": "数据思维主要讨论数据科学。"
+    },
+    {
+      "source": "data_resource",
+      "target": "digital_economy",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.9,
+      "rationale": "数字经济以数据资源作为关键生产要素。"
+    },
+    {
+      "source": "digital_technology",
+      "target": "digital_economy",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.9,
+      "rationale": "数字经济以信息通信技术的有效使用作为效率提升和经济结构优化的重要推动力。"
+    }
+  ],
+  "chunk_tags": [
+    {
+      "chunk_id": "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2",
+      "concept_ids": [
+        "data_thinking",
+        "digital_economy",
+        "data_resource",
+        "digital_technology",
+        "data_engineering",
+        "data_science"
+      ],
+      "pedagogical_type": "definition",
+      "confidence": 0.95
+    }
+  ],
+  "misconceptions": [],
+  "metadata": {
+    "generated_at": "2026-06-12T17:50:24.868566",
+    "backend": "prompt",
+    "chunk_count": 1,
+    "collection_name": "course_c37b7b78"
+  }
+}

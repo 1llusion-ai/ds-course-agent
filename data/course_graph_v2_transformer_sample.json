@@ -1,0 +1,326 @@
+{
+  "course_name": "数据科学导论",
+  "version": "0.1",
+  "nodes": [
+    {
+      "id": "data_thinking",
+      "name": "Data_Thinking",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "id": "data",
+      "name": "Data",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "id": "digital_technology",
+      "name": "Digital_Technology",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "id": "data_engineering",
+      "name": "Data_Engineering",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "id": "data_science",
+      "name": "Data_Science",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "id": "data_driven_decision_making",
+      "name": "Data_Driven_Decision_Making",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "id": "big_data",
+      "name": "Big_Data",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "id": "cloud_computing",
+      "name": "Cloud_Computing",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "id": "artificial_intelligence",
+      "name": "Artificial_Intelligence",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "id": "blockchain",
+      "name": "Blockchain",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "id": "metaverse",
+      "name": "Metaverse",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "id": "machine_learning",
+      "name": "Machine_Learning",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "id": "statistics",
+      "name": "Statistics",
+      "type": "Concept",
+      "aliases": [],
+      "chapter": "数据思维",
+      "section": "数据思维无处不在",
+      "definition": "",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5
+    }
+  ],
+  "edges": [
+    {
+      "source": "data_thinking",
+      "target": "data",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5,
+      "rationale": ""
+    },
+    {
+      "source": "data_thinking",
+      "target": "digital_technology",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5,
+      "rationale": ""
+    },
+    {
+      "source": "data_thinking",
+      "target": "data_engineering",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5,
+      "rationale": ""
+    },
+    {
+      "source": "data_thinking",
+      "target": "data_science",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5,
+      "rationale": ""
+    },
+    {
+      "source": "data_thinking",
+      "target": "data_driven_decision_making",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5,
+      "rationale": ""
+    },
+    {
+      "source": "data",
+      "target": "big_data",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5,
+      "rationale": ""
+    },
+    {
+      "source": "digital_technology",
+      "target": "cloud_computing",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5,
+      "rationale": ""
+    },
+    {
+      "source": "digital_technology",
+      "target": "artificial_intelligence",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5,
+      "rationale": ""
+    },
+    {
+      "source": "digital_technology",
+      "target": "blockchain",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5,
+      "rationale": ""
+    },
+    {
+      "source": "digital_technology",
+      "target": "metaverse",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5,
+      "rationale": ""
+    },
+    {
+      "source": "data_science",
+      "target": "machine_learning",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5,
+      "rationale": ""
+    },
+    {
+      "source": "data_science",
+      "target": "statistics",
+      "type": "related_to",
+      "evidence_chunk_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2"
+      ],
+      "confidence": 0.5,
+      "rationale": ""
+    }
+  ],
+  "chunk_tags": [
+    {
+      "chunk_id": "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f9f6deb2",
+      "concept_ids": [
+        "data_thinking",
+        "data",
+        "digital_technology",
+        "data_engineering",
+        "data_science",
+        "data_driven_decision_making",
+        "big_data",
+        "cloud_computing",
+        "artificial_intelligence",
+        "blockchain",
+        "metaverse",
+        "machine_learning",
+        "statistics"
+      ],
+      "pedagogical_type": "other",
+      "confidence": 0.5
+    }
+  ],
+  "misconceptions": [],
+  "metadata": {
+    "generated_at": "2026-06-12T14:11:10.172827",
+    "backend": "transformer",
+    "chunk_count": 1,
+    "collection_name": "course_c37b7b78"
+  }
+}

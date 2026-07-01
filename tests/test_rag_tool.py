@@ -90,6 +90,44 @@ class TestCourseRAGTool:
         assert trace.used_retrieval is True
         assert trace.sources == [{"reference": "《第7章 无监督学习算法》第123页"}]
 
+
+
+    def test_source_uses_outline_number_when_chapter_metadata_drifts(self):
+        """metadata 章字段错位时，来源展示应按 section_no 纠偏。"""
+        from core.tools import build_sources_from_documents
+
+        doc = MagicMock()
+        doc.metadata = {
+            "source": "数据科学导论.pdf",
+            "chapter": "Python 语言快速入门",
+            "chapter_no": "第3章",
+            "section": "数据科学",
+            "section_no": "2.2",
+            "subsection": "数据科学的概念",
+            "subsection_no": "2.2.1",
+            "book_page": 20,
+        }
+
+        assert build_sources_from_documents([doc]) == [
+            {"reference": "《第2章 数据科学基本知识》第20页"}
+        ]
+
+    def test_source_uses_toc_title_when_chapter_number_matches(self):
+        """章号已正确但章名陈旧时，来源展示仍应按目录标题纠偏。"""
+        from core.tools import build_sources_from_documents
+
+        doc = MagicMock()
+        doc.metadata = {
+            "chapter": "Python 语言快速入门",
+            "chapter_no": "第2章",
+            "section_no": "2.2",
+            "book_page": 20,
+        }
+
+        assert build_sources_from_documents([doc]) == [
+            {"reference": "《第2章 数据科学基本知识》第20页"}
+        ]
+
     @patch("core.tools.get_rag_service")
     def test_tool_tracks_empty_sources_when_no_results(self, mock_get_service):
         """测试无结果时仍会记录已尝试检索"""

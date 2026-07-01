@@ -83,8 +83,10 @@ def _save_cache(cache_file: Path, obj):
 
 def _compute_page_offset(pdf_path: str) -> int:
     """
-    根据PDF文件名或目录.json计算page_offset。
-    例如：第6章从教材第115页开始，则offset = 115 - 1 = 114。
+    根据PDF文件名或目录.json计算 page_offset。
+
+    page_offset 的定义是：教材页码 = 解析器/PDF页码 + page_offset。
+    全书 PDF 通常包含封面、目录等前置页，因此 offset 可能为负数。
     """
     filename = os.path.basename(pdf_path)
     # 尝试从文件名提取章编号
@@ -106,7 +108,9 @@ def _compute_page_offset(pdf_path: str) -> int:
         if toc.sections:
             last_chapter = toc.sections[-1]
             return (last_chapter.end_page or last_chapter.page) - 1 + 1
-    return 0
+    # 全书 PDF：根据解析后目录页可知，第1章教材第1页约在 PDF 第9页，
+    # 即教材页码 = PDF页码 - 8。保持这里显式，避免把 PDF 物理页误当教材页。
+    return -8
 
 
 def _parse_with_cache(pdf_path: str, max_pages: int, use_cache: bool) -> PDFParseResult:

@@ -31,6 +31,10 @@ def get_chat_model():
             api_key=config.API_KEY,
             base_url=config.BASE_URL,
             temperature=0.7,
+            max_completion_tokens=config.CHAT_MAX_TOKENS,
+            timeout=config.CHAT_TIMEOUT_SECONDS,
+            max_retries=config.CHAT_MAX_RETRIES,
+            extra_body={"enable_thinking": False} if config.CHAT_DISABLE_THINKING else None,
         )
     else:
         from langchain_ollama import OllamaLLM
@@ -210,6 +214,21 @@ class RAGService(object):
             has_results=len(documents) > 0
         )
 
+    def stream_answer_with_context(self, question: str, context: str):
+        """Stream an answer grounded in the retrieved context."""
+        prompt = self.prompt_template.format(
+            context=context,
+            history=[],
+            input=question
+        )
+        if config.CHAT_SYSTEM_SUFFIX:
+            prompt = f"{prompt}\n\n{config.CHAT_SYSTEM_SUFFIX}"
+
+        for chunk in self.chat_model.stream(prompt):
+            content = getattr(chunk, "content", chunk)
+            if isinstance(content, str) and content:
+                yield content
+
     def answer_with_context(
         self,
         question: str,
@@ -232,9 +251,11 @@ class RAGService(object):
             history=[],
             input=question
         )
+        if config.CHAT_SYSTEM_SUFFIX:
+            prompt = f"{prompt}\n\n{config.CHAT_SYSTEM_SUFFIX}"
         
         if stream:
-            return self.chat_model.stream(prompt)
+            return self.stream_answer_with_context(question, context)
         
         answer_msg = self.chat_model.invoke(prompt)
 

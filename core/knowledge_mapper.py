@@ -197,6 +197,21 @@ def precompute_knowledge_graph_embeddings(
         except Exception as e:
             logger.warning("Precompute failed for %s: %s", cid, e)
 
+    if not embeddings:
+        if out_path.exists():
+            logger.warning(
+                "Precompute produced 0 embeddings; keeping existing cache at %s",
+                out_path,
+            )
+            try:
+                with open(out_path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+                return len(existing) if isinstance(existing, dict) else 0
+            except Exception:
+                return 0
+        logger.warning("Precompute produced 0 embeddings; no cache written")
+        return 0
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(embeddings, f, ensure_ascii=False, indent=2)

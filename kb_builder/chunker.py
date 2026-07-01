@@ -79,6 +79,32 @@ class CourseChunkerV2:
             re.MULTILINE
         )
 
+    @staticmethod
+    def _section_contains_page(section, page: int) -> bool:
+        """Return True when a TOC section range contains the textbook page."""
+        if section is None:
+            return False
+        end_page = max(section.end_page or section.page, section.page)
+        return section.page <= page <= end_page
+
+    def _get_section_by_page(self, page: int):
+        """Return the most specific TOC section with sane same-page ranges."""
+        candidates = [
+            section
+            for section in self.toc.all_sections
+            if self._section_contains_page(section, page)
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda section: section.level)
+
+    def _get_chapter_by_page(self, page: int):
+        """Return the chapter containing the textbook page."""
+        for section in self.toc.sections:
+            if self._section_contains_page(section, page):
+                return section
+        return None
+
     def _detect_sections_in_text(self, text: str, page: int) -> dict:
         """
         检测文本中的章节信息
@@ -98,7 +124,7 @@ class CourseChunkerV2:
         }
 
         # 1. 根据页码获取最具体的章节信息
-        sec_by_page = self.toc.get_section_by_page(page)
+        sec_by_page = self._get_section_by_page(page)
         if sec_by_page:
             if sec_by_page.level == 1:
                 result['chapter'] = sec_by_page.name
@@ -107,7 +133,7 @@ class CourseChunkerV2:
                 result['section'] = sec_by_page.name
                 result['section_number'] = sec_by_page.number
                 # 同时获取父章节
-                chapter = self.toc.get_chapter_by_page(page)
+                chapter = self._get_chapter_by_page(page)
                 if chapter:
                     result['chapter'] = chapter.name
                     result['chapter_number'] = chapter.number
@@ -126,7 +152,7 @@ class CourseChunkerV2:
                             result['section_number'] = sec.number
                             break
                 # 获取章信息
-                chapter = self.toc.get_chapter_by_page(page)
+                chapter = self._get_chapter_by_page(page)
                 if chapter:
                     result['chapter'] = chapter.name
                     result['chapter_number'] = chapter.number
@@ -135,8 +161,29 @@ class CourseChunkerV2:
         # 策略：找到所有匹配，选择最长/最具体的编号（避免 1.4.1 被识别为 4.1）
         best_match_number = None
         best_match_priority = 0  # 优先级：3级编号 > 2级编号 > 1级编号
+        page_chapter_prefix = ""
+        if result.get('chapter_number'):
+            match = re.search(r'\d+', result['chapter_number'])
+            page_chapter_prefix = match.group(0) if match else ""
+
+        if not page_chapter_prefix:
+            return result
 
         for number, pattern in self.section_patterns.items():
+            toc_section = next((sec for sec in self.toc.all_sections if sec.number == number), None)
+            if toc_section and not self._section_contains_page(toc_section, page):
+                continue
+
+            # 页码范围是主信号。正文页中如果 OCR 混入目录/页眉里的其他章节编号，
+            # 不允许它覆盖当前页所属章；只在同一章内用标题匹配细化到节/子节。
+            if page_chapter_prefix and '.' in number:
+                if number.split('.', 1)[0] != page_chapter_prefix:
+                    continue
+            if page_chapter_prefix and number.startswith('第'):
+                match = re.search(r'\d+', number)
+                if match and match.group(0) != page_chapter_prefix:
+                    continue
+
             matches = pattern.findall(text)
             if matches:
                 # 计算优先级：子节(3部分) > 节(2部分) > 章
@@ -156,7 +203,10 @@ class CourseChunkerV2:
             # 查找完整的章节信息
             for sec in self.toc.all_sections:
                 if sec.number == best_match_number:
-                    if sec.level == 2:
+                    if sec.level == 1:
+                        result['chapter'] = sec.name
+                        result['chapter_number'] = sec.number
+                    elif sec.level == 2:
                         result['section'] = sec.name
                         result['section_number'] = sec.number
                         result['is_section_start'] = True
@@ -373,8 +423,9 @@ class CourseChunkerV2:
             if not text.strip():
                 continue
 
-            # 计算绝对页码（用于目录查询）
+            # 计算教材页码（用于目录查询）
             absolute_page_num = relative_page_num + page_offset
+            book_pages = [absolute_page_num] if absolute_page_num >= 1 else []
 
             # 检测章节信息（使用绝对页码）
             section_info = self._detect_sections_in_text(text, absolute_page_num)
@@ -395,7 +446,7 @@ class CourseChunkerV2:
                 metadata = ChunkMetadataV2(
                     source_file=filename,
                     source_pages=[relative_page_num],  # 保存相对页码
-                    book_pages=[absolute_page_num],      # 保存教材绝对页码
+                    book_pages=book_pages,              # 保存教材页码；封面/目录等前置页为空
                     chunk_type="semantic",
                     chapter=section_info.get('chapter', ''),
                     chapter_number=section_info.get('chapter_number', ''),
@@ -466,17 +517,19 @@ class CourseChunkerV2:
         chapter_contents = {}
 
         for relative_page_num, text in pages:
-            absolute_page_num = relative_page_num + page_offset
-            chapter = self.toc.get_chapter_by_page(absolute_page_num)
+            book_page_num = relative_page_num + page_offset
+            chapter = self._get_chapter_by_page(book_page_num)
             if chapter:
                 chapter_key = chapter.number or chapter.name
                 if chapter_key not in chapter_contents:
                     chapter_contents[chapter_key] = {
-                        'pages': [],
+                        'source_pages': [],
+                        'book_pages': [],
                         'texts': [],
                         'name': chapter.name
                     }
-                chapter_contents[chapter_key]['pages'].append(absolute_page_num)
+                chapter_contents[chapter_key]['source_pages'].append(relative_page_num)
+                chapter_contents[chapter_key]['book_pages'].append(book_page_num)
                 chapter_contents[chapter_key]['texts'].append(text)
 
         # 为每个章节创建影子分块
@@ -489,7 +542,8 @@ class CourseChunkerV2:
                 content=shadow_text,
                 metadata=ChunkMetadataV2(
                     source_file=filename,
-                    source_pages=data['pages'][:5],  # 前5页
+                    source_pages=data['source_pages'][:5],  # parser/PDF页
+                    book_pages=data['book_pages'][:5],      # 教材页
                     chunk_type="shadow",
                     chapter=data['name'],
                     chapter_number=chapter_key

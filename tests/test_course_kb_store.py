@@ -163,6 +163,70 @@ class TestIngestResult:
         assert result.success_count == 8
 
 
+
+
+class TestMetadataBuild:
+    """测试入库 metadata 页码语义。"""
+
+    def test_v2_metadata_uses_book_pages_for_public_page_fields(self):
+        from kb_builder.chunker import ChunkMetadataV2, ChunkV2
+        from kb_builder.store import CourseKnowledgeBase
+
+        kb = CourseKnowledgeBase.__new__(CourseKnowledgeBase)
+        kb.course_name = "数据科学导论"
+
+        chunk = ChunkV2(
+            content="2.2 数据科学",
+            metadata=ChunkMetadataV2(
+                source_file="book.pdf",
+                source_pages=[28],
+                book_pages=[20],
+                chunk_type="semantic",
+                chapter="数据科学基本知识",
+                chapter_number="第2章",
+                section="数据科学",
+                section_number="2.2",
+                subsection="数据科学的概念",
+                subsection_number="2.2.1",
+            ),
+        )
+
+        metadata = kb._build_metadata(chunk)
+
+        assert metadata["page"] == 20
+        assert metadata["book_page"] == 20
+        assert metadata["source_page"] == 28
+        assert metadata["source_pages"] == "[28]"
+        assert metadata["book_pages"] == "[20]"
+        assert metadata["chapter_no"] == "第2章"
+        assert metadata["chapter"] == "数据科学基本知识"
+
+    def test_v2_metadata_keeps_front_matter_without_book_page(self):
+        from kb_builder.chunker import ChunkMetadataV2, ChunkV2
+        from kb_builder.store import CourseKnowledgeBase
+
+        kb = CourseKnowledgeBase.__new__(CourseKnowledgeBase)
+        kb.course_name = "数据科学导论"
+
+        chunk = ChunkV2(
+            content="封面",
+            metadata=ChunkMetadataV2(
+                source_file="book.pdf",
+                source_pages=[1],
+                book_pages=[],
+                chunk_type="semantic",
+            ),
+        )
+
+        metadata = kb._build_metadata(chunk)
+
+        assert metadata["source_page"] == 1
+        assert metadata["source_pages"] == "[1]"
+        assert "page" not in metadata
+        assert "book_page" not in metadata
+        assert "book_pages" not in metadata
+
+
 class TestKBStatus:
     """测试知识库状态"""
 

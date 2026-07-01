@@ -56,6 +56,10 @@ def get_chat_model():
             api_key=config.API_KEY,
             base_url=config.BASE_URL,
             temperature=0.7,
+            max_completion_tokens=config.CHAT_MAX_TOKENS,
+            timeout=config.CHAT_TIMEOUT_SECONDS,
+            max_retries=config.CHAT_MAX_RETRIES,
+            extra_body={"enable_thinking": False} if config.CHAT_DISABLE_THINKING else None,
         )
     else:
         from langchain_ollama import ChatOllama
@@ -1023,6 +1027,53 @@ class AgentService(object):
         """Compatibility wrapper for non-streaming route execution."""
         return self._execute_route(route_state, stream=False)
 
+    def _iter_grounded_rag_response(self, route_state: dict) -> Iterator[str]:
+        """Stream the common grounded-RAG route directly from the RAG model call."""
+        from core.query_trace import trace_error, trace_span, trace_step
+        from core.tools import build_sources_from_documents, get_rag_service, _track_retrieval
+
+        question = self._route_execution_query(route_state["context"], route_state["decision"])
+
+        trace_step("agent.branch", branch="grounded_rag_stream")
+        trace_step("tool.invoke", tool="course_rag_tool", question=question)
+
+        try:
+            service = get_rag_service()
+            with trace_span("tool.course_rag.retrieve"):
+                result = service.retrieve(question)
+
+            sources = build_sources_from_documents(result.documents)
+            _track_retrieval(sources, used=True)
+
+            if not result.has_results:
+                trace_step("tool.result", tool="course_rag_tool", status="no_results")
+                message = (
+                    f"抱歉，在《{config.COURSE_NAME}》课程资料中未找到与你问题直接相关的内容。\n"
+                    "建议你：\n"
+                    "1. 换一个更具体的关键词重新提问\n"
+                    "2. 说明你想问的概念、章节或例子\n"
+                    "3. 如果是课程外问题，我也可以先帮你判断是否属于本课程范围"
+                )
+                yield from self._yield_text_chunks(message)
+                return
+
+            yielded = False
+            with trace_span("tool.course_rag.answer_stream"):
+                for chunk in service.stream_answer_with_context(question, result.formatted_context):
+                    if chunk:
+                        yielded = True
+                        yield chunk
+
+            if not yielded:
+                with trace_span("tool.course_rag.answer"):
+                    answer_result = service.answer_with_context(question, result.formatted_context)
+                yield from self._yield_text_chunks(answer_result.answer)
+
+            trace_step("tool.result", tool="course_rag_tool", status="ok")
+        except Exception as exc:
+            trace_error("tool.invoke", exc, tool="course_rag_tool")
+            yield f"检索过程中发生错误：{exc}。请稍后重试。"
+
     def chat_with_history(
         self,
         user_input: str,
@@ -1058,15 +1109,22 @@ class AgentService(object):
     ):
         """流式聊天，复用 sync 路由准备和执行核心。"""
         from langchain_core.messages import HumanMessage, AIMessage
+        from core.query_pipeline import RouteType
 
         route_state = self._prepare_query_route(user_input, session_id, student_id)
         decision = route_state["decision"]
         route = decision.route
 
-        final_result = self._execute_route(route_state, stream=True)
-
-        for chunk in self._yield_text_chunks(final_result):
-            yield {"type": "delta", "delta": chunk}
+        if route == RouteType.GROUNDED_RAG:
+            chunks = []
+            for chunk in self._iter_grounded_rag_response(route_state):
+                chunks.append(chunk)
+                yield {"type": "delta", "delta": chunk}
+            final_result = "".join(chunks)
+        else:
+            final_result = self._execute_route(route_state, stream=True)
+            for chunk in self._yield_text_chunks(final_result):
+                yield {"type": "delta", "delta": chunk}
 
         route_state["history"].add_messages([
             HumanMessage(content=user_input),

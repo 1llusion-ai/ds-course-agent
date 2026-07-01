@@ -172,6 +172,54 @@ def _get_absolute_page(doc) -> Optional[int]:
 
     return chapter_start + int(relative_page) - 1
 
+def _chapter_from_outline_number(metadata: dict) -> tuple[str, str]:
+    """Infer the chapter from section/subsection numbers when stored metadata drifts."""
+    outline = str(metadata.get("subsection_no") or metadata.get("section_no") or "").strip()
+    match = re.match(r"^(\d+)\.", outline)
+    if not match:
+        return "", ""
+
+    chapter_no = f"第{int(match.group(1))}章"
+    try:
+        from kb_builder.toc_parser import get_toc_parser
+
+        toc = get_toc_parser()
+        for section in toc.sections:
+            if getattr(section, "level", None) != 1:
+                continue
+            if str(getattr(section, "number", "")).strip() == chapter_no:
+                return chapter_no, str(getattr(section, "name", "") or "").strip()
+    except Exception:
+        pass
+
+    fallback_names = {
+        "第1章": "数据思维",
+        "第2章": "数据科学基本知识",
+        "第3章": "Python 语言快速入门",
+        "第4章": "Python 数据分析",
+        "第5章": "数据可视化",
+        "第6章": "监督学习常用算法",
+        "第7章": "无监督学习算法",
+        "第8章": "综合实践",
+        "第9章": "大语言模型及其应用",
+        "第10章": "数据科学竞赛",
+    }
+    return chapter_no, fallback_names.get(chapter_no, "")
+
+
+def _source_chapter_label(metadata: dict) -> tuple[str, str]:
+    stored_no = _extract_chapter_no(metadata)
+    stored_title = str(metadata.get("chapter") or "").strip()
+    inferred_no, inferred_title = _chapter_from_outline_number(metadata)
+
+    if inferred_no and inferred_no != stored_no:
+        return inferred_no, inferred_title or stored_title
+    if inferred_no and not stored_no:
+        return inferred_no, inferred_title or stored_title
+    if inferred_no and inferred_no == stored_no and inferred_title:
+        return stored_no, inferred_title
+    return stored_no, stored_title
+
 
 def build_sources_from_documents(documents) -> list[dict]:
     sources: list[dict] = []
@@ -179,8 +227,7 @@ def build_sources_from_documents(documents) -> list[dict]:
 
     for doc in documents or []:
         metadata = getattr(doc, "metadata", {}) or {}
-        chapter = str(metadata.get("chapter") or "").strip()
-        chapter_no = _extract_chapter_no(metadata)
+        chapter_no, chapter = _source_chapter_label(metadata)
         abs_page = _get_absolute_page(doc)
 
         if chapter and chapter_no and abs_page:
