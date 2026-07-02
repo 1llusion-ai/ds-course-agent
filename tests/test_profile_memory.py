@@ -1,11 +1,11 @@
 import tempfile
 
-from core.events import (
+from ds_course_agent.rag.events import (
     build_clarification_event,
     build_concept_mentioned_event,
     build_mastery_signal_event,
 )
-from core.memory_core import MemoryCore
+from ds_course_agent.rag.memory_core import MemoryCore
 
 
 def test_recent_concepts_keep_last_mentioned_timestamp():

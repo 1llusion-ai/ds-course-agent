@@ -4,7 +4,7 @@
 验证 QueryContext、Router、Postprocessor、Rewriter 的基本功能
 """
 import pytest
-from core.query_pipeline import (
+from ds_course_agent.rag.query_pipeline import (
     get_preprocessor,
     get_router,
     RouteType,
@@ -13,11 +13,11 @@ from core.query_pipeline import (
 
 class TestQueryPreprocessor:
     """测试 QueryPreprocessor"""
-    
+
     def test_basic_preprocessing(self):
         """测试基础预处理"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
-        
+
         context = preprocessor.process(
             user_input="  什么是决策树？  ",
             session_id="test_session",
@@ -25,16 +25,16 @@ class TestQueryPreprocessor:
             chat_history=[],
             profile=None,
         )
-        
+
         assert context.original_query == "  什么是决策树？  "
         assert context.normalized_query == "什么是决策树？"
         assert context.session_id == "test_session"
         assert context.student_id == "test_student"
-    
+
     def test_intent_detection(self):
         """测试意图识别"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
-        
+
         # 时间查询
         context = preprocessor.process(
             user_input="现在几点了？",
@@ -43,7 +43,7 @@ class TestQueryPreprocessor:
             chat_history=[],
         )
         assert "datetime" in context.detected_intents
-        
+
         # 课程安排
         context = preprocessor.process(
             user_input="第3周讲什么？",
@@ -52,7 +52,7 @@ class TestQueryPreprocessor:
             chat_history=[],
         )
         assert "schedule" in context.detected_intents
-        
+
         # 概念解释
         context = preprocessor.process(
             user_input="什么是过拟合？",
@@ -74,60 +74,60 @@ class TestQueryPreprocessor:
 
 class TestQueryRouter:
     """测试 QueryRouter"""
-    
+
     def test_datetime_route(self):
         """测试时间查询路由"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
-        
+
         context = preprocessor.process(
             user_input="现在几点？",
             session_id="test",
             student_id="test",
             chat_history=[],
         )
-        
+
         decision = router.route(context)
         assert decision.route == RouteType.CURRENT_DATETIME
         assert decision.confidence > 0.9
-    
+
     def test_schedule_route(self):
         """测试课程安排路由"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
-        
+
         context = preprocessor.process(
             user_input="第三周讲什么内容？",
             session_id="test",
             student_id="test",
             chat_history=[],
         )
-        
+
         decision = router.route(context)
         assert decision.route == RouteType.COURSE_SCHEDULE
         assert decision.confidence > 0.9
-    
+
     def test_learning_path_route(self):
         """测试学习路径路由"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
-        
+
         context = preprocessor.process(
             user_input="决策树应该怎么学？学习路线是什么？",
             session_id="test",
             student_id="test",
             chat_history=[],
         )
-        
+
         decision = router.route(context)
         assert decision.route == RouteType.LEARNING_PATH_SKILL
         assert "learning-path" in context.skill_candidate_keys
-    
+
     def test_misconception_route(self):
         """测试错误理解路由"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
-        
+
         context = preprocessor.process(
             user_input="我还是不太懂决策树和随机森林的区别",
             session_id="test",
@@ -157,12 +157,12 @@ class TestQueryRouter:
         assert decision.route == RouteType.PYTHON_EXEC
         assert decision.retrieval_policy == "disabled"
         assert decision.required_tools == ["python_exec_tool"]
-    
+
     def test_grounded_rag_route(self):
         """测试 grounded RAG 路由"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
-        
+
         # 模拟有概念识别的场景
         context = preprocessor.process(
             user_input="什么是过拟合？",
@@ -170,7 +170,7 @@ class TestQueryRouter:
             student_id="test",
             chat_history=[],
         )
-        
+
         # 如果概念识别成功，应该路由到 GROUNDED_RAG 或 EXPLANATION
         decision = router.route(context)
         assert decision.route in [
@@ -196,19 +196,19 @@ class TestQueryRouter:
         assert "code_request" in context.detected_intents
         assert "python_execution" not in context.detected_intents
         assert decision.route == RouteType.GENERIC_AGENT
-    
+
     def test_route_reasons(self):
         """测试路由原因"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
-        
+
         context = preprocessor.process(
             user_input="决策树怎么学？",
             session_id="test",
             student_id="test",
             chat_history=[],
         )
-        
+
         decision = router.route(context)
         assert len(decision.reasons) > 0
         assert isinstance(decision.reasons, list)
@@ -217,12 +217,12 @@ class TestQueryRouter:
 
 class TestEndToEnd:
     """端到端测试"""
-    
+
     def test_full_pipeline_datetime(self):
         """完整 pipeline 测试：时间查询"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
-        
+
         # Step 1: Preprocess
         context = preprocessor.process(
             user_input="现在几点了？",
@@ -230,18 +230,18 @@ class TestEndToEnd:
             student_id="test",
             chat_history=[],
         )
-        
+
         # Step 2: Route
         decision = router.route(context)
         assert decision.route == RouteType.CURRENT_DATETIME
-        
+
         assert "datetime" in context.detected_intents or decision.route == RouteType.CURRENT_DATETIME
-    
+
     def test_full_pipeline_course_question(self):
         """完整 pipeline 测试：课程问题"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
-        
+
         # Step 1: Preprocess
         context = preprocessor.process(
             user_input="什么是梯度下降？",
@@ -249,10 +249,10 @@ class TestEndToEnd:
             student_id="test",
             chat_history=[],
         )
-        
+
         # Step 2: Route
         decision = router.route(context)
-        
+
         # 应该路由到某种处理方式（不是 OFF_TOPIC）
         assert decision.route != RouteType.OFF_TOPIC
         assert decision.confidence > 0.5
@@ -267,7 +267,7 @@ class TestAgentRouteSharing:
 
     def test_chat_with_history_stream_delegates_to_stream_method(self, monkeypatch):
         """chat_with_history(stream=True) 应委托给 stream_chat_with_history。"""
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         service = object.__new__(AgentService)
         called = {}
@@ -290,9 +290,9 @@ class TestAgentRouteSharing:
 
     def test_prepare_query_route_returns_route_decision(self, monkeypatch):
         """_prepare_query_route 应返回 QueryContext 和 RouteDecision。"""
-        from core.agent import AgentService
-        from core.profile_models import StudentProfile
-        from core.query_pipeline import RouteType
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.profile_models import StudentProfile
+        from ds_course_agent.rag.query_pipeline import RouteType
         from langchain_core.messages import HumanMessage
 
         service = object.__new__(AgentService)
@@ -305,9 +305,9 @@ class TestAgentRouteSharing:
             def get_profile(self, student_id):
                 return StudentProfile(student_id=student_id)
 
-        monkeypatch.setattr("utils.history.get_history", lambda session_id: FakeHistory())
-        monkeypatch.setattr("core.agent.get_memory_core", lambda: FakeMemory())
-        monkeypatch.setattr("core.knowledge_mapper.map_question_to_concepts", lambda question, top_k=3: [])
+        monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: FakeHistory())
+        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", lambda: FakeMemory())
+        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", lambda question, top_k=3: [])
         monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
         monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
         monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
@@ -325,8 +325,8 @@ class TestAgentRouteSharing:
 
     def test_datetime_fast_path_skips_concept_map_and_profile(self, monkeypatch):
         """系统工具 fast path 不应触发概念映射或画像读取。"""
-        from core.agent import AgentService
-        from core.query_pipeline import RouteType
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.query_pipeline import RouteType
 
         service = object.__new__(AgentService)
         service.skill_loader = None
@@ -334,7 +334,7 @@ class TestAgentRouteSharing:
         class FakeHistory:
             messages = []
 
-        monkeypatch.setattr("utils.history.get_history", lambda session_id: FakeHistory())
+        monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: FakeHistory())
 
         def fail_get_memory_core():
             raise AssertionError("profile should not load for datetime fast path")
@@ -342,8 +342,8 @@ class TestAgentRouteSharing:
         def fail_concept_map(question, top_k=3):
             raise AssertionError("concept map should not run for datetime fast path")
 
-        monkeypatch.setattr("core.agent.get_memory_core", fail_get_memory_core)
-        monkeypatch.setattr("core.knowledge_mapper.map_question_to_concepts", fail_concept_map)
+        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", fail_get_memory_core)
+        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", fail_concept_map)
         monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
         monkeypatch.setattr(service, "_build_schedule_tool_query", lambda question: question)
 
@@ -425,7 +425,7 @@ class TestQueryRouterRegressions:
 
     def test_router_uses_high_confidence_rewrite_as_course_followup_signal(self):
         from langchain_core.messages import AIMessage, HumanMessage
-        from core.query_pipeline import get_rewriter
+        from ds_course_agent.rag.query_pipeline import get_rewriter
 
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
@@ -455,7 +455,7 @@ class TestQueryRouterRegressions:
 
     def test_router_does_not_promote_low_confidence_contextual_rewrite(self):
         from langchain_core.messages import AIMessage, HumanMessage
-        from core.query_pipeline import get_rewriter
+        from ds_course_agent.rag.query_pipeline import get_rewriter
 
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
@@ -504,7 +504,7 @@ class TestQueryPostprocessor:
     """测试 Query Pipeline 后处理最小闭环。"""
 
     def test_postprocessor_accepts_string_result(self):
-        from core.query_pipeline import QueryContext, RouteDecision, RouteType, get_postprocessor
+        from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteType, get_postprocessor
 
         context = QueryContext(
             original_query="你叫什么名字？",
@@ -529,7 +529,7 @@ class TestQueryPostprocessor:
 
 
     def test_postprocessor_preserves_svm_kernel_judgement_contract(self):
-        from core.query_pipeline import QueryContext, RouteDecision, RouteType, get_postprocessor
+        from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteType, get_postprocessor
 
         context = QueryContext(
             original_query="线性可分时还需要核函数吗？",
@@ -554,9 +554,9 @@ class TestAgentStreamPostprocessRegressions:
     """锁定 stream/sync 后处理一致性回归。"""
 
     def _make_service(self, monkeypatch, *, chat_stream_chunks, chat_sync_result=None, route=None):
-        from core.agent import AgentService
-        from core.profile_models import StudentProfile
-        from core.query_pipeline import RouteType
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.profile_models import StudentProfile
+        from ds_course_agent.rag.query_pipeline import RouteType
         from langchain_core.messages import AIMessage, HumanMessage
 
         service = object.__new__(AgentService)
@@ -584,9 +584,9 @@ class TestAgentStreamPostprocessRegressions:
                 return StudentProfile(student_id=student_id)
 
         selected_route = route or RouteType.GENERIC_AGENT
-        monkeypatch.setattr("utils.history.get_history", lambda session_id: fake_history)
-        monkeypatch.setattr("core.agent.get_memory_core", lambda: FakeMemory())
-        monkeypatch.setattr("core.knowledge_mapper.map_question_to_concepts", lambda question, top_k=3: [])
+        monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: fake_history)
+        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", lambda: FakeMemory())
+        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", lambda question, top_k=3: [])
         monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
         monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
         monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
@@ -629,20 +629,20 @@ class TestAgentStreamPostprocessRegressions:
         assert history.added[-1].content == deltas
 
     def test_stream_generic_whitespace_only_uses_same_fallback_as_sync(self, monkeypatch):
-        from core.tools import RetrievalTrace
+        from ds_course_agent.rag.tools import RetrievalTrace
 
         service, _history = self._make_service(
             monkeypatch,
             chat_stream_chunks=["\n\n"],
             chat_sync_result="\n\n",
         )
-        monkeypatch.setattr("core.tools.get_retrieval_trace", lambda: RetrievalTrace(used_retrieval=True))
+        monkeypatch.setattr("ds_course_agent.rag.tools.get_retrieval_trace", lambda: RetrievalTrace(used_retrieval=True))
 
         class FakeRagTool:
             def invoke(self, query):
                 return "无相关资料"
 
-        monkeypatch.setattr("core.tools.course_rag_tool", FakeRagTool())
+        monkeypatch.setattr("ds_course_agent.rag.tools.course_rag_tool", FakeRagTool())
 
         sync_result = service.chat_with_history("你叫什么名字？", "session-sync", student_id="student-1")
         stream_events = list(service.stream_chat_with_history("你叫什么名字？", "session-stream", student_id="student-1"))
@@ -665,7 +665,7 @@ class TestAgentStreamPostprocessRegressions:
         assert history.added[-1].content == "RAG 修正回答"
 
     def test_personalized_explanation_route_skips_forced_grounding(self, monkeypatch):
-        from core.query_pipeline import RouteType
+        from ds_course_agent.rag.query_pipeline import RouteType
 
         service, _history = self._make_service(
             monkeypatch,
@@ -685,7 +685,7 @@ class TestAgentStreamPostprocessRegressions:
         assert stream_events[-1]["content"] == "个性化解释结果"
 
     def test_python_exec_route_executes_tool_and_skips_forced_grounding(self, monkeypatch):
-        from core.query_pipeline import RouteType
+        from ds_course_agent.rag.query_pipeline import RouteType
 
         service, history = self._make_service(
             monkeypatch,
@@ -712,9 +712,9 @@ class TestAgentStreamPostprocessRegressions:
         assert history.added[-1].content == result
 
     def test_grounded_rag_route_uses_rewritten_grounded_tool_query(self, monkeypatch):
-        from core.agent import AgentService
-        from core.profile_models import StudentProfile
-        from core.query_pipeline import RouteType
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.profile_models import StudentProfile
+        from ds_course_agent.rag.query_pipeline import RouteType
         from langchain_core.messages import AIMessage, HumanMessage
 
         service = object.__new__(AgentService)
@@ -737,9 +737,9 @@ class TestAgentStreamPostprocessRegressions:
             def get_profile(self, student_id):
                 return StudentProfile(student_id=student_id)
 
-        monkeypatch.setattr("utils.history.get_history", lambda session_id: FakeHistory())
-        monkeypatch.setattr("core.agent.get_memory_core", lambda: FakeMemory())
-        monkeypatch.setattr("core.knowledge_mapper.map_question_to_concepts", lambda question, top_k=3: [])
+        monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: FakeHistory())
+        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", lambda: FakeMemory())
+        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", lambda question, top_k=3: [])
         monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
         monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
         monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
@@ -764,7 +764,7 @@ class TestQueryRewriter:
     """保守版 Query Rewriter 回归测试。"""
 
     def _context(self, user_input, history=None):
-        from core.query_pipeline import get_preprocessor
+        from ds_course_agent.rag.query_pipeline import get_preprocessor
 
         return get_preprocessor(enable_concept_detection=False).process(
             user_input=user_input,
@@ -775,7 +775,7 @@ class TestQueryRewriter:
 
     def test_followup_pronoun_rewrite_uses_recent_topic_without_changing_original(self):
         from langchain_core.messages import AIMessage, HumanMessage
-        from core.query_pipeline import get_rewriter
+        from ds_course_agent.rag.query_pipeline import get_rewriter
 
         history = [
             HumanMessage(content="SVM 的核函数有什么作用？"),
@@ -795,7 +795,7 @@ class TestQueryRewriter:
 
     def test_svm_kernel_followup_rewrites_generic_pronoun_quality_question(self):
         from langchain_core.messages import AIMessage, HumanMessage
-        from core.query_pipeline import get_rewriter
+        from ds_course_agent.rag.query_pipeline import get_rewriter
 
         history = [
             HumanMessage(content="SVM 的核函数有什么作用？"),
@@ -812,7 +812,7 @@ class TestQueryRewriter:
 
     def test_course_entity_followup_rewrites_overfitting_solution_question(self):
         from langchain_core.messages import AIMessage, HumanMessage
-        from core.query_pipeline import get_rewriter
+        from ds_course_agent.rag.query_pipeline import get_rewriter
 
         history = [
             HumanMessage(content="决策树容易过拟合吗？"),
@@ -829,7 +829,7 @@ class TestQueryRewriter:
 
     def test_contextual_followup_builds_grounded_query_when_no_specific_template(self):
         from langchain_core.messages import AIMessage, HumanMessage
-        from core.query_pipeline import get_rewriter
+        from ds_course_agent.rag.query_pipeline import get_rewriter
 
         history = [
             HumanMessage(content="PCA 的主成分是什么？"),
@@ -848,7 +848,7 @@ class TestQueryRewriter:
 
     def test_rewriter_skips_schedule_and_datetime_queries(self):
         from langchain_core.messages import AIMessage, HumanMessage
-        from core.query_pipeline import get_rewriter
+        from ds_course_agent.rag.query_pipeline import get_rewriter
 
         history = [
             HumanMessage(content="上次我们聊了 SVM 的核函数。"),
@@ -866,8 +866,8 @@ class TestQueryRewriter:
         assert datetime_context.enriched_query == "现在几点？"
 
     def test_prepare_query_route_runs_rewriter_before_router(self, monkeypatch):
-        from core.agent import AgentService
-        from core.profile_models import StudentProfile
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.profile_models import StudentProfile
         from langchain_core.messages import AIMessage, HumanMessage
 
         service = object.__new__(AgentService)
@@ -883,9 +883,9 @@ class TestQueryRewriter:
             def get_profile(self, student_id):
                 return StudentProfile(student_id=student_id)
 
-        monkeypatch.setattr("utils.history.get_history", lambda session_id: FakeHistory())
-        monkeypatch.setattr("core.agent.get_memory_core", lambda: FakeMemory())
-        monkeypatch.setattr("core.knowledge_mapper.map_question_to_concepts", lambda question, top_k=3: [])
+        monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: FakeHistory())
+        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", lambda: FakeMemory())
+        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", lambda question, top_k=3: [])
         monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
         monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
         monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
@@ -900,7 +900,7 @@ class TestQueryPipelineUtils:
     """共享 query utils 的回归测试，防止各模块再次分叉。"""
 
     def test_collect_recent_context_is_summary_aware_and_dict_compatible(self):
-        from core.query_pipeline.utils import collect_recent_context
+        from ds_course_agent.rag.query_pipeline.utils import collect_recent_context
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
         history = [
@@ -930,8 +930,8 @@ class TestQueryPipelineUtils:
     def test_grounded_rag_stream_yields_before_slow_second_chunk(self, monkeypatch):
         import time
 
-        from core.agent import AgentService
-        from core.query_pipeline import QueryContext, RouteDecision, RouteType
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteType
 
         service = object.__new__(AgentService)
 
@@ -993,14 +993,14 @@ class TestQueryPipelineUtils:
         assert history.added[-1].content == "第一段第二段"
 
     def test_public_system_query_predicates(self):
-        from core.query_pipeline.utils import is_datetime_request, is_schedule_request
+        from ds_course_agent.rag.query_pipeline.utils import is_datetime_request, is_schedule_request
 
         assert is_schedule_request("下次课是什么时候？") is True
         assert is_datetime_request("现在几点？") is True
         assert is_datetime_request("下次课是什么时候？") is False
 
     def test_shared_followup_predicate(self):
-        from core.query_pipeline.utils import is_contextual_followup
+        from ds_course_agent.rag.query_pipeline.utils import is_contextual_followup
 
         assert is_contextual_followup("这个为什么？") is True
         assert is_contextual_followup("能再解释一下吗？") is True

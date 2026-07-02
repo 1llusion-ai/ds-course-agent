@@ -36,8 +36,8 @@ logs/
 *.db
 
 # Frontend build artifacts
-frontend/node_modules/
-frontend/dist/
+web/node_modules/
+web/dist/
 
 # Temporary / debug files
 tmp_*.json
@@ -71,3 +71,10 @@ Thumbs.db
 docs/technical_documentation.md
 
 .omx/
+
+var/chat_history/*
+var/chroma_db/*
+var/logs/*
+var/artifacts/*
+var/cache/*
+!var/**/.gitkeep

@@ -3,10 +3,10 @@ from unittest.mock import MagicMock, patch
 
 
 class TestAgentGroundedFallback:
-    @patch("utils.history.get_history")
-    @patch("core.knowledge_mapper.map_question_to_concepts", return_value=[])
-    @patch("core.agent.get_memory_core")
-    @patch("core.tools.get_rag_service")
+    @patch("ds_course_agent.shared.history.get_history")
+    @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
+    @patch("ds_course_agent.rag.agent.get_memory_core")
+    @patch("ds_course_agent.rag.tools.get_rag_service")
     def test_course_question_falls_back_to_rag_when_agent_skips_retrieval(
         self,
         mock_get_rag_service,
@@ -14,7 +14,7 @@ class TestAgentGroundedFallback:
         _mock_map,
         mock_get_history,
     ):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         question = "\u4ec0\u4e48\u662f\u6570\u636e\u79d1\u5b66\uff1f"
 
@@ -52,11 +52,11 @@ class TestAgentGroundedFallback:
         assert result == "data science grounded answer"
         mock_service.retrieve.assert_called_once_with(question)
 
-    @patch("utils.history.get_history")
-    @patch("core.knowledge_mapper.map_question_to_concepts", return_value=[])
-    @patch("core.agent.get_memory_core")
-    @patch("core.tools._load_course_schedule")
-    @patch("core.tools._resolve_schedule_query_v2")
+    @patch("ds_course_agent.shared.history.get_history")
+    @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
+    @patch("ds_course_agent.rag.agent.get_memory_core")
+    @patch("ds_course_agent.rag.tools._load_course_schedule")
+    @patch("ds_course_agent.rag.tools._resolve_schedule_query_v2")
     def test_schedule_question_falls_back_to_schedule_tool(
         self,
         mock_resolve_schedule,
@@ -65,7 +65,7 @@ class TestAgentGroundedFallback:
         _mock_map,
         mock_get_history,
     ):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         question = "\u4e0b\u6b21\u8bfe\u7684\u65f6\u95f4"
 
@@ -99,10 +99,10 @@ class TestAgentGroundedFallback:
         mock_resolve_schedule.assert_called_once()
         assert mock_resolve_schedule.call_args[0][0] == "\u4e0b\u8282\u8bfe\u662f\u4ec0\u4e48\u65f6\u5019\uff1f"
 
-    @patch("utils.history.get_history")
-    @patch("core.knowledge_mapper.map_question_to_concepts", return_value=[])
-    @patch("core.agent.get_memory_core")
-    @patch("core.tools.current_datetime_tool")
+    @patch("ds_course_agent.shared.history.get_history")
+    @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
+    @patch("ds_course_agent.rag.agent.get_memory_core")
+    @patch("ds_course_agent.rag.tools.current_datetime_tool")
     def test_datetime_question_falls_back_to_datetime_tool(
         self,
         mock_datetime_tool,
@@ -110,7 +110,7 @@ class TestAgentGroundedFallback:
         _mock_map,
         mock_get_history,
     ):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         question = "\u4eca\u5929\u661f\u671f\u51e0\uff1f"
 

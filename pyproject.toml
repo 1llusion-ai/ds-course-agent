@@ -13,14 +13,16 @@ authors = [
   { name = "OpenAI Codex Workspace" }
 ]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.pytest.ini_options]
 pythonpath = [
+  "src",
   ".",
-  "backend",
 ]
 addopts = "--import-mode=importlib"
 cache_dir = "pytest_cache"
 testpaths = [
   "tests",
-  "backend/tests",
 ]

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from core.tools import _resolve_schedule_query_v2
+from ds_course_agent.rag.tools import _resolve_schedule_query_v2
 
 
 def _build_schedule(weeks_tuesday: str = "1-8", weeks_friday: str = "1-8"):

@@ -1,11 +1,11 @@
 """Tests for the Python code execution sandbox and LangChain tool."""
 
-from core.code_executor import (
+from ds_course_agent.rag.code_executor import (
     PythonSandbox,
     extract_python_code,
     format_python_execution_answer,
 )
-from core.tools import get_rag_tools, python_exec_tool
+from ds_course_agent.rag.tools import get_rag_tools, python_exec_tool
 
 
 def test_python_sandbox_executes_code_successfully():

@@ -1,4 +1,4 @@
-from core.skill_system import SkillRegistry
+from ds_course_agent.rag.skill_system import SkillRegistry
 
 
 def test_skill_loader_discovers_claude_style_skills():

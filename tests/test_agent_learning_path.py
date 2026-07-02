@@ -2,17 +2,17 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 
-@patch("utils.history.get_history")
-@patch("core.knowledge_mapper.map_question_to_concepts")
-@patch("core.agent.record_event")
-@patch("core.agent.get_memory_core")
+@patch("ds_course_agent.shared.history.get_history")
+@patch("ds_course_agent.rag.agent.map_question_to_concepts")
+@patch("ds_course_agent.rag.agent.record_event")
+@patch("ds_course_agent.rag.agent.get_memory_core")
 def test_chat_with_history_routes_to_learning_path_skill(
     mock_get_memory_core,
     _mock_record_event,
     mock_map_question,
     mock_get_history,
 ):
-    from core.agent import AgentService
+    from ds_course_agent.rag.agent import AgentService
 
     mock_history = MagicMock()
     mock_history.messages = []

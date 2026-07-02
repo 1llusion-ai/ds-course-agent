@@ -1,4 +1,4 @@
-from eval.agent_benchmark import (
+from benchmarks.agent_benchmark import (
     DEFAULT_BENCHMARK_PATH,
     AgentTask,
     build_benchmark_report,

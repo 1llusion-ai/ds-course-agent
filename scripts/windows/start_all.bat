@@ -63,7 +63,7 @@ echo Starting backend on port %BACKEND_PORT%...
 start "RAG-Backend" /D "%ROOT_DIR%" "%PYTHON_EXE%" scripts\run_api.py --host 127.0.0.1 --port %BACKEND_PORT% %BACKEND_EXTRA_ARGS%
 
 echo Starting frontend on port %FRONTEND_PORT%...
-start "RAG-Frontend" /D "%ROOT_DIR%\frontend" "%NPM_CMD%" run dev -- --host 127.0.0.1 --port %FRONTEND_PORT%
+start "RAG-Frontend" /D "%ROOT_DIR%\web" "%NPM_CMD%" run dev -- --host 127.0.0.1 --port %FRONTEND_PORT%
 
 echo.
 echo Backend:  http://127.0.0.1:%BACKEND_PORT%

@@ -9,23 +9,23 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 class TestAgentServiceInit:
     def test_agent_service_can_be_imported(self):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         assert AgentService is not None
 
     def test_get_agent_service_function_exists(self):
-        from core.agent import get_agent_service
+        from ds_course_agent.rag.agent import get_agent_service
 
         assert callable(get_agent_service)
 
 
 class TestAgentServiceMock:
-    @patch("core.agent.get_chat_model")
-    @patch("core.agent.get_rag_tools")
-    @patch("core.agent.get_skill_loader")
+    @patch("ds_course_agent.rag.agent.get_chat_model")
+    @patch("ds_course_agent.rag.agent.get_rag_tools")
+    @patch("ds_course_agent.rag.agent.get_skill_loader")
     def test_agent_service_initialization(self, mock_get_skill_loader, mock_get_tools, mock_get_chat_model):
-        from core.agent import AgentService
-        import core.agent as agent_module
+        from ds_course_agent.rag.agent import AgentService
+        import ds_course_agent.rag.agent as agent_module
 
         mock_get_chat_model.return_value = MagicMock()
         mock_get_tools.return_value = []
@@ -42,7 +42,7 @@ class TestAgentServiceMock:
         assert service.tools == []
 
     def test_agent_chat_returns_string(self):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         mock_agent = MagicMock()
         mock_agent.invoke.return_value = {"messages": [AIMessage(content="test answer")]}
@@ -59,7 +59,7 @@ class TestAgentServiceMock:
         assert result == "test answer"
 
     def test_build_distinction_learning_concept_from_question_text(self):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         service = AgentService.__new__(AgentService)
         distinction = service._build_distinction_learning_concept(
@@ -74,7 +74,7 @@ class TestAgentServiceMock:
 
 class TestAgentGenericPostprocess:
     def test_svm_linearly_separable_kernel_judgement_gets_direct_prefix(self):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         service = AgentService.__new__(AgentService)
         answer = service._postprocess_generic_answer(
@@ -88,7 +88,7 @@ class TestAgentGenericPostprocess:
         assert answer.endswith("可以考虑模型复杂度和数据分布。")
 
     def test_svm_linearly_separable_followup_uses_recent_kernel_context(self):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         service = AgentService.__new__(AgentService)
         history = [
@@ -106,7 +106,7 @@ class TestAgentGenericPostprocess:
         assert "通常不需要复杂的非线性核" in answer
 
     def test_svm_linearly_separable_postprocess_is_idempotent_when_answer_has_prefix(self):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         service = AgentService.__new__(AgentService)
         original = "通常不需要复杂的非线性核，线性核通常够用。"
@@ -123,7 +123,7 @@ class TestAgentGenericPostprocess:
 class TestAgentServiceIntegration:
     @pytest.mark.skip(reason="requires full runtime environment")
     def test_agent_service_can_answer_question(self):
-        from core.agent import get_agent_service
+        from ds_course_agent.rag.agent import get_agent_service
 
         service = get_agent_service()
         result = service.chat("hello")
@@ -133,7 +133,7 @@ class TestAgentServiceIntegration:
 
     @pytest.mark.skip(reason="requires full runtime environment")
     def test_agent_service_handles_empty_history(self):
-        from core.agent import get_agent_service
+        from ds_course_agent.rag.agent import get_agent_service
 
         service = get_agent_service()
         result = service.chat("test question", chat_history=[])
@@ -159,7 +159,7 @@ class TestSystemPrompt:
 
     def test_system_prompt_has_course_name(self):
         from pathlib import Path
-        import utils.config as config
+        import ds_course_agent.shared.config as config
 
         prompt_path = Path(__file__).parent.parent / "docs" / "prompts" / "system_prompt.txt"
         content = prompt_path.read_text(encoding="utf-8")
@@ -169,14 +169,14 @@ class TestSystemPrompt:
 
 class TestConfigIntegration:
     def test_config_has_required_fields(self):
-        import utils.config as config
+        import ds_course_agent.shared.config as config
 
         required_fields = ["COURSE_NAME", "COURSE_DESCRIPTION", "MODEL_CHAT", "BASE_URL_CHAT"]
         for field in required_fields:
             assert hasattr(config, field), f"missing config field: {field}"
 
     def test_config_course_name_not_empty(self):
-        import utils.config as config
+        import ds_course_agent.shared.config as config
 
         assert config.COURSE_NAME
         assert len(config.COURSE_NAME) > 0
@@ -184,7 +184,7 @@ class TestConfigIntegration:
 
 class TestFormatChatHistory:
     def test_format_dict_messages(self):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         service = AgentService.__new__(AgentService)
         service.llm = MagicMock()
@@ -205,7 +205,7 @@ class TestFormatChatHistory:
         assert result[1].content == "hi there"
 
     def test_format_base_message_input(self):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         service = AgentService.__new__(AgentService)
         service.llm = MagicMock()
@@ -224,7 +224,7 @@ class TestFormatChatHistory:
         assert result[1] is base_message_history[1]
 
     def test_format_mixed_messages(self):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         service = AgentService.__new__(AgentService)
         service.llm = MagicMock()
@@ -250,7 +250,7 @@ class TestFormatChatHistory:
 
 
     def test_build_grounded_query_from_history_uses_shared_context_template(self):
-        from core.query_pipeline.utils import build_grounded_query_from_history
+        from ds_course_agent.rag.query_pipeline.utils import build_grounded_query_from_history
         from langchain_core.messages import AIMessage, HumanMessage
 
         history = [
@@ -265,17 +265,17 @@ class TestFormatChatHistory:
         assert "当前问题：那它还需要吗？" in query
 
     def test_build_grounded_query_from_history_leaves_standalone_question_unchanged(self):
-        from core.query_pipeline.utils import build_grounded_query_from_history
+        from ds_course_agent.rag.query_pipeline.utils import build_grounded_query_from_history
 
         assert build_grounded_query_from_history("什么是数据科学？", []) == "什么是数据科学？"
 
 
 class TestChatWithHistory:
-    @patch("utils.history.get_history")
-    @patch("core.knowledge_mapper.map_question_to_concepts", return_value=[])
-    @patch("core.agent.get_memory_core")
+    @patch("ds_course_agent.shared.history.get_history")
+    @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
+    @patch("ds_course_agent.rag.agent.get_memory_core")
     def test_chat_with_history_calls_file_store(self, mock_get_memory_core, _mock_map, mock_get_history):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         mock_agent = MagicMock()
         mock_agent.invoke.return_value = {"messages": [AIMessage(content="test answer")]}
@@ -302,13 +302,13 @@ class TestChatWithHistory:
         mock_get_history.assert_called_once_with("test_session")
         mock_history.add_messages.assert_called_once()
 
-    @patch("utils.history.get_history")
-    @patch("core.knowledge_mapper.map_question_to_concepts", return_value=[])
-    @patch("core.agent.get_memory_core")
+    @patch("ds_course_agent.shared.history.get_history")
+    @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
+    @patch("ds_course_agent.rag.agent.get_memory_core")
     def test_chat_with_history_with_existing_messages(
         self, mock_get_memory_core, _mock_map, mock_get_history
     ):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         mock_agent = MagicMock()
         mock_agent.invoke.return_value = {"messages": [AIMessage(content="test answer")]}
@@ -341,10 +341,10 @@ class TestChatWithHistory:
 
     @pytest.mark.skip(reason="covered by test_agent_grounded_fallback")
     @pytest.mark.skip(reason="covered by test_agent_grounded_fallback")
-    @patch("utils.history.get_history")
-    @patch("core.agent.get_memory_core")
-    @patch("core.knowledge_mapper.map_question_to_concepts")
-    @patch("core.agent.record_event")
+    @patch("ds_course_agent.shared.history.get_history")
+    @patch("ds_course_agent.rag.agent.get_memory_core")
+    @patch("ds_course_agent.rag.agent.map_question_to_concepts")
+    @patch("ds_course_agent.rag.agent.record_event")
     def test_chat_with_history_records_learning_events(
         self,
         mock_record_event,
@@ -352,8 +352,8 @@ class TestChatWithHistory:
         mock_get_memory_core,
         mock_get_history,
     ):
-        from core.agent import AgentService
-        from core.knowledge_mapper import MatchedConcept
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.knowledge_mapper import MatchedConcept
 
         mock_map.return_value = [
             MatchedConcept(
@@ -393,10 +393,10 @@ class TestChatWithHistory:
         assert mock_record_event.call_count >= 2
 
     @pytest.mark.skip(reason="covered by test_agent_grounded_fallback")
-    @patch("utils.history.get_history")
-    @patch("core.knowledge_mapper.map_question_to_concepts", return_value=[])
-    @patch("core.agent.get_memory_core")
-    @patch("core.tools.get_rag_service")
+    @patch("ds_course_agent.shared.history.get_history")
+    @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
+    @patch("ds_course_agent.rag.agent.get_memory_core")
+    @patch("ds_course_agent.rag.tools.get_rag_service")
     def test_chat_with_history_forces_rag_when_agent_skips_retrieval(
         self,
         mock_get_rag_service,
@@ -404,7 +404,7 @@ class TestChatWithHistory:
         _mock_map,
         mock_get_history,
     ):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         mock_history = MagicMock()
         mock_history.messages = []
@@ -440,11 +440,11 @@ class TestChatWithHistory:
         assert result == "data science grounded answer"
         mock_rag_invoke.assert_called_once_with("什么是数据科学？")
 
-    @patch("utils.history.get_history")
-    @patch("core.knowledge_mapper.map_question_to_concepts", return_value=[])
-    @patch("core.agent.get_memory_core")
-    @patch("core.tools._load_course_schedule")
-    @patch("core.tools._resolve_schedule_query_v2")
+    @patch("ds_course_agent.shared.history.get_history")
+    @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
+    @patch("ds_course_agent.rag.agent.get_memory_core")
+    @patch("ds_course_agent.rag.tools._load_course_schedule")
+    @patch("ds_course_agent.rag.tools._resolve_schedule_query_v2")
     def test_chat_with_history_uses_schedule_tool_for_schedule_queries(
         self,
         mock_resolve_schedule,
@@ -453,7 +453,7 @@ class TestChatWithHistory:
         _mock_map,
         mock_get_history,
     ):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
 
         mock_history = MagicMock()
         mock_history.messages = []
@@ -486,7 +486,7 @@ class TestChatWithHistory:
 
 class TestAgentShortTermMemory:
     def test_format_chat_history_keeps_summary_before_recent_window(self):
-        from core.agent import AgentService
+        from ds_course_agent.rag.agent import AgentService
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
         service = AgentService.__new__(AgentService)
@@ -507,7 +507,7 @@ class TestAgentShortTermMemory:
         assert isinstance(result[2], AIMessage)
 
     def test_collect_recent_context_includes_summary_and_recent_messages(self):
-        from core.query_pipeline.utils import collect_recent_context
+        from ds_course_agent.rag.query_pipeline.utils import collect_recent_context
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
         history = [
@@ -526,8 +526,8 @@ class TestAgentShortTermMemory:
         assert "上一答" in context
 
     def test_prepare_query_route_uses_compacted_history(self, monkeypatch):
-        from core.agent import AgentService
-        from core.profile_models import StudentProfile
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.profile_models import StudentProfile
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
         service = object.__new__(AgentService)
@@ -551,9 +551,9 @@ class TestAgentShortTermMemory:
             def get_profile(self, student_id):
                 return StudentProfile(student_id=student_id)
 
-        monkeypatch.setattr("utils.history.get_history", lambda session_id: FakeHistory())
-        monkeypatch.setattr("core.agent.get_memory_core", lambda: FakeMemory())
-        monkeypatch.setattr("core.knowledge_mapper.map_question_to_concepts", lambda question, top_k=3: [])
+        monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: FakeHistory())
+        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", lambda: FakeMemory())
+        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", lambda question, top_k=3: [])
         monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
         monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
         monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)

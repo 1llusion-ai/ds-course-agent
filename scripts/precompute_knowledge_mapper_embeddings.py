@@ -7,15 +7,20 @@ import argparse
 import os
 import sys
 from pathlib import Path
+import sys
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+from scripts._path import PROJECT_ROOT, ensure_src_path
+
+ensure_src_path()
+
+from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from core.knowledge_mapper import precompute_knowledge_graph_embeddings
-
+from ds_course_agent.rag.knowledge_mapper import precompute_knowledge_graph_embeddings
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -37,7 +42,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Force rebuild even if in-memory embeddings already exist.",
     )
     return parser
-
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
@@ -62,7 +66,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"[OK] cached {count} concept embeddings -> {output_path}")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

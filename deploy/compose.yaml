@@ -1,0 +1,38 @@
+name: ds-course-agent
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    container_name: rag-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../var/chroma_db:/app/var/chroma_db
+      - ../var/chat_history:/app/var/chat_history
+      - ../data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    container_name: rag-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - rag-network
+
+networks:
+  rag-network:
+    driver: bridge

@@ -6,17 +6,24 @@ import argparse
 import hashlib
 import pickle
 import sys
+from pathlib import Path
+import sys
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+from scripts._path import PROJECT_ROOT, ensure_src_path
+
+ensure_src_path()
+
 from collections import defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from kb_builder.cleaner import clean_document
-from kb_builder.chunker import CourseChunkerV2
-from kb_builder.parser import parse_pdf_file
-from kb_builder.store import CourseKnowledgeBase
-from kb_builder.toc_parser import get_toc_parser
-
+from ds_course_agent.kb.cleaner import clean_document
+from ds_course_agent.kb.chunker import CourseChunkerV2
+from ds_course_agent.kb.parser import parse_pdf_file
+from ds_course_agent.kb.store import CourseKnowledgeBase
+from ds_course_agent.kb.toc_parser import get_toc_parser
 
 def _file_hash(pdf_path: str) -> str:
     """Match the cache key strategy used by scripts/build_kb.py."""
@@ -24,12 +31,10 @@ def _file_hash(pdf_path: str) -> str:
     key = f"{Path(pdf_path).resolve()}|{stat.st_mtime}|{stat.st_size}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
-
 def _cache_path(pdf_path: str, stage: str, max_pages: int = 0) -> Path:
-    base = Path("data/cache")
+    base = Path("var/cache")
     name = f"{Path(pdf_path).stem}_{_file_hash(pdf_path)}_mp{max_pages}_{stage}.pkl"
     return base / name
-
 
 def _load_cache(cache_path: Path):
     if not cache_path.exists():
@@ -40,12 +45,10 @@ def _load_cache(cache_path: Path):
     except Exception:
         return None
 
-
 def _save_cache(cache_path: Path, obj):
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     with cache_path.open("wb") as f:
         pickle.dump(obj, f)
-
 
 def check_current_kb():
     """Print current KB status and return the active collection + count."""
@@ -54,7 +57,7 @@ def check_current_kb():
     print("=" * 60)
 
     import chromadb
-    import utils.config as config
+    import ds_course_agent.shared.config as config
 
     client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
     collections = client.list_collections()
@@ -91,7 +94,6 @@ def check_current_kb():
 
     return collection, count
 
-
 def get_pdf_files():
     """Return chapter PDFs plus appendix in a deterministic order."""
     data_dir = Path("data")
@@ -107,7 +109,6 @@ def get_pdf_files():
 
     return pdf_files
 
-
 def resolve_source_section(toc, chapter_key):
     """Map a source PDF to its TOC section to recover absolute book pages."""
     if chapter_key == "appendix":
@@ -121,7 +122,6 @@ def resolve_source_section(toc, chapter_key):
         if section.number == target_number:
             return section
     return None
-
 
 def check_chunk_quality(chunk_result):
     """Simple chunk quality checks used during rebuild."""
@@ -165,7 +165,6 @@ def check_chunk_quality(chunk_result):
         ),
         "issues": issues,
     }
-
 
 def process_source(
     chapter_key,
@@ -233,7 +232,6 @@ def process_source(
 
     return chunk_result, parse_result.file_name
 
-
 def verify_page_mapping():
     """Print start pages from the TOC and return them for display."""
     print("\n" + "=" * 60)
@@ -261,7 +259,6 @@ def verify_page_mapping():
 
     return chapter_pages
 
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Rebuild the chapter-based knowledge base")
     parser.add_argument("--chunk-size", type=int, default=1300, help="Target semantic chunk size")
@@ -272,9 +269,8 @@ def parse_args():
         default=None,
         help="Hard upper bound; defaults to chunk_size + 200",
     )
-    parser.add_argument("--no-cache", action="store_true", help="Ignore parse/clean caches under data/cache")
+    parser.add_argument("--no-cache", action="store_true", help="Ignore parse/clean caches under var/cache")
     return parser.parse_args()
-
 
 def main():
     args = parse_args()
@@ -388,7 +384,6 @@ def main():
     print("\n" + "=" * 60)
     print("Rebuild complete")
     print("=" * 60)
-
 
 if __name__ == "__main__":
     main()

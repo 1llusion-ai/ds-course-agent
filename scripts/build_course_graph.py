@@ -21,6 +21,16 @@ import argparse
 import json
 import re
 import sys
+from pathlib import Path
+import sys
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+from scripts._path import PROJECT_ROOT, ensure_src_path
+
+ensure_src_path()
+
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -29,13 +39,10 @@ from typing import Any, Iterable
 import requests
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from langchain_core.documents import Document
 
-import utils.config as config
-from core.course_graph import (
+import ds_course_agent.shared.config as config
+from ds_course_agent.rag.course_graph import (
     ALLOWED_NODE_TYPES,
     ALLOWED_PEDAGOGICAL_TYPES,
     ALLOWED_RELATION_TYPES,
@@ -48,13 +55,11 @@ from core.course_graph import (
     normalize_concept_id,
 )
 
-
 @dataclass
 class SourceChunk:
     chunk_id: str
     text: str
     metadata: dict[str, Any]
-
 
 NOISE_PATTERNS = (
     "logo of",
@@ -71,13 +76,11 @@ NOISE_PATTERNS = (
     "定价",
 )
 
-
 def _compact_text(text: str, max_chars: int) -> str:
     text = re.sub(r"\s+", " ", str(text or "")).strip()
     if len(text) <= max_chars:
         return text
     return text[:max_chars].rstrip() + "..."
-
 
 def is_probably_teaching_chunk(chunk: SourceChunk, min_chars: int = 700) -> bool:
     text = _compact_text(chunk.text, max_chars=500).lower()
@@ -91,7 +94,6 @@ def is_probably_teaching_chunk(chunk: SourceChunk, min_chars: int = 700) -> bool
     if section.strip() in {"目录", "前言"}:
         return False
     return True
-
 
 def load_chunks_from_chroma(
     collection_name: str | None = None,
@@ -125,7 +127,6 @@ def load_chunks_from_chroma(
 
     return chunks
 
-
 def load_chunks_from_json(path: str | Path, limit: int | None = None, skip_noise: bool = False) -> list[SourceChunk]:
     """Load chunks from a JSON/JSONL file for experimentation.
 
@@ -151,7 +152,6 @@ def load_chunks_from_json(path: str | Path, limit: int | None = None, skip_noise
         if limit is not None and len(chunks) >= limit:
             break
     return chunks
-
 
 def build_extraction_prompt(chunk: SourceChunk, max_chars: int = 2400) -> str:
     chapter = chunk.metadata.get("chapter") or chunk.metadata.get("chapter_no") or ""
@@ -230,7 +230,6 @@ chunk 元信息：
 }}
 """.strip()
 
-
 def get_chat_model(llm_timeout: float | None = None, max_output_tokens: int | None = None):
     """Return the configured chat model for offline extraction."""
     if config.USE_REMOTE_LLM:
@@ -256,7 +255,6 @@ def get_chat_model(llm_timeout: float | None = None, max_output_tokens: int | No
         sync_client_kwargs=sync_client_kwargs,
     )
 
-
 def invoke_remote_direct(prompt: str, llm_timeout: float | None = None, max_output_tokens: int | None = None) -> str:
     if not config.USE_REMOTE_LLM:
         raise RuntimeError("--llm-provider direct requires USE_REMOTE_LLM=true")
@@ -277,7 +275,6 @@ def invoke_remote_direct(prompt: str, llm_timeout: float | None = None, max_outp
     data = response.json()
     return str(data["choices"][0]["message"].get("content") or "")
 
-
 def _extract_json_object(text: str) -> dict[str, Any]:
     raw = str(text or "").strip()
     if raw.startswith("```"):
@@ -292,13 +289,11 @@ def _extract_json_object(text: str) -> dict[str, Any]:
             return json.loads(raw[start : end + 1])
         raise
 
-
 def _coerce_float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
     except Exception:
         return default
-
 
 def graph_from_payload(payload: dict[str, Any], course_name: str, fallback_chunk: SourceChunk) -> CourseGraph:
     nodes: list[CourseGraphNode] = []
@@ -392,7 +387,6 @@ def graph_from_payload(payload: dict[str, Any], course_name: str, fallback_chunk
 
     return CourseGraph(course_name=course_name, nodes=nodes, edges=edges, chunk_tags=tags, misconceptions=misconceptions)
 
-
 def extract_with_prompt_backend(
     chunks: Iterable[SourceChunk],
     course_name: str,
@@ -436,7 +430,6 @@ def extract_with_prompt_backend(
         graphs.append(graph_from_payload(payload, course_name=course_name, fallback_chunk=chunk))
 
     return graphs
-
 
 def extract_with_transformer_backend(
     chunks: Iterable[SourceChunk],
@@ -539,7 +532,6 @@ def extract_with_transformer_backend(
 
     return graphs
 
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build an experimental course graph from course chunks.")
     parser.add_argument("--backend", choices=["prompt", "transformer"], default="prompt")
@@ -555,7 +547,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-skip-noise", action="store_true", help="Do not skip cover/TOC/noisy chunks before extraction.")
     parser.add_argument("--dry-run", action="store_true", help="Print prompts without calling the LLM. Only for prompt backend.")
     return parser.parse_args()
-
 
 def main() -> None:
     args = parse_args()
@@ -609,7 +600,6 @@ def main() -> None:
         f"nodes={len(merged.nodes)} edges={len(merged.edges)} "
         f"chunk_tags={len(merged.chunk_tags)} misconceptions={len(merged.misconceptions)}"
     )
-
 
 if __name__ == "__main__":
     main()

@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from core.profile_models import ConceptFocus, ProgressInfo, StudentProfile, WeakSpotCandidate
-from core.skill_system import SkillRegistry
+from ds_course_agent.rag.profile_models import ConceptFocus, ProgressInfo, StudentProfile, WeakSpotCandidate
+from ds_course_agent.rag.skill_system import SkillRegistry
 
 
 def _build_profile() -> StudentProfile:

@@ -2,7 +2,7 @@ import json
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from utils.history import FileChatMessageHistory, MemoryPolicy
+from ds_course_agent.shared.history import FileChatMessageHistory, MemoryPolicy
 
 
 def _turn(i: int):

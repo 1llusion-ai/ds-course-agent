@@ -11,8 +11,8 @@ project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from core.skill_system import SkillRegistry
-from core.memory_core import MemoryCore, get_memory_core, aggregate_profile
+from ds_course_agent.rag.skill_system import SkillRegistry
+from ds_course_agent.rag.memory_core import MemoryCore, get_memory_core, aggregate_profile
 
 
 def test_misconception_skill_end_to_end():
@@ -26,8 +26,8 @@ def test_misconception_skill_end_to_end():
     test_core = MemoryCore(base_dir=str(tmp_path))
 
     # patch get_memory_core 返回临时实例（executor 内部会调用它）
-    with patch("core.memory_core.get_memory_core", return_value=test_core):
-        with patch("core.memory_core._memory_core", test_core):
+    with patch("ds_course_agent.rag.memory_core.get_memory_core", return_value=test_core):
+        with patch("ds_course_agent.rag.memory_core._memory_core", test_core):
             module = SkillRegistry().load_module("misconception-handling")
 
             fake_json = json.dumps(
@@ -91,8 +91,8 @@ def test_misconception_pending_weakness():
 
     test_core = MemoryCore(base_dir=str(tmpdir))
 
-    with patch("core.memory_core.get_memory_core", return_value=test_core):
-        with patch("core.memory_core._memory_core", test_core):
+    with patch("ds_course_agent.rag.memory_core.get_memory_core", return_value=test_core):
+        with patch("ds_course_agent.rag.memory_core._memory_core", test_core):
             module = SkillRegistry().load_module("misconception-handling")
 
             fake_json = json.dumps(

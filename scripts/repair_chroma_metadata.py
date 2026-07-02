@@ -13,19 +13,25 @@ import argparse
 import json
 import re
 import sys
+from pathlib import Path
+import sys
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+from scripts._path import PROJECT_ROOT, ensure_src_path
+
+ensure_src_path()
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 import chromadb
 
-import utils.config as config
-from kb_builder.toc_parser import SectionInfo, get_toc_parser
-
+import ds_course_agent.shared.config as config
+from ds_course_agent.kb.toc_parser import SectionInfo, get_toc_parser
 
 @dataclass(frozen=True)
 class TocIndex:
@@ -33,7 +39,6 @@ class TocIndex:
     sections: dict[str, SectionInfo]
     all_sections: list[SectionInfo]
     first_textbook_page: int
-
 
 def _build_toc_index() -> TocIndex:
     toc = get_toc_parser()
@@ -56,7 +61,6 @@ def _build_toc_index() -> TocIndex:
         first_textbook_page=first_textbook_page,
     )
 
-
 def _parse_json_list(value: Any) -> list[int]:
     if value is None or value == "":
         return []
@@ -77,7 +81,6 @@ def _parse_json_list(value: Any) -> list[int]:
             pass
     return result
 
-
 def _first_int(*values: Any) -> int | None:
     for value in values:
         if value is None or value == "":
@@ -88,7 +91,6 @@ def _first_int(*values: Any) -> int | None:
             continue
     return None
 
-
 def _chapter_number_from_outline(metadata: dict[str, Any]) -> str:
     outline = str(metadata.get("subsection_no") or metadata.get("section_no") or "").strip()
     match = re.match(r"^(\d+)\.", outline)
@@ -96,11 +98,9 @@ def _chapter_number_from_outline(metadata: dict[str, Any]) -> str:
         return ""
     return f"第{int(match.group(1))}章"
 
-
 def _parent_number(number: str) -> str:
     parts = number.split(".")
     return ".".join(parts[:2]) if len(parts) >= 2 else ""
-
 
 def _chapter_by_number(index: TocIndex, number: str) -> SectionInfo | None:
     if number.startswith("第"):
@@ -109,7 +109,6 @@ def _chapter_by_number(index: TocIndex, number: str) -> SectionInfo | None:
     if not match:
         return None
     return index.chapters.get(f"第{int(match.group(1))}章")
-
 
 def _best_section_by_number(index: TocIndex, metadata: dict[str, Any]) -> tuple[SectionInfo | None, SectionInfo | None, SectionInfo | None]:
     subsection_no = str(metadata.get("subsection_no") or "").strip()
@@ -127,19 +126,16 @@ def _best_section_by_number(index: TocIndex, metadata: dict[str, Any]) -> tuple[
             break
     return chapter, section, subsection
 
-
 def _section_range_contains(section: SectionInfo | None, page: int | None) -> bool:
     if section is None or page is None:
         return False
     end_page = max(section.end_page or section.page, section.page)
     return section.page <= page <= end_page
 
-
 def _parent_section(index: TocIndex, section: SectionInfo | None) -> SectionInfo | None:
     if section is None:
         return None
     return index.sections.get(_parent_number(section.number))
-
 
 def _section_by_page(index: TocIndex, textbook_page: int | None) -> SectionInfo | None:
     if textbook_page is None:
@@ -152,7 +148,6 @@ def _section_by_page(index: TocIndex, textbook_page: int | None) -> SectionInfo 
     if not candidates:
         return None
     return max(candidates, key=lambda section: section.level)
-
 
 def _best_section_by_page(index: TocIndex, textbook_page: int | None) -> tuple[SectionInfo | None, SectionInfo | None, SectionInfo | None]:
     best = _section_by_page(index, textbook_page)
@@ -167,7 +162,6 @@ def _best_section_by_page(index: TocIndex, textbook_page: int | None) -> tuple[S
         subsection = best
         section = index.sections.get(_parent_number(best.number))
     return chapter, section, subsection
-
 
 def _infer_source_pages(metadata: dict[str, Any]) -> tuple[int | None, int | None, list[int]]:
     source_pages = _parse_json_list(metadata.get("source_pages"))
@@ -192,7 +186,6 @@ def _infer_source_pages(metadata: dict[str, Any]) -> tuple[int | None, int | Non
         parser_end = source_pages[-1]
     return parser_page, parser_end, source_pages
 
-
 def _infer_textbook_page(
     source_pages: list[int],
     parser_page: int | None,
@@ -204,7 +197,6 @@ def _infer_textbook_page(
     start = textbook_pages[0] if textbook_pages else None
     end = textbook_pages[-1] if textbook_pages else start
     return start, end, textbook_pages
-
 
 def _choose_sections(
     metadata: dict[str, Any],
@@ -231,7 +223,6 @@ def _choose_sections(
 
     return chapter, section, subsection
 
-
 CHAPTER_KEYS = (
     "chapter_no",
     "chapter",
@@ -253,7 +244,6 @@ PAGE_KEYS = (
     "source_page_end",
     "source_pages",
 )
-
 
 def normalized_metadata(metadata: dict[str, Any], index: TocIndex, page_offset: int) -> dict[str, Any]:
     updated = dict(metadata)
@@ -308,7 +298,6 @@ def normalized_metadata(metadata: dict[str, Any], index: TocIndex, page_offset: 
     updated["metadata_repair_page_offset"] = page_offset
     return {k: v for k, v in updated.items() if v is not None and v != ""}
 
-
 def repair_collection(collection_name: str, persist_dir: str, page_offset: int, dry_run: bool = False, batch_size: int = 200) -> dict[str, int]:
     index = _build_toc_index()
     client = chromadb.PersistentClient(path=persist_dir)
@@ -356,7 +345,6 @@ def repair_collection(collection_name: str, persist_dir: str, page_offset: int, 
 
     return {"total": total, "changed": changed, "dry_run": int(dry_run)}
 
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--collection", default=config.collection_name)
@@ -370,7 +358,6 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     print(repair_collection(args.collection, args.persist_dir, args.page_offset, dry_run=args.dry_run))
-
 
 if __name__ == "__main__":
     main()

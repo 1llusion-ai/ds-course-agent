@@ -9,11 +9,19 @@
 """
 import os
 import sys
+from pathlib import Path
+import sys
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+from scripts._path import PROJECT_ROOT, ensure_src_path
+
+ensure_src_path()
 
 # 添加项目根目录到路径（支持直接运行脚本）
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-sys.path.insert(0, PROJECT_ROOT)
 
 import json
 import argparse
@@ -27,13 +35,12 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 # 优先使用 GPU 进行 Marker 解析
 os.environ.setdefault("TORCH_DEVICE", "cuda")
 
-from kb_builder.parser import parse_pdf_file, PDFParseResult, save_parse_trace
-from kb_builder.cleaner import clean_document, CleanedDocument
-from kb_builder.chunker import CourseChunkerV2, ChunkingResultV2
-from kb_builder.store import CourseKnowledgeBase, IngestResult
-from kb_builder.toc_parser import get_toc_parser
+from ds_course_agent.kb.parser import parse_pdf_file, PDFParseResult, save_parse_trace
+from ds_course_agent.kb.cleaner import clean_document, CleanedDocument
+from ds_course_agent.kb.chunker import CourseChunkerV2, ChunkingResultV2
+from ds_course_agent.kb.store import CourseKnowledgeBase, IngestResult
+from ds_course_agent.kb.toc_parser import get_toc_parser
 import re
-
 
 @dataclass
 class BuildReport:
@@ -47,21 +54,18 @@ class BuildReport:
     ingest_result: dict
     quality_metrics: dict
 
-
 def _file_hash(pdf_path: str) -> str:
     """基于文件路径、修改时间、大小生成缓存键"""
     stat = os.stat(pdf_path)
     key = f"{os.path.abspath(pdf_path)}|{stat.st_mtime}|{stat.st_size}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
-
 def _cache_path(pdf_path: str, stage: str, max_pages: int) -> Path:
     """生成缓存文件路径"""
-    base = Path("data/cache")
+    base = Path("var/cache")
     h = _file_hash(pdf_path)
     name = f"{Path(pdf_path).stem}_{h}_mp{max_pages}_{stage}.pkl"
     return base / name
-
 
 def _load_cache(cache_file: Path):
     """加载缓存对象"""
@@ -73,13 +77,11 @@ def _load_cache(cache_file: Path):
     except Exception:
         return None
 
-
 def _save_cache(cache_file: Path, obj):
     """保存缓存对象"""
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     with open(cache_file, "wb") as f:
         pickle.dump(obj, f)
-
 
 def _compute_page_offset(pdf_path: str) -> int:
     """
@@ -112,7 +114,6 @@ def _compute_page_offset(pdf_path: str) -> int:
     # 即教材页码 = PDF页码 - 8。保持这里显式，避免把 PDF 物理页误当教材页。
     return -8
 
-
 def _parse_with_cache(pdf_path: str, max_pages: int, use_cache: bool) -> PDFParseResult:
     """带缓存的PDF解析"""
     cache_file = _cache_path(pdf_path, "parse", max_pages)
@@ -127,7 +128,6 @@ def _parse_with_cache(pdf_path: str, max_pages: int, use_cache: bool) -> PDFPars
         print(f"  [Cache] 保存解析缓存: {cache_file.name}")
     return result
 
-
 def _clean_with_cache(pages, file_name: str, pdf_path: str, max_pages: int, use_cache: bool) -> CleanedDocument:
     """带缓存的文本清洗"""
     cache_file = _cache_path(pdf_path, "clean", max_pages)
@@ -141,7 +141,6 @@ def _clean_with_cache(pages, file_name: str, pdf_path: str, max_pages: int, use_
         _save_cache(cache_file, result)
         print(f"  [Cache] 保存清洗缓存: {cache_file.name}")
     return result
-
 
 def build_knowledge_base(
     pdf_path: str,
@@ -226,7 +225,7 @@ def build_knowledge_base(
         quality_metrics=quality_metrics
     )
 
-    report_path = "artifacts/build_report.json"
+    report_path = "var/artifacts/build_report.json"
     os.makedirs(os.path.dirname(report_path), exist_ok=True)
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(asdict(report), f, ensure_ascii=False, indent=2)
@@ -244,7 +243,7 @@ def build_knowledge_base(
 
     # 预计算知识点映射 embedding
     try:
-        from core.knowledge_mapper import precompute_knowledge_graph_embeddings
+        from ds_course_agent.rag.knowledge_mapper import precompute_knowledge_graph_embeddings
         graph_path = Path(PROJECT_ROOT) / "data" / "knowledge_graph.json"
         cache_path = Path(PROJECT_ROOT) / "data" / "knowledge_graph_embeddings.json"
         precompute_knowledge_graph_embeddings(
@@ -255,7 +254,6 @@ def build_knowledge_base(
         print(f"[Build] 知识点 embedding 预计算失败: {e}")
 
     return report
-
 
 def calculate_quality_metrics(
     parse_result: PDFParseResult,
@@ -313,7 +311,6 @@ def calculate_quality_metrics(
 
     return metrics
 
-
 def _build_one_pdf(args: tuple) -> BuildReport:
     """多进程包装器：构建单个PDF"""
     pdf_path, max_pages, ingest, use_cache = args
@@ -322,7 +319,6 @@ def _build_one_pdf(args: tuple) -> BuildReport:
     except Exception as e:
         print(f"[ERROR] 处理 {pdf_path} 失败: {e}")
         raise
-
 
 def main():
     parser = argparse.ArgumentParser(description="课程知识库构建")
@@ -383,7 +379,6 @@ def main():
             ingest=not args.no_ingest,
             use_cache=use_cache
         )
-
 
 if __name__ == "__main__":
     main()

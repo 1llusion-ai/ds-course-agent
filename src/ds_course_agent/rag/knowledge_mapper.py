@@ -1,0 +1,428 @@
+"""
+知识点映射模块
+将自然语言问题映射到标准知识点（canonical_id）
+采用三层匹配策略：精确匹配 -> 规则匹配 -> Embedding兜底
+"""
+import json
+import logging
+import os
+import re
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass
+from pathlib import Path
+
+from ds_course_agent.shared.paths import PROJECT_ROOT
+
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MatchedConcept:
+    """匹配结果"""
+    concept_id: str
+    display_name: str
+    chapter: str
+    method: str  # exact_alias / regex_rule / embedding
+    score: float
+
+
+class KnowledgeGraph:
+    """知识图谱加载与查询"""
+
+    def __init__(self, graph_path: Optional[str] = None):
+        if graph_path is None:
+            graph_path = PROJECT_ROOT / "data" / "knowledge_graph.json"
+
+        with open(graph_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.concepts: Dict[str, Dict] = {}
+        self.alias_to_concept: Dict[str, str] = {}  # alias -> canonical_id
+        self.embeddings: Dict[str, np.ndarray] = {}  # canonical_id -> embedding vector
+
+        for concept in data["concepts"]:
+            cid = concept["canonical_id"]
+            self.concepts[cid] = concept
+
+            # 构建别名映射
+            for alias in concept["aliases"]:
+                normalized_alias = self._normalize_text(alias)
+                self.alias_to_concept[normalized_alias] = cid
+
+        # 预编译正则规则（在精确匹配之后应用）
+        self.regex_rules = self._build_regex_rules()
+
+        # 预计算 embedding（如果可用）
+        self._precompute_embeddings()
+
+    def _normalize_text(self, text: str) -> str:
+        """文本归一化：去标点、小写、统一空格"""
+        text = re.sub(r'[^\w\s]', '', text.lower())
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+
+    def _build_regex_rules(self) -> List[Tuple[re.Pattern, str]]:
+        """
+        构建正则规则
+        """
+        rules = []
+
+        # SVM 相关
+        rules.append((re.compile(r'svm.*核|支持向量机.*核|svm.*kernel', re.I), "svm_kernel"))
+        rules.append((re.compile(r'核函数.*svm|核技巧.*svm', re.I), "svm_kernel"))
+
+        # 过拟合相关
+        rules.append((re.compile(r'过拟合.*怎么|overfitting.*|泛化.*差', re.I), "overfitting"))
+
+        # 交叉验证相关
+        rules.append((re.compile(r'交叉验证.*怎么|k折|k-fold.*怎么', re.I), "cross_validation"))
+
+        # 梯度下降相关
+        rules.append((re.compile(r'梯度下降.*怎么|学习率.*怎么|sgd.*怎么', re.I), "gradient_descent"))
+
+        # 决策树相关
+        rules.append((re.compile(r'决策树.*剪枝|信息熵.*怎么|信息增益.*', re.I), "decision_tree"))
+
+        # 正则化相关
+        rules.append((re.compile(r'正则化.*怎么|l1正则|l2正则|岭回归.*lasso', re.I), "regularization"))
+
+        return rules
+
+    def _precompute_embeddings(self):
+        """预计算/加载知识图谱中所有概念的 embedding"""
+        # 优先尝试加载离线缓存
+        cache_path = PROJECT_ROOT / "data" / "knowledge_graph_embeddings.json"
+        env_cache = os.environ.get("KNOWLEDGE_MAPPER_EMBEDDING_CACHE")
+        if env_cache:
+            cache_path = Path(env_cache)
+
+        if cache_path.exists():
+            try:
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    cache_data = json.load(f)
+                for cid, vec in cache_data.items():
+                    self.embeddings[cid] = np.array(vec)
+                logger.info("Loaded %d embeddings from cache (%s)", len(self.embeddings), cache_path)
+                return
+            except Exception as e:
+                logger.warning("Cache load failed: %s, falling back to online embedding", e)
+
+        if os.environ.get("KNOWLEDGE_MAPPER_DISABLE_ONLINE_EMBEDDINGS") == "1":
+            logger.info("Online knowledge mapper embeddings disabled by environment")
+            return
+
+        try:
+            from ds_course_agent.shared.config import MODEL_EMBEDDING, API_KEY, BASE_URL
+            from langchain_openai import OpenAIEmbeddings
+
+            embedding_model = OpenAIEmbeddings(
+                model=MODEL_EMBEDDING,
+                api_key=API_KEY,
+                base_url=BASE_URL,
+                tiktoken_enabled=False,
+                check_embedding_ctx_length=False,
+            )
+
+            for cid, concept in self.concepts.items():
+                text = concept["display_name"] + " " + " ".join(concept["aliases"][:3])
+                try:
+                    embedding = embedding_model.embed_query(text)
+                    self.embeddings[cid] = np.array(embedding)
+                except Exception as e:
+                    logger.warning("Embedding failed for %s: %s", cid, e)
+
+            logger.info("Precomputed %d embeddings", len(self.embeddings))
+
+        except Exception as e:
+            logger.warning("Embedding model not available: %s", e)
+
+    def get_concept(self, concept_id: str) -> Optional[Dict]:
+        """获取概念详情"""
+        return self.concepts.get(concept_id)
+
+    def get_embedding(self, concept_id: str) -> Optional[np.ndarray]:
+        """获取概念预计算embedding"""
+        return self.embeddings.get(concept_id)
+
+
+def precompute_knowledge_graph_embeddings(
+    graph_path: str,
+    embedding_cache_path: str,
+    force: bool = False,
+) -> int:
+    """离线预计算知识图谱 embedding 并写入缓存文件。
+
+    Args:
+        graph_path: 知识图谱 JSON 路径
+        embedding_cache_path: 输出缓存路径
+        force: 是否强制重建（即使已有缓存）
+
+    Returns:
+        成功缓存的 embedding 数量
+    """
+    import os
+
+    out_path = Path(embedding_cache_path)
+    if not force and out_path.exists():
+        try:
+            with open(out_path, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+            logger.info("Cache already exists with %d entries. Use --force to rebuild.", len(existing))
+            return len(existing)
+        except Exception:
+            pass
+
+    with open(graph_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    concepts = {c["canonical_id"]: c for c in data["concepts"]}
+
+    from ds_course_agent.shared.config import MODEL_EMBEDDING, API_KEY, BASE_URL
+    from langchain_openai import OpenAIEmbeddings
+
+    embedding_model = OpenAIEmbeddings(
+        model=MODEL_EMBEDDING,
+        api_key=API_KEY,
+        base_url=BASE_URL,
+        tiktoken_enabled=False,
+        check_embedding_ctx_length=False,
+    )
+
+    embeddings: Dict[str, List[float]] = {}
+    for cid, concept in concepts.items():
+        text = concept["display_name"] + " " + " ".join(concept["aliases"][:3])
+        try:
+            vec = embedding_model.embed_query(text)
+            embeddings[cid] = [float(v) for v in vec]
+        except Exception as e:
+            logger.warning("Precompute failed for %s: %s", cid, e)
+
+    if not embeddings:
+        if out_path.exists():
+            logger.warning(
+                "Precompute produced 0 embeddings; keeping existing cache at %s",
+                out_path,
+            )
+            try:
+                with open(out_path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+                return len(existing) if isinstance(existing, dict) else 0
+            except Exception:
+                return 0
+        logger.warning("Precompute produced 0 embeddings; no cache written")
+        return 0
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(embeddings, f, ensure_ascii=False, indent=2)
+
+    # 同时设置环境变量，使同进程后续加载能命中缓存
+    os.environ["KNOWLEDGE_MAPPER_EMBEDDING_CACHE"] = str(out_path)
+    logger.info("Cached %d embeddings -> %s", len(embeddings), out_path)
+    return len(embeddings)
+
+
+class KnowledgeMapper:
+    """知识点映射器"""
+
+    def __init__(self, graph: Optional[KnowledgeGraph] = None):
+        self.graph = graph or KnowledgeGraph()
+        self._embedding_model = None
+
+    def _get_embedding_model(self):
+        """延迟加载 embedding 模型"""
+        if self._embedding_model is None:
+            from ds_course_agent.shared.config import MODEL_EMBEDDING, API_KEY, BASE_URL
+            from langchain_openai import OpenAIEmbeddings
+
+            self._embedding_model = OpenAIEmbeddings(
+                model=MODEL_EMBEDDING,
+                api_key=API_KEY,
+                base_url=BASE_URL,
+                tiktoken_enabled=False,
+                check_embedding_ctx_length=False,
+            )
+        return self._embedding_model
+
+    def _embed_text(self, text: str) -> np.ndarray:
+        """获取文本 embedding"""
+        model = self._get_embedding_model()
+        embedding = model.embed_query(text)
+        return np.array(embedding)
+
+    def _cosine_similarity(self, v1: np.ndarray, v2: np.ndarray) -> float:
+        """计算余弦相似度"""
+        norm1 = np.linalg.norm(v1)
+        norm2 = np.linalg.norm(v2)
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+        return float(np.dot(v1, v2) / (norm1 * norm2))
+
+    def _score_substring_match(self, alias: str, normalized: str) -> float:
+        """对子串命中做更稳健的打分，避免长问句压低概念命中分。"""
+        if not alias or not normalized:
+            return 0.0
+
+        if alias == normalized:
+            return 1.0
+
+        # 问句包含完整概念别名时，应视为较强命中。
+        if alias in normalized and len(alias) >= 2:
+            coverage = len(alias) / max(len(normalized), 1)
+            return round(min(0.99, 0.72 + 0.25 * coverage), 3)
+
+        # 用户问题是概念别名的截断或简写时，保留原有比例分。
+        if normalized in alias and len(normalized) >= 2:
+            return round(min(0.9, len(normalized) / max(len(alias), 1)), 3)
+
+        return 0.0
+
+    def map_question(self, question: str, top_k: int = 3,
+                     embedding_threshold: float = 0.82) -> List[MatchedConcept]:
+        """
+        三层匹配策略：
+        1. 别名精确匹配（含归一化）
+        2. 正则规则匹配
+        3. Embedding语义匹配（兜底）
+
+        Args:
+            question: 用户问题
+            top_k: 返回最大匹配数
+            embedding_threshold: embedding匹配阈值
+
+        Returns:
+            MatchedConcept列表，按score降序
+        """
+        matches = []
+        matched_ids = set()
+
+        # ===== Layer 1: 别名精确匹配 =====
+        normalized = self.graph._normalize_text(question)
+
+        # 直接匹配
+        if normalized in self.graph.alias_to_concept:
+            cid = self.graph.alias_to_concept[normalized]
+            concept = self.graph.get_concept(cid)
+            matches.append(MatchedConcept(
+                concept_id=cid,
+                display_name=concept["display_name"],
+                chapter=concept["chapter"],
+                method="exact_alias",
+                score=1.0
+            ))
+            matched_ids.add(cid)
+
+        # 子串匹配（用于长问题中提取概念）
+        for alias, cid in self.graph.alias_to_concept.items():
+            if cid in matched_ids:
+                continue
+            score = self._score_substring_match(alias, normalized)
+            if score >= 0.55:
+                concept = self.graph.get_concept(cid)
+                matches.append(MatchedConcept(
+                    concept_id=cid,
+                    display_name=concept["display_name"],
+                    chapter=concept["chapter"],
+                    method="exact_alias",
+                    score=score
+                ))
+                matched_ids.add(cid)
+
+        # ===== Layer 2: 正则规则匹配 =====
+        for pattern, cid in self.graph.regex_rules:
+            if cid in matched_ids:
+                continue
+            if pattern.search(question):
+                concept = self.graph.get_concept(cid)
+                matches.append(MatchedConcept(
+                    concept_id=cid,
+                    display_name=concept["display_name"],
+                    chapter=concept["chapter"],
+                    method="regex_rule",
+                    score=0.95
+                ))
+                matched_ids.add(cid)
+
+        # ===== Layer 3: Embedding语义匹配（兜底）=====
+        # 只有当精确匹配不足 top_k 时才使用
+        if len(matches) < top_k and self.graph.embeddings:
+            try:
+                query_vec = self._embed_text(question)
+
+                embedding_matches = []
+                for cid, concept_vec in self.graph.embeddings.items():
+                    if cid in matched_ids:
+                        continue
+                    sim = self._cosine_similarity(query_vec, concept_vec)
+                    if sim > embedding_threshold:
+                        concept = self.graph.get_concept(cid)
+                        embedding_matches.append(MatchedConcept(
+                            concept_id=cid,
+                            display_name=concept["display_name"],
+                            chapter=concept["chapter"],
+                            method="embedding",
+                            score=round(sim, 3)
+                        ))
+
+                # 按相似度排序，补充到 matches
+                embedding_matches.sort(key=lambda x: x.score, reverse=True)
+                matches.extend(embedding_matches[:top_k - len(matches)])
+
+            except Exception as e:
+                logger.warning("Embedding match failed: %s", e)
+
+        # 最终排序，取 top_k
+        matches.sort(key=lambda x: x.score, reverse=True)
+        return matches[:top_k]
+
+    def get_related_concepts(self, concept_id: str) -> List[str]:
+        """获取相关概念列表"""
+        concept = self.graph.get_concept(concept_id)
+        if concept:
+            return concept.get("related_concepts", [])
+        return []
+
+
+# 全局单例
+_knowledge_mapper: Optional[KnowledgeMapper] = None
+
+
+def get_knowledge_mapper() -> KnowledgeMapper:
+    """获取知识点映射器单例"""
+    global _knowledge_mapper
+    if _knowledge_mapper is None:
+        _knowledge_mapper = KnowledgeMapper()
+    return _knowledge_mapper
+
+
+def map_question_to_concepts(question: str, top_k: int = 3) -> List[MatchedConcept]:
+    """
+    便捷函数：将问题映射到知识点
+
+    Returns:
+        MatchedConcept列表，按匹配分数降序
+    """
+    mapper = get_knowledge_mapper()
+    return mapper.map_question(question, top_k)
+
+
+if __name__ == "__main__":
+    # 测试
+    mapper = get_knowledge_mapper()
+
+    test_questions = [
+        "什么是支持向量机？",
+        "SVM的核函数怎么选？",
+        "核技巧是什么？",
+        "kernel trick的原理",
+        "过拟合怎么处理？",
+        "梯度下降的学习率怎么调？"
+    ]
+
+    for q in test_questions:
+        print(f"\n问题: {q}")
+        matches = mapper.map_question(q)
+        for m in matches:
+            print(f"  -> {m.display_name} ({m.concept_id}) | {m.method} | score={m.score}")

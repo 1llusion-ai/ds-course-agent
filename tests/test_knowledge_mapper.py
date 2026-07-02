@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.knowledge_mapper import map_question_to_concepts
+from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
 
 
 QUESTION_CASES = [

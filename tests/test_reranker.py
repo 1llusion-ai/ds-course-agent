@@ -9,9 +9,9 @@ try:
 except ModuleNotFoundError:
     pytest = None
 
-from core.reranker import CrossEncoderReranker, get_reranker
-from core.hybrid_retriever import HybridRetriever
-import utils.config as config
+from ds_course_agent.rag.reranker import CrossEncoderReranker, get_reranker
+from ds_course_agent.rag.hybrid_retriever import HybridRetriever
+import ds_course_agent.shared.config as config
 
 
 class MockCrossEncoder:
@@ -98,8 +98,8 @@ def test_get_reranker_respects_config():
         config.ENABLE_RERANK = original_enable
 
 
-@patch("core.hybrid_retriever.chromadb.PersistentClient")
-@patch("core.hybrid_retriever.OpenAIEmbeddings")
+@patch("ds_course_agent.rag.hybrid_retriever.chromadb.PersistentClient")
+@patch("ds_course_agent.rag.hybrid_retriever.OpenAIEmbeddings")
 def test_hybrid_retriever_rerank_toggle(mock_embed, mock_client):
     """测试 HybridRetriever 在启用/禁用 rerank 时返回的文档数正确"""
     # mock chromadb get
@@ -131,8 +131,8 @@ def test_hybrid_retriever_rerank_toggle(mock_embed, mock_client):
         assert len(docs_on) == 2
 
 
-@patch("core.hybrid_retriever.chromadb.PersistentClient")
-@patch("core.hybrid_retriever.OpenAIEmbeddings")
+@patch("ds_course_agent.rag.hybrid_retriever.chromadb.PersistentClient")
+@patch("ds_course_agent.rag.hybrid_retriever.OpenAIEmbeddings")
 def test_hybrid_retriever_disables_unavailable_rerank(mock_embed, mock_client):
     """当 reranker 模型不可用时，应显式回退为纯 hybrid。"""
     mock_collection = MagicMock()

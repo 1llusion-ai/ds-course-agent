@@ -4,67 +4,38 @@ A course-focused RAG teaching assistant for **Introduction to Data Science**, bu
 
 It supports grounded textbook Q&A, streaming chat, personalized learning memory, student profile views, course schedule tools, and evaluation workflows for both retrieval and agent behavior.
 
-## Highlights
-
-- Grounded answers with textbook citations
-- Hybrid retrieval with BM25 + vector search + RRF fusion
-- Multi-turn chat with session persistence
-- SSE streaming responses
-- Student memory for recent concepts, weak spots, and resolved weak spots
-- Personalized explanation scaffolds
-- Agent and retrieval benchmark runners
-
-## Repository Status
-
-This repository has been reorganized toward a more standard open-source layout while keeping the system runnable during migration.
-
-- Active backend entrypoint: `apps/api/app/main.py`
-- Legacy backend path kept as compatibility shim: `backend/app`
-- Frontend runtime still lives in `frontend/`
-- Shared package boundaries are being introduced under `packages/`
-
-In other words: the project now has a cleaner backbone, but it is still in an incremental migration rather than a one-shot rewrite.
-
-## Architecture
+## Repository Layout
 
 ```text
-frontend/                Vue 3 application
-apps/api/app/            Active FastAPI app
-backend/app/             Compatibility shims for legacy imports
-core/                    Current runtime domain logic
-packages/rag_core/       Package-facing wrappers for core capabilities
-packages/kb_pipeline/    Package-facing wrappers for KB build pipeline
-packages/shared/         Shared config/history/vector-store wrappers
-eval/                    Retrieval and agent evaluation code + datasets
-scripts/                 CLI and local run helpers
-data/                    Small tracked metadata and local course assets
-docs/                    Architecture and prompt docs
-tests/                   Core/unit-style tests
-backend/tests/           API integration tests
+src/ds_course_agent/      Python package: API, RAG, KB pipeline, memory, teaching skills, shared utilities
+web/                      Vue 3 frontend application
+tests/                    Unit and integration tests
+scripts/                  Developer and maintenance CLIs
+benchmarks/                     Evaluation datasets, metrics, and benchmark runners
+data/                     Small tracked course metadata and sample data
+var/                      Local runtime state (gitignored except .gitkeep files)
+docs/                     Architecture notes and prompts
+deploy/                   Docker/Compose deployment files
+config/                   Dependency/config files used by deployment
 ```
 
-Runtime request flow:
+Python code uses the standard `src` layout:
 
-1. `frontend/` sends HTTP/SSE requests to the FastAPI app.
-2. `apps/api/app/routers/` handles chat, sessions, and profile APIs.
-3. `apps/api/app/core_bridge.py` bridges the API layer to the current `core/` agent and memory logic.
-4. `core/` uses retrieval, tools, and learning memory to answer or stream results.
+```text
+src/ds_course_agent/
+├── api/                  FastAPI app, routers, schemas, API state
+├── rag/                  Agent, RAG, retrieval, tools, query pipeline, memory models
+├── kb/                   Parsing, cleaning, chunking, indexing pipeline
+├── teaching/skills/      SKILL.md teaching strategies and executors
+└── shared/               Config, paths, logging, history, vector-store helpers
+```
 
-## Capability Model
+## Runtime Request Flow
 
-This repo intentionally uses a mixed capability architecture:
-
-- `tools` for deterministic queries or external/data-backed access
-- a small number of `skills` for user-facing teaching strategies
-- normal modules/services for internal ranking, mapping, and memory logic
-
-Current examples:
-
-- tools: textbook retrieval, KB status check, course schedule query
-- skills: `learning-path`, `personalized-explanation`
-- internal modules: weak-spot detection, concept mapping, route ranking
-
-The detailed boundary document is in `docs/capability_model.md`.
+1. `web/` sends HTTP/SSE requests to the FastAPI app.
+2. `src/ds_course_agent/api/routers/` handles chat, sessions, and profile APIs.
+3. `src/ds_course_agent/api/core_bridge.py` bridges the API layer to `ds_course_agent.rag`.
+4. `src/ds_course_agent/rag/` uses retrieval, tools, and learning memory to answer or stream results.
 
 ## Quick Start
 
@@ -85,16 +56,16 @@ Fill in the required keys in `.env`.
 
 ### 3. Install dependencies
 
-Backend:
+Backend/API:
 
 ```bash
-pip install -r backend/requirements.txt
+pip install -r config/api-requirements.txt
 ```
 
 Frontend:
 
 ```bash
-cd frontend
+cd web
 npm install
 ```
 
@@ -121,7 +92,7 @@ python scripts/run_api.py --reload
 ### 6. Start the frontend
 
 ```bash
-cd frontend
+cd web
 npm run dev
 ```
 
@@ -133,125 +104,72 @@ curl http://127.0.0.1:8083/health
 
 ## Common Commands
 
+The repository uses Python `src` layout. `pytest`, `main.py`, `scripts/*`, and Docker are configured for it. For ad-hoc one-liners, use `PYTHONPATH=src`.
+
 ```bash
 python main.py help
 python main.py build data/
 python main.py api --reload
 python -m pytest -q
-python -m eval.agent_benchmark --output eval/reports/agent_benchmark_report.json
+PYTHONPATH=src python -c "import ds_course_agent"
+python -m benchmarks.agent_benchmark --output var/artifacts/benchmarks/agent_benchmark_report.json
+cd web && npm run build
+docker compose -f deploy/compose.yaml config
 ```
 
 ## Development Notes
 
-### Backend
+### Backend/API
 
-- Active ASGI app: `apps.api.app.main:app`
-- Compatibility app import: `backend.app.main:app`
+- Active ASGI app: `ds_course_agent.api.main:app`
 - API routes:
-  - `apps/api/app/routers/chat.py`
-  - `apps/api/app/routers/sessions.py`
-  - `apps/api/app/routers/profile.py`
+  - `src/ds_course_agent/api/routers/chat.py`
+  - `src/ds_course_agent/api/routers/sessions.py`
+  - `src/ds_course_agent/api/routers/profile.py`
 
 ### Frontend
 
-- Current runtime app lives in `frontend/`
-- `apps/web/` is currently a boundary marker for the long-term target layout
+- Runtime app lives in `web/`
+- Build with `cd web && npm run build`
 
 ### Testing
-
-The repository now runs tests with workspace-local temporary directories instead of relying on OS temp directories. This avoids Windows permission issues in restricted environments.
 
 Main suites:
 
 - `tests/`
-- `backend/tests/`
+- API integration tests live under `tests/integration/api/`
 
 ## Data and Git Hygiene
 
 These are intentionally ignored and should usually stay out of GitHub:
 
 - `.env`
-- `chat_history/`
-- `chroma_db/`
-- `frontend/node_modules/`
-- `frontend/dist/`
-- `artifacts/`
-- generated benchmark reports in `eval/reports/`
+- `var/chat_history/`
+- `var/chroma_db/`
+- `var/logs/`
+- `var/artifacts/`
+- `var/cache/`
+- `web/node_modules/`
+- `web/dist/`
+- generated benchmark reports in `var/artifacts/benchmarks/`
 - raw course PDFs and other large copyrighted assets in `data/`
 
 Tracked course metadata that is useful for reproducibility can stay in Git, for example:
 
 - `data/course_schedule.json`
 - `data/knowledge_graph.json`
-- `data/目录.json`
-- benchmark datasets under `eval/data/`
+- benchmark datasets under `benchmarks/data/`
 
-## Evaluation
+## Deployment
 
-This repository includes two evaluation layers:
+Compose configuration lives in `deploy/compose.yaml`:
 
-- Retrieval evaluation under `eval/`
-- Agent task evaluation under `eval/agent_benchmark.py`
+```bash
+docker compose -f deploy/compose.yaml config
+docker compose -f deploy/compose.yaml up --build
+```
 
-Current tracked snapshots in this repository:
-
-### Retrieval benchmark
-
-Dataset:
-
-- 50 reviewed retrieval queries
-- Top-5 evaluation
-- active dataset: `eval/data/retrieval_qa_pairs_chunk1300.json`
-- review overlay: `eval/data/retrieval_qa_reviews.json`
-
-Latest tracked report: `eval/reports/retrieval_benchmark_report_2026-04-13.json`
-
-| Method | Recall@5 | Precision@5 | MRR | NDCG@5 | Hit@5 |
-|--------|----------|-------------|-----|--------|-------|
-| Vector | 0.5600 | 0.2640 | 0.6433 | 0.5220 | 0.82 |
-| Hybrid | 0.6667 | 0.3240 | 0.6740 | 0.6166 | 0.84 |
-| Hybrid + Rerank | 0.6733 | 0.3320 | 0.6873 | 0.6173 | 0.88 |
-
-### Agent benchmark
-
-Dataset:
-
-- 30 end-to-end agent tasks
-- covers retrieval, multi-turn context, personalization, and safety handling
-- active dataset: `eval/data/agent_tasks_v1.json`
-
-Latest tracked report: `eval/reports/agent_benchmark_report_2026-04-13.json`
-
-| Metric | Value |
-|--------|-------|
-| Agent task success rate | 0.9333 |
-| Tool call success rate | 0.9667 |
-| Grounded answer rate | 0.9583 |
-| Context utilization rate | 0.8750 |
-| Personalization hit rate | 1.0000 |
-| Failure safety rate | 1.0000 |
-
-If you are quoting metrics externally, make sure to distinguish:
-
-- `Hit@5` belongs to the retrieval benchmark
-- `Agent task success rate` belongs to the end-to-end agent benchmark
-- they are not interchangeable
-
-## Migration Notes
-
-The repo has already completed:
-
-- standardized Python project metadata via `pyproject.toml`
-- standardized backend app entrypoint under `apps/api`
-- repository CLI under `scripts/cli.py`
-- compatibility shims for legacy backend imports
-- improved `.gitignore` and artifact boundaries
-
-Still intentionally incremental:
-
-- frontend has not yet been physically moved into `apps/web`
-- core runtime logic still primarily lives in `core/`
-- package wrappers in `packages/` are present, but not every runtime import has been physically migrated yet
+The second command requires a running Docker daemon.
 
 ## License
 

@@ -1,4 +1,4 @@
-from core.hybrid_retriever import BM25Retriever, _normalize_latin_tokens
+from ds_course_agent.rag.hybrid_retriever import BM25Retriever, _normalize_latin_tokens
 
 
 def test_normalize_latin_tokens_uppercases_acronyms():

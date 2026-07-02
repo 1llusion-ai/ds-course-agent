@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from kb_builder.parser import (
+from ds_course_agent.kb.parser import (
     _build_result,
     _extract_pages_from_json,
     parse_pdf_file,
@@ -47,8 +47,8 @@ def test_parse_pdf_file_defaults_to_local_marker(monkeypatch, tmp_path):
         return True, "{}", marker_json
 
     monkeypatch.setenv("DATALAB_API_KEY", "real-looking-key")
-    monkeypatch.setattr("kb_builder.parser.parse_with_datalab", fail_if_called)
-    monkeypatch.setattr("kb_builder.parser.parse_with_marker", fake_marker)
+    monkeypatch.setattr("ds_course_agent.kb.parser.parse_with_datalab", fail_if_called)
+    monkeypatch.setattr("ds_course_agent.kb.parser.parse_with_marker", fake_marker)
 
     result = parse_pdf_file(str(pdf_path), save_trace=False)
 

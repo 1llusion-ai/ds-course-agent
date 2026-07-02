@@ -193,7 +193,7 @@ def _patch_starlette_testclient_thread_portal() -> None:
 _patch_starlette_testclient_thread_portal()
 
 
-_TEST_TMP_ROOT = Path(__file__).resolve().parent / "artifacts" / "test_tmp"
+_TEST_TMP_ROOT = Path(__file__).resolve().parent / "var" / "artifacts" / "test_tmp"
 
 
 def _make_workspace_temp_dir(prefix: str = "tmp", suffix: str = "", base_dir: str | Path | None = None) -> Path:
@@ -269,7 +269,7 @@ def tmp_path():
     Pytest's built-in tmp_path fixture uses an internal basetemp lifecycle that
     has been unreliable in this repository's Windows workspace. We keep the
     same fixture shape but back it with a plain temporary directory under the
-    gitignored artifacts tree.
+    gitignored var/artifacts tree.
     """
 
     _TEST_TMP_ROOT.mkdir(parents=True, exist_ok=True)

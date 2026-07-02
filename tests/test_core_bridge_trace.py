@@ -1,4 +1,4 @@
-import apps.api.app.core_bridge as core_bridge
+import ds_course_agent.api.core_bridge as core_bridge
 
 
 class _FakeService:

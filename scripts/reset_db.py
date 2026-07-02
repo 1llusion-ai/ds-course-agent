@@ -1,6 +1,6 @@
 import os
 import shutil
-import utils.config as config
+import ds_course_agent.shared.config as config
 
 if os.path.exists(config.persist_directory):
     shutil.rmtree(config.persist_directory)

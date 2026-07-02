@@ -1,12 +1,12 @@
 import json
 from unittest.mock import patch
 
-from core.knowledge_mapper import MatchedConcept
-from core.skill_system import SkillRegistry
-from core.tools import record_misconception_event
+from ds_course_agent.rag.knowledge_mapper import MatchedConcept
+from ds_course_agent.rag.skill_system import SkillRegistry
+from ds_course_agent.rag.tools import record_misconception_event
 
 
-@patch("core.memory_core.record_event")
+@patch("ds_course_agent.rag.memory_core.record_event")
 def test_record_misconception_event_calls_memory_core(mock_record_event):
     result = record_misconception_event.invoke(
         {
@@ -31,7 +31,7 @@ def test_record_misconception_event_calls_memory_core(mock_record_event):
     assert event.payload["target_bucket"] == "pending_weakness"
 
 
-@patch("core.memory_core.record_event")
+@patch("ds_course_agent.rag.memory_core.record_event")
 def test_record_misconception_event_normalizes_unknown_bucket(mock_record_event):
     record_misconception_event.invoke(
         {

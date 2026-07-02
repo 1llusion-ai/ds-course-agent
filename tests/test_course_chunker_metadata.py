@@ -1,6 +1,6 @@
 """Tests for TOC-based chunk metadata assignment."""
 
-from kb_builder.chunker import CourseChunkerV2
+from ds_course_agent.kb.chunker import CourseChunkerV2
 
 
 def test_front_matter_page_is_not_labeled_from_toc_text():

@@ -3,13 +3,13 @@ import math
 import pytest
 from pathlib import Path
 
-from eval.qa_dataset import (
+from benchmarks.qa_dataset import (
     find_missing_annotated_chunk_ids,
     load_review_overrides,
     load_retrieval_qa_dataset,
     normalize_qa_pair,
 )
-from eval.metrics.retrieval import (
+from benchmarks.metrics.retrieval import (
     calculate_recall_at_k,
     calculate_precision_at_k,
     calculate_mrr,
@@ -116,11 +116,11 @@ class TestRetrievalMetrics:
 
 class TestBenchmarkData:
     def test_qa_pairs_file_exists(self):
-        path = Path("eval/data/retrieval_qa_pairs.json")
+        path = Path("benchmarks/data/retrieval_qa_pairs.json")
         assert path.exists(), "QA pairs JSON must exist"
 
     def test_qa_pairs_format(self):
-        with open("eval/data/retrieval_qa_pairs.json", "r", encoding="utf-8") as f:
+        with open("benchmarks/data/retrieval_qa_pairs.json", "r", encoding="utf-8") as f:
             data = json.load(f)
         pairs = data.get("qa_pairs", [])
         assert len(pairs) > 0
@@ -136,7 +136,7 @@ class TestBenchmarkData:
             assert isinstance(p["relevance_scores"], dict)
 
     def test_category_distribution(self):
-        with open("eval/data/retrieval_qa_pairs.json", "r", encoding="utf-8") as f:
+        with open("benchmarks/data/retrieval_qa_pairs.json", "r", encoding="utf-8") as f:
             data = json.load(f)["qa_pairs"]
         counts = {}
         for p in data:
@@ -192,8 +192,8 @@ class TestBenchmarkData:
 @pytest.mark.skip(reason="需要真实 ChromaDB 和 Embedding API 环境")
 class TestBenchmarkIntegration:
     def test_benchmark_runs_without_error(self):
-        from eval.retrieval_benchmark import run_benchmark
-        report = run_benchmark(top_k=3, output_path="eval/reports/test_benchmark_report.json")
+        from benchmarks.retrieval_benchmark import run_benchmark
+        report = run_benchmark(top_k=3, output_path="benchmarks/reports/test_benchmark_report.json")
         assert "vector" in report
         assert "hybrid" in report
         assert report["vector"]["summary"]["count"] > 0
