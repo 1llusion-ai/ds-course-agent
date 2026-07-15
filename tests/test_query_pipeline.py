@@ -793,10 +793,15 @@ class TestAgentStreamPostprocessRegressions:
         monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
         monkeypatch.setattr(service, "_maybe_force_grounded_answer", lambda *args, **kwargs: None)
 
-        def fake_chat(user_input, chat_history=None, stream=False):
-            captured["user_input"] = user_input
-            return "grounded answer"
+        class FakeRagTool:
+            def invoke(self, query):
+                captured["tool_query"] = query
+                return "grounded answer"
 
+        def fake_chat(*_args, **_kwargs):
+            raise AssertionError("grounded_rag route should bypass generic agent chat")
+
+        monkeypatch.setattr("ds_course_agent.rag.tools.course_rag_tool", FakeRagTool())
         monkeypatch.setattr(service, "chat", fake_chat)
 
         state = service._prepare_query_route("过拟合怎么解决？", "session-1", "student-1")
@@ -804,8 +809,8 @@ class TestAgentStreamPostprocessRegressions:
         result = service._execute_route(state, stream=False)
 
         assert result == "grounded answer"
-        assert captured["user_input"] == state["context"].metadata["grounded_tool_query"]
-        assert "当前问题：决策树过拟合怎么解决？" in captured["user_input"]
+        assert captured["tool_query"] == state["context"].metadata["grounded_tool_query"]
+        assert "当前问题：决策树过拟合怎么解决？" in captured["tool_query"]
 
 
 class TestQueryRewriter:

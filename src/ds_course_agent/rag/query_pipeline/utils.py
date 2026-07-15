@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Any, Optional
 
 from langchain_core.messages import BaseMessage
+
+import ds_course_agent.shared.config as config
 
 JUDGEMENT_CUES = ["是否", "要不要", "需不需要", "还需要", "还能不能", "可不可以", "有没有必要"]
 SUMMARY_MARKER = "short_memory_summary"
@@ -50,9 +53,34 @@ FOLLOWUP_CUES = [
 ]
 
 
+def _normalize_query_text_uncached(query: str | None) -> str:
+    return re.sub(r"\s+", "", (query or "").lower())
+
+
+@lru_cache(maxsize=max(0, int(config.QUERY_CACHE_SIZE)))
+def _normalize_query_text_cached(query: str | None) -> str:
+    return _normalize_query_text_uncached(query)
+
+
 def normalize_query_text(query: str | None) -> str:
     """Normalize user-facing query text for lightweight routing/postprocessing."""
-    return re.sub(r"\s+", "", (query or "").lower())
+    if not config.QUERY_CACHE_ENABLED:
+        return _normalize_query_text_uncached(query)
+    if query is None or isinstance(query, str):
+        return _normalize_query_text_cached(query)
+    # Preserve legacy behavior for unexpected objects rather than forcing them
+    # through a cache key conversion.
+    return _normalize_query_text_uncached(query)
+
+
+def clear_query_text_cache() -> None:
+    """Clear query text normalization cache; useful for tests/benchmarks."""
+    _normalize_query_text_cached.cache_clear()
+
+
+def query_text_cache_info():
+    """Return functools cache_info for normalization cache observability."""
+    return _normalize_query_text_cached.cache_info()
 
 
 def is_judgement_question(query: str | None) -> bool:

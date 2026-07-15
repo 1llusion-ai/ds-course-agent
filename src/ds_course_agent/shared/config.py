@@ -45,6 +45,10 @@ CHAT_MAX_RETRIES = int(_get_env("CHAT_MAX_RETRIES", "2"))
 CHAT_DISABLE_THINKING = _get_env("CHAT_DISABLE_THINKING", "true").lower() == "true"
 CHAT_SYSTEM_SUFFIX = _get_env("CHAT_SYSTEM_SUFFIX", "/no_think")
 
+# === Lightweight in-process caches (phase 2) ===
+QUERY_CACHE_ENABLED = _get_env("QUERY_CACHE_ENABLED", "true").lower() == "true"
+QUERY_CACHE_SIZE = int(_get_env("QUERY_CACHE_SIZE", "512"))
+
 
 COURSE_NAME = _get_env("COURSE_NAME", "数据科学导论")
 COURSE_DESCRIPTION = _get_env("COURSE_DESCRIPTION", "概念答疑、课程资料问答、学习建议")
@@ -114,6 +118,8 @@ chat_timeout_seconds = CHAT_TIMEOUT_SECONDS
 chat_max_retries = CHAT_MAX_RETRIES
 chat_disable_thinking = CHAT_DISABLE_THINKING
 chat_system_suffix = CHAT_SYSTEM_SUFFIX
+query_cache_enabled = QUERY_CACHE_ENABLED
+query_cache_size = QUERY_CACHE_SIZE
 context_window_tokens = CONTEXT_WINDOW_TOKENS
 context_budget_ratio = CONTEXT_BUDGET_RATIO
 context_large_message_tokens = CONTEXT_LARGE_MESSAGE_TOKENS

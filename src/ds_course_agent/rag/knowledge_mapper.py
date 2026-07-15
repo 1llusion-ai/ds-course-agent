@@ -7,10 +7,12 @@ import json
 import logging
 import os
 import re
+from functools import lru_cache
 from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
+import ds_course_agent.shared.config as config
 from ds_course_agent.shared.paths import PROJECT_ROOT
 
 import numpy as np
@@ -397,6 +399,34 @@ def get_knowledge_mapper() -> KnowledgeMapper:
     return _knowledge_mapper
 
 
+def _clone_matched_concepts(matches: Tuple[MatchedConcept, ...]) -> List[MatchedConcept]:
+    """Return fresh dataclass instances so cache contents cannot be mutated."""
+    return [replace(match) for match in matches]
+
+
+@lru_cache(maxsize=max(0, int(config.QUERY_CACHE_SIZE)))
+def _map_question_to_concepts_cached(
+    mapper_identity: int,
+    question: str,
+    top_k: int,
+) -> Tuple[MatchedConcept, ...]:
+    # ``mapper_identity`` is part of the key so tests/runtime resets of the
+    # global mapper do not reuse stale results from a previous graph instance.
+    _ = mapper_identity
+    mapper = get_knowledge_mapper()
+    return tuple(mapper.map_question(question, top_k))
+
+
+def clear_map_question_cache() -> None:
+    """Clear concept mapping cache; useful for tests and latency harness setup."""
+    _map_question_to_concepts_cached.cache_clear()
+
+
+def map_question_cache_info():
+    """Return functools cache_info for concept mapping cache observability."""
+    return _map_question_to_concepts_cached.cache_info()
+
+
 def map_question_to_concepts(question: str, top_k: int = 3) -> List[MatchedConcept]:
     """
     便捷函数：将问题映射到知识点
@@ -405,7 +435,15 @@ def map_question_to_concepts(question: str, top_k: int = 3) -> List[MatchedConce
         MatchedConcept列表，按匹配分数降序
     """
     mapper = get_knowledge_mapper()
-    return mapper.map_question(question, top_k)
+    if not config.QUERY_CACHE_ENABLED:
+        return mapper.map_question(question, top_k)
+
+    cached = _map_question_to_concepts_cached(
+        id(mapper),
+        str(question or ""),
+        int(top_k),
+    )
+    return _clone_matched_concepts(cached)
 
 
 if __name__ == "__main__":

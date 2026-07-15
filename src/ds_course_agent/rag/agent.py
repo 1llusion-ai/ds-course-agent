@@ -941,6 +941,9 @@ class AgentService(object):
         if route_state.get("special_case_response"):
             return "special_case_response"
 
+        if route == RouteType.GROUNDED_RAG and isinstance(result, str) and result.strip():
+            return "grounded_rag_already_executed"
+
         if decision.retrieval_policy != "required":
             return f"retrieval_policy={decision.retrieval_policy}"
 
@@ -1172,6 +1175,17 @@ class AgentService(object):
 
                 result = current_datetime_tool.invoke(user_input)
                 _track_retrieval(sources=[], used=True)
+            elif route == RouteType.GROUNDED_RAG:
+                trace_step("agent.branch", branch="grounded_rag_direct")
+                from ds_course_agent.rag.tools import course_rag_tool
+
+                # Phase 2 latency optimization: when the QueryPipeline has
+                # already made a required grounded-RAG decision, avoid a second
+                # generic-agent LLM round just to decide whether to call the RAG
+                # tool.  The tool still performs retrieval + grounded answer
+                # generation and records RetrievalTrace/source telemetry.
+                with trace_span("execute.grounded_rag_tool"):
+                    result = course_rag_tool.invoke(execution_query)
             elif route == RouteType.PYTHON_EXEC:
                 trace_step("agent.branch", branch="python_exec")
                 from ds_course_agent.rag.code_executor import (
