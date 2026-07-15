@@ -117,6 +117,22 @@ def _merge_sources(existing: list[dict], incoming: list[dict]) -> list[dict]:
     return merged
 
 
+def _warn_large_tool_result(tool_name: str, result: str, **metadata) -> None:
+    """Warning-only large tool result telemetry."""
+    try:
+        from ds_course_agent.shared.context_governor import warn_if_large_text_payload
+
+        warn_if_large_text_payload(
+            result,
+            location=f"tool.{tool_name}.result",
+            payload_type="tool_result",
+            tool=tool_name,
+            **metadata,
+        )
+    except Exception:
+        pass
+
+
 def _track_retrieval(sources: list[dict], used: bool = True) -> None:
     trace = _retrieval_trace.get()
     if trace is None:
@@ -265,17 +281,20 @@ def course_rag_tool(question: str) -> str:
 
         if not result.has_results:
             trace_step("tool.result", tool="course_rag_tool", status="no_results")
-            return (
+            no_results_message = (
                 f"抱歉，在《{config.COURSE_NAME}》课程资料中未找到与你问题直接相关的内容。\n"
                 "建议你：\n"
                 "1. 换一个更具体的关键词重新提问\n"
                 "2. 说明你想问的概念、章节或例子\n"
                 "3. 如果是课程外问题，我也可以先帮你判断是否属于本课程范围"
             )
+            _warn_large_tool_result("course_rag_tool", no_results_message, status="no_results")
+            return no_results_message
 
         with trace_span("tool.course_rag.answer"):
             answer_result = service.answer_with_context(question, result.formatted_context)
         trace_step("tool.result", tool="course_rag_tool", status="ok")
+        _warn_large_tool_result("course_rag_tool", answer_result.answer, status="ok")
         return answer_result.answer
     except Exception as exc:
         trace_error("tool.invoke", exc, tool="course_rag_tool")
@@ -288,14 +307,18 @@ def check_knowledge_base_status() -> str:
     try:
         service = get_rag_service()
         service.retrieve("测试", top_k=1)
-        return (
+        result = (
             "知识库状态正常\n"
             f"课程名称：{config.COURSE_NAME}\n"
             f"课程范围：{config.COURSE_DESCRIPTION}\n"
             "检索功能：可用"
         )
+        _warn_large_tool_result("check_knowledge_base_status", result, status="ok")
+        return result
     except Exception as exc:
-        return f"知识库状态异常：{exc}"
+        result = f"知识库状态异常：{exc}"
+        _warn_large_tool_result("check_knowledge_base_status", result, status="error")
+        return result
 
 
 def _python_exec_error_hint(stderr: str) -> str:
@@ -337,8 +360,10 @@ def python_exec_tool(code: str) -> str:
         if truncated:
             lines.append("（输出已截断到 4000 字符）")
 
+        output = "\n".join(lines)
         trace_step("tool.result", tool="python_exec_tool", exit_code=exit_code, truncated=truncated)
-        return "\n".join(lines)
+        _warn_large_tool_result("python_exec_tool", output, exit_code=exit_code, truncated=truncated)
+        return output
     except Exception as exc:  # pragma: no cover - defensive guard around tool formatting
         trace_error("tool.invoke", exc, tool="python_exec_tool")
         return f"执行 Python 代码时出错：{exc}"
@@ -695,6 +720,7 @@ def course_schedule_tool(query: str) -> str:
         schedule = _load_course_schedule()
         result = _resolve_schedule_query_v2(query, schedule)
         trace_step("tool.result", tool="course_schedule_tool", result_preview=result[:40])
+        _warn_large_tool_result("course_schedule_tool", result, status="ok")
         return result
     except Exception as exc:
         trace_error("tool.invoke", exc, tool="course_schedule_tool")
@@ -718,6 +744,7 @@ def current_datetime_tool(query: str = "") -> str:
         f"今天是 {now.strftime('%Y年%m月%d日')}。"
     )
     trace_step("tool.result", tool="current_datetime_tool")
+    _warn_large_tool_result("current_datetime_tool", result, status="ok")
     return result
 
 

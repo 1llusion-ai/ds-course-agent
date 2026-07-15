@@ -21,6 +21,21 @@ from ds_course_agent.rag.hybrid_retriever import HybridRetriever
 logger = logging.getLogger(__name__)
 
 
+def _warn_large_rag_payload(payload: str, *, location: str, payload_type: str, **metadata) -> None:
+    """Warning-only RAG context/answer payload telemetry."""
+    try:
+        from ds_course_agent.shared.context_governor import warn_if_large_text_payload
+
+        warn_if_large_text_payload(
+            payload,
+            location=location,
+            payload_type=payload_type,
+            **metadata,
+        )
+    except Exception:
+        logger.debug("Failed to emit RAG payload size warning at %s", location, exc_info=True)
+
+
 # 根据配置选择LLM类
 def get_chat_model():
     """获取聊天模型（支持本地Ollama和远程API）"""
@@ -207,6 +222,13 @@ class RAGService(object):
                         break
 
         formatted_context = self._format_documents(documents)
+        _warn_large_rag_payload(
+            formatted_context,
+            location="rag.retrieve.formatted_context",
+            payload_type="rag_context",
+            document_count=len(documents),
+            top_k=k,
+        )
 
         return RetrievalResult(
             documents=documents,
@@ -223,6 +245,12 @@ class RAGService(object):
         )
         if config.CHAT_SYSTEM_SUFFIX:
             prompt = f"{prompt}\n\n{config.CHAT_SYSTEM_SUFFIX}"
+        _warn_large_rag_payload(
+            prompt,
+            location="rag.stream_answer.prompt",
+            payload_type="llm_prompt",
+            context_chars=len(context or ""),
+        )
 
         for chunk in self.chat_model.stream(prompt):
             content = getattr(chunk, "content", chunk)
@@ -253,6 +281,12 @@ class RAGService(object):
         )
         if config.CHAT_SYSTEM_SUFFIX:
             prompt = f"{prompt}\n\n{config.CHAT_SYSTEM_SUFFIX}"
+        _warn_large_rag_payload(
+            prompt,
+            location="rag.answer.prompt",
+            payload_type="llm_prompt",
+            context_chars=len(context or ""),
+        )
 
         if stream:
             return self.stream_answer_with_context(question, context)
@@ -261,6 +295,12 @@ class RAGService(object):
 
         # 提取纯字符串内容
         answer_content = answer_msg.content if hasattr(answer_msg, 'content') else str(answer_msg)
+        _warn_large_rag_payload(
+            answer_content,
+            location="rag.answer.result",
+            payload_type="rag_answer",
+            has_context=context != "无相关资料",
+        )
 
         return AnswerResult(
             answer=answer_content,

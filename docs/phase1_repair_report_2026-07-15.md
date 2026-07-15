@@ -198,30 +198,73 @@ python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline
 81 passed, 4 skipped, 1 warning
 ```
 
+### 6. Tool/RAG large payload warning-only telemetry
+
+结果：已完成大 tool result / RAG context 的 warning-only 观测。
+
+改动：
+
+- `src/ds_course_agent/shared/context_governor.py`
+  - 新增 `warn_if_large_text_payload()`。
+  - 对 raw text payload 记录：
+    - `payload_type`
+    - `estimated_tokens`
+    - `threshold_tokens`
+    - `chars`
+    - 业务元数据如 `tool`、`document_count` 等。
+  - 修正 trace data 中业务 `status` 与 `trace_step(status=...)` 的命名冲突，业务状态写为 `payload_status`。
+- `src/ds_course_agent/rag/tools.py`
+  - 在以下 tool return 边界记录大文本 warning：
+    - `course_rag_tool`
+    - `python_exec_tool`
+    - `course_schedule_tool`
+    - `current_datetime_tool`
+    - `check_knowledge_base_status`
+- `src/ds_course_agent/rag/rag.py`
+  - 在以下 RAG 边界记录大文本 warning：
+    - `RAGService.retrieve` 的 `formatted_context`
+    - `RAGService.answer_with_context` 的 prompt 和 answer
+    - `RAGService.stream_answer_with_context` 的 prompt
+
+行为边界：
+
+- 不替换 tool result。
+- 不截断 RAG context。
+- 不写 artifact 文件。
+- 只记录日志和 `context_governor.warning` trace event。
+
+验证：
+
+```bash
+python -m py_compile src/ds_course_agent/shared/context_governor.py src/ds_course_agent/rag/tools.py src/ds_course_agent/rag/rag.py
+python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py tests/test_short_term_memory.py tests/test_context_governor.py tests/test_agent_smoke.py tests/test_rag_tool.py -q
+```
+
+结果：
+
+```text
+95 passed, 5 skipped, 1 warning
+```
+
 ## 尚未完成但属于第一阶段
 
-1. tool result normalization/offload warning-only
-   - 先识别大 `course_rag_tool` 结果与大 RAG context。
-   - 第一版只记录 warning/trace，不替换内容。
-   - 下一步再把旧的大工具结果 offload 到 `var/artifacts/tool_results/`。
-
-2. 结构化错误分类与指数退避
+1. 结构化错误分类与指数退避
    - 可重试：HTTP 5xx、429、ConnectionError、TimeoutError。
    - 不可重试：401、402。
    - 可降级：400 bad request。
    - 默认重试从 1 改为 2，即最多 3 次。
 
-3. SSE progress 事件
+2. SSE progress 事件
    - routing / context / retrieval / generation / postprocess。
    - UI 可先用 timeline 展示进度。
 
 ## 当前建议的下一步
 
-下一步做 tool result normalization/offload warning-only：
+下一步做结构化错误分类与指数退避：
 
-- 在 `course_rag_tool`、RAG context、streaming grounded RAG 等边界识别大文本。
-- 第一版只记录 warning/trace，不替换内容。
-- 为下一步 offload 到 `var/artifacts/tool_results/` 留好指标和挂点。
+- 将 LLM 错误分为可重试、不可重试、可降级三类。
+- 固定 sleep 改为指数退避。
+- 将 `CHAT_MAX_RETRIES` 默认值从 1 改成 2。
 
 建议验证集：
 

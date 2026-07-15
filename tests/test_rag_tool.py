@@ -4,6 +4,9 @@ RAG Tool 单元测试
 import pytest
 from unittest.mock import patch, MagicMock
 
+from langchain_core.documents import Document
+
+from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.rag.tools import (
     begin_retrieval_trace,
     check_knowledge_base_status,
@@ -147,6 +150,42 @@ class TestCourseRAGTool:
         assert trace.used_retrieval is True
         assert trace.sources == []
 
+    @patch("ds_course_agent.rag.tools.get_rag_service")
+    def test_tool_warns_on_large_course_rag_result_without_changing_return(self, mock_get_service, monkeypatch):
+        """Large tool results are observed but not normalized/offloaded in v1."""
+        import ds_course_agent.shared.context_governor as context_governor
+        from ds_course_agent.shared.context_governor import ContextBudget
+
+        monkeypatch.setattr(
+            context_governor,
+            "DEFAULT_CONTEXT_BUDGET",
+            ContextBudget(large_message_tokens=2),
+        )
+        mock_service = MagicMock()
+        mock_result = MagicMock()
+        mock_result.has_results = True
+        mock_result.formatted_context = "context"
+        mock_result.documents = []
+        mock_service.retrieve.return_value = mock_result
+
+        large_answer = "教材回答" * 20
+        mock_answer = MagicMock()
+        mock_answer.answer = large_answer
+        mock_service.answer_with_context.return_value = mock_answer
+        mock_get_service.return_value = mock_service
+
+        token = begin_query_trace({"entrypoint": "unit_test"})
+        result = course_rag_tool.invoke("测试问题")
+        trace = end_query_trace(token)
+
+        assert result == large_answer
+        assert any(
+            event["stage"] == "context_governor.warning"
+            and event["data"]["kind"] == "large_text_payload"
+            and event["data"]["tool"] == "course_rag_tool"
+            for event in trace["events"]
+        )
+
 
 class TestCheckKnowledgeBaseStatus:
     """知识库状态检查工具测试"""
@@ -172,6 +211,39 @@ class TestCheckKnowledgeBaseStatus:
         result = check_knowledge_base_status.invoke({})
 
         assert "异常" in result or "❌" in result or "错误" in result
+
+
+class TestRAGPayloadWarnings:
+    def test_retrieve_warns_on_large_formatted_context_without_changing_result(self, monkeypatch):
+        import ds_course_agent.shared.context_governor as context_governor
+        from ds_course_agent.rag.rag import RAGService
+        from ds_course_agent.shared.context_governor import ContextBudget
+
+        monkeypatch.setattr(
+            context_governor,
+            "DEFAULT_CONTEXT_BUDGET",
+            ContextBudget(large_message_tokens=2),
+        )
+
+        service = RAGService.__new__(RAGService)
+        service.use_hybrid = True
+        service.hybrid_retriever = MagicMock()
+        service.hybrid_retriever.retrieve.return_value = [
+            Document(page_content="教材片段" * 20, metadata={"source": "test.pdf"})
+        ]
+
+        token = begin_query_trace({"entrypoint": "unit_test"})
+        result = service.retrieve("测试问题", top_k=1)
+        trace = end_query_trace(token)
+
+        assert result.has_results is True
+        assert "教材片段" in result.formatted_context
+        assert any(
+            event["stage"] == "context_governor.warning"
+            and event["data"]["kind"] == "large_text_payload"
+            and event["data"]["payload_type"] == "rag_context"
+            for event in trace["events"]
+        )
 
 
 class TestToolIntegration:

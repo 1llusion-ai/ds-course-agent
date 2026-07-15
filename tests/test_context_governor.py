@@ -7,6 +7,7 @@ from ds_course_agent.shared.context_governor import (
     estimate_text_tokens,
     warn_if_context_over_budget,
     warn_if_large_message,
+    warn_if_large_text_payload,
 )
 
 
@@ -77,3 +78,24 @@ def test_estimate_messages_tokens_handles_langchain_message_list():
 
     assert estimate_messages_tokens(messages) >= 4
 
+
+def test_warn_if_large_text_payload_records_trace_without_mutation():
+    payload = "教材片段" * 20
+
+    token = begin_query_trace({"entrypoint": "unit_test"})
+    warning = warn_if_large_text_payload(
+        payload,
+        location="unit.tool.result",
+        payload_type="tool_result",
+        budget=ContextBudget(large_message_tokens=2),
+        tool="course_rag_tool",
+    )
+    trace = end_query_trace(token)
+
+    assert warning is not None
+    assert warning["payload_type"] == "tool_result"
+    assert payload == "教材片段" * 20
+
+    events = _warning_events(trace)
+    assert events[-1]["data"]["kind"] == "large_text_payload"
+    assert events[-1]["data"]["tool"] == "course_rag_tool"

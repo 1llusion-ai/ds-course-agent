@@ -121,6 +121,9 @@ def _trace_warning(kind: str, **data: Any) -> None:
     try:
         from ds_course_agent.rag.query_trace import trace_step
 
+        if "status" in data:
+            payload_status = data.pop("status")
+            data = {**data, "payload_status": payload_status}
         trace_step("context_governor.warning", status="warning", kind=kind, **data)
     except Exception:
         logger.debug("Failed to emit context governor trace", exc_info=True)
@@ -195,3 +198,43 @@ def warn_if_large_message(
     _trace_warning("large_message", **payload)
     return payload
 
+
+def warn_if_large_text_payload(
+    text: Any,
+    *,
+    location: str,
+    payload_type: str,
+    budget: ContextBudget | None = None,
+    **metadata: Any,
+) -> dict[str, Any] | None:
+    """Warn when a raw text payload, such as a tool result, is large.
+
+    This is also warning-only and returns the original caller-owned text
+    untouched.  It exists so tool/RAG boundaries do not need to construct fake
+    LangChain messages merely to get size telemetry.
+    """
+    budget = budget or DEFAULT_CONTEXT_BUDGET
+    normalized = normalize_content_text(text)
+    estimated_tokens = estimate_text_tokens(normalized)
+    threshold = max(1, int(budget.large_message_tokens))
+    if estimated_tokens <= threshold:
+        return None
+
+    payload = {
+        "location": location,
+        "payload_type": payload_type,
+        "estimated_tokens": estimated_tokens,
+        "threshold_tokens": threshold,
+        "chars": len(normalized),
+        **metadata,
+    }
+    logger.warning(
+        "Large text payload warning at %s: type=%s estimated_tokens=%s threshold_tokens=%s chars=%s",
+        location,
+        payload_type,
+        estimated_tokens,
+        threshold,
+        len(normalized),
+    )
+    _trace_warning("large_text_payload", **payload)
+    return payload
