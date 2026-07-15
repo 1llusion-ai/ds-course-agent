@@ -721,6 +721,49 @@ class AgentService(object):
             chat_history=chat_history,
         )
 
+    def _retrieval_guard_skip_reason(self, route_state: dict, result: Optional[str] = None) -> Optional[str]:
+        """Return a reason to skip forced grounding, or None when guard may run.
+
+        Forced grounding is an expensive safety net.  It should only run for
+        routes whose router decision explicitly requires retrieval and only if
+        the current turn has not already used retrieval.  Generic/optional
+        routes must not pay a second RAG round by default.
+        """
+        from ds_course_agent.rag.query_pipeline import RouteType
+
+        decision = route_state["decision"]
+        route = decision.route
+
+        if route_state.get("special_case_response"):
+            return "special_case_response"
+
+        if decision.retrieval_policy != "required":
+            return f"retrieval_policy={decision.retrieval_policy}"
+
+        if route in {
+            RouteType.COURSE_SCHEDULE,
+            RouteType.CURRENT_DATETIME,
+            RouteType.PYTHON_EXEC,
+            RouteType.CODE_REVIEW,
+            RouteType.LEARNING_PATH_SKILL,
+            RouteType.MISCONCEPTION_SKILL,
+            RouteType.PERSONALIZED_EXPLANATION_SKILL,
+            RouteType.OFF_TOPIC,
+        }:
+            return f"route={route.value}"
+
+        try:
+            from ds_course_agent.rag.tools import get_retrieval_trace
+
+            if get_retrieval_trace().used_retrieval:
+                return "already_retrieved"
+        except Exception:
+            # Retrieval tracing is best-effort; absence of trace must not hide a
+            # required forced-grounding opportunity.
+            pass
+
+        return None
+
     def _prepare_query_route(
         self,
         user_input: str,
@@ -984,18 +1027,25 @@ class AgentService(object):
             logger.error("%s failed: %s", stage, e, exc_info=stream)
             result = ""
 
+        retrieval_guard_skip_reason = self._retrieval_guard_skip_reason(route_state, result)
+        if retrieval_guard_skip_reason:
+            trace_step(
+                "retrieval_guard.skip",
+                route=route.value,
+                retrieval_policy=decision.retrieval_policy,
+                reason=retrieval_guard_skip_reason,
+            )
+        else:
+            trace_step(
+                "retrieval_guard.force",
+                route=route.value,
+                retrieval_policy=decision.retrieval_policy,
+            )
+
         forced_result = self._maybe_force_grounded_answer(
             user_input,
             chat_history=chat_history,
-            skip=(
-                bool(special_case_response)
-                or route == RouteType.COURSE_SCHEDULE
-                or route == RouteType.CURRENT_DATETIME
-                or route == RouteType.PYTHON_EXEC
-                or route == RouteType.LEARNING_PATH_SKILL
-                or route == RouteType.MISCONCEPTION_SKILL
-                or route == RouteType.PERSONALIZED_EXPLANATION_SKILL
-            ),
+            skip=bool(retrieval_guard_skip_reason),
         )
         if forced_result and forced_result.strip():
             result = forced_result

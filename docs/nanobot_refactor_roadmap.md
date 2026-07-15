@@ -1,0 +1,135 @@
+# Nanobot-Inspired Refactor Roadmap and Progress Log
+
+Last updated: 2026-07-15
+
+This document records the agreed local plan for borrowing engineering mechanisms
+from `nanobot` while preserving this project's core course-agent architecture.
+Update the **Progress Log** whenever a roadmap item is completed or materially
+changed.
+
+## Non-negotiable boundaries
+
+- Do **not** replace or weaken `QueryPipeline` (`Preprocessor -> Rewriter -> Router`).
+- Do **not** replace the `LearningEvent` domain model.
+- Do **not** convert the Vue frontend to React.
+- Do **not** import nanobot's generic-agent surface wholesale:
+  `MessageBus`, `channels`, MCP management, multi-provider UI, voice features,
+  CLI app integrations, and generic templates are out of scope.
+- Prefer staged, testable changes over large rewrites.
+
+## What to learn from nanobot
+
+1. **Tool contracts and registry**
+   - Add metadata such as `read_only`, `side_effect`, `concurrency_safe`,
+     `exclusive`, and `cost_class`.
+   - Use metadata later for safe parallelism and UI tool progress.
+
+2. **Context governance**
+   - Enforce context budgets from estimated tokens, not message counts.
+   - Check both before a turn and before each LLM call.
+   - Keep summary as marked `SystemMessage`; do not pretend old context never
+     existed.
+
+3. **Tool result normalization/offload**
+   - Large tool outputs should be persisted under `var/artifacts/tool_results/`.
+   - LLM-visible messages should contain compact placeholders/references.
+   - First version may only record warnings and trace fields before automatic
+     replacement is enabled.
+
+4. **Atomic session/history writes**
+   - Write to temporary files and use `os.replace`.
+   - Add per-session locks for concurrent FastAPI requests.
+
+5. **Typed streaming events**
+   - Upgrade SSE events from only `delta/final` toward
+     `progress`, `delta`, `stream_end`, and `turn_end`.
+   - Keep WebSocket as a later option, not a first-step dependency.
+
+6. **Markdown and code rendering UX**
+   - Add sanitizer, code highlighting, copy button, route/source/latency badges.
+
+## Final execution order
+
+1. **Condition RetrievalGuard**
+   - Avoid automatic second RAG on optional/generic routes.
+   - Trigger forced grounding only when policy requires it and retrieval was not
+     used.
+
+2. **Latency harness and query trace report**
+   - Use fixed queries and existing `query_trace.py`.
+   - Track total latency, TTFB, route, retrieve/rerank/LLM spans, forced RAG
+     rate, source count, and empty responses.
+
+3. **ContextGovernor**
+   - Pre-turn check: `system_prompt + old_history + current_user_message`.
+   - Pre-LLM check: every actual LLM call, especially after tool results.
+   - Use `CHAT_SUMMARY_MODEL`/cheap summary model if available; fallback to the
+     existing deterministic extractive summary.
+
+4. **History durability**
+   - Write user message before the LLM call.
+   - Preserve current-turn message construction as
+     `old_history + HumanMessage(current_input)`.
+   - Use atomic writes and per-session locking.
+
+5. **Tool result normalization/offload**
+   - Add size thresholds, artifact paths, trace logging, and warning-only mode.
+   - Later enable automatic replacement of old large tool results.
+
+6. **SSE progress events**
+   - Emit progress phases: routing, preparing context, retrieving, generating,
+     postprocessing.
+   - Reserve `stream_id`/`resuming` fields for future multi-segment turns.
+
+7. **Small caches**
+   - Add in-process cache for normalized query, concept mapping, and other pure
+     deterministic steps where safe.
+
+8. **Tool registry and metadata**
+   - Split `rag/tools.py` gradually.
+   - Use a lightweight registry/dataclass first, not a large abstract framework.
+
+9. **Hooks plus route handlers**
+   - Define lifecycle events:
+     - `before_route(state)`
+     - `after_route(state, decision)`
+     - `before_llm(messages)`
+     - `after_llm(result)`
+     - `after_tool(name, result)`
+     - `after_turn(state, result)`
+     - `on_session_end(session_id)`
+   - Move `LearningEventHook`, `RetrievalGuardHook`, and
+     `ClarificationDetectorHook` out of `AgentService`.
+   - Move route execution from `if/elif` into route handler classes in the same
+     refactor wave.
+
+10. **Pydantic config and shared LLM factory**
+    - Introduce `shared/config/schema.py` and `shared/config/loader.py`.
+    - Preserve existing module-level aliases for compatibility.
+    - Move duplicated `get_chat_model()` into `shared/llm.py`.
+
+11. **Frontend polish**
+    - Add DOMPurify, code highlighting, code-copy buttons, route badges, source
+      chips, latency badges, and progress timeline.
+
+12. **Later advanced work**
+    - WebSocket multiplexing if needed.
+    - Dream-lite profile consolidation.
+    - Subagent-style code review sandbox for complex code-analysis flows.
+
+## Initial validation targets
+
+- `python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py -q`
+- API streaming tests after SSE changes:
+  `python -m pytest tests/integration/api/test_chat_stream.py -q`
+- Frontend build after UI changes:
+  `cd web && npm run build`
+
+## Progress Log
+
+| Date | Item | Status | Evidence / Notes |
+| --- | --- | --- | --- |
+| 2026-07-15 | Roadmap recorded locally | Done | Created this file. |
+| 2026-07-15 | Condition RetrievalGuard | Done | Added `AgentService._retrieval_guard_skip_reason()` and trace events `retrieval_guard.skip` / `retrieval_guard.force`; added regression test for `GENERIC_AGENT + optional` skipping forced RAG. Validation: `python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py -q` -> 44 passed, 1 warning. |
+| 2026-07-15 | Latency harness scaffold | Done | Subagent `Kepler` added `benchmarks/latency_harness.py`. Reviewed locally. Validation: `python -m py_compile benchmarks/latency_harness.py` -> pass; `python benchmarks/latency_harness.py --help` -> pass; `python benchmarks/latency_harness.py --limit 0 --output /tmp/latency_harness_report.json` -> pass and writes a zero-query report without LLM/RAG calls. |
+| 2026-07-15 | ContextGovernor/tool-result insertion audit | Done | Subagent `Pascal` completed read-only audit. Key insertion points confirmed: pre-turn in `AgentService._prepare_query_route`, pre-LLM via model wrapper in `_create_agent`, large tool-result warnings at tool return boundaries, RAG context boundary in `RAGService.retrieve`, and persistence warning in `FileChatMessageHistory.add_messages`. |

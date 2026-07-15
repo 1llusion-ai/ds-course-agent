@@ -664,6 +664,26 @@ class TestAgentStreamPostprocessRegressions:
         assert events[-1]["content"] == "RAG 修正回答"
         assert history.added[-1].content == "RAG 修正回答"
 
+    def test_generic_optional_route_skips_forced_grounding(self, monkeypatch):
+        service, history = self._make_service(
+            monkeypatch,
+            chat_stream_chunks=["通用回答"],
+            chat_sync_result="通用回答",
+        )
+        skip_values = []
+
+        def fake_force_grounded(*args, **kwargs):
+            skip_values.append(kwargs.get("skip"))
+            return None if kwargs.get("skip") else "RAG 覆盖"
+
+        monkeypatch.setattr(service, "_maybe_force_grounded_answer", fake_force_grounded)
+
+        result = service.chat_with_history("讲个笑话", "session-generic", student_id="student-1")
+
+        assert result == "通用回答"
+        assert skip_values == [True]
+        assert history.added[-1].content == "通用回答"
+
     def test_personalized_explanation_route_skips_forced_grounding(self, monkeypatch):
         from ds_course_agent.rag.query_pipeline import RouteType
 
