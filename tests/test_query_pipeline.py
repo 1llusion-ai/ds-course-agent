@@ -623,8 +623,12 @@ class TestAgentStreamPostprocessRegressions:
 
         deltas = "".join(event.get("delta", "") for event in events if event["type"] == "delta")
         done = events[-1]
+        progress_phases = [event.get("phase") for event in events if event["type"] == "progress"]
 
         assert deltas.startswith("先说结论：如果这里说的是 SVM 的核函数")
+        assert progress_phases[:2] == ["routing", "context"]
+        assert "generation" in progress_phases
+        assert "postprocess" in progress_phases
         assert done["content"] == deltas
         assert history.added[-1].content == deltas
 
@@ -1005,9 +1009,10 @@ class TestQueryPipelineUtils:
         first_elapsed = time.perf_counter() - started
         rest = list(events)
 
-        assert first == {"type": "delta", "delta": "第一段"}
+        assert first["type"] == "progress"
         assert first_elapsed < 0.1
-        assert rest[0] == {"type": "delta", "delta": "第二段"}
+        delta_events = [event for event in [first] + rest if event["type"] == "delta"]
+        assert [event["delta"] for event in delta_events] == ["第一段", "第二段"]
         assert rest[-1]["type"] == "done"
         assert rest[-1]["content"] == "第一段第二段"
         assert history.added[-1].content == "第一段第二段"

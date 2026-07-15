@@ -15,6 +15,7 @@
           <span class="loading-dot"></span>
           <span class="loading-dot"></span>
           <span class="loading-dot"></span>
+          <span v-if="message.progress?.message" class="loading-label">{{ message.progress.message }}</span>
         </div>
       </template>
 
@@ -24,7 +25,7 @@
         <div v-else class="message-content markdown-body" v-html="renderedContent"></div>
         <div v-if="message.isLoading" class="streaming-status">
           <span class="streaming-pulse"></span>
-          <span>生成中</span>
+          <span>{{ message.progress?.message || '生成中' }}</span>
         </div>
       </template>
 
@@ -193,9 +194,16 @@ const renderedSources = computed(() => {
   animation-delay: -0.32s;
 }
 
-.loading-dot:nth-child(2) {
-  animation-delay: -0.16s;
-}
+	.loading-dot:nth-child(2) {
+	  animation-delay: -0.16s;
+	}
+
+	.loading-label {
+	  margin-left: 4px;
+	  color: #57534e;
+	  font-size: 13px;
+	  font-weight: 600;
+	}
 
 .streaming-status {
   display: inline-flex;

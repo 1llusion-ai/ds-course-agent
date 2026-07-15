@@ -11,7 +11,8 @@ function buildPendingMessage(requestId) {
     content: '',
     timestamp: new Date().toISOString(),
     isLoading: true,
-    requestId
+    requestId,
+    progress: null
   }
 }
 
@@ -86,6 +87,24 @@ export const useChatStore = defineStore('chat', () => {
       return {
         ...message,
         content: `${message.content || ''}${delta}`,
+        timestamp: new Date().toISOString(),
+        isLoading: true
+      }
+    })
+
+    setSessionMessages(sessionId, nextMessages)
+  }
+
+  function updatePendingMessageProgress(sessionId, requestId, progress) {
+    const currentMessages = messagesBySession.value[sessionId] || []
+    const nextMessages = currentMessages.map(message => {
+      if (message.requestId !== requestId) {
+        return message
+      }
+
+      return {
+        ...message,
+        progress,
         timestamp: new Date().toISOString(),
         isLoading: true
       }
@@ -188,6 +207,18 @@ export const useChatStore = defineStore('chat', () => {
             appendPendingMessageDelta(sessionId, requestId, payload.delta)
             options.onProgress?.()
           }
+          return
+        }
+
+        if (payload.type === 'progress') {
+          updatePendingMessageProgress(sessionId, requestId, {
+            phase: payload.phase,
+            message: payload.message,
+            route: payload.route,
+            stream_id: payload.stream_id,
+            resuming: Boolean(payload.resuming)
+          })
+          options.onProgress?.()
           return
         }
 

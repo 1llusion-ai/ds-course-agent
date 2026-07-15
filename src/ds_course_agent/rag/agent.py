@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import uuid
 _correct_cert_path = r'D:\Anaconda\envs\RAG\Library\ssl\cacert.pem'
 if os.path.exists(_correct_cert_path):
     os.environ['SSL_CERT_FILE'] = _correct_cert_path
@@ -369,6 +370,22 @@ class AgentService(object):
 
         for index in range(0, len(text), chunk_size):
             yield text[index:index + chunk_size]
+
+    def _progress_event(
+        self,
+        phase: str,
+        message: str,
+        *,
+        stream_id: str,
+        **metadata,
+    ) -> dict:
+        return {
+            "type": "progress",
+            "phase": phase,
+            "message": message,
+            "stream_id": stream_id,
+            **metadata,
+        }
 
     def _build_error_response(self, title: str, detail: str, is_retryable: bool = True) -> str:
         """构建用户友好的错误提示"""
@@ -1269,22 +1286,58 @@ class AgentService(object):
         from langchain_core.messages import HumanMessage, AIMessage
         from ds_course_agent.rag.query_pipeline import RouteType
 
+        stream_id = uuid.uuid4().hex
+        yield self._progress_event(
+            "routing",
+            "正在分析问题类型...",
+            stream_id=stream_id,
+            resuming=False,
+        )
         route_state = self._prepare_query_route(user_input, session_id, student_id)
         decision = route_state["decision"]
         route = decision.route
+        yield self._progress_event(
+            "context",
+            "正在准备上下文...",
+            stream_id=stream_id,
+            route=route.value,
+            confidence=decision.confidence,
+            resuming=False,
+        )
         route_state["history"].add_messages([HumanMessage(content=user_input)])
 
         if route == RouteType.GROUNDED_RAG:
+            yield self._progress_event(
+                "retrieval",
+                "正在检索课程资料...",
+                stream_id=stream_id,
+                route=route.value,
+                resuming=False,
+            )
             chunks = []
             for chunk in self._iter_grounded_rag_response(route_state):
                 chunks.append(chunk)
-                yield {"type": "delta", "delta": chunk}
+                yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
             final_result = "".join(chunks)
         else:
+            yield self._progress_event(
+                "generation",
+                "正在生成回答...",
+                stream_id=stream_id,
+                route=route.value,
+                resuming=False,
+            )
             final_result = self._execute_route(route_state, stream=True)
             for chunk in self._yield_text_chunks(final_result):
-                yield {"type": "delta", "delta": chunk}
+                yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
 
+        yield self._progress_event(
+            "postprocess",
+            "正在整理回答...",
+            stream_id=stream_id,
+            route=route.value,
+            resuming=False,
+        )
         route_state["history"].add_messages([
             AIMessage(content=final_result if isinstance(final_result, str) else "系统错误"),
         ])
@@ -1293,6 +1346,7 @@ class AgentService(object):
             "type": "done",
             "content": final_result,
             "route": route.value,
+            "stream_id": stream_id,
             "trace": {
                 "route": route.value,
                 "confidence": decision.confidence,

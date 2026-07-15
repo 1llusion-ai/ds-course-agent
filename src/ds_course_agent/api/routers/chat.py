@@ -264,10 +264,30 @@ async def send_message_stream(
                     break
 
                 event_type = event.get("type")
+                if event_type == "progress":
+                    yield _sse(
+                        {
+                            "type": "progress",
+                            "phase": event.get("phase"),
+                            "message": event.get("message", ""),
+                            "route": event.get("route"),
+                            "stream_id": event.get("stream_id"),
+                            "resuming": bool(event.get("resuming", False)),
+                        }
+                    )
+                    continue
+
                 if event_type == "delta":
                     delta = event.get("delta", "")
                     if delta:
-                        yield _sse({"type": "delta", "delta": delta})
+                        yield _sse(
+                            {
+                                "type": "delta",
+                                "delta": delta,
+                                "stream_id": event.get("stream_id"),
+                                "resuming": bool(event.get("resuming", False)),
+                            }
+                        )
                     continue
 
                 if event_type == "final":
@@ -284,6 +304,7 @@ async def send_message_stream(
                         {
                             "type": "final",
                             "session_id": session_id,
+                            "stream_id": event.get("stream_id"),
                             "message": _msg_to_dict(assistant_msg),
                         }
                     )

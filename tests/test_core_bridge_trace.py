@@ -12,6 +12,7 @@ class _FakeService:
         assert user_input == "hello"
         assert session_id == "sess_1"
         assert student_id == "stu_1"
+        yield {"type": "progress", "phase": "routing", "message": "正在分析问题类型...", "stream_id": "s1"}
         yield {"type": "delta", "delta": "A"}
         yield {"type": "done", "content": "AB"}
 
@@ -50,7 +51,8 @@ def test_core_bridge_stream_final_includes_query_trace(monkeypatch):
 
     events = list(core_bridge.stream_chat_with_history("hello", "sess_1", "stu_1"))
 
-    assert events[0]["type"] == "delta"
+    assert events[0]["type"] == "progress"
+    assert events[1]["type"] == "delta"
     assert events[-1]["type"] == "final"
     assert events[-1]["content"] == "AB"
     assert "query_trace" in events[-1]

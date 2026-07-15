@@ -20,6 +20,7 @@ def fresh_client(monkeypatch):
     def fake_stream_chat_with_history(message: str, session_id: str, student_id: str):
         assert message == "hello"
         assert student_id == "test"
+        yield {"type": "progress", "phase": "routing", "message": "正在分析问题类型...", "stream_id": "s1"}
         yield {"type": "delta", "delta": "你"}
         yield {"type": "delta", "delta": "好"}
         yield {
@@ -50,6 +51,7 @@ def test_stream_endpoint_returns_real_sse(fresh_client):
     )
 
     assert response.status_code == 200
+    assert '"type": "progress"' in response.text
     assert '"type": "delta"' in response.text
     assert '"type": "final"' in response.text
     assert "你好" in response.text

@@ -283,22 +283,60 @@ python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline
 98 passed, 5 skipped, 1 warning
 ```
 
+### 8. SSE progress events
+
+结果：已完成后端 SSE progress 协议和前端最小展示。
+
+改动：
+
+- `src/ds_course_agent/rag/agent.py`
+  - `stream_chat_with_history` 新增 progress event：
+    - `routing`
+    - `context`
+    - `retrieval`
+    - `generation`
+    - `postprocess`
+  - `progress` 和 `delta` 事件携带预留字段：
+    - `stream_id`
+    - `resuming`
+- `src/ds_course_agent/api/core_bridge.py`
+  - 透传 `progress` 事件。
+- `src/ds_course_agent/api/routers/chat.py`
+  - 将 `progress` 事件输出为 SSE。
+  - `delta` 事件同步携带 `stream_id` / `resuming`。
+- `web/src/stores/chat.js`
+  - pending assistant message 记录当前 progress。
+- `web/src/components/ChatMessage.vue`
+  - loading / streaming 状态展示当前 progress 文案。
+
+验证：
+
+```bash
+python -m py_compile src/ds_course_agent/rag/agent.py src/ds_course_agent/api/core_bridge.py src/ds_course_agent/api/routers/chat.py
+python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py tests/test_short_term_memory.py tests/test_context_governor.py tests/test_agent_smoke.py tests/test_rag_tool.py tests/test_core_bridge_trace.py tests/integration/api/test_chat_stream.py -q
+cd web && npm run build
+```
+
+结果：
+
+```text
+102 passed, 5 skipped, 1 warning
+frontend build passed
+```
+
 ## 尚未完成但属于第一阶段
 
-1. SSE progress 事件
-   - routing / context / retrieval / generation / postprocess。
-   - UI 可先用 timeline 展示进度。
+无。第一阶段防御性加固和可观测性基础已完成。
 
 ## 当前建议的下一步
 
-下一步做 SSE progress 事件：
-
-- 后端在 route/context/retrieval/generation/postprocess 阶段发 progress event。
-- 前端暂时可不大改，先能接收并展示 timeline。
-- 协议保留 `stream_id` / `resuming` 字段，为未来多段流式 turn 做准备。
-
-建议验证集：
+进入第二阶段前，建议先跑一次真实 latency harness，生成 baseline：
 
 ```bash
-python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py tests/test_short_term_memory.py tests/test_context_governor.py tests/test_agent_smoke.py tests/test_rag_tool.py -q
+python benchmarks/latency_harness.py --limit 20
 ```
+
+然后进入第二阶段第一项：
+
+- 小型查询缓存：query normalization / concept map 等纯函数路径。
+- 或按 roadmap 继续 tool registry + metadata，为后续工具并发和 progress timeline 打基础。
