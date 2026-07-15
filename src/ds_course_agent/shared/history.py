@@ -92,6 +92,11 @@ class FileChatMessageHistory(BaseChatMessageHistory):
             self._warn_persisted_context(all_messages)
 
             new_messages = [message_to_dict(message) for message in all_messages]
+            # If this raises, the previous JSON file remains intact because
+            # os.replace has not happened yet.  The caller should still treat
+            # the current add as not persisted; a Phase 2 checkpoint/JSONL
+            # fallback can make user-message persistence recoverable across
+            # repeated filesystem failures.
             self._atomic_write_json(new_messages)
 
     def clear(self) -> None:

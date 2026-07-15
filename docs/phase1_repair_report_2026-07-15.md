@@ -324,6 +324,46 @@ cd web && npm run build
 frontend build passed
 ```
 
+### 9. Phase 1 review fixes
+
+结果：已补齐外部审查指出的 Phase 1 流式与 trace 语义问题。
+
+改动：
+
+- `src/ds_course_agent/rag/agent.py`
+  - 新增 `_stream_chat_with_retry()`：
+    - 如果 `agent.stream()` 在发出任何 delta 前遇到 retryable 错误，先指数退避一次，再改用阻塞式 `agent.invoke()` 恢复结果并分块输出。
+    - 如果已经发出 delta 后失败，不做自动重试，避免前端看到重复 token。
+  - 收窄 `_classify_llm_error()` 的 Ollama 分类：
+    - 仅 `status_code is None` 且包含连接/拒绝/不可达语义时归类为 `ollama`。
+    - `bad request: model ollama-text is not supported` 这类请求错误仍归类为 `degradable`。
+  - 对 `stream_chat_with_history()` 的 generic optional 路径启用真实流式：
+    - 可直接流式的路由直接转发 `self.chat(..., stream=True)` 的 chunk。
+    - 需要后处理的少数 generic 场景继续走 buffered fallback。
+  - 移除 `chat()` 内重复的 ContextGovernor pre-LLM warning，保留 `_prepare_query_route()` 的 turn 前检查，避免同一消息集合重复记 trace。
+  - 修正 RetrievalGuard trace：
+    - 只有真正替换回答时记录 `retrieval_guard.force`。
+    - force 尝试未产生结果时记录 `retrieval_guard.force_empty`。
+- `src/ds_course_agent/shared/history.py`
+  - 在 atomic write 调用点补充注释：若写入异常，旧 JSON 文件仍完整，但当前 add 应视为未持久化；Phase 2 可用 JSONL/checkpoint 机制增强恢复。
+
+验证：
+
+```bash
+python -m py_compile src/ds_course_agent/rag/agent.py src/ds_course_agent/shared/history.py
+python -m pytest tests/test_agent_smoke.py tests/test_query_pipeline.py -q
+python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py tests/test_short_term_memory.py tests/test_context_governor.py tests/test_agent_smoke.py tests/test_rag_tool.py tests/test_core_bridge_trace.py tests/integration/api/test_chat_stream.py -q
+```
+
+结果：
+
+```text
+targeted: 73 passed, 4 skipped, 1 warning
+broader Phase 1 set: 104 passed, 5 skipped, 1 warning
+full suite: 275 passed, 6 skipped, 2 warnings
+py_compile passed
+```
+
 ## 尚未完成但属于第一阶段
 
 无。第一阶段防御性加固和可观测性基础已完成。

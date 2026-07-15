@@ -668,6 +668,30 @@ class TestAgentStreamPostprocessRegressions:
         assert events[-1]["content"] == "RAG 修正回答"
         assert history.added[-1].content == "RAG 修正回答"
 
+    def test_stream_generic_optional_yields_direct_agent_chunks(self, monkeypatch):
+        service, history = self._make_service(
+            monkeypatch,
+            chat_stream_chunks=["第一", "第二"],
+            chat_sync_result="第一第二",
+        )
+        execute_called = False
+        original_execute = service._execute_route
+
+        def spy_execute(*args, **kwargs):
+            nonlocal execute_called
+            execute_called = True
+            return original_execute(*args, **kwargs)
+
+        monkeypatch.setattr(service, "_execute_route", spy_execute)
+
+        events = list(service.stream_chat_with_history("讲个笑话", "session-direct-stream", student_id="student-1"))
+        delta_events = [event for event in events if event["type"] == "delta"]
+
+        assert [event["delta"] for event in delta_events] == ["第一", "第二"]
+        assert events[-1]["content"] == "第一第二"
+        assert history.added[-1].content == "第一第二"
+        assert execute_called is False
+
     def test_generic_optional_route_skips_forced_grounding(self, monkeypatch):
         service, history = self._make_service(
             monkeypatch,

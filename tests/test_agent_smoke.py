@@ -58,37 +58,6 @@ class TestAgentServiceMock:
         assert isinstance(result, str)
         assert result == "test answer"
 
-    def test_agent_chat_warns_when_pre_llm_context_exceeds_budget(self, monkeypatch):
-        from ds_course_agent.rag.agent import AgentService
-        from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
-        import ds_course_agent.shared.context_governor as context_governor
-        from ds_course_agent.shared.context_governor import ContextBudget
-
-        monkeypatch.setattr(
-            context_governor,
-            "DEFAULT_CONTEXT_BUDGET",
-            ContextBudget(context_window_tokens=20, budget_ratio=0.5),
-        )
-        mock_agent = MagicMock()
-        mock_agent.invoke.return_value = {"messages": [AIMessage(content="test answer")]}
-
-        service = AgentService.__new__(AgentService)
-        service.llm = MagicMock()
-        service.tools = []
-        service.agent = mock_agent
-
-        token = begin_query_trace({"entrypoint": "unit_test"})
-        with patch.object(AgentService, "_format_chat_history", return_value=[]):
-            result = service.chat("你好" * 20)
-        trace = end_query_trace(token)
-
-        assert result == "test answer"
-        assert any(
-            event["stage"] == "context_governor.warning"
-            and event["data"]["location"] == "agent.chat.pre_llm"
-            for event in trace["events"]
-        )
-
     def test_prepare_query_route_warns_when_pre_turn_context_exceeds_budget(self, tmp_path, monkeypatch):
         from ds_course_agent.rag.agent import AgentService
         from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
@@ -223,6 +192,37 @@ class TestAgentServiceMock:
         assert result == "基础检索回答"
         fallback.assert_called_once_with("test question")
         assert mock_agent.invoke.call_count == 1
+
+    def test_agent_stream_retries_pre_delta_retryable_error_with_blocking_invoke(self, monkeypatch):
+        from ds_course_agent.rag.agent import AgentService
+        import ds_course_agent.rag.agent as agent_module
+
+        mock_agent = MagicMock()
+        mock_agent.stream.side_effect = TimeoutError("timeout before first delta")
+        mock_agent.invoke.return_value = {"messages": [AIMessage(content="recovered stream answer")]}
+        sleeps = []
+
+        monkeypatch.setattr(agent_module.config, "CHAT_MAX_RETRIES", 2)
+        monkeypatch.setattr(agent_module.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+        service = AgentService.__new__(AgentService)
+        service.agent = mock_agent
+
+        with patch.object(AgentService, "_format_chat_history", return_value=[]):
+            chunks = list(service.chat("test question", stream=True))
+
+        assert "".join(chunks) == "recovered stream answer"
+        assert sleeps == [1]
+        assert mock_agent.stream.call_count == 1
+        assert mock_agent.invoke.call_count == 1
+
+    def test_llm_error_classification_limits_ollama_to_connectivity_errors(self):
+        from ds_course_agent.rag.agent import AgentService
+
+        service = AgentService.__new__(AgentService)
+
+        assert service._classify_llm_error(ConnectionError("failed to connect to ollama:11434")) == "ollama"
+        assert service._classify_llm_error(Exception("bad request: model ollama-text is not supported")) == "degradable"
 
     def test_build_distinction_learning_concept_from_question_text(self):
         from ds_course_agent.rag.agent import AgentService

@@ -30,6 +30,7 @@ from ds_course_agent.rag.query_pipeline.utils import (
     collect_recent_context,
     is_contextual_followup,
     is_datetime_request,
+    is_judgement_question,
     is_schedule_request,
     normalize_query_text,
 )
@@ -120,6 +121,20 @@ class AgentService(object):
         if any(token in message for token in ["badrequest", "bad request", "messages", "validation"]):
             return "degradable"
 
+        is_ollama_connectivity = (
+            "ollama" in message
+            and status_code is None
+            and (
+                isinstance(exc, ConnectionError)
+                or "connection" in message
+                or "refused" in message
+                or "connect" in message
+                or "unreachable" in message
+            )
+        )
+        if is_ollama_connectivity:
+            return "ollama"
+
         if status_code == 429 or (status_code is not None and 500 <= status_code <= 599):
             return "retryable"
         if isinstance(exc, (ConnectionError, TimeoutError)):
@@ -130,9 +145,6 @@ class AgentService(object):
             return "retryable"
         if any(token in message for token in ["500", "502", "503", "504", "server error"]):
             return "retryable"
-
-        if "ollama" in message:
-            return "ollama"
 
         return "unknown"
 
@@ -183,6 +195,123 @@ class AgentService(object):
         except Exception:
             logger.debug("Basic RAG fallback failed", exc_info=True)
         return None
+
+    def _invoke_messages_with_retry(
+        self,
+        messages: list,
+        *,
+        fallback_input: str,
+        start_attempt: int = 0,
+    ) -> str:
+        """Invoke the agent with structured retry/degrade handling."""
+        max_retries = max(0, int(config.CHAT_MAX_RETRIES))
+        for attempt in range(start_attempt, max_retries + 1):
+            try:
+                result = self.agent.invoke({"messages": messages})
+                response = self._extract_response(result)
+
+                if not response or not response.strip():
+                    if attempt < max_retries:
+                        self._sleep_before_retry(attempt, reason="empty_response")
+                        continue
+                    return self._build_error_response(
+                        "生成回复失败",
+                        "AI未能生成有效回复，请重试。",
+                        is_retryable=True
+                    )
+
+                return response
+
+            except Exception as e:
+                error_response = self._handle_llm_exception(
+                    e,
+                    attempt=attempt,
+                    max_retries=max_retries,
+                    fallback_input=fallback_input,
+                )
+                if error_response is None:
+                    continue
+                return error_response
+
+        return self._build_error_response("未知错误", "请稍后重试", is_retryable=True)
+
+    def _handle_llm_exception(
+        self,
+        exc: Exception,
+        *,
+        attempt: int,
+        max_retries: int,
+        fallback_input: str,
+    ) -> Optional[str]:
+        """Return an error/degraded response, or None when caller should retry."""
+        error_category = self._classify_llm_error(exc)
+
+        if error_category == "retryable":
+            if attempt < max_retries:
+                self._sleep_before_retry(attempt, reason=error_category)
+                return None
+            return self._build_error_response(
+                "服务暂时不可用",
+                "AI服务连接超时，请检查网络后重试。",
+                is_retryable=True
+            )
+
+        if error_category == "permanent":
+            return self._build_error_response(
+                "AI服务配置异常",
+                "AI服务认证、额度或计费状态异常，请联系管理员检查 API Key 和账户状态。",
+                is_retryable=False
+            )
+
+        if error_category == "degradable":
+            fallback = self._invoke_basic_rag_fallback(fallback_input)
+            if fallback:
+                return fallback
+            return self._build_error_response(
+                "请求格式不兼容",
+                "AI服务拒绝了本次请求，且基础检索降级未能生成可用回答。",
+                is_retryable=True
+            )
+
+        if error_category == "ollama":
+            return self._build_error_response(
+                "本地模型服务异常",
+                f"请检查Ollama是否运行，或模型'{config.MODEL_CHAT}'是否已加载。",
+                is_retryable=True
+            )
+
+        return self._build_error_response(
+            "处理请求时出错",
+            f"错误信息：{str(exc)[:100]}",
+            is_retryable=True
+        )
+
+    def _stream_chat_with_retry(self, messages: list, *, fallback_input: str) -> Iterator[str]:
+        """Stream once, then retry retryable pre-delta failures via blocking invoke.
+
+        If a stream has already emitted content, retrying would duplicate tokens
+        the frontend has seen.  In that case we let the caller's fallback path
+        handle the failure.  If no delta was emitted, retry with non-streaming
+        ``agent.invoke`` and yield the recovered response in coarse chunks.
+        """
+        max_retries = max(0, int(config.CHAT_MAX_RETRIES))
+        emitted = False
+        try:
+            for chunk in self._stream_chat_messages(messages):
+                if chunk:
+                    emitted = True
+                    yield chunk
+            return
+        except Exception as exc:
+            if emitted or self._classify_llm_error(exc) != "retryable" or max_retries <= 0:
+                raise
+            self._sleep_before_retry(0, reason="stream_retryable")
+            recovered = self._invoke_messages_with_retry(
+                messages,
+                fallback_input=fallback_input,
+                start_attempt=1,
+            )
+            yield from self._yield_text_chunks(recovered)
 
     def _check_ollama_connection(self, max_retries: int = 3, timeout: int = 30):
         """检查 Ollama 服务是否可用，带重试机制"""
@@ -251,78 +380,11 @@ class AgentService(object):
 
         formatted_history = self._format_chat_history(chat_history)
         messages = formatted_history + [HumanMessage(content=user_input)]
-        self._warn_context_budget(
-            messages,
-            location="agent.chat.pre_llm",
-            message_count=len(messages),
-        )
 
         if stream:
-            return self._stream_chat_messages(messages)
+            return self._stream_chat_with_retry(messages, fallback_input=user_input)
 
-        max_retries = max(0, int(config.CHAT_MAX_RETRIES))
-        for attempt in range(max_retries + 1):
-            try:
-                result = self.agent.invoke({"messages": messages})
-                response = self._extract_response(result)
-
-                # 检查空响应
-                if not response or not response.strip():
-                    if attempt < max_retries:
-                        self._sleep_before_retry(attempt, reason="empty_response")
-                        continue
-                    return self._build_error_response(
-                        "生成回复失败",
-                        "AI未能生成有效回复，请重试。",
-                        is_retryable=True
-                    )
-
-                return response
-
-            except Exception as e:
-                error_category = self._classify_llm_error(e)
-
-                if error_category == "retryable":
-                    if attempt < max_retries:
-                        self._sleep_before_retry(attempt, reason=error_category)
-                        continue
-                    return self._build_error_response(
-                        "服务暂时不可用",
-                        "AI服务连接超时，请检查网络后重试。",
-                        is_retryable=True
-                    )
-
-                if error_category == "permanent":
-                    return self._build_error_response(
-                        "AI服务配置异常",
-                        "AI服务认证、额度或计费状态异常，请联系管理员检查 API Key 和账户状态。",
-                        is_retryable=False
-                    )
-
-                if error_category == "degradable":
-                    fallback = self._invoke_basic_rag_fallback(user_input)
-                    if fallback:
-                        return fallback
-                    return self._build_error_response(
-                        "请求格式不兼容",
-                        "AI服务拒绝了本次请求，且基础检索降级未能生成可用回答。",
-                        is_retryable=True
-                    )
-
-                if error_category == "ollama":
-                    return self._build_error_response(
-                        "本地模型服务异常",
-                        f"请检查Ollama是否运行，或模型'{config.MODEL_CHAT}'是否已加载。",
-                        is_retryable=True
-                    )
-
-                return self._build_error_response(
-                    "处理请求时出错",
-                    f"错误信息：{str(e)[:100]}",
-                    is_retryable=True
-                )
-
-        return self._build_error_response("未知错误", "请稍后重试", is_retryable=True)
+        return self._invoke_messages_with_retry(messages, fallback_input=user_input)
 
     def _stream_chat(self, messages: list) -> Iterator[str]:
         """流式输出对话响应"""
@@ -777,6 +839,34 @@ class AgentService(object):
             or context.original_query
         )
 
+    def _can_direct_stream_route(self, route_state: dict) -> bool:
+        """Whether stream_chat_with_history can yield generic chunks directly."""
+        from ds_course_agent.rag.query_pipeline import RouteType
+
+        decision = route_state["decision"]
+        if decision.route != RouteType.GENERIC_AGENT:
+            return False
+        if decision.retrieval_policy == "required":
+            return False
+        return not self._generic_answer_needs_buffered_postprocess(route_state)
+
+    def _generic_answer_needs_buffered_postprocess(self, route_state: dict) -> bool:
+        """Detect generic cases where postprocessor may prepend/modify content."""
+        context = route_state["context"]
+        question = context.original_query
+        normalized = normalize_query_text(question)
+        recent_context = normalize_query_text(collect_recent_context(route_state.get("chat_history"), include_roles=False))
+        refers_to_kernel = (
+            "核函数" in normalized
+            or "线性核" in normalized
+            or "kernel" in normalized
+            or (
+                "它" in question
+                and any(token in recent_context for token in ["核函数", "支持向量机", "svm", "kernel"])
+            )
+        )
+        return bool(is_judgement_question(question) and "线性可分" in normalized and refers_to_kernel)
+
     def _maybe_force_grounded_answer(
         self,
         question: str,
@@ -1153,7 +1243,19 @@ class AgentService(object):
             result = ""
 
         retrieval_guard_skip_reason = self._retrieval_guard_skip_reason(route_state, result)
-        if retrieval_guard_skip_reason:
+        forced_result = self._maybe_force_grounded_answer(
+            user_input,
+            chat_history=chat_history,
+            skip=bool(retrieval_guard_skip_reason),
+        )
+        if forced_result and forced_result.strip():
+            trace_step(
+                "retrieval_guard.force",
+                route=route.value,
+                retrieval_policy=decision.retrieval_policy,
+            )
+            result = forced_result
+        elif retrieval_guard_skip_reason:
             trace_step(
                 "retrieval_guard.skip",
                 route=route.value,
@@ -1162,18 +1264,10 @@ class AgentService(object):
             )
         else:
             trace_step(
-                "retrieval_guard.force",
+                "retrieval_guard.force_empty",
                 route=route.value,
                 retrieval_policy=decision.retrieval_policy,
             )
-
-        forced_result = self._maybe_force_grounded_answer(
-            user_input,
-            chat_history=chat_history,
-            skip=bool(retrieval_guard_skip_reason),
-        )
-        if forced_result and forced_result.strip():
-            result = forced_result
 
         if not result or not isinstance(result, str) or not result.strip():
             try:
@@ -1327,9 +1421,22 @@ class AgentService(object):
                 route=route.value,
                 resuming=False,
             )
-            final_result = self._execute_route(route_state, stream=True)
-            for chunk in self._yield_text_chunks(final_result):
-                yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
+            if self._can_direct_stream_route(route_state):
+                chunks = []
+                execution_query = self._route_execution_query(route_state["context"], decision)
+                for chunk in self.chat(execution_query, route_state["chat_history"], stream=True):
+                    if chunk:
+                        chunks.append(chunk)
+                        yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
+                final_result = "".join(chunks)
+                if not final_result.strip():
+                    final_result = self._execute_route(route_state, stream=False)
+                    for chunk in self._yield_text_chunks(final_result):
+                        yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
+            else:
+                final_result = self._execute_route(route_state, stream=True)
+                for chunk in self._yield_text_chunks(final_result):
+                    yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
 
         yield self._progress_event(
             "postprocess",
