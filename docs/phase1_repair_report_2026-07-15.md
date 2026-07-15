@@ -162,36 +162,66 @@ python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline
 78 passed, 4 skipped, 1 warning
 ```
 
+### 5. History durability
+
+结果：已完成 history 持久化加固。
+
+改动：
+
+- `src/ds_course_agent/shared/history.py`
+  - 为每个 history 文件增加进程内 `threading.RLock`。
+  - `messages`、`add_messages`、`clear`、`delete` 使用同一 session/file 锁。
+  - 写入从直接覆盖文件改成：
+    - 写临时文件
+    - flush + fsync
+    - `os.replace(temp, target)` 原子替换
+  - 若 `os.replace` 失败，旧 history 文件保持不变。
+- `src/ds_course_agent/rag/agent.py`
+  - `chat_with_history` 改为：
+    1. `_prepare_query_route` 读取旧 history
+    2. 立即写入 `HumanMessage(user_input)`
+    3. 执行 LLM/route
+    4. 追加 `AIMessage(result)`
+  - `stream_chat_with_history` 同步采用相同顺序。
+  - 当前 turn 的 LLM 输入仍由 `chat()` 显式构造 `old_history + HumanMessage(current_input)`，不依赖新写入文件。
+
+验证：
+
+```bash
+python -m py_compile src/ds_course_agent/shared/history.py src/ds_course_agent/rag/agent.py
+python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py tests/test_short_term_memory.py tests/test_context_governor.py tests/test_agent_smoke.py -q
+```
+
+结果：
+
+```text
+81 passed, 4 skipped, 1 warning
+```
+
 ## 尚未完成但属于第一阶段
 
-1. history 持久化加固
-   - 先写 user message，再调 LLM，再写 assistant message。
-   - 保持当前 turn 的 LLM 输入显式追加 `HumanMessage(current_input)`。
-   - 文件写入改为 temp file + `os.replace`。
-   - 加 per-session lock，避免并发写 history 互相覆盖。
-
-2. tool result normalization/offload warning-only
+1. tool result normalization/offload warning-only
    - 先识别大 `course_rag_tool` 结果与大 RAG context。
    - 第一版只记录 warning/trace，不替换内容。
    - 下一步再把旧的大工具结果 offload 到 `var/artifacts/tool_results/`。
 
-3. 结构化错误分类与指数退避
+2. 结构化错误分类与指数退避
    - 可重试：HTTP 5xx、429、ConnectionError、TimeoutError。
    - 不可重试：401、402。
    - 可降级：400 bad request。
    - 默认重试从 1 改为 2，即最多 3 次。
 
-4. SSE progress 事件
+3. SSE progress 事件
    - routing / context / retrieval / generation / postprocess。
    - UI 可先用 timeline 展示进度。
 
 ## 当前建议的下一步
 
-下一步做 history 持久化加固：
+下一步做 tool result normalization/offload warning-only：
 
-- 先写 user message，再调 LLM，避免进程中断时丢问题。
-- `FileChatMessageHistory` 改为 temp file + `os.replace`。
-- 增加 per-session lock，降低并发 FastAPI 请求互相覆盖 history 的风险。
+- 在 `course_rag_tool`、RAG context、streaming grounded RAG 等边界识别大文本。
+- 第一版只记录 warning/trace，不替换内容。
+- 为下一步 offload 到 `var/artifacts/tool_results/` 留好指标和挂点。
 
 建议验证集：
 

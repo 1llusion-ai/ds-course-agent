@@ -117,6 +117,39 @@ class TestAgentServiceMock:
             for event in trace["events"]
         )
 
+    def test_chat_with_history_persists_user_before_llm_execution(self, tmp_path, monkeypatch):
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.shared.history import FileChatMessageHistory, MemoryPolicy
+
+        history = FileChatMessageHistory(
+            storage_path=str(tmp_path),
+            session_id="session-write-first",
+            memory_policy=MemoryPolicy(max_recent_messages=10, summarize_after_messages=20),
+        )
+        service = AgentService.__new__(AgentService)
+
+        def fake_prepare(user_input, session_id, student_id=None):
+            return {
+                "history": history,
+                "chat_history": [],
+                "student_id": student_id or session_id,
+            }
+
+        def fake_execute(route_state, stream=False):
+            assert [message.content for message in history.messages] == ["请解释 PCA"]
+            return "PCA 是一种降维方法。"
+
+        monkeypatch.setattr(service, "_prepare_query_route", fake_prepare)
+        monkeypatch.setattr(service, "_execute_route", fake_execute)
+
+        result = service.chat_with_history("请解释 PCA", "session-write-first", student_id="stu1")
+
+        assert result == "PCA 是一种降维方法。"
+        assert [message.content for message in history.messages] == [
+            "请解释 PCA",
+            "PCA 是一种降维方法。",
+        ]
+
     def test_build_distinction_learning_concept_from_question_text(self):
         from ds_course_agent.rag.agent import AgentService
 
@@ -359,7 +392,11 @@ class TestChatWithHistory:
 
         assert isinstance(result, str)
         mock_get_history.assert_called_once_with("test_session")
-        mock_history.add_messages.assert_called_once()
+        assert mock_history.add_messages.call_count == 2
+        assert isinstance(mock_history.add_messages.call_args_list[0][0][0][0], HumanMessage)
+        assert mock_history.add_messages.call_args_list[0][0][0][0].content == "test question"
+        assert isinstance(mock_history.add_messages.call_args_list[1][0][0][0], AIMessage)
+        assert mock_history.add_messages.call_args_list[1][0][0][0].content == "test answer"
 
     @patch("ds_course_agent.shared.history.get_history")
     @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
+import threading
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -31,6 +33,19 @@ class MemoryPolicy:
 DEFAULT_MEMORY_POLICY = MemoryPolicy()
 SUMMARY_MARKER = "short_memory_summary"
 SUMMARY_TITLE = "短期记忆摘要"
+_SESSION_LOCKS: dict[str, threading.RLock] = {}
+_SESSION_LOCKS_GUARD = threading.Lock()
+
+
+def _get_session_lock(file_path: str) -> threading.RLock:
+    """Return one process-local reentrant lock per history file."""
+    key = os.path.abspath(file_path)
+    with _SESSION_LOCKS_GUARD:
+        lock = _SESSION_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _SESSION_LOCKS[key] = lock
+        return lock
 
 
 def get_history(session_id, memory_policy: MemoryPolicy | None = None):
@@ -47,11 +62,16 @@ class FileChatMessageHistory(BaseChatMessageHistory):
         self.session_id = session_id
         self.file_path = os.path.join(self.storage_path, self.session_id)
         self.memory_policy = memory_policy or DEFAULT_MEMORY_POLICY
+        self._lock = _get_session_lock(self.file_path)
 
         os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
 
     @property
     def messages(self) -> list[BaseMessage]:
+        with self._lock:
+            return self._read_messages_unlocked()
+
+    def _read_messages_unlocked(self) -> list[BaseMessage]:
         try:
             with open(
                 self.file_path,
@@ -65,18 +85,40 @@ class FileChatMessageHistory(BaseChatMessageHistory):
 
     def add_messages(self, messages: Sequence[BaseMessage]) -> None:
         self._warn_incoming_large_messages(messages)
-        all_messages = list(self.messages)
-        all_messages.extend(messages)
-        all_messages = self._compact_messages(all_messages)
-        self._warn_persisted_context(all_messages)
+        with self._lock:
+            all_messages = list(self._read_messages_unlocked())
+            all_messages.extend(messages)
+            all_messages = self._compact_messages(all_messages)
+            self._warn_persisted_context(all_messages)
 
-        new_messages = [message_to_dict(message) for message in all_messages]
-        with open(self.file_path, "w", encoding="utf-8") as f:
-            json.dump(new_messages, f, ensure_ascii=False)
+            new_messages = [message_to_dict(message) for message in all_messages]
+            self._atomic_write_json(new_messages)
 
     def clear(self) -> None:
-        with open(self.file_path, "w", encoding="utf-8") as f:
-            json.dump([], f)
+        with self._lock:
+            self._atomic_write_json([])
+
+    def _atomic_write_json(self, payload) -> None:
+        """Atomically replace the history file with a JSON payload."""
+        directory = os.path.dirname(self.file_path)
+        os.makedirs(directory, exist_ok=True)
+        fd, temp_path = tempfile.mkstemp(
+            prefix=f".{os.path.basename(self.file_path)}.",
+            suffix=".tmp",
+            dir=directory,
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, self.file_path)
+        finally:
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
 
     def _warn_incoming_large_messages(self, messages: Sequence[BaseMessage]) -> None:
         try:
@@ -109,13 +151,14 @@ class FileChatMessageHistory(BaseChatMessageHistory):
 
     def delete(self) -> bool:
         """删除历史记录文件"""
-        try:
-            if os.path.exists(self.file_path):
-                os.remove(self.file_path)
-                return True
-            return False
-        except Exception:
-            return False
+        with self._lock:
+            try:
+                if os.path.exists(self.file_path):
+                    os.remove(self.file_path)
+                    return True
+                return False
+            except Exception:
+                return False
 
     def _compact_messages(self, messages: list[BaseMessage]) -> list[BaseMessage]:
         policy = self.memory_policy

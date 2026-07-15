@@ -1,7 +1,10 @@
 import json
+import threading
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+import ds_course_agent.shared.history as history_module
 from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 import ds_course_agent.shared.context_governor as context_governor
 from ds_course_agent.shared.context_governor import ContextBudget
@@ -98,3 +101,53 @@ def test_history_large_message_warning_does_not_change_persisted_content(tmp_pat
         if event["stage"] == "context_governor.warning"
     ]
     assert any(event["data"]["kind"] == "large_message" for event in warning_events)
+
+
+def test_file_chat_history_atomic_write_keeps_previous_file_on_replace_failure(tmp_path, monkeypatch):
+    history = FileChatMessageHistory(
+        storage_path=str(tmp_path),
+        session_id="session-atomic",
+        memory_policy=MemoryPolicy(max_recent_messages=10, summarize_after_messages=20),
+    )
+    history.add_messages([HumanMessage(content="旧问题")])
+    original_raw = (tmp_path / "session-atomic").read_text(encoding="utf-8")
+
+    def fail_replace(*args, **kwargs):
+        raise RuntimeError("replace failed")
+
+    monkeypatch.setattr(history_module.os, "replace", fail_replace)
+
+    with pytest.raises(RuntimeError, match="replace failed"):
+        history.add_messages([AIMessage(content="新回答")])
+
+    assert (tmp_path / "session-atomic").read_text(encoding="utf-8") == original_raw
+    assert [message.content for message in history.messages] == ["旧问题"]
+
+
+def test_file_chat_history_per_session_lock_prevents_lost_updates(tmp_path):
+    session_id = "session-concurrent"
+    policy = MemoryPolicy(max_recent_messages=100, summarize_after_messages=200)
+
+    def append_message(index: int):
+        history = FileChatMessageHistory(
+            storage_path=str(tmp_path),
+            session_id=session_id,
+            memory_policy=policy,
+        )
+        history.add_messages([HumanMessage(content=f"问题{index}")])
+
+    threads = [threading.Thread(target=append_message, args=(index,)) for index in range(20)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    final_history = FileChatMessageHistory(
+        storage_path=str(tmp_path),
+        session_id=session_id,
+        memory_policy=policy,
+    )
+    contents = [message.content for message in final_history.messages]
+
+    assert len(contents) == 20
+    assert set(contents) == {f"问题{index}" for index in range(20)}

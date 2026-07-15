@@ -1168,10 +1168,10 @@ class AgentService(object):
             return self.stream_chat_with_history(user_input, session_id, student_id=student_id)
 
         route_state = self._prepare_query_route(user_input, session_id, student_id)
+        route_state["history"].add_messages([HumanMessage(content=user_input)])
         result = self._execute_route(route_state, stream=False)
 
         route_state["history"].add_messages([
-            HumanMessage(content=user_input),
             AIMessage(content=result if isinstance(result, str) else "系统错误"),
         ])
 
@@ -1190,6 +1190,7 @@ class AgentService(object):
         route_state = self._prepare_query_route(user_input, session_id, student_id)
         decision = route_state["decision"]
         route = decision.route
+        route_state["history"].add_messages([HumanMessage(content=user_input)])
 
         if route == RouteType.GROUNDED_RAG:
             chunks = []
@@ -1203,7 +1204,6 @@ class AgentService(object):
                 yield {"type": "delta", "delta": chunk}
 
         route_state["history"].add_messages([
-            HumanMessage(content=user_input),
             AIMessage(content=final_result if isinstance(final_result, str) else "系统错误"),
         ])
 
