@@ -72,6 +72,11 @@ CONTEXT_WINDOW_TOKENS = int(_get_env("CONTEXT_WINDOW_TOKENS", "8192"))
 CONTEXT_BUDGET_RATIO = float(_get_env("CONTEXT_BUDGET_RATIO", "0.70"))
 CONTEXT_LARGE_MESSAGE_TOKENS = int(_get_env("CONTEXT_LARGE_MESSAGE_TOKENS", "2048"))
 
+# === Tool/RAG large-result artifact storage (phase 2) ===
+TOOL_RESULT_ARTIFACTS_ENABLED = _get_env("TOOL_RESULT_ARTIFACTS_ENABLED", "true").lower() == "true"
+TOOL_RESULT_ARTIFACT_DIR = _get_path_env("TOOL_RESULT_ARTIFACT_DIR", "var/artifacts/tool_results")
+TOOL_RESULT_INLINE_MAX_CHARS = int(_get_env("TOOL_RESULT_INLINE_MAX_CHARS", "3000"))
+
 CHUNK_SIZE = int(_get_env("CHUNK_SIZE", "1300"))
 CHUNK_OVERLAP = int(_get_env("CHUNK_OVERLAP", "300"))
 MAX_SPLIT_CHAR_NUMBER = int(_get_env("MAX_SPLIT_CHAR_NUMBER", "1500"))
@@ -123,3 +128,6 @@ query_cache_size = QUERY_CACHE_SIZE
 context_window_tokens = CONTEXT_WINDOW_TOKENS
 context_budget_ratio = CONTEXT_BUDGET_RATIO
 context_large_message_tokens = CONTEXT_LARGE_MESSAGE_TOKENS
+tool_result_artifacts_enabled = TOOL_RESULT_ARTIFACTS_ENABLED
+tool_result_artifact_dir = TOOL_RESULT_ARTIFACT_DIR
+tool_result_inline_max_chars = TOOL_RESULT_INLINE_MAX_CHARS

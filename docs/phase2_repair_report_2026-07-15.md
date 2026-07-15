@@ -102,6 +102,37 @@
 - 这一步不自动 offload 大结果，只把 `course_rag_tool` / `python_exec_tool`
   标成 `offload_candidate`。
 
+## 4. Tool/RAG result artifact storage
+
+目的：补上 nanobot 风格 tool result normalization 的第一层能力——大 payload
+先落盘并在 trace 中留下引用，后续再把旧 tool message 替换为占位符。
+
+改动：
+
+- `src/ds_course_agent/shared/tool_result_store.py`
+  - 新增 `store_text_artifact()`：把大文本写到
+    `var/artifacts/tool_results/YYYYMMDD/*.txt`，并写 JSON sidecar metadata。
+  - 新增 `maybe_store_large_text_payload()`：复用 ContextGovernor 的大文本
+    token 阈值；超过阈值时先发 `context_governor.warning`，再按配置写 artifact
+    并发 `tool_result.artifact` trace。
+- `src/ds_course_agent/rag/tools.py`
+  - `course_rag_tool`、`python_exec_tool`、课表/时间/KB 状态工具的大结果
+    telemetry 从 warning-only 升级为 warning + artifact reference。
+- `src/ds_course_agent/rag/rag.py`
+  - `retrieve().formatted_context`、`answer_with_context` prompt/result、
+    `stream_answer_with_context` prompt 的大 payload 同样保存 artifact。
+- `src/ds_course_agent/shared/config.py` / `.env.example`
+  - 新增 `TOOL_RESULT_ARTIFACTS_ENABLED=true`
+  - 新增 `TOOL_RESULT_ARTIFACT_DIR=var/artifacts/tool_results`
+  - 新增 `TOOL_RESULT_INLINE_MAX_CHARS=3000`（预留给后续占位符/摘要策略）
+
+边界：
+
+- 本 slice **不修改** tool 返回给 LLM/用户的正文，避免破坏当前回答质量。
+- artifact 是不可变快照 + trace 引用；真正把旧大工具结果替换为
+  `[Prior course_rag_tool result compacted: artifact://...]` 将在后续
+  ContextGovernor 自动压缩/placeholder slice 中启用。
+
 ## 验证
 
 ### 单测 / 编译
@@ -113,6 +144,9 @@ python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline
 python -m py_compile src/ds_course_agent/tools/registry.py src/ds_course_agent/tools/__init__.py src/ds_course_agent/rag/tools.py src/ds_course_agent/rag/agent.py src/ds_course_agent/rag/query_pipeline/router.py src/ds_course_agent/api/routers/chat.py src/ds_course_agent/rag/__init__.py tests/test_tool_registry.py tests/test_agent_smoke.py tests/integration/api/test_chat_stream.py
 python -m pytest tests/test_tool_registry.py -q
 python -m pytest tests/test_tool_registry.py tests/test_rag_tool.py tests/test_code_executor.py tests/test_agent_smoke.py tests/test_query_pipeline.py tests/integration/api/test_chat_stream.py -q
+python -m py_compile src/ds_course_agent/shared/tool_result_store.py src/ds_course_agent/shared/config.py src/ds_course_agent/rag/tools.py src/ds_course_agent/rag/rag.py tests/test_tool_result_store.py
+python -m pytest tests/test_tool_result_store.py tests/test_context_governor.py tests/test_rag_tool.py -q
+python -m pytest tests/test_tool_result_store.py tests/test_context_governor.py tests/test_rag_tool.py tests/test_tool_registry.py tests/test_agent_smoke.py tests/test_query_pipeline.py tests/integration/api/test_chat_stream.py -q
 python -m pytest -q
 ```
 
@@ -126,6 +160,9 @@ py_compile passed
 tool registry targeted: 6 passed, 1 warning
 tool registry + affected paths: 110 passed, 5 skipped, 1 warning
 full suite after registry: 283 passed, 6 skipped, 2 warnings
+tool result artifact targeted: 21 passed, 1 skipped, 1 warning
+tool result + affected paths: 101 passed, 5 skipped, 1 warning
+full suite after artifact storage: 286 passed, 6 skipped, 2 warnings
 ```
 
 ### 真实 latency harness smoke

@@ -22,11 +22,11 @@ logger = logging.getLogger(__name__)
 
 
 def _warn_large_rag_payload(payload: str, *, location: str, payload_type: str, **metadata) -> None:
-    """Warning-only RAG context/answer payload telemetry."""
+    """Large RAG context/answer payload telemetry and artifact storage."""
     try:
-        from ds_course_agent.shared.context_governor import warn_if_large_text_payload
+        from ds_course_agent.shared.tool_result_store import maybe_store_large_text_payload
 
-        warn_if_large_text_payload(
+        maybe_store_large_text_payload(
             payload,
             location=location,
             payload_type=payload_type,

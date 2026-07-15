@@ -118,11 +118,11 @@ def _merge_sources(existing: list[dict], incoming: list[dict]) -> list[dict]:
 
 
 def _warn_large_tool_result(tool_name: str, result: str, **metadata) -> None:
-    """Warning-only large tool result telemetry."""
+    """Large tool result telemetry and artifact storage."""
     try:
-        from ds_course_agent.shared.context_governor import warn_if_large_text_payload
+        from ds_course_agent.shared.tool_result_store import maybe_store_large_text_payload
 
-        warn_if_large_text_payload(
+        maybe_store_large_text_payload(
             result,
             location=f"tool.{tool_name}.result",
             payload_type="tool_result",
