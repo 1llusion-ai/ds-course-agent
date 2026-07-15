@@ -15,6 +15,30 @@ import tempfile
 from typing import Any
 
 
+# Matches a natural-language question appended to the end of a code line, e.g.
+# `print("hi")    这个代码正确吗` -> the trailing `    这个代码正确吗` part.
+# Anchored at end-of-line and requires leading whitespace so it never eats into
+# string literals or comments that happen to contain Chinese.
+_TRAILING_QUESTION_RE = re.compile(
+    r"[ \t]+"
+    r"(?:请|帮|麻烦)?(?:帮我|麻烦你)?"
+    r"(?:这[个段条]|上面的?|我的?|以下)?"
+    r"(?:代码|code|程序|脚本)?"
+    r"(?:是否|有没有|存在|是)?"
+    r"(?:正确吗|对不对|对吗|有没有问题|有问题吗|哪里有问题|错在哪里|哪里错了|哪里错|错在哪"
+    r"|有bug吗|有bug|有问题|有错|为什么不对|为什么报错|为什么不|为什么|怎么回事"
+    r"|看看|看一下|检查一下|检查|正确|对|没问题|合理|可以|能运行|能跑|review|check)"
+    r"[？?！!。.，,~]*"
+    r"\s*$",
+    re.IGNORECASE,
+)
+
+
+def _strip_trailing_question(text: str) -> str:
+    """Strip a natural-language question appended to the end of a code line."""
+    return _TRAILING_QUESTION_RE.sub("", text).rstrip()
+
+
 def extract_python_code(text: str) -> str:
     """Extract executable Python code from a user message.
 
@@ -22,6 +46,10 @@ def extract_python_code(text: str) -> str:
     1. fenced Markdown code blocks;
     2. text after common Chinese/English "run this code:" markers;
     3. the whole message when it already looks like a Python snippet.
+
+    For case 3, trailing non-code lines (the student's question) are dropped,
+    and a question appended to the last code line (e.g. ``print(...)  这个对吗``)
+    is stripped so it does not poison execution.
     """
     source = str(text or "").strip()
     if not source:
@@ -38,7 +66,7 @@ def extract_python_code(text: str) -> str:
     for pattern in marker_patterns:
         match = re.search(pattern, source, flags=re.IGNORECASE)
         if match:
-            return match.group(1).strip()
+            return _strip_trailing_question(match.group(1).strip())
 
     lines = source.splitlines()
     code_start = next(
@@ -50,9 +78,61 @@ def extract_python_code(text: str) -> str:
         None,
     )
     if code_start is not None:
-        return "\n".join(lines[code_start:]).strip()
+        # Find the last code-looking line; everything after it is the question.
+        code_end = code_start
+        for index in range(len(lines) - 1, code_start - 1, -1):
+            if _looks_like_python_line(lines[index]):
+                code_end = index
+                break
+        code = "\n".join(lines[code_start : code_end + 1]).strip()
+        return _strip_trailing_question(code)
 
-    return source if _looks_like_python_line(source) else ""
+    return _strip_trailing_question(source) if _looks_like_python_line(source) else ""
+
+
+def extract_question(text: str) -> str:
+    """Extract the natural-language question from a message that also contains code.
+
+    Returns trailing non-code lines plus any question appended to the last code
+    line. Returns "" when no question can be isolated.
+    """
+    source = str(text or "").strip()
+    if not source:
+        return ""
+
+    # fenced code block: question is whatever follows the closing fence
+    fenced = re.search(r"```(?:python|py)?\s*[\s\S]*?```\s*([\s\S]+)$", source, flags=re.IGNORECASE)
+    if fenced and fenced.group(1).strip():
+        return fenced.group(1).strip()
+
+    lines = source.splitlines()
+    code_start = next(
+        (index for index, line in enumerate(lines) if _looks_like_python_line(line)),
+        None,
+    )
+    if code_start is None:
+        return ""
+
+    last_code_idx = code_start
+    for index in range(len(lines) - 1, code_start - 1, -1):
+        if _looks_like_python_line(lines[index]):
+            last_code_idx = index
+            break
+
+    parts: list[str] = []
+
+    inline_match = _TRAILING_QUESTION_RE.search(lines[last_code_idx])
+    if inline_match:
+        question = inline_match.group(0).strip()
+        if question:
+            parts.append(question)
+
+    if last_code_idx + 1 < len(lines):
+        trailing = "\n".join(lines[last_code_idx + 1 :]).strip()
+        if trailing:
+            parts.append(trailing)
+
+    return " ".join(parts).strip()
 
 
 def _looks_like_python_line(line: str) -> bool:

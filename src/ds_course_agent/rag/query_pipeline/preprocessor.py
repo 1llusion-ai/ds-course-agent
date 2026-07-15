@@ -165,6 +165,10 @@ class QueryPreprocessor:
         if any(kw in q for kw in ["代码", "实现", "python", "怎么写", "示例"]):
             intents.append("code_request")
 
+        # 代码审查请求：贴了代码并问"对不对/错在哪"，优先于盲执行
+        if self._is_code_review_request(query):
+            intents.append("code_review")
+
         if self._is_python_execution_request(query):
             intents.append("python_execution")
 
@@ -214,6 +218,49 @@ class QueryPreprocessor:
         )
 
         return (has_execution_cue and has_code) or looks_like_standalone_code
+
+    def _is_code_review_request(self, query: str) -> bool:
+        """判断用户是否贴了代码并询问其正确性/错误（而非要求运行）。
+
+        触发条件：消息中包含代码 + 审查/检查类提问，且没有明确的"运行/执行"
+        意图（运行类请求交给 python_execution 路由）。
+
+        审查/执行线索只在"问题部分"（剥离代码后）上匹配，避免学生代码注释里的
+        "运行/调试"等词干扰路由。
+        """
+        q = query.lower()
+
+        code_patterns = [
+            r"```(?:python|py)?\s*[\s\S]+?```",
+            r"\bprint\s*\(",
+            r"\bimport\s+[a-zA-Z_]",
+            r"\bfrom\s+[a-zA-Z_][\w.]*\s+import\b",
+            r"\b(def|class|for|while|if)\s+.+:",
+            r"\b[a-zA-Z_]\w*\s*=\s*[^=]",
+        ]
+        has_code = any(re.search(pattern, q, flags=re.IGNORECASE) for pattern in code_patterns)
+        if not has_code:
+            return False
+
+        # 只在问题部分匹配线索，避免代码注释/字符串里的词误触发
+        from ds_course_agent.rag.code_executor import extract_question
+
+        question_part = extract_question(query).lower() or q
+
+        review_cues = [
+            "正确吗", "对吗", "对不对", "有问题吗", "有没有问题",
+            "错在哪", "哪里错了", "哪里错", "哪里有问题",
+            "有bug", "有错", "有问题", "为什么不", "为什么报错", "为什么不对",
+            "怎么回事", "帮我看看", "帮我检查", "帮我找错", "检查一下",
+            "review", "check my code",
+        ]
+        has_review = any(cue in question_part for cue in review_cues)
+
+        # 明确的执行意图优先走 python_execution
+        execution_cues = ["运行", "执行", "跑一下", "跑下", "调试", "debug", "run", "execute"]
+        has_explicit_execution = any(cue in question_part for cue in execution_cues)
+
+        return has_review and not has_explicit_execution
 
     def _is_clarification_signal(self, query: str) -> bool:
         """判断是否是澄清请求"""

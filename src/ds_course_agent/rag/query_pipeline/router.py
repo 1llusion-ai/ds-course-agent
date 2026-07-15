@@ -44,6 +44,17 @@ class QueryRouter:
         """
         query = self._normalize(context.normalized_query)
 
+        # 0. 代码审查请求：贴了代码并问"对不对/错在哪" → 走 code-review skill，
+        #    定位错误并给出修正代码，而不是盲目执行。优先于 PYTHON_EXEC。
+        if "code_review" in context.detected_intents:
+            return RouteDecision(
+                route=RouteType.CODE_REVIEW,
+                confidence=0.93,
+                reasons=["检测到代码审查请求"],
+                skill_name="code-review",
+                retrieval_policy="disabled",
+            )
+
         # 1. 明确 Python 代码执行请求：直接走运行时工具，不查教材、不附来源。
         # 放在系统工具前，避免代码字符串里的“今天/第3周”等词误触发时间/课表。
         if "python_execution" in context.detected_intents:

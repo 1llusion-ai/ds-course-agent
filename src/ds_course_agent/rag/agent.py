@@ -80,6 +80,7 @@ class AgentService(object):
         self.explanation_skill = self.skill_loader.load_executor("personalized-explanation")
         self.learning_path_skill = self.skill_loader.load_executor("learning-path")
         self.misconception_skill = self.skill_loader.load_executor("misconception-handling")
+        self.code_review_skill = self.skill_loader.load_executor("code-review")
 
         # 如果使用本地Ollama，检查连接
         if not config.USE_REMOTE_LLM:
@@ -978,6 +979,9 @@ class AgentService(object):
                     with trace_span("execute.python_sandbox"):
                         execution_result = PythonSandbox().execute(code)
                     result = format_python_execution_answer(code, execution_result)
+            elif route == RouteType.CODE_REVIEW and getattr(self, "code_review_skill", None):
+                trace_step("agent.branch", branch="code_review")
+                result = self.code_review_skill(user_input, student_id, session_id)
             elif route == RouteType.LEARNING_PATH_SKILL and getattr(self, "learning_path_skill", None):
                 trace_step("agent.branch", branch="learning_path_skill")
                 result = self.learning_path_skill(user_input, student_id, session_id)
