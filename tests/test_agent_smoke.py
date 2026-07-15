@@ -58,6 +58,65 @@ class TestAgentServiceMock:
         assert isinstance(result, str)
         assert result == "test answer"
 
+    def test_agent_chat_warns_when_pre_llm_context_exceeds_budget(self, monkeypatch):
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
+        import ds_course_agent.shared.context_governor as context_governor
+        from ds_course_agent.shared.context_governor import ContextBudget
+
+        monkeypatch.setattr(
+            context_governor,
+            "DEFAULT_CONTEXT_BUDGET",
+            ContextBudget(context_window_tokens=20, budget_ratio=0.5),
+        )
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {"messages": [AIMessage(content="test answer")]}
+
+        service = AgentService.__new__(AgentService)
+        service.llm = MagicMock()
+        service.tools = []
+        service.agent = mock_agent
+
+        token = begin_query_trace({"entrypoint": "unit_test"})
+        with patch.object(AgentService, "_format_chat_history", return_value=[]):
+            result = service.chat("你好" * 20)
+        trace = end_query_trace(token)
+
+        assert result == "test answer"
+        assert any(
+            event["stage"] == "context_governor.warning"
+            and event["data"]["location"] == "agent.chat.pre_llm"
+            for event in trace["events"]
+        )
+
+    def test_prepare_query_route_warns_when_pre_turn_context_exceeds_budget(self, tmp_path, monkeypatch):
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
+        import ds_course_agent.shared.config as config
+        import ds_course_agent.shared.context_governor as context_governor
+        from ds_course_agent.shared.context_governor import ContextBudget
+
+        monkeypatch.setattr(config, "storage_path", str(tmp_path))
+        monkeypatch.setattr(
+            context_governor,
+            "DEFAULT_CONTEXT_BUDGET",
+            ContextBudget(context_window_tokens=20, budget_ratio=0.5),
+        )
+
+        service = AgentService.__new__(AgentService)
+        service.system_prompt = "系统提示" * 20
+
+        token = begin_query_trace({"entrypoint": "unit_test"})
+        route_state = service._prepare_query_route("你好", "session-ctx", student_id="student-ctx")
+        trace = end_query_trace(token)
+
+        assert route_state["decision"].retrieval_policy == "disabled"
+        assert any(
+            event["stage"] == "context_governor.warning"
+            and event["data"]["location"] == "agent.prepare_query_route"
+            for event in trace["events"]
+        )
+
     def test_build_distinction_learning_concept_from_question_text(self):
         from ds_course_agent.rag.agent import AgentService
 

@@ -96,7 +96,7 @@ python benchmarks/latency_harness.py --limit 0 --output /tmp/latency_harness_rep
 
 关键结论：
 
-- 当前还没有真正实现 `ContextGovernor`。
+- 审计时还没有真正实现 `ContextGovernor`。
 - pre-turn 最小插入点：
   - `AgentService._prepare_query_route`
   - 在 `history = get_history(session_id)` 和 `chat_history = history.messages` 之后检查：
@@ -116,45 +116,85 @@ python benchmarks/latency_harness.py --limit 0 --output /tmp/latency_harness_rep
 - history 持久化兜底：
   - `FileChatMessageHistory.add_messages`
 
+### 4. ContextGovernor warning-only v1
+
+结果：已实现第一版观测能力，但不改变线上行为。
+
+新增/改动：
+
+- `src/ds_course_agent/shared/context_governor.py`
+  - 新增 token 粗估：
+    - 中文/CJK 字符 `/ 1.5`
+    - 英文词 `/ 0.75`
+    - 其他非空白字符轻量计入
+  - 新增 warning-only API：
+    - `warn_if_context_over_budget`
+    - `warn_if_large_message`
+  - 超阈值时记录日志并发 `context_governor.warning` query trace event。
+- `src/ds_course_agent/shared/config.py`
+  - 新增配置：
+    - `CONTEXT_WINDOW_TOKENS`，默认 `8192`
+    - `CONTEXT_BUDGET_RATIO`，默认 `0.70`
+    - `CONTEXT_LARGE_MESSAGE_TOKENS`，默认 `2048`
+- `src/ds_course_agent/rag/agent.py`
+  - 在 `_prepare_query_route` 读取历史后做 pre-turn 检查。
+  - 在 `chat()` 构造 messages 后、调用 agent 前做 pre-LLM 检查。
+- `src/ds_course_agent/shared/history.py`
+  - 在 `add_messages` 中对 incoming large message 和 persisted context 做 warning-only 检查。
+
+行为边界：
+
+- 不压缩。
+- 不截断。
+- 不 offload。
+- 不改变 messages/history 内容。
+
+验证：
+
+```bash
+python -m py_compile src/ds_course_agent/shared/context_governor.py src/ds_course_agent/rag/agent.py src/ds_course_agent/shared/history.py
+python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py tests/test_short_term_memory.py tests/test_context_governor.py tests/test_agent_smoke.py -q
+```
+
+结果：
+
+```text
+78 passed, 4 skipped, 1 warning
+```
+
 ## 尚未完成但属于第一阶段
 
-1. `ContextGovernor` warning-only v1
-   - token 粗估：中文字符 `/ 1.5`，英文词 `/ 0.75`。
-   - 先只 trace/log，不自动压缩。
-   - 覆盖 pre-turn 与直接 LLM 调用前警告。
-
-2. history 持久化加固
+1. history 持久化加固
    - 先写 user message，再调 LLM，再写 assistant message。
    - 保持当前 turn 的 LLM 输入显式追加 `HumanMessage(current_input)`。
    - 文件写入改为 temp file + `os.replace`。
    - 加 per-session lock，避免并发写 history 互相覆盖。
 
-3. tool result normalization/offload warning-only
+2. tool result normalization/offload warning-only
    - 先识别大 `course_rag_tool` 结果与大 RAG context。
    - 第一版只记录 warning/trace，不替换内容。
    - 下一步再把旧的大工具结果 offload 到 `var/artifacts/tool_results/`。
 
-4. 结构化错误分类与指数退避
+3. 结构化错误分类与指数退避
    - 可重试：HTTP 5xx、429、ConnectionError、TimeoutError。
    - 不可重试：401、402。
    - 可降级：400 bad request。
    - 默认重试从 1 改为 2，即最多 3 次。
 
-5. SSE progress 事件
+4. SSE progress 事件
    - routing / context / retrieval / generation / postprocess。
    - UI 可先用 timeline 展示进度。
 
 ## 当前建议的下一步
 
-下一步先做 `ContextGovernor warning-only v1`，因为：
+下一步做 history 持久化加固：
 
-- 不改变线上行为，风险低。
-- 能立刻暴露 history、tool result、RAG context 何时撑爆上下文。
-- 是后续“摘要压缩”和“大工具结果 offload”的前置观测基础。
+- 先写 user message，再调 LLM，避免进程中断时丢问题。
+- `FileChatMessageHistory` 改为 temp file + `os.replace`。
+- 增加 per-session lock，降低并发 FastAPI 请求互相覆盖 history 的风险。
 
 建议验证集：
 
 ```bash
-python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py tests/test_short_term_memory.py -q
+python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py tests/test_short_term_memory.py tests/test_context_governor.py tests/test_agent_smoke.py -q
 ```
-

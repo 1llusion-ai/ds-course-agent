@@ -63,6 +63,11 @@ SHORT_MEMORY_RECENT_MESSAGES = int(_get_env("SHORT_MEMORY_RECENT_MESSAGES", "12"
 SHORT_MEMORY_SUMMARIZE_AFTER_MESSAGES = int(_get_env("SHORT_MEMORY_SUMMARIZE_AFTER_MESSAGES", "20"))
 SHORT_MEMORY_SUMMARY_MAX_CHARS = int(_get_env("SHORT_MEMORY_SUMMARY_MAX_CHARS", "2000"))
 
+# === Context governance (warning-only in phase 1) ===
+CONTEXT_WINDOW_TOKENS = int(_get_env("CONTEXT_WINDOW_TOKENS", "8192"))
+CONTEXT_BUDGET_RATIO = float(_get_env("CONTEXT_BUDGET_RATIO", "0.70"))
+CONTEXT_LARGE_MESSAGE_TOKENS = int(_get_env("CONTEXT_LARGE_MESSAGE_TOKENS", "2048"))
+
 CHUNK_SIZE = int(_get_env("CHUNK_SIZE", "1300"))
 CHUNK_OVERLAP = int(_get_env("CHUNK_OVERLAP", "300"))
 MAX_SPLIT_CHAR_NUMBER = int(_get_env("MAX_SPLIT_CHAR_NUMBER", "1500"))
@@ -109,3 +114,6 @@ chat_timeout_seconds = CHAT_TIMEOUT_SECONDS
 chat_max_retries = CHAT_MAX_RETRIES
 chat_disable_thinking = CHAT_DISABLE_THINKING
 chat_system_suffix = CHAT_SYSTEM_SUFFIX
+context_window_tokens = CONTEXT_WINDOW_TOKENS
+context_budget_ratio = CONTEXT_BUDGET_RATIO
+context_large_message_tokens = CONTEXT_LARGE_MESSAGE_TOKENS

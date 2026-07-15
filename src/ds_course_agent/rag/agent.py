@@ -92,6 +92,15 @@ class AgentService(object):
         """Compatibility wrapper around the centralized prompt loader."""
         return get_system_prompt()
 
+    def _warn_context_budget(self, messages: list, *, location: str, **metadata) -> None:
+        """Emit warning-only context budget telemetry without mutating messages."""
+        try:
+            from ds_course_agent.shared.context_governor import warn_if_context_over_budget
+
+            warn_if_context_over_budget(messages, location=location, **metadata)
+        except Exception:
+            logger.debug("Context budget warning failed at %s", location, exc_info=True)
+
     def _check_ollama_connection(self, max_retries: int = 3, timeout: int = 30):
         """检查 Ollama 服务是否可用，带重试机制"""
         import requests
@@ -159,6 +168,11 @@ class AgentService(object):
 
         formatted_history = self._format_chat_history(chat_history)
         messages = formatted_history + [HumanMessage(content=user_input)]
+        self._warn_context_budget(
+            messages,
+            location="agent.chat.pre_llm",
+            message_count=len(messages),
+        )
 
         if stream:
             return self._stream_chat_messages(messages)
@@ -784,6 +798,14 @@ class AgentService(object):
         with trace_span("prepare.history_load"):
             history = get_history(session_id)
             chat_history = history.messages
+        self._warn_context_budget(
+            [SystemMessage(content=getattr(self, "system_prompt", ""))]
+            + list(chat_history)
+            + [HumanMessage(content=user_input)],
+            location="agent.prepare_query_route",
+            session_id=session_id,
+            student_id=student_id,
+        )
 
         special_case_response = self._handle_special_case(user_input)
 

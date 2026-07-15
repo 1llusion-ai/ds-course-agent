@@ -64,9 +64,11 @@ class FileChatMessageHistory(BaseChatMessageHistory):
             return []
 
     def add_messages(self, messages: Sequence[BaseMessage]) -> None:
+        self._warn_incoming_large_messages(messages)
         all_messages = list(self.messages)
         all_messages.extend(messages)
         all_messages = self._compact_messages(all_messages)
+        self._warn_persisted_context(all_messages)
 
         new_messages = [message_to_dict(message) for message in all_messages]
         with open(self.file_path, "w", encoding="utf-8") as f:
@@ -75,6 +77,35 @@ class FileChatMessageHistory(BaseChatMessageHistory):
     def clear(self) -> None:
         with open(self.file_path, "w", encoding="utf-8") as f:
             json.dump([], f)
+
+    def _warn_incoming_large_messages(self, messages: Sequence[BaseMessage]) -> None:
+        try:
+            from ds_course_agent.shared.context_governor import warn_if_large_message
+
+            for index, message in enumerate(messages):
+                warn_if_large_message(
+                    message,
+                    location="history.add_messages.incoming",
+                    session_id=self.session_id,
+                    message_index=index,
+                )
+        except Exception:
+            # History persistence must never fail because telemetry failed.
+            pass
+
+    def _warn_persisted_context(self, messages: Sequence[BaseMessage]) -> None:
+        try:
+            from ds_course_agent.shared.context_governor import warn_if_context_over_budget
+
+            warn_if_context_over_budget(
+                messages,
+                location="history.add_messages.persisted",
+                session_id=self.session_id,
+                message_count=len(messages),
+            )
+        except Exception:
+            # History persistence must never fail because telemetry failed.
+            pass
 
     def delete(self) -> bool:
         """删除历史记录文件"""
