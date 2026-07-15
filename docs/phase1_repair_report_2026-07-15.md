@@ -330,11 +330,39 @@ frontend build passed
 
 ## 当前建议的下一步
 
-进入第二阶段前，建议先跑一次真实 latency harness，生成 baseline：
+已跑真实 latency harness baseline：
 
 ```bash
 python benchmarks/latency_harness.py --limit 20
 ```
+
+报告路径：
+
+- `var/artifacts/benchmarks/latency_harness_report.json`（gitignored）
+
+Baseline 摘要：
+
+- 20/20 completed，0 errors。
+- p50：`16075.444 ms`
+- p95：`125785.697 ms`
+- max：`149079.176 ms`
+- avg：`30244.96 ms`
+- routes：`grounded_rag=19`，`generic_agent=1`
+- retrieval rate：`95%`
+- avg sources：`2.4`
+- `agent_force_grounded_count=17`
+- `retrieval_guard_force_count=17`
+
+最慢 query：
+
+- `multi_003#turn1`：`149079 ms`
+- `multi_002#turn2`：`124560 ms`
+
+主要时延线索：
+
+- `tool.course_rag.answer` p50 `7390 ms`，avg `9901 ms`。
+- `execute.agent_chat` p50 `8858.5 ms`，avg `9312.9 ms`。
+- 少数 query 的 `prepare.concept_map` / `retriever.embedding_query` 出现极端长尾。
 
 然后进入第二阶段第一项：
 
