@@ -21,14 +21,13 @@ class TestAgentServiceInit:
 
 class TestAgentServiceMock:
     @patch("ds_course_agent.rag.agent.get_chat_model")
-    @patch("ds_course_agent.rag.agent.get_rag_tools")
     @patch("ds_course_agent.rag.agent.get_skill_loader")
-    def test_agent_service_initialization(self, mock_get_skill_loader, mock_get_tools, mock_get_chat_model):
+    def test_agent_service_initialization(self, mock_get_skill_loader, mock_get_chat_model):
         from ds_course_agent.rag.agent import AgentService
         import ds_course_agent.rag.agent as agent_module
+        from ds_course_agent.tools.registry import ToolRegistry
 
         mock_get_chat_model.return_value = MagicMock()
-        mock_get_tools.return_value = []
         mock_loader = MagicMock()
         mock_loader.load_executor.return_value = MagicMock()
         mock_get_skill_loader.return_value = mock_loader
@@ -36,7 +35,8 @@ class TestAgentServiceMock:
         with patch.object(agent_module.config, "USE_REMOTE_LLM", True):
             with patch.object(AgentService, "_load_system_prompt", return_value="test prompt"):
                 with patch.object(AgentService, "_create_agent", return_value=MagicMock()):
-                    service = AgentService()
+                    with patch.object(agent_module, "get_rag_tool_registry", return_value=ToolRegistry()):
+                        service = AgentService()
 
         assert service is not None
         assert service.tools == []

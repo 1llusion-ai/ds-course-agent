@@ -271,6 +271,7 @@ async def send_message_stream(
                             "phase": event.get("phase"),
                             "message": event.get("message", ""),
                             "route": event.get("route"),
+                            "tool": event.get("tool"),
                             "stream_id": event.get("stream_id"),
                             "resuming": bool(event.get("resuming", False)),
                         }

@@ -72,7 +72,7 @@ class QueryRouter:
                 route=RouteType.CURRENT_DATETIME,
                 confidence=0.95,
                 reasons=["检测到时间查询关键词"],
-                required_tools=["current_datetime"],
+                required_tools=["current_datetime_tool"],
                 retrieval_policy="disabled",
             )
 
@@ -81,7 +81,7 @@ class QueryRouter:
                 route=RouteType.COURSE_SCHEDULE,
                 confidence=0.95,
                 reasons=["检测到课程安排查询关键词"],
-                required_tools=["course_schedule"],
+                required_tools=["course_schedule_tool"],
                 retrieval_policy="optional",
             )
 

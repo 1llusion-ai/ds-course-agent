@@ -35,7 +35,7 @@ from ds_course_agent.rag.query_pipeline.utils import (
     normalize_query_text,
 )
 from ds_course_agent.rag.skill_system import get_skill_loader
-from ds_course_agent.rag.tools import get_rag_tools
+from ds_course_agent.rag.tools import get_rag_tool_registry
 from ds_course_agent.rag.memory_core import get_memory_core, record_event, aggregate_profile
 from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
 from ds_course_agent.rag.events import (
@@ -74,7 +74,8 @@ class AgentService(object):
 
     def __init__(self):
         self.llm = get_chat_model()
-        self.tools = get_rag_tools()
+        self.tool_registry = get_rag_tool_registry()
+        self.tools = self.tool_registry.as_langchain_tools(exposed_only=True)
         self.system_prompt = self._load_system_prompt()
 
         # 延迟导入避免循环导入
@@ -448,6 +449,17 @@ class AgentService(object):
             "stream_id": stream_id,
             **metadata,
         }
+
+    def _tool_progress_label(self, tool_name: str, default: str) -> str:
+        """Resolve a user-facing progress label from tool metadata."""
+
+        registry = getattr(self, "tool_registry", None)
+        if registry is None:
+            return default
+        try:
+            return registry.progress_label_for(tool_name, default=default)
+        except Exception:
+            return default
 
     def _build_error_response(self, title: str, detail: str, is_retryable: bool = True) -> str:
         """构建用户友好的错误提示"""
@@ -1417,9 +1429,10 @@ class AgentService(object):
         if route == RouteType.GROUNDED_RAG:
             yield self._progress_event(
                 "retrieval",
-                "正在检索课程资料...",
+                self._tool_progress_label("course_rag_tool", "正在检索课程资料..."),
                 stream_id=stream_id,
                 route=route.value,
+                tool="course_rag_tool",
                 resuming=False,
             )
             chunks = []

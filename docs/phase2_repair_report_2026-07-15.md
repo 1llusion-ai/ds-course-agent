@@ -8,7 +8,8 @@
 - `LearningEvent` 体系保持不动。
 - Vue 前端保持不换框架。
 
-本批改动聚焦第一项：**降低真实 latency harness 暴露出的同步 grounded RAG 时延**。
+本批改动先聚焦真实 latency harness 暴露出的同步 grounded RAG 时延，
+随后补上 nanobot 启发的 **Tool Registry + metadata** 基础设施。
 
 ## 1. Grounded RAG 同步路径直连 RAG tool
 
@@ -51,6 +52,56 @@
 - 不缓存 RAG answer，不缓存学生画像，不缓存 LearningEvent 写入。
 - 可通过 `QUERY_CACHE_ENABLED=false` 关闭。
 
+## 3. Tool Registry + metadata
+
+目的：先把工具的运行契约显式化，但不立即重写工具目录或并发执行逻辑。
+这是后续 progress timeline、只读工具并行、tool result offload 的共同基础。
+
+改动：
+
+- `src/ds_course_agent/tools/registry.py`
+  - 新增轻量 `ToolSpec` dataclass。
+  - 元数据字段包括：`read_only`、`side_effect`、`concurrency_safe`、
+    `cost_class`、`progress_label`、`expose_to_agent`、`result_policy`。
+  - 新增 `ToolRegistry`，保持注册顺序、校验重复/名称不一致、输出
+    JSON-serializable metadata。
+- `src/ds_course_agent/rag/tools.py`
+  - `get_rag_tools()` 改为通过 registry 返回 `expose_to_agent=True` 的
+    LangChain tools，保持原 agent tool 列表不变。
+  - 新增 `get_rag_tool_registry()` / `get_rag_tool_spec()` /
+    `get_rag_tool_metadata()`。
+- `src/ds_course_agent/rag/agent.py`
+  - `AgentService` 初始化保存 `tool_registry`，并从同一个 registry 派生
+    `self.tools`，避免 registry/tools 双来源漂移。
+  - 流式 grounded RAG 的 retrieval progress message 从 registry 的
+    `course_rag_tool.progress_label` 读取，并在 progress event 中附带
+    `tool="course_rag_tool"`。
+- `src/ds_course_agent/rag/query_pipeline/router.py`
+  - `required_tools` 统一使用 registry 名：`current_datetime_tool` /
+    `course_schedule_tool` / `python_exec_tool`。
+- `src/ds_course_agent/api/routers/chat.py`
+  - SSE progress event 透传 `tool` 字段，前端可直接展示 tool progress。
+
+当前工具标记：
+
+- `course_rag_tool`：`read_only=True`，`side_effect=False`，
+  `concurrency_safe=True`，`cost_class="llm_retrieval"`，
+  `result_policy="offload_candidate"`。
+- `check_knowledge_base_status` / `course_schedule_tool` /
+  `current_datetime_tool`：只读、可并行。
+- `python_exec_tool`：sandbox 执行，标记为有 side effect、不可并行，
+  result 可作为 future offload candidate。
+- `record_misconception_event`：写学习事件，标记为有 side effect，
+  `expose_to_agent=False`；继续由 misconception skill executor 调用，
+  不新增给 generic agent。
+
+边界：
+
+- 这一步不自动并行 tool call。
+- 这一步不搬迁 `rag/tools.py` 中的实现，只新增 registry 包作为过渡层。
+- 这一步不自动 offload 大结果，只把 `course_rag_tool` / `python_exec_tool`
+  标成 `offload_candidate`。
+
 ## 验证
 
 ### 单测 / 编译
@@ -59,6 +110,10 @@
 python -m py_compile src/ds_course_agent/shared/config.py src/ds_course_agent/rag/query_pipeline/utils.py src/ds_course_agent/rag/knowledge_mapper.py src/ds_course_agent/rag/agent.py
 python -m pytest tests/test_query_cache.py tests/test_knowledge_mapper.py tests/test_query_pipeline.py -q
 python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py tests/test_short_term_memory.py tests/test_context_governor.py tests/test_agent_smoke.py tests/test_rag_tool.py tests/test_core_bridge_trace.py tests/integration/api/test_chat_stream.py tests/test_query_cache.py tests/test_knowledge_mapper.py -q
+python -m py_compile src/ds_course_agent/tools/registry.py src/ds_course_agent/tools/__init__.py src/ds_course_agent/rag/tools.py src/ds_course_agent/rag/agent.py src/ds_course_agent/rag/query_pipeline/router.py src/ds_course_agent/api/routers/chat.py src/ds_course_agent/rag/__init__.py tests/test_tool_registry.py tests/test_agent_smoke.py tests/integration/api/test_chat_stream.py
+python -m pytest tests/test_tool_registry.py -q
+python -m pytest tests/test_tool_registry.py tests/test_rag_tool.py tests/test_code_executor.py tests/test_agent_smoke.py tests/test_query_pipeline.py tests/integration/api/test_chat_stream.py -q
+python -m pytest -q
 ```
 
 结果：
@@ -68,6 +123,9 @@ targeted: 65 passed, 1 warning
 broader Phase 1/2 set: 127 passed, 5 skipped, 1 warning
 full suite: 277 passed, 6 skipped, 2 warnings
 py_compile passed
+tool registry targeted: 6 passed, 1 warning
+tool registry + affected paths: 110 passed, 5 skipped, 1 warning
+full suite after registry: 283 passed, 6 skipped, 2 warnings
 ```
 
 ### 真实 latency harness smoke
@@ -102,5 +160,5 @@ retrieval_guard_force_count: 0
 
 ## 下一步
 
-1. 继续拆 `tools/registry.py` 和 tool metadata，为 progress timeline、只读工具并发、大 result offload 做铺垫。
+1. 基于 registry 逐步把 `rag/tools.py` 拆成一个 tool 一个文件，并准备 tool result offload。
 2. 然后做 hooks + route handlers，一次性拆薄 `AgentService`。

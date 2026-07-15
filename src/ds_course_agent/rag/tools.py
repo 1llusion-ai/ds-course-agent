@@ -786,14 +786,29 @@ def record_misconception_event(
     return json.dumps({"success": True, "event_id": event.event_id, "target_bucket": normalized_bucket}, ensure_ascii=False)
 
 
+def get_rag_tool_registry():
+    """Return the operational registry for all known course-agent tools."""
+    from ds_course_agent.tools.registry import build_default_tool_registry
+
+    return build_default_tool_registry()
+
+
+def get_rag_tool_spec(name: str):
+    """Return metadata for a named tool."""
+
+    return get_rag_tool_registry().get(name)
+
+
+def get_rag_tool_metadata(*, exposed_only: bool = False) -> list[dict]:
+    """Return JSON-serializable tool metadata for traces/UI/tests."""
+
+    return get_rag_tool_registry().metadata(exposed_only=exposed_only)
+
+
 def get_rag_tools():
-    return [
-        course_rag_tool,
-        check_knowledge_base_status,
-        course_schedule_tool,
-        current_datetime_tool,
-        python_exec_tool,
-    ]
+    """Return the LangChain tools exposed to the generic agent."""
+
+    return get_rag_tool_registry().as_langchain_tools(exposed_only=True)
 
 
 if __name__ == "__main__":
