@@ -41,7 +41,7 @@ USE_REMOTE_LLM = _get_env("USE_REMOTE_LLM", "false").lower() == "true"
 REMOTE_MODEL_NAME = _get_env("REMOTE_MODEL_NAME", "Qwen/Qwen3-8B")
 CHAT_MAX_TOKENS = int(_get_env("CHAT_MAX_TOKENS", "512"))
 CHAT_TIMEOUT_SECONDS = float(_get_env("CHAT_TIMEOUT_SECONDS", "45"))
-CHAT_MAX_RETRIES = int(_get_env("CHAT_MAX_RETRIES", "1"))
+CHAT_MAX_RETRIES = int(_get_env("CHAT_MAX_RETRIES", "2"))
 CHAT_DISABLE_THINKING = _get_env("CHAT_DISABLE_THINKING", "true").lower() == "true"
 CHAT_SYSTEM_SUFFIX = _get_env("CHAT_SYSTEM_SUFFIX", "/no_think")
 

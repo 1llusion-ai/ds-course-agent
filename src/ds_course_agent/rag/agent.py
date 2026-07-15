@@ -101,6 +101,88 @@ class AgentService(object):
         except Exception:
             logger.debug("Context budget warning failed at %s", location, exc_info=True)
 
+    def _classify_llm_error(self, exc: Exception) -> str:
+        """Classify LLM/provider errors for retry/degrade decisions."""
+        status_code = self._extract_error_status_code(exc)
+        message = str(exc).lower()
+        exc_name = type(exc).__name__.lower()
+
+        if status_code in {401, 402}:
+            return "permanent"
+        if any(token in message for token in ["unauthorized", "authentication", "api key", "apikey"]):
+            return "permanent"
+        if any(token in message for token in ["insufficient balance", "payment required", "quota exceeded"]):
+            return "permanent"
+
+        if status_code == 400:
+            return "degradable"
+        if any(token in message for token in ["badrequest", "bad request", "messages", "validation"]):
+            return "degradable"
+
+        if status_code == 429 or (status_code is not None and 500 <= status_code <= 599):
+            return "retryable"
+        if isinstance(exc, (ConnectionError, TimeoutError)):
+            return "retryable"
+        if "timeout" in exc_name or "connection" in exc_name:
+            return "retryable"
+        if any(token in message for token in ["429", "rate limit", "too many requests", "timeout", "connection"]):
+            return "retryable"
+        if any(token in message for token in ["500", "502", "503", "504", "server error"]):
+            return "retryable"
+
+        if "ollama" in message:
+            return "ollama"
+
+        return "unknown"
+
+    def _extract_error_status_code(self, exc: Exception) -> int | None:
+        """Best-effort status-code extraction across HTTP client exception types."""
+        for attr in ("status_code", "code"):
+            value = getattr(exc, attr, None)
+            if value is not None:
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    pass
+        response = getattr(exc, "response", None)
+        status_code = getattr(response, "status_code", None)
+        if status_code is not None:
+            try:
+                return int(status_code)
+            except (TypeError, ValueError):
+                pass
+        match = re.search(r"\b(400|401|402|429|5\d\d)\b", str(exc))
+        return int(match.group(1)) if match else None
+
+    def _retry_delay_seconds(self, attempt: int) -> int:
+        """Exponential backoff: first retry 1s, then 2s, then 4s."""
+        return 2 ** max(0, int(attempt))
+
+    def _sleep_before_retry(self, attempt: int, *, reason: str) -> None:
+        delay = self._retry_delay_seconds(attempt)
+        self._trace_agent_retry(attempt=attempt + 1, delay_seconds=delay, reason=reason)
+        time.sleep(delay)
+
+    def _trace_agent_retry(self, **data) -> None:
+        try:
+            from ds_course_agent.rag.query_trace import trace_step
+
+            trace_step("agent.retry", **data)
+        except Exception:
+            logger.debug("Failed to emit agent retry trace", exc_info=True)
+
+    def _invoke_basic_rag_fallback(self, user_input: str) -> Optional[str]:
+        """Degrade a failed LLM request to the basic course RAG tool."""
+        try:
+            from ds_course_agent.rag.tools import course_rag_tool
+
+            fallback = course_rag_tool.invoke(user_input)
+            if fallback and fallback.strip():
+                return f"{fallback}\n\n[注：由于技术原因，本次使用基础检索模式]"
+        except Exception:
+            logger.debug("Basic RAG fallback failed", exc_info=True)
+        return None
+
     def _check_ollama_connection(self, max_retries: int = 3, timeout: int = 30):
         """检查 Ollama 服务是否可用，带重试机制"""
         import requests
@@ -177,7 +259,7 @@ class AgentService(object):
         if stream:
             return self._stream_chat_messages(messages)
 
-        max_retries = 2
+        max_retries = max(0, int(config.CHAT_MAX_RETRIES))
         for attempt in range(max_retries + 1):
             try:
                 result = self.agent.invoke({"messages": messages})
@@ -186,26 +268,22 @@ class AgentService(object):
                 # 检查空响应
                 if not response or not response.strip():
                     if attempt < max_retries:
-                        import time
-                        time.sleep(0.5)  # 短暂延迟后重试
+                        self._sleep_before_retry(attempt, reason="empty_response")
                         continue
-                    else:
-                        return self._build_error_response(
-                            "生成回复失败",
-                            "AI未能生成有效回复，请重试。",
-                            is_retryable=True
-                        )
+                    return self._build_error_response(
+                        "生成回复失败",
+                        "AI未能生成有效回复，请重试。",
+                        is_retryable=True
+                    )
 
                 return response
 
             except Exception as e:
-                error_msg = str(e).lower()
+                error_category = self._classify_llm_error(e)
 
-                # 可重试错误
-                if any(err in error_msg for err in ["502", "503", "timeout", "connection"]):
+                if error_category == "retryable":
                     if attempt < max_retries:
-                        import time
-                        time.sleep(1)  # 网络错误等待稍长
+                        self._sleep_before_retry(attempt, reason=error_category)
                         continue
                     return self._build_error_response(
                         "服务暂时不可用",
@@ -213,31 +291,35 @@ class AgentService(object):
                         is_retryable=True
                     )
 
-                # 请求错误 - 直接使用工具降级
-                if any(err in error_msg for err in ["badrequest", "messages", "validation"]):
-                    try:
-                        from ds_course_agent.rag.tools import course_rag_tool
-                        fallback = course_rag_tool.invoke(user_input)
-                        if fallback and fallback.strip():
-                            return f"{fallback}\n\n[注：由于技术原因，本次使用基础检索模式]"
-                    except Exception:
-                        pass
+                if error_category == "permanent":
+                    return self._build_error_response(
+                        "AI服务配置异常",
+                        "AI服务认证、额度或计费状态异常，请联系管理员检查 API Key 和账户状态。",
+                        is_retryable=False
+                    )
 
-                # Ollama 特定错误
-                if "ollama" in error_msg:
+                if error_category == "degradable":
+                    fallback = self._invoke_basic_rag_fallback(user_input)
+                    if fallback:
+                        return fallback
+                    return self._build_error_response(
+                        "请求格式不兼容",
+                        "AI服务拒绝了本次请求，且基础检索降级未能生成可用回答。",
+                        is_retryable=True
+                    )
+
+                if error_category == "ollama":
                     return self._build_error_response(
                         "本地模型服务异常",
                         f"请检查Ollama是否运行，或模型'{config.MODEL_CHAT}'是否已加载。",
                         is_retryable=True
                     )
 
-                # 最后一轮，返回通用错误
-                if attempt >= max_retries:
-                    return self._build_error_response(
-                        "处理请求时出错",
-                        f"错误信息：{str(e)[:100]}",
-                        is_retryable=True
-                    )
+                return self._build_error_response(
+                    "处理请求时出错",
+                    f"错误信息：{str(e)[:100]}",
+                    is_retryable=True
+                )
 
         return self._build_error_response("未知错误", "请稍后重试", is_retryable=True)
 

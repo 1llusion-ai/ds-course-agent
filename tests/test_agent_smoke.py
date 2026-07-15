@@ -150,6 +150,80 @@ class TestAgentServiceMock:
             "PCA 是一种降维方法。",
         ]
 
+    def test_agent_chat_retries_retryable_errors_with_exponential_backoff(self, monkeypatch):
+        from ds_course_agent.rag.agent import AgentService
+        import ds_course_agent.rag.agent as agent_module
+
+        mock_agent = MagicMock()
+        mock_agent.invoke.side_effect = [
+            TimeoutError("timeout"),
+            ConnectionError("connection lost"),
+            {"messages": [AIMessage(content="recovered answer")]},
+        ]
+        sleeps = []
+
+        monkeypatch.setattr(agent_module.config, "CHAT_MAX_RETRIES", 2)
+        monkeypatch.setattr(agent_module.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+        service = AgentService.__new__(AgentService)
+        service.agent = mock_agent
+
+        with patch.object(AgentService, "_format_chat_history", return_value=[]):
+            result = service.chat("test question")
+
+        assert result == "recovered answer"
+        assert sleeps == [1, 2]
+        assert mock_agent.invoke.call_count == 3
+
+    def test_agent_chat_does_not_retry_permanent_auth_error(self, monkeypatch):
+        from ds_course_agent.rag.agent import AgentService
+        import ds_course_agent.rag.agent as agent_module
+
+        class AuthError(Exception):
+            status_code = 401
+
+        mock_agent = MagicMock()
+        mock_agent.invoke.side_effect = AuthError("401 unauthorized")
+        sleep = MagicMock()
+
+        monkeypatch.setattr(agent_module.config, "CHAT_MAX_RETRIES", 2)
+        monkeypatch.setattr(agent_module.time, "sleep", sleep)
+
+        service = AgentService.__new__(AgentService)
+        service.agent = mock_agent
+
+        with patch.object(AgentService, "_format_chat_history", return_value=[]):
+            result = service.chat("test question")
+
+        assert "AI服务配置异常" in result
+        assert "请稍后重试" not in result
+        assert mock_agent.invoke.call_count == 1
+        sleep.assert_not_called()
+
+    def test_agent_chat_degrades_bad_request_to_basic_rag(self, monkeypatch):
+        from ds_course_agent.rag.agent import AgentService
+        import ds_course_agent.rag.agent as agent_module
+
+        class BadRequestError(Exception):
+            status_code = 400
+
+        mock_agent = MagicMock()
+        mock_agent.invoke.side_effect = BadRequestError("400 bad request")
+
+        monkeypatch.setattr(agent_module.config, "CHAT_MAX_RETRIES", 2)
+
+        service = AgentService.__new__(AgentService)
+        service.agent = mock_agent
+        fallback = MagicMock(return_value="基础检索回答")
+        service._invoke_basic_rag_fallback = fallback
+
+        with patch.object(AgentService, "_format_chat_history", return_value=[]):
+            result = service.chat("test question")
+
+        assert result == "基础检索回答"
+        fallback.assert_called_once_with("test question")
+        assert mock_agent.invoke.call_count == 1
+
     def test_build_distinction_learning_concept_from_question_text(self):
         from ds_course_agent.rag.agent import AgentService
 

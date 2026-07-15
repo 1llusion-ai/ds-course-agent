@@ -246,28 +246,59 @@ python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline
 95 passed, 5 skipped, 1 warning
 ```
 
+### 7. Structured LLM error classification + backoff
+
+结果：已完成主 `AgentService.chat()` 路径的结构化错误分类和指数退避。
+
+改动：
+
+- `src/ds_course_agent/rag/agent.py`
+  - 新增错误分类：
+    - `retryable`：HTTP 5xx、429、`ConnectionError`、`TimeoutError`、timeout/connection/rate-limit 文本。
+    - `permanent`：401、402、认证/API key/余额/计费类错误。
+    - `degradable`：400 bad request、message/validation 类请求错误。
+    - `ollama`：本地 Ollama 服务异常。
+  - 重试等待改为指数退避：
+    - 第 1 次重试前等待 1 秒
+    - 第 2 次重试前等待 2 秒
+    - 第 3 次重试前等待 4 秒
+  - `degradable` 错误直接降级为基础 `course_rag_tool`，不再继续重复 LLM 请求。
+  - `permanent` 错误不重试，并返回不可重试用户提示。
+  - 新增 `agent.retry` query trace event。
+- `src/ds_course_agent/shared/config.py`
+  - `CHAT_MAX_RETRIES` 默认值从 `1` 改为 `2`，即最多 3 次尝试。
+- `.env.example`
+  - 同步默认值为 `CHAT_MAX_RETRIES=2`。
+
+验证：
+
+```bash
+python -m py_compile src/ds_course_agent/rag/agent.py src/ds_course_agent/shared/config.py
+python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py tests/test_short_term_memory.py tests/test_context_governor.py tests/test_agent_smoke.py tests/test_rag_tool.py -q
+```
+
+结果：
+
+```text
+98 passed, 5 skipped, 1 warning
+```
+
 ## 尚未完成但属于第一阶段
 
-1. 结构化错误分类与指数退避
-   - 可重试：HTTP 5xx、429、ConnectionError、TimeoutError。
-   - 不可重试：401、402。
-   - 可降级：400 bad request。
-   - 默认重试从 1 改为 2，即最多 3 次。
-
-2. SSE progress 事件
+1. SSE progress 事件
    - routing / context / retrieval / generation / postprocess。
    - UI 可先用 timeline 展示进度。
 
 ## 当前建议的下一步
 
-下一步做结构化错误分类与指数退避：
+下一步做 SSE progress 事件：
 
-- 将 LLM 错误分为可重试、不可重试、可降级三类。
-- 固定 sleep 改为指数退避。
-- 将 `CHAT_MAX_RETRIES` 默认值从 1 改成 2。
+- 后端在 route/context/retrieval/generation/postprocess 阶段发 progress event。
+- 前端暂时可不大改，先能接收并展示 timeline。
+- 协议保留 `stream_id` / `resuming` 字段，为未来多段流式 turn 做准备。
 
 建议验证集：
 
 ```bash
-python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py tests/test_short_term_memory.py tests/test_context_governor.py tests/test_agent_smoke.py -q
+python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py tests/test_short_term_memory.py tests/test_context_governor.py tests/test_agent_smoke.py tests/test_rag_tool.py -q
 ```
