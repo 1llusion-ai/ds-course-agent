@@ -4,25 +4,44 @@
       <button
         type="button"
         class="brand-icon-button"
+        :class="{ 'brand-icon-button--logo': !props.collapsed }"
         :aria-label="props.collapsed ? '展开边栏' : '教学 Agent'"
         :title="props.collapsed ? '展开边栏' : '教学 Agent'"
         @click="handleBrandClick"
       >
-        <img src="/icon/thought_mark.png" alt="" class="brand-icon" />
+        <img
+          :src="props.collapsed ? '/icon/thought_mark.png' : '/icon/thought_logo.png'"
+          alt=""
+          class="brand-icon"
+          :class="props.collapsed ? 'brand-icon--mark' : 'brand-icon--logo'"
+        />
       </button>
 
-      <button
-        v-if="!props.collapsed"
-        type="button"
-        class="sidebar-collapse-button"
-        aria-label="折叠边栏"
-        title="折叠边栏"
-        @click="handleSidebarToggle"
-      >
-        <svg class="sidebar-collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-          <path stroke-linecap="round" stroke-width="2" d="M5 7h14M5 12h14M5 17h14" />
-        </svg>
-      </button>
+      <div v-if="!props.collapsed" class="sidebar-brand-actions">
+        <button
+          ref="searchButtonRef"
+          type="button"
+          class="sidebar-search-button"
+          :class="{ 'sidebar-search-button--active': searchOpen || searchQuery }"
+          aria-label="搜索会话"
+          title="搜索会话 · Ctrl K"
+          @click="toggleSessionSearch"
+        >
+          <el-icon><Search /></el-icon>
+        </button>
+
+        <button
+          type="button"
+          class="sidebar-collapse-button"
+          aria-label="折叠边栏"
+          title="折叠边栏"
+          @click="handleSidebarToggle"
+        >
+          <svg class="sidebar-collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-width="2" d="M5 7h14M5 12h14M5 17h14" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <div class="sidebar-top">
@@ -36,24 +55,34 @@
           <el-icon><Plus /></el-icon>
         </span>
         <span v-if="!props.collapsed" class="new-chat-button__text">新建聊天</span>
-        <span v-if="!props.collapsed" class="new-chat-button__hint">New</span>
       </button>
 
-      <label v-if="!props.collapsed" class="session-search" aria-label="搜索会话">
+      <label
+        v-if="!props.collapsed && searchOpen"
+        ref="searchContainerRef"
+        class="session-search"
+        aria-label="搜索会话"
+      >
         <el-icon class="session-search__icon"><Search /></el-icon>
         <input
+          ref="searchInputRef"
           v-model="searchQuery"
           class="session-search__input"
           type="search"
           placeholder="搜索会话"
           autocomplete="off"
+          @keydown.esc.prevent.stop="closeSessionSearch"
         />
+        <button
+          type="button"
+          class="session-search__close"
+          aria-label="关闭搜索"
+          title="关闭搜索"
+          @click="closeSessionSearch"
+        >
+          ×
+        </button>
       </label>
-    </div>
-
-    <div v-if="!props.collapsed" class="session-list-heading">
-      <span>最近对话</span>
-      <span>{{ filteredSessionCount }} 个</span>
     </div>
 
     <el-scrollbar v-if="!props.collapsed" class="session-scroll">
@@ -73,7 +102,6 @@
         >
           <div class="session-group__title">
             <span>{{ group.label }}</span>
-            <span>{{ group.sessions.length }}</span>
           </div>
 
           <div
@@ -105,10 +133,6 @@
                 </span>
               </div>
 
-              <span class="session-meta">
-                <template v-if="sessionStore.isPinned(session.id)">置顶 · </template>
-                消息 {{ session.message_count || 0 }} 条 · {{ formatTime(session.updated_at) }}
-              </span>
             </div>
 
             <div class="session-actions">
@@ -172,12 +196,17 @@
     </el-scrollbar>
 
     <div class="sidebar-footer">
-      <button type="button" class="utility-entry" title="学习快照" @click="handleProfileOpen">
+      <button type="button" class="utility-entry" title="学习画像" @click="handleProfileOpen">
         <span class="utility-entry__icon utility-entry__icon--profile">
-          <el-icon><TrendCharts /></el-icon>
+          <svg class="profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <rect x="4" y="4.5" width="16" height="15" rx="3.2" stroke-width="1.8" />
+            <circle cx="10" cy="10" r="2.1" stroke-width="1.8" />
+            <path stroke-linecap="round" stroke-width="1.8" d="M7.2 16.1c.7-1.4 1.7-2.1 2.8-2.1s2.1.7 2.8 2.1" />
+            <path stroke-linecap="round" stroke-width="1.8" d="M15.3 9h1.8M15.3 12h1.8M15.3 15h1.8" />
+          </svg>
         </span>
         <span v-if="!props.collapsed" class="utility-entry__body">
-          <span class="utility-entry__title">学习快照</span>
+          <span class="utility-entry__title">学习画像</span>
           <span class="utility-entry__meta">{{ profileSummaryText }}</span>
         </span>
       </button>
@@ -201,7 +230,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -223,6 +252,27 @@ const sessionStore = useSessionStore()
 const chatStore = useChatStore()
 const profileStore = useProfileStore()
 const searchQuery = ref('')
+const searchOpen = ref(false)
+const searchInputRef = ref(null)
+const searchButtonRef = ref(null)
+const searchContainerRef = ref(null)
+
+const sessionDialogClasses = {
+  overlay: 'session-dialog-overlay',
+  dialog: 'session-dialog',
+  deleteDialog: 'session-dialog session-dialog--delete',
+  renameDialog: 'session-dialog session-dialog--rename',
+  cancelButton: 'session-dialog__cancel',
+  confirmButton: 'session-dialog__confirm',
+  dangerConfirmButton: 'session-dialog__confirm session-dialog__confirm--danger'
+}
+
+const sessionDialogBaseOptions = {
+  modalClass: sessionDialogClasses.overlay,
+  cancelButtonClass: sessionDialogClasses.cancelButton,
+  closeOnClickModal: true,
+  distinguishCancelAndClose: true
+}
 
 const filteredSessions = computed(() => {
   const query = normalizeSearchText(searchQuery.value)
@@ -232,12 +282,9 @@ const filteredSessions = computed(() => {
 
   return sessionStore.sortedSessions.filter(session => {
     const title = normalizeSearchText(session.title)
-    const updated = normalizeSearchText(formatTime(session.updated_at))
-    return title.includes(query) || updated.includes(query)
+    return title.includes(query)
   })
 })
-
-const filteredSessionCount = computed(() => filteredSessions.value.length)
 
 const groupedSessions = computed(() => {
   if (normalizeSearchText(searchQuery.value)) {
@@ -318,6 +365,60 @@ function handleSidebarToggle() {
   emit('toggle-collapse')
 }
 
+function focusSearchInput() {
+  nextTick(() => {
+    searchInputRef.value?.focus()
+  })
+  window.setTimeout(() => {
+    searchInputRef.value?.focus()
+  }, 0)
+}
+
+function openSessionSearch() {
+  if (props.collapsed) {
+    emit('toggle-collapse')
+  }
+  searchOpen.value = true
+  focusSearchInput()
+}
+
+function closeSessionSearch() {
+  searchQuery.value = ''
+  searchOpen.value = false
+}
+
+function toggleSessionSearch() {
+  if (searchOpen.value) {
+    closeSessionSearch()
+    return
+  }
+  openSessionSearch()
+}
+
+function handleGlobalKeydown(event) {
+  if ((event.ctrlKey || event.metaKey) && event.key?.toLowerCase() === 'k') {
+    event.preventDefault()
+    openSessionSearch()
+  }
+}
+
+function handleGlobalPointerDown(event) {
+  if (!searchOpen.value || normalizeSearchText(searchQuery.value)) {
+    return
+  }
+
+  const target = event.target
+  if (!(target instanceof Node)) {
+    return
+  }
+
+  if (searchContainerRef.value?.contains(target) || searchButtonRef.value?.contains(target)) {
+    return
+  }
+
+  closeSessionSearch()
+}
+
 function handleBrandClick() {
   if (props.collapsed) {
     emit('toggle-collapse')
@@ -345,13 +446,11 @@ async function handleDelete(id) {
       '删除这个对话？',
       {
         type: 'warning',
-        customClass: 'session-delete-dialog',
+        ...sessionDialogBaseOptions,
+        customClass: sessionDialogClasses.deleteDialog,
         confirmButtonText: '删除',
         cancelButtonText: '取消',
-        confirmButtonClass: 'session-delete-dialog__confirm',
-        cancelButtonClass: 'session-delete-dialog__cancel',
-        closeOnClickModal: true,
-        distinguishCancelAndClose: true
+        confirmButtonClass: sessionDialogClasses.dangerConfirmButton
       }
     )
     await sessionStore.deleteSession(id)
@@ -376,9 +475,13 @@ async function handleCommand(cmd, session) {
         '请输入新的会话标题',
         '重命名会话',
         {
+          ...sessionDialogBaseOptions,
+          customClass: sessionDialogClasses.renameDialog,
           confirmButtonText: '确定',
           cancelButtonText: '取消',
+          confirmButtonClass: sessionDialogClasses.confirmButton,
           inputValue: session.title,
+          inputPlaceholder: '输入新的会话标题',
           inputPattern: /\S+/,
           inputErrorMessage: '标题不能为空',
         }
@@ -391,31 +494,6 @@ async function handleCommand(cmd, session) {
       }
     }
   }
-}
-
-function formatTime(timeStr) {
-  if (!timeStr) {
-    return ''
-  }
-
-  const date = new Date(timeStr)
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  const now = new Date()
-  const diff = now - date
-
-  if (diff < 60_000) {
-    return '刚刚'
-  }
-  if (diff < 3_600_000) {
-    return `${Math.floor(diff / 60_000)} 分钟前`
-  }
-  if (diff < 86_400_000) {
-    return `${Math.floor(diff / 3_600_000)} 小时前`
-  }
-  return `${Math.floor(diff / 86_400_000)} 天前`
 }
 
 function normalizeSearchText(value) {
@@ -463,11 +541,19 @@ function startOfDay(date) {
 }
 
 onMounted(() => {
+  window.addEventListener('keydown', handleGlobalKeydown)
+  window.addEventListener('pointerdown', handleGlobalPointerDown)
+
   if (!profileStore.summary && !profileStore.loading) {
     profileStore.fetchSummary().catch(error => {
       console.warn('加载学习快照失败:', error)
     })
   }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
+  window.removeEventListener('pointerdown', handleGlobalPointerDown)
 })
 </script>
 
@@ -481,10 +567,8 @@ onMounted(() => {
   height: 100%;
   overflow: hidden;
   color: #292524;
-  background:
-    radial-gradient(circle at 14% 0%, rgba(79, 70, 229, 0.08), transparent 28%),
-    linear-gradient(180deg, #ffffff 0%, #fbfaf8 100%);
-  border-right: 1px solid rgba(214, 211, 209, 0.82);
+  background: transparent;
+  border-right: 1px solid rgba(214, 211, 209, 0.34);
   transition: width 0.18s ease;
 }
 
@@ -506,7 +590,14 @@ onMounted(() => {
   padding: 10px 0 6px;
 }
 
+.sidebar-brand-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .brand-icon-button,
+.sidebar-search-button,
 .sidebar-collapse-button {
   display: inline-flex;
   align-items: center;
@@ -519,28 +610,50 @@ onMounted(() => {
   border: 0;
   border-radius: 12px;
   cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.brand-icon-button--logo {
+  justify-content: flex-start;
+  width: 132px;
+  padding: 0 4px;
 }
 
 .brand-icon-button:hover,
+.sidebar-search-button:hover,
+.sidebar-search-button--active,
 .sidebar-collapse-button:hover {
-  color: #312e81;
-  background: rgba(99, 102, 241, 0.08);
+  color: #292524;
+  background: rgba(28, 25, 23, 0.06);
 }
 
 .brand-icon-button:active,
+.sidebar-search-button:active,
 .sidebar-collapse-button:active {
   transform: scale(0.96);
 }
 
 .brand-icon {
+  object-fit: contain;
+}
+
+.brand-icon--mark {
   width: 38px;
   height: 38px;
-  object-fit: contain;
   border-radius: 12px;
 }
 
+.brand-icon--logo {
+  width: 124px;
+  height: 38px;
+  object-position: left center;
+}
+
 .sidebar-collapse-button .el-icon {
+  font-size: 17px;
+}
+
+.sidebar-search-button .el-icon {
   font-size: 17px;
 }
 
@@ -554,8 +667,8 @@ onMounted(() => {
 .sidebar-top {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 8px 14px 12px;
+  gap: 8px;
+  padding: 6px 10px 12px;
 }
 
 .chat-sidebar--collapsed .sidebar-top {
@@ -567,17 +680,17 @@ onMounted(() => {
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 42px;
-  gap: 10px;
-  padding: 9px 10px;
-  color: #312e81;
-  background: linear-gradient(180deg, #ffffff 0%, #f7f7ff 100%);
-  border: 1px solid rgba(99, 102, 241, 0.20);
-  border-radius: 16px;
-  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.08);
+  min-height: 40px;
+  gap: 8px;
+  padding: 8px 10px;
+  color: #292524;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  box-shadow: none;
   cursor: pointer;
   font: inherit;
-  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+  transition: background 0.16s ease, color 0.16s ease;
 }
 
 .chat-sidebar--collapsed .new-chat-button {
@@ -589,21 +702,19 @@ onMounted(() => {
 }
 
 .new-chat-button:hover {
-  transform: translateY(-1px);
-  border-color: rgba(79, 70, 229, 0.34);
-  box-shadow: 0 14px 28px rgba(79, 70, 229, 0.12);
+  background: rgba(28, 25, 23, 0.06);
 }
 
 .new-chat-button__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  color: white;
-  background: linear-gradient(135deg, #6366f1, #4f46e5);
-  border-radius: 10px;
-  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.24);
+  width: 24px;
+  height: 24px;
+  color: #57534e;
+  background: transparent;
+  border-radius: 8px;
+  box-shadow: none;
 }
 
 .chat-sidebar--collapsed .new-chat-button__icon {
@@ -633,16 +744,16 @@ onMounted(() => {
   gap: 8px;
   min-height: 38px;
   padding: 0 11px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(214, 211, 209, 0.74);
-  border-radius: 14px;
+  background: rgba(28, 25, 23, 0.04);
+  border: 1px solid transparent;
+  border-radius: 11px;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
 .session-search:focus-within {
-  background: #ffffff;
-  border-color: rgba(99, 102, 241, 0.34);
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(168, 162, 158, 0.32);
+  box-shadow: none;
 }
 
 .session-search__icon {
@@ -665,23 +776,32 @@ onMounted(() => {
   color: #a8a29e;
 }
 
-.session-list-heading {
-  display: flex;
-  justify-content: space-between;
+.session-search__close {
+  display: inline-flex;
   align-items: center;
-  padding: 4px 16px 8px;
-  color: #78716c;
-  font-size: 12px;
-  font-weight: 700;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: #a8a29e;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  transition: background 0.16s ease, color 0.16s ease;
 }
 
-.session-list-heading span:first-child {
-  letter-spacing: 0.08em;
+.session-search__close:hover {
+  color: #44403c;
+  background: rgba(28, 25, 23, 0.06);
 }
 
 .session-scroll {
   flex: 1;
-  padding: 0 10px 14px;
+  padding: 2px 8px 14px;
 }
 
 :deep(.session-scroll .el-scrollbar__view) {
@@ -689,60 +809,52 @@ onMounted(() => {
 }
 
 .session-group {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .session-group__title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 4px 6px;
+  padding: 7px 6px 5px;
   color: #a8a29e;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.06em;
 }
 
 .session-wrapper {
   position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  min-height: 58px;
-  padding: 10px 8px;
-  margin-bottom: 3px;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 8px;
+  margin-bottom: 2px;
   overflow: hidden;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 15px;
+  border-radius: 11px;
   cursor: pointer;
-  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  transition: background 0.16s ease, color 0.16s ease;
 }
 
 .session-wrapper:hover {
-  background: rgba(255, 255, 255, 0.74);
-  border-color: rgba(231, 229, 228, 0.92);
-  box-shadow: 0 10px 22px rgba(28, 25, 23, 0.05);
-  transform: translateY(-1px);
+  background: rgba(28, 25, 23, 0.05);
 }
 
 .session-wrapper--active {
-  background:
-    linear-gradient(90deg, rgba(99, 102, 241, 0.12), rgba(255, 255, 255, 0.88) 50%),
-    #ffffff;
-  border-color: rgba(99, 102, 241, 0.22);
-  box-shadow:
-    inset 3px 0 0 #6366f1,
-    0 12px 24px rgba(79, 70, 229, 0.08);
+  background: rgba(28, 25, 23, 0.075);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .session-wrapper--pinned:not(.session-wrapper--active) {
-  background: rgba(255, 255, 255, 0.44);
-  border-color: rgba(99, 102, 241, 0.10);
+  background: rgba(28, 25, 23, 0.035);
+  border-color: transparent;
 }
 
 .session-leading {
-  display: inline-flex;
+  display: none;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
@@ -761,12 +873,12 @@ onMounted(() => {
 }
 
 .session-wrapper--active .session-leading {
-  background: rgba(99, 102, 241, 0.12);
+  background: rgba(87, 83, 78, 0.10);
 }
 
 .session-wrapper--active .session-leading__dot {
-  background: #6366f1;
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.10);
+  background: #78716c;
+  box-shadow: 0 0 0 4px rgba(87, 83, 78, 0.10);
 }
 
 .session-wrapper--pinned .session-leading__dot {
@@ -788,26 +900,17 @@ onMounted(() => {
 .session-title {
   min-width: 0;
   overflow: hidden;
-  color: #44403c;
+  color: #3f3f3f;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 650;
   line-height: 1.35;
 }
 
 .session-wrapper--active .session-title {
-  color: #312e81;
-}
-
-.session-meta {
-  display: block;
-  margin-top: 4px;
-  overflow: hidden;
-  color: #a8a29e;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
+  color: #1f1f1f;
+  font-weight: 750;
 }
 
 .session-actions {
@@ -837,7 +940,7 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  color: #4f46e5;
+  color: #10a37f;
   font-size: 11px;
   font-weight: 500;
 }
@@ -856,7 +959,7 @@ onMounted(() => {
   color: #78716c;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 9px;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -871,8 +974,8 @@ onMounted(() => {
 .session-menu-btn:hover,
 .session-menu-btn:focus {
   color: #292524;
-  background: rgba(245, 245, 244, 0.90);
-  border-color: rgba(214, 211, 209, 0.78);
+  background: rgba(28, 25, 23, 0.07);
+  border-color: transparent;
 }
 
 .session-menu-btn svg {
@@ -962,9 +1065,9 @@ onMounted(() => {
   padding: 24px 16px;
   color: #a8a29e;
   text-align: center;
-  background: rgba(255, 255, 255, 0.58);
-  border: 1px dashed rgba(214, 211, 209, 0.92);
-  border-radius: 18px;
+  background: transparent;
+  border: 1px dashed rgba(214, 211, 209, 0.72);
+  border-radius: 14px;
 }
 
 .session-empty__icon {
@@ -992,10 +1095,8 @@ onMounted(() => {
 .sidebar-footer {
   flex-shrink: 0;
   padding: 10px 12px 14px;
-  background:
-    linear-gradient(180deg, rgba(251, 250, 248, 0), rgba(251, 250, 248, 0.96) 22%),
-    rgba(251, 250, 248, 0.92);
-  border-top: 1px solid rgba(231, 229, 228, 0.76);
+  background: transparent;
+  border-top: 1px solid rgba(231, 229, 228, 0.28);
 }
 
 .chat-sidebar--collapsed .sidebar-footer {
@@ -1010,18 +1111,18 @@ onMounted(() => {
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 46px;
-  gap: 10px;
-  padding: 8px 9px;
+  min-height: 42px;
+  gap: 9px;
+  padding: 7px 9px;
   margin-top: 4px;
   color: #44403c;
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 15px;
+  border-radius: 11px;
   cursor: pointer;
   font: inherit;
-  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  transition: background 0.16s ease, color 0.16s ease;
 }
 
 .chat-sidebar--collapsed .utility-entry {
@@ -1035,10 +1136,7 @@ onMounted(() => {
 }
 
 .utility-entry:hover {
-  transform: translateY(-1px);
-  background: rgba(255, 255, 255, 0.78);
-  border-color: rgba(231, 229, 228, 0.92);
-  box-shadow: 0 10px 22px rgba(28, 25, 23, 0.05);
+  background: rgba(28, 25, 23, 0.05);
 }
 
 .utility-entry--muted {
@@ -1050,21 +1148,26 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   color: #78716c;
-  background: rgba(245, 245, 244, 0.95);
-  border-radius: 12px;
+  background: rgba(28, 25, 23, 0.05);
+  border-radius: 9px;
 }
 
 .chat-sidebar--collapsed .utility-entry__icon {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
 }
 
 .utility-entry__icon--profile {
-  color: #4f46e5;
-  background: rgba(99, 102, 241, 0.10);
+  color: #57534e;
+  background: rgba(28, 25, 23, 0.05);
+}
+
+.profile-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .utility-entry__body {

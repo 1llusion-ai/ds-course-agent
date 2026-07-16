@@ -1,5 +1,11 @@
 <template>
-  <div class="message-wrapper" :class="{ 'user-message': message.role === 'user' }">
+  <div
+    class="message-wrapper"
+    :class="{
+      'user-message': message.role === 'user',
+      'assistant-message': message.role !== 'user'
+    }"
+  >
     <div
       class="message-bubble"
       :class="[
@@ -7,13 +13,6 @@
         { 'is-loading': message.isLoading, 'is-error': message.isError }
       ]"
     >
-      <div v-if="message.role !== 'user' && message.isLoading" class="message-topline">
-        <span v-if="message.isLoading" class="live-badge">
-          <span class="live-pulse"></span>
-          正在生成
-        </span>
-      </div>
-
       <div v-if="message.role === 'user'" class="message-content user-content">
         {{ message.content }}
       </div>
@@ -87,12 +86,28 @@
           </component>
         </div>
       </div>
+
+      <div v-if="message.role !== 'user' && message.content && !message.isLoading" class="assistant-actions">
+        <button
+          type="button"
+          class="assistant-action-button"
+          :class="{
+            'assistant-action-button--success': messageCopyState === 'success',
+            'assistant-action-button--error': messageCopyState === 'error'
+          }"
+          :aria-label="messageCopyLabel"
+          @click="copyAssistantMessage"
+        >
+          <span class="assistant-action-button__icon" aria-hidden="true">⧉</span>
+          <span>{{ messageCopyLabel }}</span>
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import 'katex/dist/katex.min.css'
 
 import { isJavascriptUrl, renderMarkdownWithEnhancements } from '../utils/markdown'
@@ -102,6 +117,15 @@ const props = defineProps({
     type: Object,
     required: true
   }
+})
+
+const messageCopyState = ref('idle')
+let messageCopyTimer = null
+
+const messageCopyLabel = computed(() => {
+  if (messageCopyState.value === 'success') return '已复制'
+  if (messageCopyState.value === 'error') return '复制失败'
+  return '复制'
 })
 
 const ROUTE_LABELS = {
@@ -333,50 +357,81 @@ async function handleMarkdownClick(event) {
     setCopyState(button, '复制失败', true)
   }
 }
+
+async function copyAssistantMessage() {
+  if (!props.message.content) return
+
+  if (messageCopyTimer) {
+    window.clearTimeout(messageCopyTimer)
+    messageCopyTimer = null
+  }
+
+  try {
+    await copyText(props.message.content)
+    messageCopyState.value = 'success'
+  } catch (error) {
+    messageCopyState.value = 'error'
+  }
+
+  messageCopyTimer = window.setTimeout(() => {
+    messageCopyState.value = 'idle'
+    messageCopyTimer = null
+  }, 1400)
+}
+
+onBeforeUnmount(() => {
+  if (messageCopyTimer) {
+    window.clearTimeout(messageCopyTimer)
+  }
+})
 </script>
 
 <style scoped>
 .message-wrapper {
   display: flex;
   align-items: flex-start;
+  width: 100%;
 }
 
 .message-wrapper.user-message {
   justify-content: flex-end;
 }
 
-.message-wrapper:not(.user-message) {
-  justify-content: flex-start;
+.message-wrapper.assistant-message {
+  justify-content: center;
 }
 
 .message-bubble {
   max-width: min(78%, 880px);
   padding: 12px 16px;
   border-radius: 18px;
-  box-shadow: 0 16px 36px rgba(28, 25, 23, 0.06);
 }
 
 .user-bubble {
-  color: #fff;
-  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
-}
-
-.ai-bubble {
-  position: relative;
+  max-width: min(68%, 720px);
   color: #1c1917;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(255, 252, 247, 0.93) 100%);
   border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 18px 18px 6px 18px;
+  box-shadow: 0 16px 36px rgba(28, 25, 23, 0.06);
   backdrop-filter: blur(12px);
 }
 
+.ai-bubble {
+  position: relative;
+  width: min(100%, 820px);
+  max-width: min(100%, 820px);
+  padding: 2px 0 0;
+  color: #1c1917;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .ai-bubble::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), transparent 36%, rgba(15, 118, 110, 0.06));
+  display: none;
 }
 
 .ai-bubble > * {
@@ -384,42 +439,8 @@ async function handleMarkdownClick(event) {
 }
 
 .ai-bubble.is-error {
-  border-color: rgba(248, 113, 113, 0.42);
-  background: linear-gradient(180deg, rgba(255, 247, 247, 0.98) 0%, rgba(255, 255, 255, 0.94) 100%);
-}
-
-.message-topline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.live-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 22px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.live-badge {
-  color: #0f766e;
-  background: rgba(20, 184, 166, 0.1);
-  border: 1px solid rgba(20, 184, 166, 0.16);
-}
-
-.live-pulse {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: currentColor;
-  animation: pulse 1.25s infinite ease-in-out;
+  padding-left: 14px;
+  border-left: 3px solid rgba(248, 113, 113, 0.78);
 }
 
 .message-content {
@@ -764,6 +785,14 @@ async function handleMarkdownClick(event) {
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.96));
 }
 
+.markdown-body :deep(.code-block__footer) {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.98);
+}
+
 .markdown-body :deep(.code-block__lang) {
   color: #cbd5e1;
   font-size: 12px;
@@ -776,7 +805,8 @@ async function handleMarkdownClick(event) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 8px;
+  min-height: 28px;
+  padding: 5px 10px;
   color: #cbd5e1;
   font-size: 12px;
   font-weight: 700;
@@ -988,9 +1018,56 @@ async function handleMarkdownClick(event) {
   font-weight: 650;
 }
 
+.assistant-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 10px;
+}
+
+.assistant-action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 10px;
+  color: #78716c;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.assistant-action-button:hover {
+  color: #292524;
+  background: rgba(245, 245, 244, 0.86);
+  border-color: rgba(214, 211, 209, 0.88);
+  transform: translateY(-1px);
+}
+
+.assistant-action-button--success {
+  color: #15803d;
+  background: rgba(220, 252, 231, 0.78);
+  border-color: rgba(74, 222, 128, 0.34);
+}
+
+.assistant-action-button--error {
+  color: #b91c1c;
+  background: rgba(254, 226, 226, 0.82);
+  border-color: rgba(248, 113, 113, 0.34);
+}
+
+.assistant-action-button__icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
 .user-bubble .source-panel {
-  color: rgba(255, 255, 255, 0.86);
-  border-top-color: rgba(255, 255, 255, 0.2);
+  color: #475569;
+  border-top-color: rgba(148, 163, 184, 0.18);
 }
 
 

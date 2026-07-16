@@ -157,11 +157,13 @@ function createRenderer() {
       `<div class="code-block" data-language="${escapeHtml(label)}">`,
       '<div class="code-block__header">',
       `<span class="code-block__lang">${escapeHtml(label)}</span>`,
+      '</div>',
+      `<pre class="code-block__pre language-${className}"><code class="language-${className}">${highlighted}</code></pre>`,
+      '<div class="code-block__footer">',
       '<button type="button" class="code-copy" aria-label="复制代码">',
       '<span class="copy-icon" aria-hidden="true">⧉</span><span class="copy-label">复制</span>',
       '</button>',
       '</div>',
-      `<pre class="code-block__pre language-${className}"><code class="language-${className}">${highlighted}</code></pre>`,
       '</div>\n'
     ].join('')
   }

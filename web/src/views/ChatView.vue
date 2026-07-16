@@ -281,6 +281,11 @@ onMounted(async () => {
   width: 100%;
   height: 100vh;
   overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.16), transparent 26%),
+    radial-gradient(circle at 82% 12%, rgba(79, 70, 229, 0.14), transparent 30%),
+    radial-gradient(circle at right center, rgba(20, 184, 166, 0.10), transparent 30%),
+    linear-gradient(140deg, #fafaf9 0%, #f8fafc 46%, #eef2ff 100%);
 }
 
 .chat-main {
@@ -288,11 +293,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background:
-    radial-gradient(circle at top left, rgba(245, 158, 11, 0.16), transparent 26%),
-    radial-gradient(circle at 82% 12%, rgba(79, 70, 229, 0.14), transparent 30%),
-    radial-gradient(circle at right center, rgba(20, 184, 166, 0.10), transparent 30%),
-    linear-gradient(140deg, #fafaf9 0%, #f8fafc 46%, #eef2ff 100%);
+  background: transparent;
 }
 
 .chat-header {
@@ -302,9 +303,8 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 18px;
   padding: 0 18px;
-  background: rgba(255, 255, 255, 0.68);
-  border-bottom: 1px solid rgba(214, 211, 209, 0.62);
-  backdrop-filter: blur(16px);
+  background: transparent;
+  border-bottom: 1px solid transparent;
   flex-shrink: 0;
 }
 
@@ -340,18 +340,18 @@ onMounted(async () => {
   height: 36px;
   padding: 0;
   color: #57534e;
-  background: rgba(255, 255, 255, 0.75);
-  border: 1px solid rgba(214, 211, 209, 0.72);
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 999px;
   cursor: pointer;
-  box-shadow: 0 8px 18px rgba(28, 25, 23, 0.06);
+  box-shadow: none;
   transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
 }
 
 .theme-toggle:hover {
   color: #1c1917;
-  background: rgba(255, 255, 255, 0.92);
-  border-color: rgba(148, 163, 184, 0.38);
+  background: rgba(28, 25, 23, 0.05);
+  border-color: transparent;
   transform: translateY(-1px);
 }
 
@@ -382,7 +382,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  width: min(100%, 1120px);
+  width: min(100%, 820px);
   margin: 0 auto;
 }
 

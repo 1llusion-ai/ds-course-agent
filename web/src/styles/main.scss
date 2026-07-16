@@ -85,13 +85,14 @@ html.theme-dark ::-webkit-scrollbar-thumb:hover {
    Keep the palette neutral and consistent: dark gray shell, subtle borders,
    and one restrained accent. `!important` is used only because many component
    styles are scoped and loaded after this global stylesheet. */
+html.theme-dark .chat-layout,
 html.theme-dark .chat-main {
   background: var(--dark-bg) !important;
 }
 
 html.theme-dark .chat-header {
-  background: var(--dark-bg) !important;
-  border-bottom-color: var(--dark-border-soft) !important;
+  background: transparent !important;
+  border-bottom-color: transparent !important;
 }
 
 html.theme-dark .thread-title,
@@ -103,7 +104,6 @@ html.theme-dark .empty-kicker,
 html.theme-dark .empty-content p,
 html.theme-dark .input-hint,
 html.theme-dark .session-meta,
-html.theme-dark .session-list-heading,
 html.theme-dark .session-group__title,
 html.theme-dark .utility-entry__meta,
 html.theme-dark .source-panel__label,
@@ -134,12 +134,15 @@ html.theme-dark .chat-sidebar {
 
 html.theme-dark .brand-icon-button,
 html.theme-dark .sidebar-collapse-button,
+html.theme-dark .sidebar-search-button,
 html.theme-dark .session-menu-btn {
   color: var(--dark-text-muted) !important;
 }
 
 html.theme-dark .brand-icon-button:hover,
 html.theme-dark .sidebar-collapse-button:hover,
+html.theme-dark .sidebar-search-button:hover,
+html.theme-dark .sidebar-search-button--active,
 html.theme-dark .session-menu-btn:hover,
 html.theme-dark .session-menu-btn:focus {
   color: var(--dark-text) !important;
@@ -149,19 +152,20 @@ html.theme-dark .session-menu-btn:focus {
 
 html.theme-dark .new-chat-button {
   color: var(--dark-text) !important;
-  background: var(--dark-panel) !important;
-  border-color: var(--dark-border) !important;
+  background: transparent !important;
+  border-color: transparent !important;
   box-shadow: none !important;
 }
 
 html.theme-dark .new-chat-button:hover {
-  border-color: #4a4a4a !important;
+  background: var(--dark-panel-soft) !important;
+  border-color: transparent !important;
   box-shadow: none !important;
 }
 
 html.theme-dark .new-chat-button__icon {
-  color: #ffffff !important;
-  background: var(--dark-accent) !important;
+  color: var(--dark-text-muted) !important;
+  background: transparent !important;
   box-shadow: none !important;
 }
 
@@ -171,14 +175,14 @@ html.theme-dark .new-chat-button__hint {
 }
 
 html.theme-dark .session-search {
-  background: var(--dark-panel) !important;
-  border-color: var(--dark-border) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: transparent !important;
 }
 
 html.theme-dark .session-search:focus-within {
   background: var(--dark-panel-soft) !important;
-  border-color: #5a5a5a !important;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--dark-border) !important;
+  box-shadow: none !important;
 }
 
 html.theme-dark .session-search__input,
@@ -188,8 +192,14 @@ html.theme-dark .input-field {
 
 html.theme-dark .session-search__input::placeholder,
 html.theme-dark .input-field::placeholder,
-html.theme-dark .session-search__icon {
+html.theme-dark .session-search__icon,
+html.theme-dark .session-search__close {
   color: var(--dark-text-faint) !important;
+}
+
+html.theme-dark .session-search__close:hover {
+  color: var(--dark-text) !important;
+  background: var(--dark-hover) !important;
 }
 
 html.theme-dark .session-wrapper {
@@ -198,15 +208,15 @@ html.theme-dark .session-wrapper {
 
 html.theme-dark .session-wrapper:hover,
 html.theme-dark .session-wrapper--pinned:not(.session-wrapper--active) {
-  background: var(--dark-panel) !important;
-  border-color: var(--dark-border-soft) !important;
+  background: var(--dark-panel-soft) !important;
+  border-color: transparent !important;
   box-shadow: none !important;
 }
 
 html.theme-dark .session-wrapper--active {
   background: var(--dark-panel-soft) !important;
-  border-color: var(--dark-border) !important;
-  box-shadow: inset 3px 0 0 var(--dark-accent) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 
 html.theme-dark .session-title,
@@ -220,7 +230,7 @@ html.theme-dark .session-leading,
 html.theme-dark .utility-entry__icon,
 html.theme-dark .session-empty__icon {
   color: var(--dark-text-muted) !important;
-  background: var(--dark-panel-soft) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
 }
 
 html.theme-dark .session-leading__dot {
@@ -228,8 +238,8 @@ html.theme-dark .session-leading__dot {
 }
 
 html.theme-dark .session-wrapper--active .session-leading__dot {
-  background: var(--dark-accent) !important;
-  box-shadow: 0 0 0 4px rgba(16, 163, 127, 0.16) !important;
+  background: var(--dark-text-faint) !important;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08) !important;
 }
 
 html.theme-dark .session-wrapper--pinned .session-leading__dot {
@@ -238,7 +248,7 @@ html.theme-dark .session-wrapper--pinned .session-leading__dot {
 
 html.theme-dark .session-empty {
   color: var(--dark-text-muted) !important;
-  background: var(--dark-panel) !important;
+  background: transparent !important;
   border-color: var(--dark-border) !important;
 }
 
@@ -259,13 +269,12 @@ html.theme-dark .utility-entry {
 
 html.theme-dark .utility-entry:hover {
   color: var(--dark-text) !important;
-  background: var(--dark-panel) !important;
-  border-color: var(--dark-border-soft) !important;
+  background: var(--dark-panel-soft) !important;
+  border-color: transparent !important;
   box-shadow: none !important;
 }
 
-html.theme-dark .input-container,
-html.theme-dark .ai-bubble {
+html.theme-dark .input-container {
   background: var(--dark-panel) !important;
   border-color: var(--dark-border) !important;
   box-shadow: none !important;
@@ -312,18 +321,43 @@ html.theme-dark .prompt-card:hover {
 }
 
 html.theme-dark .user-bubble {
-  background: #2f6fed !important;
-  color: #ffffff !important;
+  color: var(--dark-text) !important;
+  background: var(--dark-panel) !important;
+  border-color: var(--dark-border) !important;
+  box-shadow: none !important;
+}
+
+html.theme-dark .ai-bubble {
+  color: var(--dark-text) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 
 html.theme-dark .ai-bubble::before {
   display: none !important;
 }
 
-html.theme-dark .live-badge {
+html.theme-dark .assistant-action-button {
   color: var(--dark-text-muted) !important;
-  background: rgba(255, 255, 255, 0.06) !important;
-  border-color: var(--dark-border-soft) !important;
+}
+
+html.theme-dark .assistant-action-button:hover {
+  color: var(--dark-text) !important;
+  background: var(--dark-panel-soft) !important;
+  border-color: var(--dark-border) !important;
+}
+
+html.theme-dark .assistant-action-button--success {
+  color: #86efac !important;
+  background: rgba(22, 163, 74, 0.16) !important;
+  border-color: rgba(74, 222, 128, 0.22) !important;
+}
+
+html.theme-dark .assistant-action-button--error {
+  color: #fca5a5 !important;
+  background: rgba(220, 38, 38, 0.16) !important;
+  border-color: rgba(248, 113, 113, 0.22) !important;
 }
 
 html.theme-dark .source-chip,
@@ -391,125 +425,332 @@ html.theme-dark .session-action-menu .menu-item-danger:not(.is-disabled):focus {
   background: rgba(239, 68, 68, 0.12) !important;
 }
 
-/* Session delete confirmation dialog */
-.session-delete-dialog {
-  width: min(420px, calc(100vw - 32px));
-  padding: 4px 0 2px;
-  border: 1px solid rgba(214, 211, 209, 0.88);
-  border-radius: 22px;
-  box-shadow: 0 24px 70px rgba(28, 25, 23, 0.18);
+/* Session rename/delete dialogs */
+.session-dialog-overlay {
+  background: rgba(28, 25, 23, 0.36) !important;
+  backdrop-filter: blur(2px);
 }
 
-.session-delete-dialog .el-message-box__header {
-  padding: 22px 24px 8px;
+.session-dialog-overlay .el-overlay-message-box {
+  position: fixed !important;
+  inset: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  padding: 24px 16px !important;
+  overflow-y: auto !important;
+  text-align: left !important;
 }
 
-.session-delete-dialog .el-message-box__title {
+.session-dialog-overlay .el-overlay-message-box::after {
+  display: none !important;
+}
+
+.session-dialog {
+  width: min(440px, calc(100vw - 32px)) !important;
+  max-width: min(440px, calc(100vw - 32px)) !important;
+  padding: 0 !important;
+  margin: auto !important;
   color: #1c1917;
-  font-size: 18px;
+  background: rgba(255, 255, 255, 0.98) !important;
+  border: 1px solid rgba(214, 211, 209, 0.9);
+  border-radius: 24px !important;
+  box-shadow: 0 28px 80px rgba(28, 25, 23, 0.22);
+  overflow: hidden;
+  text-align: left;
+}
+
+.session-dialog .el-message-box__header {
+  padding: 24px 24px 8px !important;
+}
+
+.session-dialog .el-message-box__header.show-close {
+  padding-right: 64px !important;
+}
+
+.session-dialog .el-message-box__title {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  color: #1c1917;
+  font-size: 19px;
   font-weight: 800;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
 }
 
-.session-delete-dialog .el-message-box__headerbtn {
-  top: 16px;
-  right: 16px;
-  width: 30px;
-  height: 30px;
+.session-dialog .el-message-box__headerbtn {
+  top: 14px !important;
+  right: 14px !important;
+  width: 36px !important;
+  height: 36px !important;
   border-radius: 999px;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
 
-.session-delete-dialog .el-message-box__headerbtn:hover {
-  background: rgba(245, 245, 244, 0.95);
+.session-dialog .el-message-box__headerbtn .el-message-box__close {
+  color: #a8a29e !important;
+  font-size: 18px;
 }
 
-.session-delete-dialog .el-message-box__content {
-  padding: 6px 24px 18px;
+.session-dialog .el-message-box__headerbtn:hover,
+.session-dialog .el-message-box__headerbtn:focus-visible {
+  background: rgba(245, 245, 244, 0.95) !important;
 }
 
-.session-delete-dialog .el-message-box__status {
-  display: none;
+.session-dialog .el-message-box__headerbtn:hover .el-message-box__close,
+.session-dialog .el-message-box__headerbtn:focus-visible .el-message-box__close {
+  color: #44403c !important;
 }
 
-.session-delete-dialog .el-message-box__message {
-  padding-left: 0;
-  color: #78716c;
-  font-size: 14px;
+.session-dialog .el-message-box__content {
+  padding: 8px 24px 0 !important;
+}
+
+.session-dialog .el-message-box__container {
+  align-items: flex-start;
+}
+
+.session-dialog .el-message-box__status {
+  display: none !important;
+}
+
+.session-dialog .el-message-box__message {
+  padding-left: 0 !important;
+  color: #57534e;
+  font-size: 14.5px;
   line-height: 1.65;
 }
 
-.session-delete-dialog .el-message-box__btns {
-  display: flex;
-  flex-direction: row-reverse;
-  gap: 10px;
-  padding: 0 24px 22px;
+.session-dialog .el-message-box__message p,
+.session-dialog .el-message-box__message label {
+  margin: 0;
+  line-height: 1.65;
 }
 
-.session-delete-dialog .el-message-box__btns .el-button {
-  min-width: 76px;
-  height: 36px;
-  margin-left: 0;
-  border-radius: 999px;
+.session-dialog .el-message-box__input {
+  padding-top: 16px !important;
+}
+
+.session-dialog .el-message-box__input .el-input__wrapper {
+  min-height: 46px;
+  padding: 0 14px;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(214, 211, 209, 0.95) inset,
+    0 1px 2px rgba(28, 25, 23, 0.04);
+  transition: box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.session-dialog .el-message-box__input .el-input__wrapper.is-focus {
+  box-shadow:
+    0 0 0 1.5px #4f46e5 inset,
+    0 0 0 4px rgba(79, 70, 229, 0.12);
+}
+
+.session-dialog .el-message-box__input .el-input.invalid .el-input__wrapper,
+.session-dialog .el-message-box__input .el-input.invalid .el-input__wrapper.is-focus {
+  box-shadow:
+    0 0 0 1.5px #dc2626 inset,
+    0 0 0 4px rgba(220, 38, 38, 0.1);
+}
+
+.session-dialog .el-message-box__input .el-input__inner {
+  height: 44px;
+  color: #1c1917;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.session-dialog .el-message-box__input .el-input__inner::placeholder {
+  color: #a8a29e;
+}
+
+.session-dialog .el-message-box__errormsg {
+  min-height: 20px;
+  margin-top: 7px;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.session-dialog .el-message-box__btns {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: flex-end !important;
+  flex-wrap: nowrap !important;
+  gap: 12px;
+  padding: 22px 24px 24px !important;
+}
+
+.session-dialog .el-message-box__btns .el-button {
+  min-width: 104px !important;
+  height: 42px !important;
+  padding: 0 20px !important;
+  margin-left: 0 !important;
+  border-radius: 999px !important;
+  font-size: 14px;
   font-weight: 750;
+  line-height: 1;
+  transition:
+    transform 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
-.session-delete-dialog__cancel {
-  color: #57534e !important;
+.session-dialog .el-message-box__btns .el-button:active {
+  transform: scale(0.98);
+}
+
+.session-dialog__cancel {
+  color: #44403c !important;
   background: #ffffff !important;
   border-color: rgba(214, 211, 209, 0.95) !important;
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
 }
 
-.session-delete-dialog__cancel:hover {
-  color: #292524 !important;
+.session-dialog__cancel:hover,
+.session-dialog__cancel:focus {
+  color: #1c1917 !important;
   background: #f5f5f4 !important;
   border-color: #d6d3d1 !important;
 }
 
-.session-delete-dialog__confirm {
+.session-dialog__confirm {
   color: #ffffff !important;
+  background: #4f46e5 !important;
+  border-color: #4f46e5 !important;
+  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.24);
+}
+
+.session-dialog__confirm:hover,
+.session-dialog__confirm:focus {
+  background: #4338ca !important;
+  border-color: #4338ca !important;
+  box-shadow: 0 12px 26px rgba(79, 70, 229, 0.28);
+}
+
+.session-dialog__confirm--danger {
   background: #dc2626 !important;
   border-color: #dc2626 !important;
-  box-shadow: 0 10px 20px rgba(220, 38, 38, 0.20);
+  box-shadow: 0 10px 22px rgba(220, 38, 38, 0.22);
 }
 
-.session-delete-dialog__confirm:hover {
+.session-dialog__confirm--danger:hover,
+.session-dialog__confirm--danger:focus {
   background: #b91c1c !important;
   border-color: #b91c1c !important;
-  box-shadow: 0 12px 24px rgba(220, 38, 38, 0.24);
+  box-shadow: 0 12px 26px rgba(220, 38, 38, 0.26);
 }
 
-html.theme-dark .session-delete-dialog {
+html.theme-dark .session-dialog-overlay {
+  background: rgba(0, 0, 0, 0.58) !important;
+}
+
+html.theme-dark .session-dialog {
+  color: var(--dark-text);
   background: var(--dark-panel) !important;
   border-color: var(--dark-border) !important;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.54);
 }
 
-html.theme-dark .session-delete-dialog .el-message-box__title {
+html.theme-dark .session-dialog .el-message-box__title {
   color: var(--dark-text) !important;
 }
 
-html.theme-dark .session-delete-dialog .el-message-box__message {
+html.theme-dark .session-dialog .el-message-box__message {
   color: var(--dark-text-muted) !important;
 }
 
-html.theme-dark .session-delete-dialog .el-message-box__headerbtn:hover {
+html.theme-dark .session-dialog .el-message-box__headerbtn .el-message-box__close {
+  color: var(--dark-text-faint) !important;
+}
+
+html.theme-dark .session-dialog .el-message-box__headerbtn:hover,
+html.theme-dark .session-dialog .el-message-box__headerbtn:focus-visible {
   background: var(--dark-hover) !important;
 }
 
-html.theme-dark .session-delete-dialog__cancel {
+html.theme-dark .session-dialog .el-message-box__headerbtn:hover .el-message-box__close,
+html.theme-dark .session-dialog .el-message-box__headerbtn:focus-visible .el-message-box__close {
+  color: var(--dark-text) !important;
+}
+
+html.theme-dark .session-dialog .el-message-box__input .el-input__wrapper {
+  background: var(--dark-panel-soft) !important;
+  box-shadow: 0 0 0 1px var(--dark-border) inset !important;
+}
+
+html.theme-dark .session-dialog .el-message-box__input .el-input__wrapper.is-focus {
+  box-shadow:
+    0 0 0 1.5px var(--dark-accent) inset,
+    0 0 0 4px rgba(16, 163, 127, 0.18) !important;
+}
+
+html.theme-dark .session-dialog .el-message-box__input .el-input.invalid .el-input__wrapper,
+html.theme-dark .session-dialog .el-message-box__input .el-input.invalid .el-input__wrapper.is-focus {
+  box-shadow:
+    0 0 0 1.5px #ef4444 inset,
+    0 0 0 4px rgba(239, 68, 68, 0.16) !important;
+}
+
+html.theme-dark .session-dialog .el-message-box__input .el-input__inner {
+  color: var(--dark-text) !important;
+  -webkit-text-fill-color: var(--dark-text);
+}
+
+html.theme-dark .session-dialog .el-message-box__input .el-input__inner::placeholder {
+  color: var(--dark-text-faint) !important;
+}
+
+html.theme-dark .session-dialog .el-message-box__errormsg {
+  color: #fca5a5 !important;
+}
+
+html.theme-dark .session-dialog__cancel {
   color: var(--dark-text) !important;
   background: var(--dark-panel-soft) !important;
   border-color: var(--dark-border) !important;
 }
 
-html.theme-dark .session-delete-dialog__cancel:hover {
+html.theme-dark .session-dialog__cancel:hover,
+html.theme-dark .session-dialog__cancel:focus {
   background: var(--dark-hover) !important;
   border-color: #4a4a4a !important;
 }
 
-html.theme-dark .session-delete-dialog__confirm {
+html.theme-dark .session-dialog__confirm {
+  color: #ffffff !important;
+  background: var(--dark-accent) !important;
+  border-color: var(--dark-accent) !important;
+  box-shadow: 0 10px 22px rgba(16, 163, 127, 0.22);
+}
+
+html.theme-dark .session-dialog__confirm:hover,
+html.theme-dark .session-dialog__confirm:focus {
+  background: #0f8f72 !important;
+  border-color: #0f8f72 !important;
+  box-shadow: 0 12px 26px rgba(16, 163, 127, 0.26);
+}
+
+html.theme-dark .session-dialog__confirm--danger {
   background: #dc2626 !important;
   border-color: #dc2626 !important;
+  box-shadow: 0 10px 22px rgba(220, 38, 38, 0.26);
+}
+
+html.theme-dark .session-dialog__confirm--danger:hover,
+html.theme-dark .session-dialog__confirm--danger:focus {
+  background: #b91c1c !important;
+  border-color: #b91c1c !important;
+  box-shadow: 0 12px 26px rgba(220, 38, 38, 0.3);
 }
 
 /* Layout utilities */
