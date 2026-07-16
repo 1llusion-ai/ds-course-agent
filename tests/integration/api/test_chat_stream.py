@@ -27,6 +27,13 @@ def fresh_client(monkeypatch):
             "stream_id": "s1",
             "tool": "course_rag_tool",
         }
+        yield {
+            "type": "progress",
+            "phase": "generation",
+            "message": "正在生成回答...",
+            "route": "generic_agent",
+            "stream_id": "s1",
+        }
         yield {"type": "delta", "delta": "你"}
         yield {"type": "delta", "delta": "好"}
         yield {
@@ -72,3 +79,5 @@ def test_stream_endpoint_returns_real_sse(fresh_client):
     assert messages[-1]["role"] == "assistant"
     assert messages[-1]["content"] == "你好"
     assert messages[-1]["sources"] == [{"reference": "《第1章 数据科学简介》第1页"}]
+    assert messages[-1]["progress_events"][0]["phase"] == "routing"
+    assert messages[-1]["progress_events"][1]["route"] == "generic_agent"

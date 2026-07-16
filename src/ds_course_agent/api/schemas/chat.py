@@ -9,6 +9,8 @@ class ChatMessage(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
     sources: Optional[List[dict]] = None
     route: Optional[str] = None
+    progress: Optional[dict[str, Any]] = None
+    progress_events: Optional[List[dict[str, Any]]] = None
     metadata: Optional[dict[str, Any]] = None
 
 

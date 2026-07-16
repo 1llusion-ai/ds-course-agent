@@ -7,11 +7,7 @@
         { 'is-loading': message.isLoading, 'is-error': message.isError }
       ]"
     >
-      <div v-if="message.role !== 'user' && (routeBadge || message.isLoading)" class="message-topline">
-        <span v-if="routeBadge" class="route-badge" :title="`Route: ${routeBadge}`">
-          <span class="route-dot"></span>
-          {{ routeBadge }}
-        </span>
+      <div v-if="message.role !== 'user' && message.isLoading" class="message-topline">
         <span v-if="message.isLoading" class="live-badge">
           <span class="live-pulse"></span>
           正在生成
@@ -237,8 +233,7 @@ const currentProgressMessage = computed(() => {
 
 const progressSummary = computed(() => {
   const count = progressItems.value.length
-  const route = routeBadge.value
-  return [count ? `${count} 步` : '', route].filter(Boolean).join(' · ')
+  return count ? `${count} 步` : ''
 })
 
 const hasExplicitProgressEvents = computed(() => (
@@ -252,17 +247,6 @@ const showProgressTimeline = computed(() => (
   progressItems.value.length > 0 &&
   (props.message.isLoading || hasExplicitProgressEvents.value)
 ))
-
-const routeBadge = computed(() => {
-  const items = progressItems.value
-  const lastProgressRoute = items.length ? items[items.length - 1].route : ''
-  return formatRoute(
-    props.message.route ||
-    props.message.metadata?.route ||
-    props.message.progress?.route ||
-    lastProgressRoute
-  )
-})
 
 const sourceChips = computed(() => {
   const rawSources = normalizeSourceList(props.message.sources || props.message.metadata?.sources)
@@ -412,7 +396,6 @@ async function handleMarkdownClick(event) {
   margin-bottom: 8px;
 }
 
-.route-badge,
 .live-badge {
   display: inline-flex;
   align-items: center;
@@ -423,20 +406,6 @@ async function handleMarkdownClick(event) {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
-}
-
-.route-badge {
-  color: #1d4ed8;
-  background: rgba(37, 99, 235, 0.08);
-  border: 1px solid rgba(37, 99, 235, 0.12);
-}
-
-.route-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #2563eb, #14b8a6);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 .live-badge {

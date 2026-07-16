@@ -100,6 +100,8 @@ def _msg_to_dict(msg: ChatMessage) -> dict:
         "timestamp": msg.timestamp.isoformat() if msg.timestamp else datetime.now().isoformat(),
         "sources": msg.sources or None,
         "route": msg.route or None,
+        "progress": msg.progress or None,
+        "progress_events": msg.progress_events or None,
         "metadata": msg.metadata or None,
     }
 
@@ -114,6 +116,8 @@ def _msg_from_dict(data: dict) -> ChatMessage:
         timestamp=ts or datetime.now(),
         sources=data.get("sources"),
         route=data.get("route"),
+        progress=data.get("progress"),
+        progress_events=data.get("progress_events") or data.get("progressEvents"),
         metadata=data.get("metadata"),
     )
 
@@ -250,6 +254,7 @@ async def send_message_stream(
     async def generate() -> AsyncGenerator[str, None]:
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[dict | object] = asyncio.Queue()
+        progress_events: list[dict] = []
 
         def worker():
             try:
@@ -282,15 +287,20 @@ async def send_message_stream(
 
                 event_type = event.get("type")
                 if event_type == "progress":
+                    progress_event = {
+                        "phase": event.get("phase"),
+                        "message": event.get("message", ""),
+                        "route": event.get("route"),
+                        "tool": event.get("tool"),
+                        "stream_id": event.get("stream_id"),
+                        "resuming": bool(event.get("resuming", False)),
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                    progress_events.append(progress_event)
                     yield _sse(
                         {
                             "type": "progress",
-                            "phase": event.get("phase"),
-                            "message": event.get("message", ""),
-                            "route": event.get("route"),
-                            "tool": event.get("tool"),
-                            "stream_id": event.get("stream_id"),
-                            "resuming": bool(event.get("resuming", False)),
+                            **progress_event,
                         }
                     )
                     continue
@@ -315,6 +325,8 @@ async def send_message_stream(
                         content=event.get("content", ""),
                         sources=event.get("sources") or None,
                         route=event.get("route"),
+                        progress=progress_events[-1] if progress_events else None,
+                        progress_events=progress_events or None,
                         metadata={
                             "route": event.get("route"),
                             "used_retrieval": event.get("used_retrieval"),

@@ -45,6 +45,61 @@ function latestRouteFromProgress(events = []) {
   return event?.route || ''
 }
 
+function progressEventList(message = {}) {
+  if (Array.isArray(message.progressEvents)) return message.progressEvents
+  if (Array.isArray(message.progress_events)) return message.progress_events
+  return []
+}
+
+function hasProgressDetails(message = {}) {
+  return Boolean(message.progress || progressEventList(message).length)
+}
+
+function isSameStoredMessage(left = {}, right = {}) {
+  return left.role === right.role && (left.content || '') === (right.content || '')
+}
+
+function mergeHistoryWithLocalProgress(history = [], localMessages = []) {
+  if (!history.length || !localMessages.length) return history
+
+  const usedLocalIndexes = new Set()
+
+  return history.map((remoteMessage, index) => {
+    let localMessage = localMessages[index]
+    let localIndex = index
+
+    if (!isSameStoredMessage(remoteMessage, localMessage)) {
+      localIndex = localMessages.findIndex((candidate, candidateIndex) => (
+        !usedLocalIndexes.has(candidateIndex) &&
+        isSameStoredMessage(remoteMessage, candidate)
+      ))
+      localMessage = localIndex >= 0 ? localMessages[localIndex] : null
+    }
+
+    if (localIndex >= 0) {
+      usedLocalIndexes.add(localIndex)
+    }
+
+    if (!localMessage || hasProgressDetails(remoteMessage) || !hasProgressDetails(localMessage)) {
+      return remoteMessage
+    }
+
+    const localProgressEvents = progressEventList(localMessage)
+
+    return {
+      ...remoteMessage,
+      route: remoteMessage.route || localMessage.route,
+      metadata: {
+        ...(localMessage.metadata || {}),
+        ...(remoteMessage.metadata || {})
+      },
+      progress: remoteMessage.progress || localMessage.progress || null,
+      progressEvents: remoteMessage.progressEvents || localMessage.progressEvents,
+      progress_events: remoteMessage.progress_events || localMessage.progress_events || localProgressEvents
+    }
+  })
+}
+
 export const useChatStore = defineStore('chat', () => {
   const messages = ref([])
   const activeSessionId = ref(null)
@@ -188,7 +243,9 @@ export const useChatStore = defineStore('chat', () => {
       localMessages.some(message => message.isLoading) ||
       localMessages.length > history.length
 
-    const nextMessages = shouldKeepLocal ? localMessages : history
+    const nextMessages = shouldKeepLocal
+      ? localMessages
+      : mergeHistoryWithLocalProgress(history, localMessages)
     setSessionMessages(sessionId, nextMessages)
     return response
   }
@@ -258,7 +315,8 @@ export const useChatStore = defineStore('chat', () => {
             route: payload.route,
             tool: payload.tool,
             stream_id: payload.stream_id,
-            resuming: Boolean(payload.resuming)
+            resuming: Boolean(payload.resuming),
+            timestamp: payload.timestamp
           })
           options.onProgress?.()
           return
