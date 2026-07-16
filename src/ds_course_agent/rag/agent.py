@@ -44,6 +44,8 @@ from ds_course_agent.rag.events import (
     build_concept_mentioned_event,
     build_mastery_signal_event,
 )
+from ds_course_agent.hooks import HookManager, RetrievalGuardHook
+from ds_course_agent.rag.route_handlers import default_route_handlers
 
 # 延迟导入 skills 避免循环导入
 # Skills are discovered from the `skills/` directory and loaded on demand.
@@ -77,6 +79,8 @@ class AgentService(object):
         self.tool_registry = get_rag_tool_registry()
         self.tools = self.tool_registry.as_langchain_tools(exposed_only=True)
         self.system_prompt = self._load_system_prompt()
+        self.hooks = HookManager([RetrievalGuardHook()])
+        self.route_handlers = default_route_handlers()
 
         # 延迟导入避免循环导入
         self.skill_loader = get_skill_loader()
@@ -94,6 +98,24 @@ class AgentService(object):
     def _load_system_prompt(self) -> str:
         """Compatibility wrapper around the centralized prompt loader."""
         return get_system_prompt()
+
+    def _get_hooks(self) -> HookManager:
+        """Return hook manager, lazily initialized for tests using __new__."""
+
+        hooks = getattr(self, "hooks", None)
+        if hooks is None:
+            hooks = HookManager([RetrievalGuardHook()])
+            self.hooks = hooks
+        return hooks
+
+    def _get_route_handlers(self):
+        """Return route handlers, lazily initialized for tests using __new__."""
+
+        handlers = getattr(self, "route_handlers", None)
+        if handlers is None:
+            handlers = default_route_handlers()
+            self.route_handlers = handlers
+        return handlers
 
     def _warn_context_budget(self, messages: list, *, location: str, **metadata) -> None:
         """Emit warning-only context budget telemetry without mutating messages."""
@@ -1040,7 +1062,7 @@ class AgentService(object):
                 reasons=decision.reasons,
                 fast_path=True,
             )
-            return {
+            state = {
                 "student_id": student_id,
                 "history": history,
                 "chat_history": chat_history,
@@ -1051,6 +1073,9 @@ class AgentService(object):
                 "context": context,
                 "decision": decision,
             }
+            self._get_hooks().before_route(state)
+            self._get_hooks().after_route(state, decision)
+            return state
 
         from ds_course_agent.rag.query_pipeline import RouteType
 
@@ -1067,7 +1092,7 @@ class AgentService(object):
                 RouteType.CURRENT_DATETIME,
                 0.98,
                 ["fast path: 当前日期时间查询"],
-                required_tools=["current_datetime"],
+                required_tools=["current_datetime_tool"],
                 retrieval_policy="disabled",
             )
         if is_schedule_request(user_input):
@@ -1075,7 +1100,7 @@ class AgentService(object):
                 RouteType.COURSE_SCHEDULE,
                 0.98,
                 ["fast path: 课程安排查询"],
-                required_tools=["course_schedule"],
+                required_tools=["course_schedule_tool"],
                 retrieval_policy="optional",
             )
 
@@ -1118,6 +1143,18 @@ class AgentService(object):
         context.metadata["schedule_tool_query"] = self._build_schedule_tool_query(user_input)
         context.metadata["grounded_tool_query"] = rewrite_result.enriched_query
 
+        route_state_base = {
+            "student_id": student_id,
+            "history": history,
+            "chat_history": chat_history,
+            "profile": profile,
+            "special_case_response": special_case_response,
+            "matched_concepts": matched_concepts,
+            "skill_candidate_keys": skill_candidate_keys,
+            "context": context,
+        }
+        self._get_hooks().before_route(route_state_base)
+
         with trace_span("prepare.router"):
             decision = get_router().route(context)
         trace_step(
@@ -1142,7 +1179,7 @@ class AgentService(object):
                 special_case_response=special_case_response,
             )
 
-        return {
+        state = {
             "student_id": student_id,
             "history": history,
             "chat_history": chat_history,
@@ -1153,114 +1190,23 @@ class AgentService(object):
             "context": context,
             "decision": decision,
         }
+        self._get_hooks().after_route(state, decision)
+        return state
 
     def _execute_route(self, route_state: dict, stream: bool = False) -> str:
         """按统一 RouteDecision 执行回答；sync/stream 共享此执行核心。"""
-        from ds_course_agent.rag.query_pipeline import RouteType, get_postprocessor
-        from ds_course_agent.rag.query_trace import trace_step, trace_error, trace_span
+        from ds_course_agent.rag.query_trace import trace_error
 
         user_input = route_state["context"].original_query
-        session_id = route_state["context"].session_id
-        student_id = route_state["student_id"]
         chat_history = route_state["chat_history"]
-        special_case_response = route_state["special_case_response"]
-        matched_concepts = route_state["matched_concepts"]
-        decision = route_state["decision"]
-        route = decision.route
-        execution_query = self._route_execution_query(route_state["context"], decision)
 
         result = None
 
         try:
-            if special_case_response:
-                trace_step("agent.branch", branch="special_case")
-                result = special_case_response
-            elif route == RouteType.COURSE_SCHEDULE:
-                trace_step("agent.branch", branch="schedule")
-                from ds_course_agent.rag.tools import course_schedule_tool, _track_retrieval
-
-                result = course_schedule_tool.invoke(self._build_schedule_tool_query(user_input))
-                _track_retrieval(sources=[], used=True)
-            elif route == RouteType.CURRENT_DATETIME:
-                trace_step("agent.branch", branch="datetime")
-                from ds_course_agent.rag.tools import current_datetime_tool, _track_retrieval
-
-                result = current_datetime_tool.invoke(user_input)
-                _track_retrieval(sources=[], used=True)
-            elif route == RouteType.GROUNDED_RAG:
-                trace_step("agent.branch", branch="grounded_rag_direct")
-                from ds_course_agent.rag.tools import course_rag_tool
-
-                # Phase 2 latency optimization: when the QueryPipeline has
-                # already made a required grounded-RAG decision, avoid a second
-                # generic-agent LLM round just to decide whether to call the RAG
-                # tool.  The tool still performs retrieval + grounded answer
-                # generation and records RetrievalTrace/source telemetry.
-                with trace_span("execute.grounded_rag_tool"):
-                    result = course_rag_tool.invoke(execution_query)
-            elif route == RouteType.PYTHON_EXEC:
-                trace_step("agent.branch", branch="python_exec")
-                from ds_course_agent.rag.code_executor import (
-                    PythonSandbox,
-                    extract_python_code,
-                    format_python_execution_answer,
-                )
-
-                code = extract_python_code(user_input)
-                if not code:
-                    result = (
-                        "没有检测到可执行的 Python 代码。"
-                        "请把代码放在 ```python ... ``` 代码块中，或直接发送要运行的代码。"
-                    )
-                else:
-                    with trace_span("execute.python_sandbox"):
-                        execution_result = PythonSandbox().execute(code)
-                    result = format_python_execution_answer(code, execution_result)
-            elif route == RouteType.CODE_REVIEW and getattr(self, "code_review_skill", None):
-                trace_step("agent.branch", branch="code_review")
-                result = self.code_review_skill(user_input, student_id, session_id)
-            elif route == RouteType.LEARNING_PATH_SKILL and getattr(self, "learning_path_skill", None):
-                trace_step("agent.branch", branch="learning_path_skill")
-                result = self.learning_path_skill(user_input, student_id, session_id)
-            elif route == RouteType.MISCONCEPTION_SKILL and getattr(self, "misconception_skill", None):
-                trace_step("agent.branch", branch="misconception_skill")
-                result = self.misconception_skill(user_input, student_id, session_id, "0")
-            elif route == RouteType.PERSONALIZED_EXPLANATION_SKILL and getattr(self, "explanation_skill", None):
-                trace_step("agent.branch", branch="explanation_skill")
-                if matched_concepts:
-                    logger.info(
-                        "识别知识点: %s (%s)",
-                        matched_concepts[0].concept_id,
-                        matched_concepts[0].method,
-                    )
-                result = self.explanation_skill(user_input, student_id, session_id)
-            else:
-                trace_step("agent.branch", branch="generic_agent")
-                if stream:
-                    with trace_span("execute.agent_chat_stream"):
-                        streamed_parts = [
-                            chunk
-                            for chunk in self.chat(execution_query, chat_history, stream=True)
-                            if chunk
-                        ]
-                    result = "".join(streamed_parts)
-                    if result == "":
-                        with trace_span("execute.agent_chat"):
-                            result = self.chat(execution_query, chat_history, stream=False)
-                else:
-                    with trace_span("execute.agent_chat"):
-                        result = self.chat(execution_query, chat_history, stream=False)
-
-                if hasattr(result, "__iter__") and not isinstance(result, str):
-                    result = "".join(result)
-
-                final_response = get_postprocessor().process(
-                    route_state["context"],
-                    decision,
-                    result,
-                    chat_history=chat_history,
-                )
-                result = final_response.content
+            for handler in self._get_route_handlers():
+                if handler.can_handle(self, route_state):
+                    result = handler.execute(self, route_state, stream=stream)
+                    break
 
         except Exception as e:
             stage = "agent.stream_generate" if stream else "agent.generate"
@@ -1268,32 +1214,7 @@ class AgentService(object):
             logger.error("%s failed: %s", stage, e, exc_info=stream)
             result = ""
 
-        retrieval_guard_skip_reason = self._retrieval_guard_skip_reason(route_state, result)
-        forced_result = self._maybe_force_grounded_answer(
-            user_input,
-            chat_history=chat_history,
-            skip=bool(retrieval_guard_skip_reason),
-        )
-        if forced_result and forced_result.strip():
-            trace_step(
-                "retrieval_guard.force",
-                route=route.value,
-                retrieval_policy=decision.retrieval_policy,
-            )
-            result = forced_result
-        elif retrieval_guard_skip_reason:
-            trace_step(
-                "retrieval_guard.skip",
-                route=route.value,
-                retrieval_policy=decision.retrieval_policy,
-                reason=retrieval_guard_skip_reason,
-            )
-        else:
-            trace_step(
-                "retrieval_guard.force_empty",
-                route=route.value,
-                retrieval_policy=decision.retrieval_policy,
-            )
+        result = self._get_hooks().after_llm(route_state, result, agent=self, stream=stream)
 
         if not result or not isinstance(result, str) or not result.strip():
             try:

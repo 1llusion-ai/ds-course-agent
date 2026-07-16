@@ -150,3 +150,20 @@ def test_router_required_tools_resolve_in_registry():
         assert decision.required_tools, f"expected required_tools for {question!r}"
         for tool_name in decision.required_tools:
             assert tool_name in registry.names
+
+
+def test_agent_fast_path_required_tools_use_registry_names(tmp_path, monkeypatch):
+    import ds_course_agent.shared.config as config
+    from ds_course_agent.rag.agent import AgentService
+
+    registry = build_default_tool_registry()
+    monkeypatch.setattr(config, "storage_path", str(tmp_path))
+
+    service = AgentService.__new__(AgentService)
+    service.system_prompt = ""
+
+    for question in ["现在几点？", "下次课是什么时候？"]:
+        state = service._prepare_query_route(question, "registry-fast-path", "student-1")
+        assert state["decision"].required_tools
+        for tool_name in state["decision"].required_tools:
+            assert tool_name in registry.names

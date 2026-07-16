@@ -133,6 +133,43 @@
   `[Prior course_rag_tool result compacted: artifact://...]` 将在后续
   ContextGovernor 自动压缩/placeholder slice 中启用。
 
+## 5. Hooks + route handlers skeleton
+
+目的：开始拆薄 `AgentService`，把横切逻辑和路由执行分支从 1500 行级别的
+service 中移出，但暂时不改变 QueryPipeline、LearningEvent 与 skill executor
+契约。
+
+改动：
+
+- `src/ds_course_agent/hooks/`
+  - 新增 `HookManager` 与同步生命周期方法：
+    `before_route`、`after_route`、`before_llm`、`after_llm`、
+    `after_tool`、`after_turn`、`on_session_end`。
+  - 新增 `RetrievalGuardHook`，接管 `_execute_route()` 末尾的
+    retrieval guard 调用与 trace 记录。
+  - 为了低风险迁移，`RetrievalGuardHook` 当前仍委托回
+    `AgentService._retrieval_guard_skip_reason()` 和
+    `AgentService._maybe_force_grounded_answer()`，这样现有 monkeypatch 测试与
+    兼容 wrapper 不漂移；后续再把私有方法完全搬进 hook。
+- `src/ds_course_agent/rag/route_handlers.py`
+  - 新增 `RouteHandler` 协议与一组 first-match handlers：
+    `SpecialCaseRouteHandler`、`CourseScheduleRouteHandler`、
+    `CurrentDatetimeRouteHandler`、`GroundedRagRouteHandler`、
+    `PythonExecRouteHandler`、`SkillRouteHandler`、`GenericAgentRouteHandler`。
+  - `AgentService._execute_route()` 从大段 `if/elif` 改为遍历
+    `self.route_handlers`。
+- `src/ds_course_agent/rag/agent.py`
+  - 初始化 `HookManager([RetrievalGuardHook()])` 与默认 route handlers。
+  - 为 `__new__` 构造的单元测试保留 lazy `_get_hooks()` /
+    `_get_route_handlers()`。
+
+边界：
+
+- 这一步不搬 LearningEventHook / ClarificationDetectorHook；它们留到下一
+  个更聚焦的 slice。
+- 这一步不改变 public `chat_with_history` / stream event 协议。
+- 这一步不改变 grounded RAG 直连优化、tool registry、artifact 行为。
+
 ## 验证
 
 ### 单测 / 编译
@@ -147,6 +184,9 @@ python -m pytest tests/test_tool_registry.py tests/test_rag_tool.py tests/test_c
 python -m py_compile src/ds_course_agent/shared/tool_result_store.py src/ds_course_agent/shared/config.py src/ds_course_agent/rag/tools.py src/ds_course_agent/rag/rag.py tests/test_tool_result_store.py
 python -m pytest tests/test_tool_result_store.py tests/test_context_governor.py tests/test_rag_tool.py -q
 python -m pytest tests/test_tool_result_store.py tests/test_context_governor.py tests/test_rag_tool.py tests/test_tool_registry.py tests/test_agent_smoke.py tests/test_query_pipeline.py tests/integration/api/test_chat_stream.py -q
+python -m py_compile src/ds_course_agent/hooks/base.py src/ds_course_agent/hooks/retrieval_guard.py src/ds_course_agent/hooks/__init__.py src/ds_course_agent/rag/route_handlers.py src/ds_course_agent/rag/agent.py tests/test_agent_hooks_route_handlers.py
+python -m pytest tests/test_agent_hooks_route_handlers.py tests/test_agent_smoke.py tests/test_query_pipeline.py tests/test_agent_grounded_fallback.py -q
+python -m pytest tests/test_agent_hooks_route_handlers.py tests/test_agent_smoke.py tests/test_query_pipeline.py tests/test_agent_grounded_fallback.py tests/test_tool_result_store.py tests/test_context_governor.py tests/test_rag_tool.py tests/test_tool_registry.py tests/integration/api/test_chat_stream.py -q
 python -m pytest -q
 ```
 
@@ -163,6 +203,9 @@ full suite after registry: 283 passed, 6 skipped, 2 warnings
 tool result artifact targeted: 21 passed, 1 skipped, 1 warning
 tool result + affected paths: 101 passed, 5 skipped, 1 warning
 full suite after artifact storage: 286 passed, 6 skipped, 2 warnings
+hooks/route handlers targeted: 80 passed, 4 skipped, 1 warning
+hooks/route handlers affected paths: 109 passed, 5 skipped, 1 warning
+full suite after hooks/route handlers: 291 passed, 6 skipped, 2 warnings
 ```
 
 ### 真实 latency harness smoke
