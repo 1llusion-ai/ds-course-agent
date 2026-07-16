@@ -340,7 +340,20 @@ function handleCreate() {
 
 async function handleDelete(id) {
   try {
-    await ElMessageBox.confirm('确定删除这个会话吗？', '删除会话', { type: 'warning' })
+    await ElMessageBox.confirm(
+      '删除后将无法恢复此对话记录。',
+      '删除这个对话？',
+      {
+        type: 'warning',
+        customClass: 'session-delete-dialog',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        confirmButtonClass: 'session-delete-dialog__confirm',
+        cancelButtonClass: 'session-delete-dialog__cancel',
+        closeOnClickModal: true,
+        distinguishCancelAndClose: true
+      }
+    )
     await sessionStore.deleteSession(id)
     ElMessage.success('会话已删除')
     router.push('/chat')
