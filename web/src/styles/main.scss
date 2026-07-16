@@ -25,6 +25,29 @@ body {
   background: linear-gradient(135deg, #fafaf9 0%, #f5f5f4 100%);
   font-size: 14px;
   line-height: 1.5;
+  color: var(--text-primary);
+}
+
+html.theme-dark {
+  color-scheme: dark;
+  --dark-bg: #212121;
+  --dark-bg-subtle: #1f1f1f;
+  --dark-sidebar: #171717;
+  --dark-panel: #2a2a2a;
+  --dark-panel-soft: #2f2f2f;
+  --dark-hover: #383838;
+  --dark-border: #3a3a3a;
+  --dark-border-soft: #303030;
+  --dark-text: #ececec;
+  --dark-text-muted: #b4b4b4;
+  --dark-text-faint: #8a8a8a;
+  --dark-accent: #10a37f;
+  --dark-danger: #ef4444;
+}
+
+html.theme-dark body {
+  background: var(--dark-bg);
+  color: var(--dark-text);
 }
 
 .font-serif {
@@ -48,6 +71,325 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a29e;
+}
+
+html.theme-dark ::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+}
+
+html.theme-dark ::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+}
+
+/* Global dark-theme overrides.
+   Keep the palette neutral and consistent: dark gray shell, subtle borders,
+   and one restrained accent. `!important` is used only because many component
+   styles are scoped and loaded after this global stylesheet. */
+html.theme-dark .chat-main {
+  background: var(--dark-bg) !important;
+}
+
+html.theme-dark .chat-header {
+  background: var(--dark-bg) !important;
+  border-bottom-color: var(--dark-border-soft) !important;
+}
+
+html.theme-dark .thread-title,
+html.theme-dark .empty-content h1 {
+  color: var(--dark-text) !important;
+}
+
+html.theme-dark .empty-kicker,
+html.theme-dark .empty-content p,
+html.theme-dark .input-hint,
+html.theme-dark .session-meta,
+html.theme-dark .session-list-heading,
+html.theme-dark .session-group__title,
+html.theme-dark .utility-entry__meta,
+html.theme-dark .source-panel__label,
+html.theme-dark .source-chip__detail,
+html.theme-dark .progress-summary__meta,
+html.theme-dark .progress-step,
+html.theme-dark .progress-step__meta {
+  color: var(--dark-text-muted) !important;
+}
+
+html.theme-dark .theme-toggle {
+  color: var(--dark-text) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+html.theme-dark .theme-toggle:hover {
+  background: var(--dark-panel-soft) !important;
+  border-color: var(--dark-border) !important;
+}
+
+html.theme-dark .chat-sidebar {
+  color: var(--dark-text) !important;
+  background: var(--dark-sidebar) !important;
+  border-right-color: var(--dark-border-soft) !important;
+}
+
+html.theme-dark .brand-icon-button,
+html.theme-dark .sidebar-collapse-button,
+html.theme-dark .session-menu-btn {
+  color: var(--dark-text-muted) !important;
+}
+
+html.theme-dark .brand-icon-button:hover,
+html.theme-dark .sidebar-collapse-button:hover,
+html.theme-dark .session-menu-btn:hover,
+html.theme-dark .session-menu-btn:focus {
+  color: var(--dark-text) !important;
+  background: var(--dark-panel-soft) !important;
+  border-color: var(--dark-border) !important;
+}
+
+html.theme-dark .new-chat-button {
+  color: var(--dark-text) !important;
+  background: var(--dark-panel) !important;
+  border-color: var(--dark-border) !important;
+  box-shadow: none !important;
+}
+
+html.theme-dark .new-chat-button:hover {
+  border-color: #4a4a4a !important;
+  box-shadow: none !important;
+}
+
+html.theme-dark .new-chat-button__icon {
+  color: #ffffff !important;
+  background: var(--dark-accent) !important;
+  box-shadow: none !important;
+}
+
+html.theme-dark .new-chat-button__hint {
+  color: var(--dark-text-muted) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+html.theme-dark .session-search {
+  background: var(--dark-panel) !important;
+  border-color: var(--dark-border) !important;
+}
+
+html.theme-dark .session-search:focus-within {
+  background: var(--dark-panel-soft) !important;
+  border-color: #5a5a5a !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06) !important;
+}
+
+html.theme-dark .session-search__input,
+html.theme-dark .input-field {
+  color: var(--dark-text) !important;
+}
+
+html.theme-dark .session-search__input::placeholder,
+html.theme-dark .input-field::placeholder,
+html.theme-dark .session-search__icon {
+  color: var(--dark-text-faint) !important;
+}
+
+html.theme-dark .session-wrapper {
+  color: var(--dark-text) !important;
+}
+
+html.theme-dark .session-wrapper:hover,
+html.theme-dark .session-wrapper--pinned:not(.session-wrapper--active) {
+  background: var(--dark-panel) !important;
+  border-color: var(--dark-border-soft) !important;
+  box-shadow: none !important;
+}
+
+html.theme-dark .session-wrapper--active {
+  background: var(--dark-panel-soft) !important;
+  border-color: var(--dark-border) !important;
+  box-shadow: inset 3px 0 0 var(--dark-accent) !important;
+}
+
+html.theme-dark .session-title,
+html.theme-dark .session-wrapper--active .session-title,
+html.theme-dark .utility-entry__title,
+html.theme-dark .utility-entry--muted .utility-entry__title {
+  color: var(--dark-text) !important;
+}
+
+html.theme-dark .session-leading,
+html.theme-dark .utility-entry__icon,
+html.theme-dark .session-empty__icon {
+  color: var(--dark-text-muted) !important;
+  background: var(--dark-panel-soft) !important;
+}
+
+html.theme-dark .session-leading__dot {
+  background: var(--dark-text-faint) !important;
+}
+
+html.theme-dark .session-wrapper--active .session-leading__dot {
+  background: var(--dark-accent) !important;
+  box-shadow: 0 0 0 4px rgba(16, 163, 127, 0.16) !important;
+}
+
+html.theme-dark .session-wrapper--pinned .session-leading__dot {
+  background: #e3b341 !important;
+}
+
+html.theme-dark .session-empty {
+  color: var(--dark-text-muted) !important;
+  background: var(--dark-panel) !important;
+  border-color: var(--dark-border) !important;
+}
+
+html.theme-dark .session-empty p {
+  color: var(--dark-text) !important;
+}
+
+html.theme-dark .sidebar-footer {
+  background: var(--dark-sidebar) !important;
+  border-top-color: var(--dark-border-soft) !important;
+}
+
+html.theme-dark .utility-entry {
+  color: var(--dark-text-muted) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+html.theme-dark .utility-entry:hover {
+  color: var(--dark-text) !important;
+  background: var(--dark-panel) !important;
+  border-color: var(--dark-border-soft) !important;
+  box-shadow: none !important;
+}
+
+html.theme-dark .input-container,
+html.theme-dark .ai-bubble {
+  background: var(--dark-panel) !important;
+  border-color: var(--dark-border) !important;
+  box-shadow: none !important;
+}
+
+html.theme-dark .input-container:focus-within {
+  border-color: #5a5a5a !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06) !important;
+}
+
+html.theme-dark .input-field,
+html.theme-dark .markdown-body,
+html.theme-dark .message-content,
+html.theme-dark .markdown-body h1,
+html.theme-dark .markdown-body h2,
+html.theme-dark .markdown-body h3,
+html.theme-dark .markdown-body h4,
+html.theme-dark .markdown-body strong,
+html.theme-dark .progress-step__title {
+  color: var(--dark-text) !important;
+}
+
+html.theme-dark .send-btn {
+  color: #111111 !important;
+  background: #f4f4f4 !important;
+  box-shadow: none !important;
+}
+
+html.theme-dark .input-area {
+  background: linear-gradient(180deg, transparent, var(--dark-bg) 42%) !important;
+}
+
+html.theme-dark .prompt-card {
+  color: var(--dark-text-muted) !important;
+  background: var(--dark-panel) !important;
+  border-color: var(--dark-border) !important;
+}
+
+html.theme-dark .prompt-card:hover {
+  color: var(--dark-text) !important;
+  background: var(--dark-hover) !important;
+  border-color: #4a4a4a !important;
+  box-shadow: none !important;
+}
+
+html.theme-dark .user-bubble {
+  background: #2f6fed !important;
+  color: #ffffff !important;
+}
+
+html.theme-dark .ai-bubble::before {
+  display: none !important;
+}
+
+html.theme-dark .route-badge,
+html.theme-dark .live-badge {
+  color: var(--dark-text-muted) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--dark-border-soft) !important;
+}
+
+html.theme-dark .source-chip,
+html.theme-dark .progress-summary,
+html.theme-dark .progress-timeline,
+html.theme-dark .markdown-body pre:not(.code-block__pre),
+html.theme-dark .markdown-body .katex-display,
+html.theme-dark .markdown-body blockquote,
+html.theme-dark .markdown-body th,
+html.theme-dark .markdown-body tr:nth-child(even) td {
+  color: var(--dark-text) !important;
+  background: var(--dark-bg-subtle) !important;
+  border-color: var(--dark-border) !important;
+}
+
+html.theme-dark .source-panel,
+html.theme-dark .markdown-body h2 {
+  border-color: var(--dark-border-soft) !important;
+}
+
+html.theme-dark .source-chip:hover,
+html.theme-dark .progress-summary:hover {
+  background: var(--dark-hover) !important;
+  border-color: #4a4a4a !important;
+}
+
+html.theme-dark .markdown-body code {
+  color: var(--dark-text) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: var(--dark-border-soft) !important;
+}
+
+html.theme-dark .markdown-body td,
+html.theme-dark .markdown-body th {
+  border-color: var(--dark-border) !important;
+}
+
+html.theme-dark .session-action-menu {
+  --el-bg-color-overlay: var(--dark-panel);
+  --el-border-color-light: var(--dark-border);
+  --el-text-color-regular: var(--dark-text);
+  --el-fill-color-light: var(--dark-hover);
+  background: var(--dark-panel) !important;
+  border-color: var(--dark-border) !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.36) !important;
+}
+
+html.theme-dark .session-action-menu .el-dropdown-menu__item {
+  color: var(--dark-text) !important;
+}
+
+html.theme-dark .session-action-menu .el-dropdown-menu__item:not(.is-disabled):hover,
+html.theme-dark .session-action-menu .el-dropdown-menu__item:not(.is-disabled):focus {
+  color: var(--dark-text) !important;
+  background: var(--dark-hover) !important;
+}
+
+html.theme-dark .session-action-menu .menu-item-danger {
+  color: #f87171 !important;
+}
+
+html.theme-dark .session-action-menu .menu-item-danger:not(.is-disabled):hover,
+html.theme-dark .session-action-menu .menu-item-danger:not(.is-disabled):focus {
+  color: #fca5a5 !important;
+  background: rgba(239, 68, 68, 0.12) !important;
 }
 
 /* Layout utilities */

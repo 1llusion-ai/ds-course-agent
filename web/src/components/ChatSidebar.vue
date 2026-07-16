@@ -8,7 +8,7 @@
         :title="props.collapsed ? '展开边栏' : '教学 Agent'"
         @click="handleBrandClick"
       >
-        <img src="/icon/thought_logo.png" alt="" class="brand-icon" />
+        <img src="/icon/thought_mark.png" alt="" class="brand-icon" />
       </button>
 
       <button
@@ -19,7 +19,9 @@
         title="折叠边栏"
         @click="handleSidebarToggle"
       >
-        <el-icon><Menu /></el-icon>
+        <svg class="sidebar-collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-width="2" d="M5 7h14M5 12h14M5 17h14" />
+        </svg>
       </button>
     </div>
 
@@ -78,7 +80,10 @@
             v-for="session in group.sessions"
             :key="session.id"
             class="session-wrapper"
-            :class="{ 'session-wrapper--active': sessionStore.currentSessionId === session.id }"
+            :class="{
+              'session-wrapper--active': sessionStore.currentSessionId === session.id,
+              'session-wrapper--pinned': sessionStore.isPinned(session.id)
+            }"
             @click="handleSessionClick(session.id, $event)"
           >
             <span class="session-leading">
@@ -101,6 +106,7 @@
               </div>
 
               <span class="session-meta">
+                <template v-if="sessionStore.isPinned(session.id)">置顶 · </template>
                 消息 {{ session.message_count || 0 }} 条 · {{ formatTime(session.updated_at) }}
               </span>
             </div>
@@ -112,18 +118,48 @@
               >
                 {{ sessionStore.unreadCounts[session.id] }}
               </span>
-              <el-dropdown trigger="click" @command="(cmd) => handleCommand(cmd, session)" size="small">
-                <el-button type="default" link size="small" class="session-menu-btn">
-                  <el-icon><MoreFilled /></el-icon>
-                </el-button>
+              <el-dropdown
+                trigger="click"
+                popper-class="session-action-menu"
+                @command="(cmd) => handleCommand(cmd, session)"
+                size="small"
+              >
+                <button
+                  type="button"
+                  class="session-menu-btn"
+                  aria-label="会话操作"
+                  title="会话操作"
+                  @click.stop
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 12h.01M12 12h.01M18 12h.01" />
+                  </svg>
+                </button>
                 <template #dropdown>
                   <el-dropdown-menu>
+                    <el-dropdown-item command="pin">
+                      <span class="menu-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="m14.5 4.5 5 5-3.2 1.1-3.8 3.8.3 3.5-1 1-3.7-3.7-3.1 3.1-1.3-1.3 3.1-3.1-3.7-3.7 1-1 3.5.3 3.8-3.8 1.1-3.2Z" />
+                        </svg>
+                      </span>
+                      <span>{{ sessionStore.isPinned(session.id) ? '取消置顶' : '置顶' }}</span>
+                    </el-dropdown-item>
                     <el-dropdown-item command="rename">
-                      <el-icon><Edit /></el-icon>
+                      <span class="menu-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M4 20h4.2L18.7 9.5a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4 15.8V20Z" />
+                          <path stroke-linecap="round" stroke-width="1.9" d="M13.5 6.5l4 4" />
+                        </svg>
+                      </span>
                       <span>重命名</span>
                     </el-dropdown-item>
-                    <el-dropdown-item command="delete">
-                      <el-icon><Delete /></el-icon>
+                    <el-dropdown-item command="delete" divided class="menu-item-danger">
+                      <span class="menu-item-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M6 7h12M10 7V5h4v2m-6 3v8m4-8v8m4-8v8M8 7l.6 13h6.8L16 7" />
+                        </svg>
+                      </span>
                       <span>删除</span>
                     </el-dropdown-item>
                   </el-dropdown-menu>
@@ -212,8 +248,26 @@ const groupedSessions = computed(() => {
 
   const groups = []
   const byKey = new Map()
+  const pinnedSessions = []
+  const regularSessions = []
 
   for (const session of filteredSessions.value) {
+    if (sessionStore.isPinned(session.id)) {
+      pinnedSessions.push(session)
+    } else {
+      regularSessions.push(session)
+    }
+  }
+
+  if (pinnedSessions.length) {
+    groups.push({
+      key: 'pinned',
+      label: '置顶',
+      sessions: pinnedSessions
+    })
+  }
+
+  for (const session of regularSessions) {
     const bucket = getSessionBucket(session.updated_at)
     if (!byKey.has(bucket.key)) {
       byKey.set(bucket.key, {
@@ -278,10 +332,10 @@ function handleSessionClick(id, event) {
   selectSession(id)
 }
 
-async function handleCreate() {
-  const session = await sessionStore.createSession()
-  ElMessage.success('会话已创建')
-  router.push(`/chat/${session.id}`)
+function handleCreate() {
+  sessionStore.setCurrentSession(null)
+  chatStore.setActiveSession(null)
+  router.push('/chat')
 }
 
 async function handleDelete(id) {
@@ -298,7 +352,10 @@ async function handleDelete(id) {
 }
 
 async function handleCommand(cmd, session) {
-  if (cmd === 'delete') {
+  if (cmd === 'pin') {
+    sessionStore.togglePin(session.id)
+    ElMessage.success(sessionStore.isPinned(session.id) ? '已置顶' : '已取消置顶')
+  } else if (cmd === 'delete') {
     await handleDelete(session.id)
   } else if (cmd === 'rename') {
     try {
@@ -422,12 +479,13 @@ onMounted(() => {
   width: 4rem;
 }
 
+
 .sidebar-brand-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 48px;
-  padding: 10px 12px 6px;
+  min-height: 54px;
+  padding: 10px 10px 8px;
 }
 
 .chat-sidebar--collapsed .sidebar-brand-row {
@@ -440,8 +498,8 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 42px;
+  height: 42px;
   padding: 0;
   color: #57534e;
   background: transparent;
@@ -463,15 +521,22 @@ onMounted(() => {
 }
 
 .brand-icon {
-  width: 30px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
   object-fit: contain;
-  border-radius: 10px;
+  border-radius: 12px;
 }
 
 .sidebar-collapse-button .el-icon {
   font-size: 17px;
 }
+
+.sidebar-collapse-icon {
+  width: 18px;
+  height: 18px;
+}
+
+
 
 .sidebar-top {
   display: flex;
@@ -658,6 +723,11 @@ onMounted(() => {
     0 12px 24px rgba(79, 70, 229, 0.08);
 }
 
+.session-wrapper--pinned:not(.session-wrapper--active) {
+  background: rgba(255, 255, 255, 0.44);
+  border-color: rgba(99, 102, 241, 0.10);
+}
+
 .session-leading {
   display: inline-flex;
   align-items: center;
@@ -684,6 +754,10 @@ onMounted(() => {
 .session-wrapper--active .session-leading__dot {
   background: #6366f1;
   box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.10);
+}
+
+.session-wrapper--pinned .session-leading__dot {
+  background: #f59e0b;
 }
 
 .session-body {
@@ -760,8 +834,19 @@ onMounted(() => {
 }
 
 .session-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: #78716c;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .session-wrapper:hover .session-menu-btn,
@@ -770,16 +855,79 @@ onMounted(() => {
   opacity: 1;
 }
 
-.session-menu-btn .el-icon {
-  font-size: 16px;
-  color: #57534e;
+.session-menu-btn:hover,
+.session-menu-btn:focus {
+  color: #292524;
+  background: rgba(245, 245, 244, 0.90);
+  border-color: rgba(214, 211, 209, 0.78);
 }
 
-:deep(.el-dropdown-menu__item) {
+.session-menu-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+:global(.session-action-menu) {
+  min-width: 150px;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(214, 211, 209, 0.88);
+  box-shadow: 0 18px 48px rgba(28, 25, 23, 0.14);
+}
+
+:global(.session-action-menu .el-dropdown-menu) {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+:global(.session-action-menu .el-dropdown-menu__item) {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
+  min-height: 34px;
+  padding: 8px 10px;
+  color: #44403c;
+  border-radius: 10px;
   font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+:global(.session-action-menu .el-dropdown-menu__item:not(.is-disabled):focus),
+:global(.session-action-menu .el-dropdown-menu__item:not(.is-disabled):hover) {
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+:global(.session-action-menu .el-dropdown-menu__item--divided) {
+  margin-top: 5px;
+  border-top-color: rgba(231, 229, 228, 0.92);
+}
+
+:global(.session-action-menu .menu-item-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+}
+
+:global(.session-action-menu .menu-item-icon svg) {
+  width: 17px;
+  height: 17px;
+}
+
+:global(.session-action-menu .menu-item-danger) {
+  color: #dc2626;
+}
+
+:global(.session-action-menu .menu-item-danger:not(.is-disabled):focus),
+:global(.session-action-menu .menu-item-danger:not(.is-disabled):hover) {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .session-spinner {
@@ -932,6 +1080,37 @@ onMounted(() => {
   font-size: 11px;
   line-height: 1.2;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 @keyframes session-spin {
   to {

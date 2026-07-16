@@ -5,22 +5,24 @@
     <div class="chat-main">
       <header class="chat-header">
         <div class="thread-header-left">
-          <button
-            type="button"
-            class="thread-sidebar-toggle"
-            :aria-label="sidebarCollapsed ? '展开边栏' : '折叠边栏'"
-            :title="sidebarCollapsed ? '展开边栏' : '折叠边栏'"
-            @click="toggleSidebar"
-          >
-            <el-icon><Menu /></el-icon>
-          </button>
           <span class="thread-title">{{ headerTitle }}</span>
         </div>
         <div class="header-status">
-          <span class="status-pill">
-            <span class="status-dot"></span>
-            {{ chatStore.loading ? '回答生成中' : '随时可提问' }}
-          </span>
+          <button
+            type="button"
+            class="theme-toggle"
+            :aria-label="isDarkTheme ? '切换到日间模式' : '切换到夜间模式'"
+            :title="isDarkTheme ? '日间模式' : '夜间模式'"
+            @click="toggleTheme"
+          >
+            <svg v-if="isDarkTheme" class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.36-6.36-1.42 1.42M7.06 16.94l-1.42 1.42m12.72 0-1.42-1.42M7.06 7.06 5.64 5.64" />
+              <circle cx="12" cy="12" r="4" stroke-width="2" />
+            </svg>
+            <svg v-else class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12.79A8.5 8.5 0 1 1 11.21 3 6.7 6.7 0 0 0 21 12.79Z" />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -28,12 +30,18 @@
         <div ref="messagesContainer" class="messages-area">
           <div v-if="chatStore.messages.length === 0" class="empty-state">
             <div class="empty-content">
-              <img src="/avatar/Assistant.png" alt="AI助手" class="robot-icon" />
-              <h2>开始一段新的学习对话</h2>
+              <div class="empty-kicker">DATA SCIENCE COURSE AGENT</div>
+              <h1>今天想解决什么数据科学问题？</h1>
               <p>
                 可以直接提问课程概念、公式推导、案例理解，
                 也可以让我帮你梳理最近卡住的知识点。
               </p>
+              <ChatInput
+                hero
+                :loading="chatStore.loading"
+                class="empty-composer"
+                @send="handleSend"
+              />
               <div class="prompt-grid">
                 <button
                   v-for="prompt in starterPrompts"
@@ -57,7 +65,7 @@
           </div>
         </div>
 
-        <div class="input-area">
+        <div v-if="chatStore.messages.length > 0" class="input-area">
           <ChatInput :loading="chatStore.loading" @send="handleSend" />
         </div>
       </div>
@@ -85,8 +93,10 @@ const sessionStore = useSessionStore()
 const chatStore = useChatStore()
 const profileStore = useProfileStore()
 const sidebarCollapsed = ref(readSidebarCollapsedPreference())
+const theme = ref(readThemePreference())
 
 const headerTitle = computed(() => sessionStore.currentSession?.title || '新对话')
+const isDarkTheme = computed(() => theme.value === 'dark')
 
 const starterPrompts = [
   '逻辑回归为什么能做分类？',
@@ -127,13 +137,8 @@ watch(
       return
     }
 
-    if (sessionCount > 0) {
-      const first = sessionStore.sortedSessions[0]
-      if (first) {
-        sessionStore.setCurrentSession(first.id)
-        router.replace(`/chat/${first.id}`)
-      }
-    }
+    sessionStore.setCurrentSession(null)
+    chatStore.setActiveSession(null)
   },
   { immediate: true }
 )
@@ -220,6 +225,26 @@ function readSidebarCollapsedPreference() {
   return window.localStorage.getItem('ds-course-agent.sidebarCollapsed') === 'true'
 }
 
+function readThemePreference() {
+  if (typeof window === 'undefined') return 'light'
+  return window.localStorage.getItem('ds-course-agent.theme') === 'dark' ? 'dark' : 'light'
+}
+
+function applyThemePreference(value) {
+  if (typeof document === 'undefined') return
+  document.documentElement.classList.toggle('theme-dark', value === 'dark')
+  document.body?.classList.toggle('theme-dark', value === 'dark')
+  document.getElementById('app')?.classList.toggle('theme-dark', value === 'dark')
+  document.documentElement.style.colorScheme = value === 'dark' ? 'dark' : 'light'
+}
+
+function toggleTheme() {
+  theme.value = isDarkTheme.value ? 'light' : 'dark'
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem('ds-course-agent.theme', theme.value)
+  }
+}
+
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value
   if (typeof window !== 'undefined') {
@@ -237,6 +262,8 @@ function scrollToBottom() {
     }
   })
 }
+
+watch(theme, applyThemePreference, { immediate: true })
 
 onMounted(async () => {
   try {
@@ -288,31 +315,6 @@ onMounted(async () => {
   min-width: 0;
 }
 
-.thread-sidebar-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  color: #78716c;
-  background: transparent;
-  border: 0;
-  border-radius: 9px;
-  cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
-}
-
-.thread-sidebar-toggle:hover {
-  color: #292524;
-  background: rgba(245, 245, 244, 0.88);
-}
-
-.thread-sidebar-toggle:active {
-  transform: scale(0.96);
-}
-
 .thread-title {
   max-width: min(58vw, 34rem);
   overflow: hidden;
@@ -330,30 +332,36 @@ onMounted(async () => {
   min-width: 0;
 }
 
-.status-pill {
+.theme-toggle {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  padding: 6px 11px;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: #57534e;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(214, 211, 209, 0.72);
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(28, 25, 23, 0.06);
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
 }
 
-.status-pill {
-  gap: 7px;
-  color: #0f766e;
-  background: rgba(20, 184, 166, 0.10);
-  border: 1px solid rgba(20, 184, 166, 0.16);
+.theme-toggle:hover {
+  color: #1c1917;
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(148, 163, 184, 0.38);
+  transform: translateY(-1px);
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: #14b8a6;
-  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.12);
+.theme-toggle:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.theme-icon {
+  width: 17px;
+  height: 17px;
 }
 
 .chat-content {
@@ -382,61 +390,66 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  min-height: 100%;
+  padding: 30px 12px;
 }
 
 .empty-content {
-  max-width: 720px;
+  width: min(100%, 860px);
+  max-width: 860px;
   text-align: center;
-  padding: 34px;
-  border-radius: 32px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.68));
-  border: 1px solid rgba(231, 229, 228, 0.9);
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.10);
-  backdrop-filter: blur(18px);
+  padding: 8px 0;
 }
 
-.robot-icon {
-  width: 68px;
-  height: 68px;
-  margin: 0 auto 16px;
-  border-radius: 20px;
-  object-fit: cover;
+.empty-kicker {
+  margin-bottom: 14px;
+  color: #78716c;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.16em;
 }
 
-.empty-content h2 {
-  margin: 0 0 10px;
+.empty-content h1 {
+  max-width: 720px;
+  margin: 0 auto 14px;
   color: #1c1917;
-  font-size: 22px;
-  font-weight: 700;
+  font-size: clamp(30px, 5vw, 48px);
+  font-weight: 760;
+  line-height: 1.16;
+  letter-spacing: -0.04em;
 }
 
 .empty-content p {
   margin: 0 auto;
-  max-width: 520px;
+  max-width: 560px;
   color: #57534e;
   line-height: 1.7;
 }
 
+.empty-composer {
+  margin-top: 30px;
+}
+
 .prompt-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 22px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  width: min(100%, 800px);
+  margin: 16px auto 0;
 }
 
 .prompt-card {
-  min-height: 54px;
-  padding: 12px 14px;
-  color: #334155;
-  text-align: left;
-  background: rgba(248, 250, 252, 0.84);
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 16px;
+  min-height: 38px;
+  padding: 9px 12px;
+  color: #57534e;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.64);
+  border: 1px solid rgba(214, 211, 209, 0.70);
+  border-radius: 999px;
   cursor: pointer;
   font: inherit;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 750;
   transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
@@ -452,6 +465,17 @@ onMounted(async () => {
   background: linear-gradient(180deg, transparent, rgba(248, 250, 252, 0.86) 42%);
 }
 
+
+
+
+
+
+
+
+
+
+
+
 @media (max-width: 900px) {
   .chat-header {
     padding: 8px 12px;
@@ -466,11 +490,17 @@ onMounted(async () => {
   }
 
   .prompt-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .input-area {
     padding: 12px 14px 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .prompt-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -341,6 +341,11 @@ export const useChatStore = defineStore('chat', () => {
   function setActiveSession(sessionId) {
     activeSessionId.value = sessionId
 
+    if (!sessionId) {
+      messages.value = []
+      return
+    }
+
     if (!messagesBySession.value[sessionId]) {
       setSessionMessages(sessionId, [])
     } else {

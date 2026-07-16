@@ -1,11 +1,11 @@
 <template>
-  <div class="chat-input-wrapper">
+  <div class="chat-input-wrapper" :class="{ 'chat-input-wrapper--hero': hero }">
     <div class="input-container">
       <textarea
         v-model="inputText"
         rows="1"
         class="input-field"
-        placeholder="问一个课程概念、公式推导或代码问题..."
+        :placeholder="placeholder"
         @keydown.enter="handleEnterKey"
         @input="autoResize"
         ref="textareaRef"
@@ -21,7 +21,7 @@
         <span v-else class="send-loader"></span>
       </button>
     </div>
-    <div class="input-hint">
+    <div v-if="!hero" class="input-hint">
       <span>Enter 发送 · Shift+Enter 换行</span>
       <span>基于教材与学习画像回答</span>
     </div>
@@ -29,13 +29,20 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { computed, ref, nextTick } from 'vue'
 
-const props = defineProps({ loading: Boolean })
+const props = defineProps({
+  loading: Boolean,
+  hero: Boolean
+})
 const emit = defineEmits(['send'])
 
 const inputText = ref('')
 const textareaRef = ref(null)
+const placeholder = computed(() => props.hero
+  ? '问一个数据科学问题、公式推导或代码练习...'
+  : '问一个课程概念、公式推导或代码问题...'
+)
 
 function autoResize() {
   nextTick(() => {
@@ -73,6 +80,10 @@ function handleEnterKey(event) {
   margin: 0 auto;
 }
 
+.chat-input-wrapper--hero {
+  max-width: 800px;
+}
+
 .input-container {
   display: flex;
   align-items: flex-end;
@@ -87,6 +98,15 @@ function handleEnterKey(event) {
     0 1px 0 rgba(255, 255, 255, 0.88) inset;
   backdrop-filter: blur(18px);
   transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.chat-input-wrapper--hero .input-container {
+  border-color: rgba(15, 23, 42, 0.07);
+  border-radius: 28px;
+  padding: 18px 18px 18px 22px;
+  box-shadow:
+    0 24px 70px rgba(15, 23, 42, 0.10),
+    0 1px 0 rgba(255, 255, 255, 0.92) inset;
 }
 
 .input-container:focus-within {
@@ -110,6 +130,11 @@ function handleEnterKey(event) {
   max-height: 150px;
   font-family: inherit;
   padding: 4px 0;
+}
+
+.chat-input-wrapper--hero .input-field {
+  min-height: 58px;
+  font-size: 16px;
 }
 
 .input-field::placeholder {
@@ -165,6 +190,12 @@ function handleEnterKey(event) {
   color: #94a3b8;
   margin-top: 10px;
 }
+
+
+
+
+
+
 
 @keyframes input-spin {
   to {

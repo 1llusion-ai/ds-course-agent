@@ -1024,6 +1024,25 @@ async function handleMarkdownClick(event) {
   border-top-color: rgba(255, 255, 255, 0.2);
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @media (max-width: 760px) {
   .message-bubble {
     max-width: calc(100% - 52px);
