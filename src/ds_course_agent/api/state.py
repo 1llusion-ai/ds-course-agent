@@ -15,8 +15,12 @@ from pathlib import Path
 from typing import Dict, List
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.api.title_generation import (
+    DEFAULT_SESSION_TITLE,
+    build_fallback_session_title,
+    should_repair_stored_title,
+)
 
-DEFAULT_SESSION_TITLE = "新会话"
 STATE_FILE = Path(config.CHAT_HISTORY_DIR) / "backend_state.json"
 
 _sessions: Dict[str, dict] = {}
@@ -111,12 +115,13 @@ def _derive_session_metadata(session_id: str, messages: List[dict], fallback_ts:
         for message in messages
         if message.get("role") == "user" and message.get("content")
     ]
-    title = (user_messages[0][:10] if user_messages else "") or DEFAULT_SESSION_TITLE
+    title = build_fallback_session_title(user_messages[0]) if user_messages else DEFAULT_SESSION_TITLE
     created_at = _parse_timestamp(messages[0].get("timestamp"), fallback_ts) if messages else fallback_ts
     updated_at = _parse_timestamp(messages[-1].get("timestamp"), fallback_ts) if messages else fallback_ts
 
     return {
         "title": title,
+        "title_source": "legacy",
         "student_id": "default_student",
         "created_at": created_at.isoformat(),
         "updated_at": updated_at.isoformat(),
@@ -168,12 +173,31 @@ def _repair_session_metadata() -> bool:
                 changed = True
             continue
 
-        if session_id in _sessions:
+        if session_id not in _sessions:
+            fallback_ts = datetime.now()
+            _sessions[session_id] = _derive_session_metadata(session_id, messages, fallback_ts)
+            changed = True
             continue
 
-        fallback_ts = datetime.now()
-        _sessions[session_id] = _derive_session_metadata(session_id, messages, fallback_ts)
-        changed = True
+        session = _sessions[session_id]
+
+        user_messages = [
+            message.get("content", "").strip()
+            for message in messages
+            if message.get("role") == "user" and message.get("content")
+        ]
+        if not user_messages:
+            continue
+
+        current_title = str(session.get("title") or "")
+        title_source = session.get("title_source")
+        if should_repair_stored_title(user_messages[0], current_title, title_source):
+            repaired_title = build_fallback_session_title(user_messages[0])
+            if repaired_title and repaired_title != current_title:
+                session["title"] = repaired_title
+                session["title_source"] = "repaired"
+                session["title_repaired_from"] = current_title
+                changed = True
 
     return changed
 

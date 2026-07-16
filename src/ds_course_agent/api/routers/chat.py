@@ -18,7 +18,14 @@ from fastapi.responses import StreamingResponse
 
 from ..core_bridge import chat_with_history, stream_chat_with_history
 from ..schemas.chat import ChatHistoryResponse, ChatMessage, ChatRequest, ChatResponse
-from ..state import _chat_history, _save as _save_state, _sessions
+from ..state import DEFAULT_SESSION_TITLE, _chat_history, _save as _save_state, _sessions
+from ..title_generation import (
+    SESSION_TITLE_MAX_CHARS,
+    _clean_generated_title,
+    _finalize_title,
+    build_fallback_session_title,
+    looks_like_unprocessed_question_title,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,51 +33,32 @@ router = APIRouter()
 
 _STREAM_SENTINEL = object()
 
-_title_gen_cache: dict[str, bool] = {}  # session_id -> title generated flag
+_title_generation_pending: set[str] = set()
+# Backward-compatible test/runtime hook. It now tracks only in-flight title jobs
+# rather than "already generated" sessions.
+_title_gen_cache = _title_generation_pending
 
 
-def _clean_generated_title(raw: str) -> str:
-    """清理 LLM 生成的标题：去除常见前缀、引号、多余空格。"""
-    title = str(raw or "").strip()
-    # 循环去除前缀模式
-    while True:
-        new_title = title
-        for prefix in ["标题：", "标题:", "标题"]:
-            if new_title.startswith(prefix):
-                new_title = new_title[len(prefix):].strip()
-                break
-        if new_title == title:
-            break
-        title = new_title
-    # 去除两侧引号
-    for quote in ["'", '"', "「", "」", "『", "』"]:
-        if title.startswith(quote):
-            title = title[1:].strip()
-        if title.endswith(quote):
-            title = title[:-1].strip()
-    # 去除中间所有空格
-    title = "".join(title.split())
-    return title
+def _extract_response_text(response) -> str:
+    if hasattr(response, "content"):
+        return str(response.content or "").strip()
+    if isinstance(response, str):
+        return response.strip()
+    return str(response).strip()
 
 
-def _finalize_title(question: str, raw_title: str) -> str:
-    """后处理生成的标题：保留周次模式、截断到 10 字。"""
-    title = _clean_generated_title(raw_title)
-    # 如果问题包含"第X周"但标题丢了，补回去
-    import re
-    week_match = re.search(r"第[一二三四五六七八九十百0-9]+周", question)
-    if week_match and not re.search(r"第[一二三四五六七八九十百0-9]+周", title):
-        title = week_match.group(0) + title
-    # 截断到 10 字符
-    return title[:10]
+async def _generate_session_title_with_source(question: str) -> tuple[str, str]:
+    """Generate a session title.
 
+    Returns ``(title, source)`` where source is ``llm`` or ``heuristic``.
+    The heuristic fallback is deliberately topic-like, not a raw question slice.
+    """
 
-async def _generate_session_title(question: str) -> str:
-    """用 LLM 将问题概括为标题，限制 10 字以内。"""
     prompt = f"""请把下面这个问题概括成一个会话标题，必须满足以下要求：
-1. 不超过 10 个字符（汉字、英文字母、数字均算 1 个字符）
+1. 不超过 {SESSION_TITLE_MAX_CHARS} 个字符（汉字、英文字母、数字均算 1 个字符）
 2. 必须保留核心语义
-3. 直接返回标题，不要任何解释或引号
+3. 生成短语式标题，不要直接截取原问题
+4. 直接返回标题，不要任何解释或引号
 
 问题：{question}
 
@@ -79,18 +67,22 @@ async def _generate_session_title(question: str) -> str:
     try:
         from ds_course_agent.shared.llm import get_chat_model
         llm = get_chat_model()
-        response = llm.invoke(prompt)
-        title = ""
-        if hasattr(response, "content"):
-            title = response.content.strip()
-        elif isinstance(response, str):
-            title = response.strip()
-        else:
-            title = str(response).strip()
-        return _finalize_title(question, title)
-    except Exception:
-        # 降级：直接取前10字
-        return question[:10]
+        response = await run_in_threadpool(llm.invoke, prompt)
+        raw_title = _extract_response_text(response)
+        cleaned_title = _clean_generated_title(raw_title)
+        title = _finalize_title(question, cleaned_title)
+        source = "heuristic" if not cleaned_title or looks_like_unprocessed_question_title(question, cleaned_title) else "llm"
+        return title, source
+    except Exception as exc:
+        logger.warning("会话标题 LLM 生成失败，已使用规则标题降级。", exc_info=True)
+        return build_fallback_session_title(question), "heuristic"
+
+
+async def _generate_session_title(question: str) -> str:
+    """用 LLM 将问题概括为标题；失败时返回规则标题。"""
+
+    title, _source = await _generate_session_title_with_source(question)
+    return title
 
 
 def _msg_to_dict(msg: ChatMessage) -> dict:
@@ -144,21 +136,71 @@ def _update_session_metadata(session_id: str, timestamp: str | None = None, *, s
         _save_state()
 
 
-def _schedule_title_generation(session_id: str, message: str) -> None:
-    """Generate the first-turn title in the background without blocking replies."""
-    if _title_gen_cache.get(session_id):
+def _first_user_message(session_id: str, fallback: str = "") -> str:
+    for item in _chat_history.get(session_id, []):
+        if item.get("role") == "user" and item.get("content"):
+            return str(item.get("content") or "")
+    return fallback
+
+
+def _should_schedule_title_generation(session_id: str, message: str, *, is_first_message: bool) -> bool:
+    if session_id in _title_generation_pending:
+        return False
+
+    session = _sessions.get(session_id)
+    if not session:
+        return False
+
+    title = str(session.get("title") or "").strip()
+    source = session.get("title_source")
+    attempts = int(session.get("title_generation_attempts") or 0)
+
+    if source == "manual":
+        return False
+    if source == "llm":
+        return False
+
+    # Always name a brand-new default session once. If the LLM is temporarily
+    # unavailable, retry on a couple of later sends while keeping the heuristic
+    # title visible in the meantime.
+    if not title or title == DEFAULT_SESSION_TITLE:
+        return True
+    if source in {"default", "heuristic", "fallback", "llm_failed", "legacy", "repaired"}:
+        return attempts < 3
+    if is_first_message and looks_like_unprocessed_question_title(message, title):
+        return True
+    return False
+
+
+def _schedule_title_generation(session_id: str, message: str, *, is_first_message: bool) -> None:
+    """Generate or retry the session title in the background without blocking replies."""
+    if not _should_schedule_title_generation(session_id, message, is_first_message=is_first_message):
         return
 
-    _title_gen_cache[session_id] = True
+    _title_generation_pending.add(session_id)
 
     async def _bg_generate_title():
         try:
-            generated_title = await _generate_session_title(message)
+            seed_message = _first_user_message(session_id, message)
+            generated_title, source = await _generate_session_title_with_source(seed_message)
             if session_id in _sessions:
                 _sessions[session_id]["title"] = generated_title
+                _sessions[session_id]["title_source"] = source
+                _sessions[session_id]["title_generation_attempts"] = (
+                    int(_sessions[session_id].get("title_generation_attempts") or 0) + 1
+                )
                 _save_state()
         except Exception:
             logger.debug("会话标题生成失败", exc_info=True)
+            if session_id in _sessions:
+                _sessions[session_id]["title"] = build_fallback_session_title(message)
+                _sessions[session_id]["title_source"] = "heuristic"
+                _sessions[session_id]["title_generation_attempts"] = (
+                    int(_sessions[session_id].get("title_generation_attempts") or 0) + 1
+                )
+                _save_state()
+        finally:
+            _title_generation_pending.discard(session_id)
 
     asyncio.create_task(_bg_generate_title())
 
@@ -183,9 +225,8 @@ async def send_message(data: ChatRequest):
     user_msg = ChatMessage(role="user", content=data.message)
     _append_message(data.session_id, user_msg, save=False)
 
-    # 首次消息：后台生成标题，不阻塞回答。
-    if is_first_message:
-        _schedule_title_generation(data.session_id, data.message)
+    # 首次消息自动命名；如果之前只拿到了规则标题，后续消息会有限重试 LLM。
+    _schedule_title_generation(data.session_id, data.message, is_first_message=is_first_message)
 
     try:
         assistant_result = await run_in_threadpool(
@@ -247,9 +288,8 @@ async def send_message_stream(
     user_msg = ChatMessage(role="user", content=message)
     _append_message(session_id, user_msg, save=False)
 
-    # 首次消息：异步后台生成标题，不阻塞流式响应
-    if is_first_message:
-        _schedule_title_generation(session_id, message)
+    # 首次消息自动命名；如果之前只拿到了规则标题，后续消息会有限重试 LLM。
+    _schedule_title_generation(session_id, message, is_first_message=is_first_message)
 
     async def generate() -> AsyncGenerator[str, None]:
         loop = asyncio.get_running_loop()

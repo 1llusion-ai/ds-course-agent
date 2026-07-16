@@ -37,6 +37,7 @@ async def create_session(data: SessionCreate):
 
     session_data = {
         "title": data.title,
+        "title_source": "default" if data.title == DEFAULT_SESSION_TITLE else "manual",
         "student_id": data.student_id,
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
@@ -88,8 +89,9 @@ async def update_session(session_id: str, data: SessionUpdate):
         raise HTTPException(status_code=404, detail="会话不存在")
 
     session = _sessions[session_id]
-    if data.title:
+    if data.title is not None:
         session["title"] = data.title
+        session["title_source"] = "manual"
     session["updated_at"] = datetime.now().isoformat()
     _save_state()
 
