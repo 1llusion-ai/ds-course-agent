@@ -213,7 +213,10 @@ class QueryPreprocessor:
         # 整条消息本身就是简短 Python 语句时，也应直接进入执行路由。
         looks_like_standalone_code = bool(
             has_code
-            and not any(cue in compact for cue in ["什么是", "是什么", "解释", "怎么写", "示例"])
+            and not any(cue in compact for cue in [
+                "什么是", "是什么", "解释", "解析", "说明", "做什么",
+                "什么意思", "怎么写", "示例",
+            ])
             and len(query.strip().splitlines()) <= 8
         )
 

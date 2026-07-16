@@ -1,0 +1,61 @@
+{
+  "name": "route_boundary_v1",
+  "version": "0.1",
+  "description": "High-signal route boundary cases that should be checked without executing LLM/RAG.",
+  "cases": [
+    {
+      "id": "schedule_today",
+      "query": "今天有课吗？",
+      "expected_route": "course_schedule",
+      "expected_retrieval_policy": "optional",
+      "disallowed_routes": ["grounded_rag"]
+    },
+    {
+      "id": "schedule_next_class",
+      "query": "下次课是什么时候？",
+      "expected_route": "course_schedule",
+      "expected_retrieval_policy": "optional",
+      "disallowed_routes": ["grounded_rag"]
+    },
+    {
+      "id": "datetime_now",
+      "query": "现在几点？",
+      "expected_route": "current_datetime",
+      "expected_retrieval_policy": "disabled",
+      "disallowed_routes": ["grounded_rag"]
+    },
+    {
+      "id": "code_review_bug",
+      "query": "这段代码哪里错了？\n```python\nfor i in range(3) print(i)\n```",
+      "expected_route": "code_review",
+      "expected_retrieval_policy": "disabled",
+      "disallowed_routes": ["grounded_rag"]
+    },
+    {
+      "id": "code_explain_payload",
+      "query": "帮我解析这段代码在做什么：\n```python\nfrom sklearn.model_selection import cross_val_score\nscores = cross_val_score(model, X, y, cv=5)\nprint(scores.mean())\n```",
+      "expected_route": "generic_agent",
+      "expected_retrieval_policy": "optional",
+      "disallowed_routes": ["grounded_rag"]
+    },
+    {
+      "id": "python_demo_course_concept",
+      "query": "请用 Python 演示一次交叉验证",
+      "expected_route": "generic_agent",
+      "expected_retrieval_policy": "optional",
+      "disallowed_routes": ["grounded_rag"]
+    },
+    {
+      "id": "concept_overfitting",
+      "query": "什么是过拟合？",
+      "expected_route": "grounded_rag",
+      "expected_retrieval_policy": "required"
+    },
+    {
+      "id": "concept_kmeans_steps",
+      "query": "K-means 的基本步骤是什么？",
+      "expected_route": "grounded_rag",
+      "expected_retrieval_policy": "required"
+    }
+  ]
+}

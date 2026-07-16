@@ -5,10 +5,12 @@
 """
 import pytest
 from ds_course_agent.rag.query_pipeline import (
+    DetectedConcept,
     get_preprocessor,
     get_router,
     RouteType,
 )
+from ds_course_agent.rag.route_handlers import default_route_handlers
 
 
 class TestQueryPreprocessor:
@@ -196,6 +198,85 @@ class TestQueryRouter:
         assert "code_request" in context.detected_intents
         assert "python_execution" not in context.detected_intents
         assert decision.route == RouteType.GENERIC_AGENT
+
+    def test_code_explanation_with_payload_uses_autonomous_agent_not_forced_rag(self):
+        """贴代码让助教解析时应由 agent 自主选择工具，不能直接 RAG。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input=(
+                "帮我解析这段代码在做什么：\n"
+                "```python\n"
+                "from sklearn.model_selection import cross_val_score\n"
+                "scores = cross_val_score(model, X, y, cv=5)\n"
+                "print(scores.mean())\n"
+                "```"
+            ),
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        context.detected_concepts = [
+            DetectedConcept(
+                concept_id="cross_validation",
+                method="exact",
+                confidence=0.95,
+                metadata={"display_name": "交叉验证"},
+            )
+        ]
+
+        decision = router.route(context)
+
+        assert "code_request" in context.detected_intents
+        assert decision.route == RouteType.GENERIC_AGENT
+        assert decision.retrieval_policy == "optional"
+        assert decision.metadata["autonomous_tool_choice"] is True
+
+    def test_python_course_demo_uses_autonomous_agent_not_forced_rag(self):
+        """“用 Python 演示课程概念”是模糊工具选择，不应直接强制 RAG。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input="请用 Python 演示一次交叉验证",
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        context.detected_concepts = [
+            DetectedConcept(
+                concept_id="cross_validation",
+                method="exact",
+                confidence=0.96,
+                metadata={"display_name": "交叉验证"},
+            )
+        ]
+
+        decision = router.route(context)
+
+        assert "code_request" in context.detected_intents
+        assert decision.route == RouteType.GENERIC_AGENT
+        assert decision.retrieval_policy == "optional"
+
+    def test_schedule_question_is_not_marked_as_rag_retrieval(self):
+        """课表工具不应污染 used_retrieval/RAG 语义。"""
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.tools._shared import begin_retrieval_trace, end_retrieval_trace
+
+        service = AgentService.__new__(AgentService)
+        service.route_handlers = default_route_handlers()
+        state = service._prepare_query_route("今天有课吗？", "test_schedule_route", "student")
+
+        token = begin_retrieval_trace()
+        try:
+            result = service._execute_route(state)
+        finally:
+            trace = end_retrieval_trace(token)
+
+        assert state["decision"].route == RouteType.COURSE_SCHEDULE
+        assert "课程安排" in result or "没有课程" in result
+        assert trace.used_retrieval is False
 
     def test_route_reasons(self):
         """测试路由原因"""

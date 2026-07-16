@@ -47,12 +47,10 @@ class CourseScheduleRouteHandler:
     def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_step
         from ds_course_agent.tools.course_schedule import course_schedule_tool
-        from ds_course_agent.tools._shared import _track_retrieval
 
         question = route_state["context"].original_query
         trace_step("agent.branch", branch="schedule")
         result = course_schedule_tool.invoke(agent._build_schedule_tool_query(question))
-        _track_retrieval(sources=[], used=True)
         return result
 
 
@@ -63,12 +61,10 @@ class CurrentDatetimeRouteHandler:
     def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_step
         from ds_course_agent.tools.datetime_tool import current_datetime_tool
-        from ds_course_agent.tools._shared import _track_retrieval
 
         question = route_state["context"].original_query
         trace_step("agent.branch", branch="datetime")
         result = current_datetime_tool.invoke(question)
-        _track_retrieval(sources=[], used=True)
         return result
 
 

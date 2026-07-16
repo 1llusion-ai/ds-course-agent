@@ -790,7 +790,7 @@ class AgentService(object):
             return None
 
         from ds_course_agent.rag.query_trace import trace_step, trace_error
-        from ds_course_agent.tools._shared import _track_retrieval, get_retrieval_trace
+        from ds_course_agent.tools._shared import get_retrieval_trace
         from ds_course_agent.tools.course_rag import course_rag_tool
         from ds_course_agent.tools.course_schedule import course_schedule_tool
         from ds_course_agent.tools.datetime_tool import current_datetime_tool
@@ -798,16 +798,11 @@ class AgentService(object):
         try:
             if is_schedule_request(question):
                 trace_step("agent.force_grounded", branch="schedule")
-                result = course_schedule_tool.invoke(self._build_schedule_tool_query(question))
-                # Mark as retrieval to prevent re-entry
-                _track_retrieval(sources=[], used=True)
-                return result
+                return course_schedule_tool.invoke(self._build_schedule_tool_query(question))
 
             if is_datetime_request(question):
                 trace_step("agent.force_grounded", branch="datetime")
-                result = current_datetime_tool.invoke(question)
-                _track_retrieval(sources=[], used=True)
-                return result
+                return current_datetime_tool.invoke(question)
 
             trace = get_retrieval_trace()
             if trace.used_retrieval:

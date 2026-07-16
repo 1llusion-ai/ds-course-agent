@@ -85,9 +85,19 @@ class QueryRouter:
                 retrieval_policy="optional",
             )
 
-        # 3. 教学策略类
+        # 3. 模糊/代码类请求：交给通用 agent 自主选择工具。
+        #
+        # 这是借鉴 nanobot 的关键边界：Router 只抢占高置信、低歧义路径；
+        # 带代码/示例/实现意图的请求即使命中课程概念，也不应被直接强制
+        # grounded RAG。让 tool-capable agent 根据上下文决定是否需要查教材、
+        # 审查代码、运行 Python，或直接解释。
+        autonomous_decision = self._route_autonomous_tool_choice(context)
+        if autonomous_decision is not None:
+            return autonomous_decision
 
-        # 3.1 学习路径 skill
+        # 4. 教学策略类
+
+        # 4.1 学习路径 skill
         if self._should_use_learning_path_skill(context):
             return RouteDecision(
                 route=RouteType.LEARNING_PATH_SKILL,
@@ -98,7 +108,7 @@ class QueryRouter:
                 fallback_route=RouteType.GROUNDED_RAG,
             )
 
-        # 3.2 错误理解 / misconception skill
+        # 4.2 错误理解 / misconception skill
         if self._should_use_misconception_skill(context):
             return RouteDecision(
                 route=RouteType.MISCONCEPTION_SKILL,
@@ -109,7 +119,7 @@ class QueryRouter:
                 fallback_route=RouteType.GROUNDED_RAG,
             )
 
-        # 3.3 个性化解释 skill
+        # 4.3 个性化解释 skill
         if self._should_use_explanation_skill(context):
             return RouteDecision(
                 route=RouteType.PERSONALIZED_EXPLANATION_SKILL,
@@ -120,12 +130,12 @@ class QueryRouter:
                 fallback_route=RouteType.GROUNDED_RAG,
             )
 
-        # 4. Query rewrite 指向明确课程追问时，优先进入 grounded RAG。
+        # 5. Query rewrite 指向明确课程追问时，优先进入 grounded RAG。
         rewrite_decision = self._route_rewritten_followup(context)
         if rewrite_decision is not None:
             return rewrite_decision
 
-        # 5. 课程知识问答类 - 默认使用 grounded RAG
+        # 6. 课程知识问答类 - 明确概念/原理/定义类问题使用 grounded RAG
         if self._is_likely_course_question(context):
             return RouteDecision(
                 route=RouteType.GROUNDED_RAG,
@@ -135,12 +145,53 @@ class QueryRouter:
                 fallback_route=RouteType.GENERIC_AGENT,
             )
 
-        # 6. 通用 agent fallback
+        # 7. 通用 agent fallback
         return RouteDecision(
             route=RouteType.GENERIC_AGENT,
             confidence=0.60,
             reasons=["未匹配到特定路由，使用通用 agent"],
             retrieval_policy="optional",
+        )
+
+    def _route_autonomous_tool_choice(self, context: QueryContext) -> Optional[RouteDecision]:
+        """Return generic-agent routing for ambiguous code/example requests.
+
+        The goal is not to enumerate every possible query by rules.  Instead we
+        carve out broad ambiguity classes where deterministic RAG is harmful:
+        code payloads, code generation, and Python demonstrations often require
+        the agent to decide among direct explanation, code review, Python
+        execution, and optional course retrieval.
+        """
+
+        intents = set(context.detected_intents or [])
+        query = self._normalize(context.normalized_query)
+
+        if "code_request" not in intents and not self._contains_code_payload(query):
+            return None
+
+        return RouteDecision(
+            route=RouteType.GENERIC_AGENT,
+            confidence=0.78,
+            reasons=["代码/示例/实现类请求，交给 agent 自主选择工具"],
+            retrieval_policy="optional",
+            metadata={
+                "autonomous_tool_choice": True,
+                "allowed_tool_hints": [
+                    "course_rag_tool",
+                    "python_exec_tool",
+                    "course_schedule_tool",
+                    "current_datetime_tool",
+                ],
+            },
+        )
+
+    def _contains_code_payload(self, query: str) -> bool:
+        """Best-effort broad code-payload detector used only to avoid forced RAG."""
+
+        return bool(
+            "```" in query
+            or re.search(r"\b(print|import|from|def|class|for|while|if)\b", query, flags=re.IGNORECASE)
+            or re.search(r"\b[a-zA-Z_]\w*\s*=\s*[^=]", query)
         )
 
     def _route_rewritten_followup(self, context: QueryContext) -> Optional[RouteDecision]:
