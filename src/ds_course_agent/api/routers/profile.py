@@ -21,7 +21,7 @@ from ..schemas.profile import (
     ConceptDetail,
     RelatedConcept,
 )
-from ds_course_agent.rag.tools import build_sources_from_documents, get_rag_service
+from ds_course_agent.tools.course_rag import build_sources_from_documents, get_rag_service
 from ds_course_agent.kb.toc_parser import get_toc_parser
 
 router = APIRouter()

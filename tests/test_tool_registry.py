@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from ds_course_agent.tools.registry import ToolRegistry, ToolSpec, build_default_tool_registry
-from ds_course_agent.rag.tools import get_rag_tool_metadata, get_rag_tool_spec, get_rag_tools
+from ds_course_agent.tools.registry import get_rag_tool_metadata, get_rag_tool_spec, get_rag_tools
 
 
 EXPECTED_REGISTRY_NAMES = [

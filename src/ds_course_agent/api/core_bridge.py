@@ -56,7 +56,7 @@ def get_agent_service():
 
 
 def chat_with_history(message: str, session_id: str, student_id: str) -> dict:
-    from ds_course_agent.rag.tools import begin_retrieval_trace, end_retrieval_trace
+    from ds_course_agent.tools.course_rag import begin_retrieval_trace, end_retrieval_trace
     from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
 
     q_token = begin_query_trace(meta={"session_id": session_id, "student_id": student_id})
@@ -90,7 +90,7 @@ def chat_with_history(message: str, session_id: str, student_id: str) -> dict:
 
 
 def stream_chat_with_history(message: str, session_id: str, student_id: str):
-    from ds_course_agent.rag.tools import begin_retrieval_trace, end_retrieval_trace
+    from ds_course_agent.tools.course_rag import begin_retrieval_trace, end_retrieval_trace
     from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
 
     q_token = begin_query_trace(meta={"session_id": session_id, "student_id": student_id})

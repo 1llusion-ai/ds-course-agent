@@ -323,8 +323,36 @@ python -m pytest tests/test_tool_result_store.py tests/test_context_governor.py 
 17 passed, 1 warning
 ```
 
+## 9. Tools clean split
+
+目的：按 clean-cut 原则完成 nanobot-style one-tool-per-file 目录结构，
+把原本 800+ 行的 `rag/tools.py` 拆到 `src/ds_course_agent/tools/`，避免 tool 层继续成为杂烩文件。
+
+改动：
+
+- 新增 split tool modules：
+  - `tools/course_rag.py`
+  - `tools/knowledge_base_status.py`
+  - `tools/course_schedule.py`
+  - `tools/datetime_tool.py`
+  - `tools/python_exec.py`
+  - `tools/misconception.py`
+  - `tools/_shared.py`：承载 retrieval trace、RAGService lazy singleton 与 large-result telemetry。
+- `tools/registry.py` 直接从 split modules 构建 registry，保持 tool 名称、顺序和 metadata 不变。
+- repo 内所有调用方、benchmarks 与测试改为新 import 路径。
+- 删除 `src/ds_course_agent/rag/tools.py`，不保留长期 re-export 兼容层。
+
+验证：
+
+```text
+py_compile passed
+python -m pytest tests/test_tool_registry.py tests/test_rag_tool.py tests/test_agent_smoke.py tests/test_code_executor.py tests/test_course_schedule_tool.py tests/test_current_datetime_tool.py tests/test_misconception_handling.py tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py -q
+125 passed, 5 skipped, 1 warning
+python -m pytest -q
+298 passed, 6 skipped, 2 warnings
+```
+
 ## 下一步
 
-1. 基于 registry 逐步把 `rag/tools.py` 拆成一个 tool 一个文件。
-2. 做 Pydantic config clean-cut，将 `shared/config.py` 迁移为 `shared/config/` 包并统一导入。
-3. Skill prompt injection：将认知型教学 skill 注入系统提示词。
+1. 做 Pydantic config clean-cut，将 `shared/config.py` 迁移为 `shared/config/` 包并统一导入。
+2. Skill prompt injection：将认知型教学 skill 注入系统提示词。

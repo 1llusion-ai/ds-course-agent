@@ -6,7 +6,8 @@ from ds_course_agent.rag.code_executor import (
     extract_question,
     format_python_execution_answer,
 )
-from ds_course_agent.rag.tools import get_rag_tools, python_exec_tool
+from ds_course_agent.tools.registry import get_rag_tools
+from ds_course_agent.tools.python_exec import python_exec_tool
 
 
 def test_python_sandbox_executes_code_successfully():

@@ -296,7 +296,7 @@ class RAGService(object):
         formatted_docs = ""
         for doc in docs:
             # 构建包含绝对页码的元数据（删除相对页码避免混淆）
-            from ds_course_agent.rag.tools import _get_absolute_page
+            from ds_course_agent.tools.course_rag import _get_absolute_page
             metadata = dict(doc.metadata)
             # 优先使用已存储的 book_page，否则动态计算
             abs_page = metadata.get('book_page') or metadata.get('book_page_start') or _get_absolute_page(doc)

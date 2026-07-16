@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from ds_course_agent.rag.knowledge_mapper import MatchedConcept
 from ds_course_agent.rag.skill_system import SkillRegistry
-from ds_course_agent.rag.tools import record_misconception_event
+from ds_course_agent.tools.misconception import record_misconception_event
 
 
 @patch("ds_course_agent.rag.memory_core.record_event")

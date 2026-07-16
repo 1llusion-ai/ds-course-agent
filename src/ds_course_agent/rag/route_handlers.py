@@ -40,7 +40,8 @@ class CourseScheduleRouteHandler:
 
     def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_step
-        from ds_course_agent.rag.tools import course_schedule_tool, _track_retrieval
+        from ds_course_agent.tools.course_schedule import course_schedule_tool
+        from ds_course_agent.tools._shared import _track_retrieval
 
         question = route_state["context"].original_query
         trace_step("agent.branch", branch="schedule")
@@ -55,7 +56,8 @@ class CurrentDatetimeRouteHandler:
 
     def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_step
-        from ds_course_agent.rag.tools import current_datetime_tool, _track_retrieval
+        from ds_course_agent.tools.datetime_tool import current_datetime_tool
+        from ds_course_agent.tools._shared import _track_retrieval
 
         question = route_state["context"].original_query
         trace_step("agent.branch", branch="datetime")
@@ -70,7 +72,7 @@ class GroundedRagRouteHandler:
 
     def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_step, trace_span
-        from ds_course_agent.rag.tools import course_rag_tool
+        from ds_course_agent.tools.course_rag import course_rag_tool
 
         context = route_state["context"]
         decision = route_state["decision"]

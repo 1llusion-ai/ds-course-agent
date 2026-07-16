@@ -633,20 +633,20 @@ class TestAgentStreamPostprocessRegressions:
         assert history.added[-1].content == deltas
 
     def test_stream_generic_whitespace_only_uses_same_fallback_as_sync(self, monkeypatch):
-        from ds_course_agent.rag.tools import RetrievalTrace
+        from ds_course_agent.tools.course_rag import RetrievalTrace
 
         service, _history = self._make_service(
             monkeypatch,
             chat_stream_chunks=["\n\n"],
             chat_sync_result="\n\n",
         )
-        monkeypatch.setattr("ds_course_agent.rag.tools.get_retrieval_trace", lambda: RetrievalTrace(used_retrieval=True))
+        monkeypatch.setattr("ds_course_agent.tools.course_rag.get_retrieval_trace", lambda: RetrievalTrace(used_retrieval=True))
 
         class FakeRagTool:
             def invoke(self, query):
                 return "无相关资料"
 
-        monkeypatch.setattr("ds_course_agent.rag.tools.course_rag_tool", FakeRagTool())
+        monkeypatch.setattr("ds_course_agent.tools.course_rag.course_rag_tool", FakeRagTool())
 
         sync_result = service.chat_with_history("你叫什么名字？", "session-sync", student_id="student-1")
         stream_events = list(service.stream_chat_with_history("你叫什么名字？", "session-stream", student_id="student-1"))
@@ -801,7 +801,7 @@ class TestAgentStreamPostprocessRegressions:
         def fake_chat(*_args, **_kwargs):
             raise AssertionError("grounded_rag route should bypass generic agent chat")
 
-        monkeypatch.setattr("ds_course_agent.rag.tools.course_rag_tool", FakeRagTool())
+        monkeypatch.setattr("ds_course_agent.tools.course_rag.course_rag_tool", FakeRagTool())
         monkeypatch.setattr(service, "chat", fake_chat)
 
         state = service._prepare_query_route("过拟合怎么解决？", "session-1", "student-1")

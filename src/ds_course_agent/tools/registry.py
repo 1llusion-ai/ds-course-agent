@@ -1,16 +1,9 @@
-"""Tool registry and metadata for the teaching agent.
-
-This module is intentionally lightweight: existing LangChain tool callables stay in
-``ds_course_agent.rag.tools`` for now, while this registry records operational
-metadata that the agent/UI can use for progress events, safe parallelism, and
-future tool-result offloading.
-"""
+"""Tool registry and metadata for the teaching agent."""
 
 from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from importlib import import_module
 from typing import Any, Iterable, Iterator
 
 
@@ -125,19 +118,20 @@ class ToolRegistry:
 
 
 def build_default_tool_registry() -> ToolRegistry:
-    """Build the default registry from the existing tool implementations.
+    """Build the default registry from split one-tool modules."""
 
-    Imports are deliberately lazy to avoid changing the current ``rag.tools``
-    import graph while the directory split is still incremental.
-    """
-
-    rag_tools = import_module("ds_course_agent.rag.tools")
+    from ds_course_agent.tools.course_rag import course_rag_tool
+    from ds_course_agent.tools.course_schedule import course_schedule_tool
+    from ds_course_agent.tools.datetime_tool import current_datetime_tool
+    from ds_course_agent.tools.knowledge_base_status import check_knowledge_base_status
+    from ds_course_agent.tools.misconception import record_misconception_event
+    from ds_course_agent.tools.python_exec import python_exec_tool
 
     return ToolRegistry(
         [
             ToolSpec(
                 name="course_rag_tool",
-                tool=rag_tools.course_rag_tool,
+                tool=course_rag_tool,
                 read_only=True,
                 side_effect=False,
                 concurrency_safe=True,
@@ -148,7 +142,7 @@ def build_default_tool_registry() -> ToolRegistry:
             ),
             ToolSpec(
                 name="check_knowledge_base_status",
-                tool=rag_tools.check_knowledge_base_status,
+                tool=check_knowledge_base_status,
                 read_only=True,
                 side_effect=False,
                 concurrency_safe=True,
@@ -158,7 +152,7 @@ def build_default_tool_registry() -> ToolRegistry:
             ),
             ToolSpec(
                 name="course_schedule_tool",
-                tool=rag_tools.course_schedule_tool,
+                tool=course_schedule_tool,
                 read_only=True,
                 side_effect=False,
                 concurrency_safe=True,
@@ -168,7 +162,7 @@ def build_default_tool_registry() -> ToolRegistry:
             ),
             ToolSpec(
                 name="current_datetime_tool",
-                tool=rag_tools.current_datetime_tool,
+                tool=current_datetime_tool,
                 read_only=True,
                 side_effect=False,
                 concurrency_safe=True,
@@ -178,7 +172,7 @@ def build_default_tool_registry() -> ToolRegistry:
             ),
             ToolSpec(
                 name="python_exec_tool",
-                tool=rag_tools.python_exec_tool,
+                tool=python_exec_tool,
                 read_only=False,
                 side_effect=True,
                 concurrency_safe=False,
@@ -189,7 +183,7 @@ def build_default_tool_registry() -> ToolRegistry:
             ),
             ToolSpec(
                 name="record_misconception_event",
-                tool=rag_tools.record_misconception_event,
+                tool=record_misconception_event,
                 read_only=False,
                 side_effect=True,
                 concurrency_safe=False,
@@ -202,4 +196,36 @@ def build_default_tool_registry() -> ToolRegistry:
     )
 
 
-__all__ = ["ToolRegistry", "ToolSpec", "build_default_tool_registry"]
+def get_rag_tool_registry() -> ToolRegistry:
+    """Return the operational registry for all known course-agent tools."""
+
+    return build_default_tool_registry()
+
+
+def get_rag_tool_spec(name: str) -> ToolSpec:
+    """Return metadata for a named tool."""
+
+    return get_rag_tool_registry().get(name)
+
+
+def get_rag_tool_metadata(*, exposed_only: bool = False) -> list[dict[str, Any]]:
+    """Return JSON-serializable tool metadata for traces/UI/tests."""
+
+    return get_rag_tool_registry().metadata(exposed_only=exposed_only)
+
+
+def get_rag_tools() -> list[Any]:
+    """Return the LangChain tools exposed to the generic agent."""
+
+    return get_rag_tool_registry().as_langchain_tools(exposed_only=True)
+
+
+__all__ = [
+    "ToolRegistry",
+    "ToolSpec",
+    "build_default_tool_registry",
+    "get_rag_tool_registry",
+    "get_rag_tool_spec",
+    "get_rag_tool_metadata",
+    "get_rag_tools",
+]

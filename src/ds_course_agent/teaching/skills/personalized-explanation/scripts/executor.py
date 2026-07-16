@@ -15,7 +15,7 @@ if str(project_root) not in sys.path:
 from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
 from ds_course_agent.rag.memory_core import get_memory_core
 from ds_course_agent.rag.profile_models import StudentProfile
-from ds_course_agent.rag.tools import course_rag_tool
+from ds_course_agent.tools.course_rag import course_rag_tool
 
 
 def _load_local_module(filename: str, module_suffix: str):

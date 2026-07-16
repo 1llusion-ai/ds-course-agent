@@ -33,7 +33,7 @@ from ds_course_agent.rag.query_pipeline.utils import (
     normalize_query_text,
 )
 from ds_course_agent.rag.skill_system import get_skill_loader
-from ds_course_agent.rag.tools import get_rag_tool_registry
+from ds_course_agent.tools.registry import get_rag_tool_registry
 from ds_course_agent.rag.memory_core import get_memory_core, record_event
 from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
 from ds_course_agent.hooks.base import HookManager
@@ -203,7 +203,7 @@ class AgentService(object):
     def _invoke_basic_rag_fallback(self, user_input: str) -> Optional[str]:
         """Degrade a failed LLM request to the basic course RAG tool."""
         try:
-            from ds_course_agent.rag.tools import course_rag_tool
+            from ds_course_agent.tools.course_rag import course_rag_tool
 
             fallback = course_rag_tool.invoke(user_input)
             if fallback and fallback.strip():
@@ -698,13 +698,10 @@ class AgentService(object):
             return None
 
         from ds_course_agent.rag.query_trace import trace_step, trace_error
-        from ds_course_agent.rag.tools import (
-            course_rag_tool,
-            course_schedule_tool,
-            current_datetime_tool,
-            get_retrieval_trace,
-            _track_retrieval,
-        )
+        from ds_course_agent.tools._shared import _track_retrieval, get_retrieval_trace
+        from ds_course_agent.tools.course_rag import course_rag_tool
+        from ds_course_agent.tools.course_schedule import course_schedule_tool
+        from ds_course_agent.tools.datetime_tool import current_datetime_tool
 
         try:
             if is_schedule_request(question):
@@ -781,7 +778,7 @@ class AgentService(object):
             return f"route={route.value}"
 
         try:
-            from ds_course_agent.rag.tools import get_retrieval_trace
+            from ds_course_agent.tools.course_rag import get_retrieval_trace
 
             if get_retrieval_trace().used_retrieval:
                 return "already_retrieved"
@@ -1005,7 +1002,7 @@ class AgentService(object):
 
         if not result or not isinstance(result, str) or not result.strip():
             try:
-                from ds_course_agent.rag.tools import course_rag_tool
+                from ds_course_agent.tools.course_rag import course_rag_tool
 
                 fallback_query = build_grounded_query_from_history(user_input, chat_history)
                 fallback = course_rag_tool.invoke(fallback_query)
@@ -1033,7 +1030,8 @@ class AgentService(object):
     def _iter_grounded_rag_response(self, route_state: dict) -> Iterator[str]:
         """Stream the common grounded-RAG route directly from the RAG model call."""
         from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
-        from ds_course_agent.rag.tools import build_sources_from_documents, get_rag_service, _track_retrieval
+        from ds_course_agent.tools.course_rag import build_sources_from_documents, get_rag_service
+        from ds_course_agent.tools._shared import _track_retrieval
 
         question = self._route_execution_query(route_state["context"], route_state["decision"])
 

@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional
 
 from benchmarks.samples import get_eval_samples, EvalSample
-from ds_course_agent.rag.tools import course_rag_tool
+from ds_course_agent.tools.course_rag import course_rag_tool
 
 def safe_print(text: str):
     """安全打印，处理 Windows 编码问题"""

@@ -1,6 +1,6 @@
 import re
 
-from ds_course_agent.rag.tools import current_datetime_tool
+from ds_course_agent.tools.datetime_tool import current_datetime_tool
 
 
 def test_current_datetime_tool_contains_date_time_and_weekday():

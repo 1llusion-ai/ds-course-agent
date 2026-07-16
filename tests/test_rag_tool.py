@@ -7,13 +7,13 @@ from unittest.mock import patch, MagicMock
 from langchain_core.documents import Document
 
 from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
-from ds_course_agent.rag.tools import (
+from ds_course_agent.tools.course_rag import (
     begin_retrieval_trace,
-    check_knowledge_base_status,
     course_rag_tool,
     end_retrieval_trace,
-    get_rag_tools,
 )
+from ds_course_agent.tools.knowledge_base_status import check_knowledge_base_status
+from ds_course_agent.tools.registry import get_rag_tools
 
 
 class TestCourseRAGTool:
@@ -35,7 +35,7 @@ class TestCourseRAGTool:
         assert len(tools) >= 1
         assert course_rag_tool in tools
 
-    @patch("ds_course_agent.rag.tools.get_rag_service")
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_tool_returns_error_message_on_exception(self, mock_get_service):
         """测试异常情况下返回错误消息"""
         mock_service = MagicMock()
@@ -46,7 +46,7 @@ class TestCourseRAGTool:
 
         assert "错误" in result or "异常" in result or "error" in result.lower()
 
-    @patch("ds_course_agent.rag.tools.get_rag_service")
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_tool_returns_no_results_message(self, mock_get_service):
         """测试无检索结果时返回提示消息"""
         mock_service = MagicMock()
@@ -60,7 +60,7 @@ class TestCourseRAGTool:
 
         assert "未找到" in result or "无" in result or "建议" in result
 
-    @patch("ds_course_agent.rag.tools.get_rag_service")
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_tool_tracks_retrieval_sources(self, mock_get_service):
         """测试检索轨迹会保留实际来源"""
         mock_service = MagicMock()
@@ -97,7 +97,7 @@ class TestCourseRAGTool:
 
     def test_source_uses_outline_number_when_chapter_metadata_drifts(self):
         """metadata 章字段错位时，来源展示应按 section_no 纠偏。"""
-        from ds_course_agent.rag.tools import build_sources_from_documents
+        from ds_course_agent.tools.course_rag import build_sources_from_documents
 
         doc = MagicMock()
         doc.metadata = {
@@ -117,7 +117,7 @@ class TestCourseRAGTool:
 
     def test_source_uses_toc_title_when_chapter_number_matches(self):
         """章号已正确但章名陈旧时，来源展示仍应按目录标题纠偏。"""
-        from ds_course_agent.rag.tools import build_sources_from_documents
+        from ds_course_agent.tools.course_rag import build_sources_from_documents
 
         doc = MagicMock()
         doc.metadata = {
@@ -131,7 +131,7 @@ class TestCourseRAGTool:
             {"reference": "《第2章 数据科学基本知识》第20页"}
         ]
 
-    @patch("ds_course_agent.rag.tools.get_rag_service")
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_tool_tracks_empty_sources_when_no_results(self, mock_get_service):
         """测试无结果时仍会记录已尝试检索"""
         mock_service = MagicMock()
@@ -150,7 +150,7 @@ class TestCourseRAGTool:
         assert trace.used_retrieval is True
         assert trace.sources == []
 
-    @patch("ds_course_agent.rag.tools.get_rag_service")
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_tool_warns_on_large_course_rag_result_without_changing_return(self, mock_get_service, monkeypatch):
         """Large tool results are observed but not normalized/offloaded in v1."""
         import ds_course_agent.shared.context_governor as context_governor
@@ -190,7 +190,7 @@ class TestCourseRAGTool:
 class TestCheckKnowledgeBaseStatus:
     """知识库状态检查工具测试"""
 
-    @patch("ds_course_agent.rag.tools.get_rag_service")
+    @patch("ds_course_agent.tools.knowledge_base_status.get_rag_service")
     def test_status_tool_returns_success(self, mock_get_service):
         """测试状态检查返回成功"""
         mock_service = MagicMock()
@@ -203,7 +203,7 @@ class TestCheckKnowledgeBaseStatus:
 
         assert "正常" in result or "✅" in result
 
-    @patch("ds_course_agent.rag.tools.get_rag_service")
+    @patch("ds_course_agent.tools.knowledge_base_status.get_rag_service")
     def test_status_tool_returns_error_on_exception(self, mock_get_service):
         """测试状态检查异常时返回错误"""
         mock_get_service.side_effect = Exception("连接失败")

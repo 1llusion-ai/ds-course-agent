@@ -566,7 +566,7 @@ class TestChatWithHistory:
     @patch("ds_course_agent.shared.history.get_history")
     @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
     @patch("ds_course_agent.rag.agent.get_memory_core")
-    @patch("ds_course_agent.rag.tools.get_rag_service")
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_chat_with_history_forces_rag_when_agent_skips_retrieval(
         self,
         mock_get_rag_service,
@@ -613,8 +613,8 @@ class TestChatWithHistory:
     @patch("ds_course_agent.shared.history.get_history")
     @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
     @patch("ds_course_agent.rag.agent.get_memory_core")
-    @patch("ds_course_agent.rag.tools._load_course_schedule")
-    @patch("ds_course_agent.rag.tools._resolve_schedule_query_v2")
+    @patch("ds_course_agent.tools.course_schedule._load_course_schedule")
+    @patch("ds_course_agent.tools.course_schedule._resolve_schedule_query_v2")
     def test_chat_with_history_uses_schedule_tool_for_schedule_queries(
         self,
         mock_resolve_schedule,
