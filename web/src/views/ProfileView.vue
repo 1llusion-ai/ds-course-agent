@@ -1,94 +1,176 @@
 <template>
-  <div class="profile-page">
-    <section class="profile-hero">
-      <div>
-        <p class="profile-hero__eyebrow">Profile Intelligence</p>
-        <h1 class="profile-hero__title">学习画像</h1>
+  <main class="profile-page">
+    <header class="profile-header">
+      <div class="profile-header__copy">
+        <p class="profile-eyebrow">学习画像</p>
+        <h1>学习档案与诊断建议</h1>
+        <p class="profile-header__subtitle">
+          基于你的近期提问、课程进度和薄弱点信号，整理一份可行动的学习画像。
+        </p>
       </div>
-      <div class="profile-hero__actions">
+
+      <div class="profile-header__actions">
         <el-button text @click="goBack">
           <el-icon class="mr-1"><ArrowLeft /></el-icon>
           返回对话
         </el-button>
-        <el-button type="primary" plain @click="refreshProfile">刷新画像</el-button>
+        <el-button plain :loading="profileStore.loading" @click="refreshProfile">刷新画像</el-button>
       </div>
-    </section>
+    </header>
 
     <el-skeleton v-if="profileStore.loading && !detail" :rows="8" animated />
 
     <template v-else-if="detail">
-      <section class="profile-metrics">
-        <article class="metric-card metric-card--indigo">
-          <span class="metric-card__label">当前章节</span>
-          <strong class="metric-card__value">{{ detail.progress.current_chapter || '尚未稳定识别' }}</strong>
+      <section class="profile-summary panel">
+        <div class="profile-summary__main">
+          <p class="section-kicker">Profile Summary</p>
+          <h2>{{ profileHeadline }}</h2>
+          <p>{{ profileNarrative }}</p>
 
-        </article>
+          <div class="summary-facts">
+            <div class="summary-fact">
+              <span>当前关注</span>
+              <strong>{{ focusConceptText }}</strong>
+            </div>
+            <div class="summary-fact">
+              <span>学习状态</span>
+              <strong>{{ learningStateText }}</strong>
+            </div>
+            <div class="summary-fact">
+              <span>主要风险</span>
+              <strong>{{ riskText }}</strong>
+            </div>
+          </div>
+        </div>
 
-        <article class="metric-card">
-          <span class="metric-card__label">最近关注知识点</span>
-          <strong class="metric-card__value">{{ detail.recent_concepts.length }}</strong>
-        </article>
-
-        <article class="metric-card metric-card--sky">
-          <span class="metric-card__label">待观察薄弱点</span>
-          <strong class="metric-card__value">{{ detail.pending_weak_spots.length }}</strong>
-        </article>
-
-        <article class="metric-card metric-card--amber">
-          <span class="metric-card__label">活跃薄弱点</span>
-          <strong class="metric-card__value">{{ detail.weak_spots.length }}</strong>
-        </article>
-
-        <article class="metric-card metric-card--emerald">
-          <span class="metric-card__label">已克服薄弱点</span>
-          <strong class="metric-card__value">{{ detail.stats.total_resolved_weak_spots }}</strong>
-        </article>
+        <div class="profile-summary__stats" aria-label="画像统计">
+          <div class="summary-stat">
+            <span>近期知识点</span>
+            <strong>{{ recentConcepts.length }}</strong>
+          </div>
+          <div class="summary-stat">
+            <span>活跃薄弱点</span>
+            <strong>{{ activeWeakSpots.length }}</strong>
+          </div>
+          <div class="summary-stat">
+            <span>待观察</span>
+            <strong>{{ pendingWeakSpots.length }}</strong>
+          </div>
+          <div class="summary-stat">
+            <span>已克服</span>
+            <strong>{{ detail.stats.total_resolved_weak_spots }}</strong>
+          </div>
+        </div>
       </section>
 
-      <section class="profile-grid">
-        <!-- 左列：最近章节 + 学习轨迹 -->
-        <div class="profile-col profile-col--left">
+      <section class="profile-layout">
+        <div class="profile-main-column">
           <article class="panel">
             <div class="panel__header">
               <div>
-                <p class="panel__eyebrow">Recent Concepts</p>
-                <h2 class="panel__title">最近知识点</h2>
+                <p class="section-kicker">Recent Focus</p>
+                <h2>近期关注</h2>
               </div>
+              <span class="panel__hint">最近在对话里反复出现的概念</span>
             </div>
 
-            <div v-if="detail.recent_concepts.length" class="concept-list">
+            <div v-if="recentConcepts.length" class="concept-list">
               <div
-                v-for="concept in detail.recent_concepts"
+                v-for="concept in recentConcepts.slice(0, 6)"
                 :key="concept.concept_id"
-                class="concept-item"
+                class="concept-row"
               >
-                <div class="concept-item__main">
-                  <div class="concept-item__name-row">
-                    <span class="concept-item__name">{{ concept.display_name }}</span>
-                    <el-tag size="small" effect="light" type="primary" round>x{{ concept.mention_count }}</el-tag>
-                  </div>
-                  <div class="concept-item__meta">
+                <div class="concept-row__body">
+                  <strong>{{ concept.display_name }}</strong>
+                  <div class="row-meta">
                     <span>{{ concept.chapter || '未分类章节' }}</span>
                     <span v-if="concept.last_question_type">{{ concept.last_question_type }}</span>
                   </div>
                 </div>
-                <div class="concept-item__time">{{ formatTime(concept.last_mentioned_at) }}</div>
+                <span class="count-chip">x{{ concept.mention_count }}</span>
               </div>
             </div>
-            <el-empty v-else description="还没有形成稳定的近期关注点" />
+            <div v-else class="empty-note">还没有形成稳定的近期关注点。</div>
           </article>
 
           <article class="panel">
             <div class="panel__header">
               <div>
-                <p class="panel__eyebrow">Study Trace</p>
-                <h2 class="panel__title">学习轨迹</h2>
+                <p class="section-kicker">Diagnosis</p>
+                <h2>薄弱点诊断</h2>
+              </div>
+              <span class="panel__hint">可手动将已经掌握的知识点移出活跃列表</span>
+            </div>
+
+            <div v-if="activeWeakSpots.length" class="weakspot-list">
+              <div
+                v-for="spot in activeWeakSpots"
+                :key="spot.concept_id"
+                class="weakspot-row weakspot-row--active"
+              >
+                <div class="weakspot-row__body">
+                  <div class="weakspot-row__title">
+                    <strong>{{ spot.display_name }}</strong>
+                    <span class="confidence-chip">{{ Math.round(spot.confidence * 100) }}%</span>
+                  </div>
+                  <div class="row-meta">
+                    <span>讲解次数 {{ spot.clarification_count }}</span>
+                    <span>{{ formatTime(spot.last_triggered_at) }}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="text-action"
+                  :disabled="resolvingConceptId === spot.concept_id"
+                  @click="handleResolveWeakSpot(spot)"
+                >
+                  {{ resolvingConceptId === spot.concept_id ? '处理中…' : '已掌握' }}
+                </button>
+              </div>
+            </div>
+            <div v-else class="empty-note">暂无活跃薄弱点。</div>
+
+            <div v-if="pendingWeakSpots.length" class="subsection">
+              <h3>待观察信号</h3>
+              <div class="compact-list">
+                <div
+                  v-for="spot in pendingWeakSpots.slice(0, 4)"
+                  :key="spot.concept_id"
+                  class="compact-row"
+                >
+                  <span>{{ spot.display_name }}</span>
+                  <small>出现讲解 {{ spot.clarification_count }} 次</small>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <aside class="profile-side-column">
+          <article class="panel panel--advice">
+            <div class="panel__header">
+              <div>
+                <p class="section-kicker">Next Step</p>
+                <h2>下一步建议</h2>
               </div>
             </div>
 
-            <div class="chapter-bars">
+            <ol class="advice-list">
+              <li v-for="item in nextStepSuggestions" :key="item">{{ item }}</li>
+            </ol>
+          </article>
+
+          <article class="panel">
+            <div class="panel__header">
+              <div>
+                <p class="section-kicker">Trace</p>
+                <h2>学习轨迹</h2>
+              </div>
+            </div>
+
+            <div v-if="chapterStats.length" class="chapter-bars">
               <div
-                v-for="item in chapterStats"
+                v-for="item in chapterStats.slice(0, 6)"
                 :key="item.chapter"
                 class="chapter-bar"
               >
@@ -101,126 +183,44 @@
                 </div>
               </div>
             </div>
-          </article>
+            <div v-else class="empty-note">暂无章节轨迹。</div>
 
-          <article class="panel">
-            <div class="panel__header">
-              <div>
-                <p class="panel__eyebrow">Daily Activity</p>
-                <h2 class="panel__title">每日提问数</h2>
-              </div>
-            </div>
-
-            <div class="activity-strip">
+            <div v-if="activityItems.length" class="activity-strip">
               <div
-                v-for="item in activityItems"
+                v-for="item in activityItems.slice(-7)"
                 :key="item.day"
                 class="activity-strip__item"
               >
-                <span class="activity-strip__day">{{ item.day }}</span>
-                <strong class="activity-strip__count">{{ item.count }}</strong>
+                <span>{{ item.day }}</span>
+                <strong>{{ item.count }}</strong>
               </div>
             </div>
-          </article>
-        </div>
-
-        <!-- 右列：当前薄弱点 + 待观察 + 已克服 -->
-        <div class="profile-col profile-col--right">
-          <article class="panel">
-            <div class="panel__header">
-              <div>
-                <p class="panel__eyebrow">Active Weak Spots</p>
-                <h2 class="panel__title">当前薄弱点</h2>
-              </div>
-            </div>
-
-            <div v-if="detail.weak_spots.length" class="weakspot-list">
-              <div
-                v-for="spot in detail.weak_spots"
-                :key="spot.concept_id"
-                class="weakspot-item weakspot-item--active"
-              >
-                <div class="weakspot-item__title">
-                  <div class="weakspot-item__title-main">
-                    <span>{{ spot.display_name }}</span>
-                    <strong>{{ Math.round(spot.confidence * 100) }}%</strong>
-                  </div>
-                  <el-button
-                    size="small"
-                    text
-                    type="primary"
-                    :loading="resolvingConceptId === spot.concept_id"
-                    @click="handleResolveWeakSpot(spot)"
-                  >
-                    已掌握
-                  </el-button>
-                </div>
-                <div class="weakspot-item__meta">
-                  <span>讲解次数 {{ spot.clarification_count }}</span>
-                  <span>{{ formatTime(spot.last_triggered_at) }}</span>
-                </div>
-              </div>
-            </div>
-            <el-empty v-else description="暂无活跃薄弱点" />
           </article>
 
           <article class="panel">
             <div class="panel__header">
               <div>
-                <p class="panel__eyebrow">Observed Signals</p>
-                <h2 class="panel__title">待观察薄弱点</h2>
+                <p class="section-kicker">Resolved</p>
+                <h2>已克服记录</h2>
               </div>
             </div>
 
-            <div v-if="detail.pending_weak_spots.length" class="weakspot-list">
+            <div v-if="resolvedWeakSpots.length" class="compact-list">
               <div
-                v-for="spot in detail.pending_weak_spots"
-                :key="spot.concept_id"
-                class="weakspot-item weakspot-item--pending"
-              >
-                <div class="weakspot-item__title">
-                  <span>{{ spot.display_name }}</span>
-                  <el-tag size="small" type="info" effect="light" round>观察中</el-tag>
-                </div>
-                <div class="weakspot-item__meta">
-                  <span>已出现讲解 {{ spot.clarification_count }} 次</span>
-                  <span>{{ formatTime(spot.last_triggered_at) }}</span>
-                </div>
-              </div>
-            </div>
-            <el-empty v-else description="暂无待观察薄弱点" />
-          </article>
-
-          <article class="panel">
-            <div class="panel__header">
-              <div>
-                <p class="panel__eyebrow">Resolved History</p>
-                <h2 class="panel__title">已克服薄弱点</h2>
-              </div>
-            </div>
-
-            <div v-if="detail.resolved_weak_spots.length" class="weakspot-list">
-              <div
-                v-for="spot in detail.resolved_weak_spots"
+                v-for="spot in resolvedWeakSpots.slice(0, 5)"
                 :key="`${spot.concept_id}-${spot.resolved_at || spot.last_triggered_at}`"
-                class="weakspot-item weakspot-item--resolved"
+                class="compact-row"
               >
-                <div class="weakspot-item__title">
-                  <span>{{ spot.display_name }}</span>
-                  <el-tag size="small" type="success" effect="light" round>已克服</el-tag>
-                </div>
-                <div class="weakspot-item__meta">
-                  <span>曾讲解 {{ spot.clarification_count }} 次</span>
-                  <span>{{ formatTime(spot.resolved_at) }}</span>
-                </div>
+                <span>{{ spot.display_name }}</span>
+                <small>{{ formatTime(spot.resolved_at) }}</small>
               </div>
             </div>
-            <el-empty v-else description="还没有记录到已克服的薄弱点" />
+            <div v-else class="empty-note">还没有记录到已克服的薄弱点。</div>
           </article>
-        </div>
+        </aside>
       </section>
     </template>
-  </div>
+  </main>
 </template>
 
 <script setup>
@@ -236,6 +236,74 @@ const profileStore = useProfileStore()
 const resolvingConceptId = ref(null)
 
 const detail = computed(() => profileStore.detail)
+const recentConcepts = computed(() => detail.value?.recent_concepts || [])
+const activeWeakSpots = computed(() => detail.value?.weak_spots || [])
+const pendingWeakSpots = computed(() => detail.value?.pending_weak_spots || [])
+const resolvedWeakSpots = computed(() => detail.value?.resolved_weak_spots || [])
+
+const focusConceptText = computed(() => {
+  const names = recentConcepts.value.slice(0, 3).map(concept => concept.display_name).filter(Boolean)
+  return names.length ? names.join(' / ') : '尚未稳定识别'
+})
+
+const profileHeadline = computed(() => {
+  const chapter = detail.value?.progress?.current_chapter
+  if (chapter) return `当前主要围绕「${chapter}」学习。`
+  return '正在根据你的对话形成学习画像。'
+})
+
+const profileNarrative = computed(() => {
+  if (activeWeakSpots.value.length) {
+    return '系统已经捕捉到一些需要巩固的知识点，建议先做小范围复习，再通过例题确认是否真正掌握。'
+  }
+  if (pendingWeakSpots.value.length) {
+    return '目前有一些待观察信号，可以继续通过追问和练习确认它们是否会发展成稳定薄弱点。'
+  }
+  return '目前没有明显薄弱点，可以继续围绕近期关注概念做拓展练习，保持学习节奏。'
+})
+
+const learningStateText = computed(() => {
+  if (activeWeakSpots.value.length) return `${activeWeakSpots.value.length} 个知识点需要巩固`
+  if (pendingWeakSpots.value.length) return `${pendingWeakSpots.value.length} 个知识点正在观察`
+  return '状态稳定，继续积累对话信号'
+})
+
+const riskText = computed(() => {
+  const active = activeWeakSpots.value.length
+  const pending = pendingWeakSpots.value.length
+  if (active && pending) return `${active} 个活跃薄弱点，${pending} 个待观察信号`
+  if (active) return `${active} 个活跃薄弱点`
+  if (pending) return `${pending} 个待观察信号`
+  return '暂无明显风险'
+})
+
+const nextStepSuggestions = computed(() => {
+  const suggestions = []
+
+  activeWeakSpots.value.slice(0, 2).forEach(spot => {
+    suggestions.push(`优先复习「${spot.display_name}」，用一道例题确认理解。`)
+  })
+
+  if (pendingWeakSpots.value.length) {
+    suggestions.push(`继续追问「${pendingWeakSpots.value[0].display_name}」，判断是否只是暂时卡顿。`)
+  }
+
+  if (recentConcepts.value.length) {
+    suggestions.push(`围绕「${recentConcepts.value[0].display_name}」整理一页概念笔记。`)
+  }
+
+  const chapter = detail.value?.progress?.current_chapter
+  if (chapter) {
+    suggestions.push(`回顾「${chapter}」的核心定义、公式和案例。`)
+  }
+
+  if (!suggestions.length) {
+    suggestions.push('先完成 3～5 个课程概念提问，让系统形成更稳定的画像。')
+    suggestions.push('每次学习后用一句话总结“我现在还不确定什么”。')
+  }
+
+  return [...new Set(suggestions)].slice(0, 4)
+})
 
 const chapterStats = computed(() => {
   const stats = detail.value?.chapter_stats || {}
@@ -329,323 +397,490 @@ onMounted(async () => {
 <style scoped>
 .profile-page {
   min-height: 100vh;
-  padding: 28px;
-  background:
-    radial-gradient(circle at top left, rgba(99, 102, 241, 0.12), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.10), transparent 24%),
-    linear-gradient(180deg, #fafaf9 0%, #f5f5f4 100%);
+  padding: 30px;
   color: #1c1917;
+  background:
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 26%),
+    radial-gradient(circle at 82% 12%, rgba(79, 70, 229, 0.10), transparent 30%),
+    radial-gradient(circle at right center, rgba(20, 184, 166, 0.08), transparent 30%),
+    linear-gradient(140deg, #fafaf9 0%, #f8fafc 46%, #eef2ff 100%);
   overflow-y: auto;
 }
 
-.profile-hero {
+.profile-header,
+.profile-summary,
+.profile-layout {
+  width: min(100%, 1120px);
+  margin-inline: auto;
+}
+
+.profile-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 20px;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
-.profile-hero__actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+.profile-header__copy {
+  max-width: 680px;
 }
 
-.profile-hero__eyebrow,
-.panel__eyebrow {
-  margin: 0 0 6px;
-  color: #6366f1;
+.profile-eyebrow,
+.section-kicker {
+  margin: 0 0 7px;
+  color: #78716c;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-.profile-hero__title,
-.panel__title {
+.profile-header h1 {
   margin: 0;
-  font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+  color: #1c1917;
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 760;
+  line-height: 1.12;
+  letter-spacing: -0.04em;
 }
 
-.profile-hero__title {
-  font-size: clamp(30px, 4vw, 42px);
-}
-
-.profile-hero__subtitle {
-  max-width: 720px;
+.profile-header__subtitle {
+  max-width: 620px;
   margin: 12px 0 0;
   color: #57534e;
   line-height: 1.7;
 }
 
-.profile-metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
-}
-
-.metric-card,
-.panel {
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(231, 229, 228, 0.92);
-  border-radius: 24px;
-  box-shadow: 0 14px 40px rgba(28, 25, 23, 0.06);
-  backdrop-filter: blur(8px);
-}
-
-.metric-card {
-  padding: 18px;
+.profile-header__actions {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
-}
-
-.metric-card--indigo {
-  background: linear-gradient(180deg, rgba(238, 242, 255, 0.92), rgba(255, 255, 255, 0.92));
-}
-
-.metric-card--amber {
-  background: linear-gradient(180deg, rgba(255, 251, 235, 0.92), rgba(255, 255, 255, 0.92));
-}
-
-.metric-card--sky {
-  background: linear-gradient(180deg, rgba(239, 246, 255, 0.94), rgba(255, 255, 255, 0.92));
-}
-
-.metric-card--emerald {
-  background: linear-gradient(180deg, rgba(236, 253, 245, 0.92), rgba(255, 255, 255, 0.92));
-}
-
-.metric-card__label {
-  font-size: 12px;
-  color: #78716c;
-}
-
-.metric-card__value {
-  font-size: 30px;
-  line-height: 1.1;
-}
-
-.metric-card__hint {
-  font-size: 12px;
-  color: #a8a29e;
-}
-
-.profile-grid {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  grid-template-rows: 1fr 1fr 1fr;
-  gap: 16px;
-  align-items: stretch;
-}
-
-.profile-col {
-  display: grid;
-  grid-template-rows: subgrid;
-  grid-row: span 3;
-  align-self: stretch;
-  height: 100%;
+  flex-wrap: wrap;
 }
 
 .panel {
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
+  color: #1c1917;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(214, 211, 209, 0.62);
+  border-radius: 22px;
+  box-shadow: none;
+  backdrop-filter: blur(14px);
+}
+
+.profile-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.profile-summary__main h2 {
+  margin: 0;
+  font-size: 23px;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.profile-summary__main p:not(.section-kicker) {
+  max-width: 720px;
+  margin: 10px 0 0;
+  color: #57534e;
+  line-height: 1.72;
+}
+
+.summary-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.summary-fact {
+  min-width: 0;
+  padding: 12px;
+  background: rgba(248, 250, 252, 0.68);
+  border: 1px solid rgba(226, 232, 240, 0.72);
+  border-radius: 16px;
+}
+
+.summary-fact span,
+.summary-stat span,
+.panel__hint,
+.row-meta,
+.compact-row small,
+.activity-strip__item span {
+  color: #78716c;
+  font-size: 12px;
+}
+
+.summary-fact strong {
+  display: block;
+  margin-top: 5px;
   overflow: hidden;
-  height: 100%;
-  box-sizing: border-box;
-  /* 限制面板高度，内容超出滚动 */
-  max-height: 320px;
+  color: #292524;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.profile-summary__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summary-stat {
+  padding: 14px;
+  background: rgba(250, 250, 249, 0.72);
+  border: 1px solid rgba(231, 229, 228, 0.72);
+  border-radius: 18px;
+}
+
+.summary-stat strong {
+  display: block;
+  margin-top: 7px;
+  color: #1c1917;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.profile-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.8fr);
+  gap: 18px;
+}
+
+.profile-main-column,
+.profile-side-column {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.profile-layout .panel {
+  padding: 18px;
 }
 
 .panel__header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   margin-bottom: 14px;
-  flex-shrink: 0;
 }
 
-.concept-list {
-  flex: 1;
-  min-height: 0;
-  max-height: 240px; /* 约3个条目高度 */
+.panel__header h2 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.02em;
 }
 
-.weakspot-list {
-  flex: 1;
-  min-height: 0;
-  max-height: 240px; /* 约3个条目高度 */
-}
-
-.panel__caption {
-  color: #a8a29e;
-  font-size: 12px;
-  max-width: 260px;
+.panel__hint {
+  max-width: 240px;
   text-align: right;
+  line-height: 1.45;
 }
 
 .concept-list,
-.weakspot-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-/* 滚动条样式 */
-.concept-list::-webkit-scrollbar,
-.weakspot-list::-webkit-scrollbar {
-  width: 4px;
-}
-.concept-list::-webkit-scrollbar-track,
-.weakspot-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-.concept-list::-webkit-scrollbar-thumb,
-.weakspot-list::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 999px;
-}
-
-.concept-item,
-.weakspot-item {
-  width: 100%;
-  text-align: left;
-  border-radius: 20px;
-}
-
-.concept-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border: 1px solid rgba(224, 231, 255, 0.95);
-  background: linear-gradient(180deg, rgba(248, 250, 255, 0.96), rgba(255, 255, 255, 0.96));
-}
-
-.concept-item__name-row,
-.weakspot-item__title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.weakspot-item__title {
-  justify-content: space-between;
-}
-
-.weakspot-item__title-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.concept-item__name {
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.concept-item__meta,
-.weakspot-item__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 6px;
-  color: #78716c;
-  font-size: 12px;
-}
-
-.concept-item__time {
-  white-space: nowrap;
-  color: #57534e;
-  font-size: 12px;
-  align-self: center;
-}
-
-.weakspot-item {
-  padding: 14px 16px;
-}
-
-.weakspot-item--active {
-  background: linear-gradient(180deg, rgba(255, 251, 235, 0.98), rgba(255, 255, 255, 0.98));
-  border: 1px solid rgba(251, 191, 36, 0.28);
-}
-
-.weakspot-item--pending {
-  background: linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(255, 255, 255, 0.98));
-  border: 1px solid rgba(59, 130, 246, 0.18);
-}
-
-.weakspot-item--resolved {
-  background: linear-gradient(180deg, rgba(236, 253, 245, 0.98), rgba(255, 255, 255, 0.98));
-  border: 1px solid rgba(16, 185, 129, 0.22);
-}
-
+.weakspot-list,
+.compact-list,
 .chapter-bars {
+  display: grid;
+  gap: 9px;
+}
+
+.concept-row,
+.weakspot-row,
+.compact-row {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  margin-bottom: 18px;
-  overflow-y: auto;
-  padding-right: 4px;
-  flex: 1;
+  padding: 11px 12px;
+  background: rgba(250, 250, 249, 0.72);
+  border: 1px solid rgba(231, 229, 228, 0.72);
+  border-radius: 15px;
+}
+
+.concept-row__body,
+.weakspot-row__body {
+  min-width: 0;
+}
+
+.concept-row strong,
+.weakspot-row strong,
+.compact-row span {
+  color: #292524;
+  font-weight: 720;
+}
+
+.weakspot-row__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 5px;
+}
+
+.count-chip,
+.confidence-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 9px;
+  color: #57534e;
+  background: rgba(28, 25, 23, 0.05);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.weakspot-row--active {
+  border-color: rgba(180, 83, 9, 0.18);
+  background: rgba(255, 251, 235, 0.58);
+}
+
+.text-action {
+  flex-shrink: 0;
+  min-height: 30px;
+  padding: 0 11px;
+  color: #57534e;
+  background: transparent;
+  border: 1px solid rgba(214, 211, 209, 0.78);
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 760;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.text-action:hover:not(:disabled) {
+  color: #292524;
+  background: rgba(28, 25, 23, 0.05);
+}
+
+.text-action:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.subsection {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(231, 229, 228, 0.72);
+}
+
+.subsection h3 {
+  margin: 0 0 10px;
+  color: #57534e;
+  font-size: 13px;
+}
+
+.panel--advice {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.advice-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: advice;
+}
+
+.advice-list li {
+  position: relative;
+  padding: 10px 12px 10px 38px;
+  color: #292524;
+  background: rgba(248, 250, 252, 0.72);
+  border: 1px solid rgba(226, 232, 240, 0.72);
+  border-radius: 15px;
+  line-height: 1.55;
+  counter-increment: advice;
+}
+
+.advice-list li::before {
+  content: counter(advice);
+  position: absolute;
+  left: 11px;
+  top: 11px;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: #57534e;
+  background: rgba(28, 25, 23, 0.06);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .chapter-bar__meta {
   display: flex;
   justify-content: space-between;
-  font-size: 13px;
-  color: #44403c;
+  gap: 12px;
   margin-bottom: 6px;
+  color: #44403c;
+  font-size: 13px;
+}
+
+.chapter-bar__meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chapter-bar__track {
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(231, 229, 228, 0.9);
+  height: 7px;
   overflow: hidden;
+  background: rgba(231, 229, 228, 0.84);
+  border-radius: 999px;
 }
 
 .chapter-bar__fill {
   height: 100%;
+  background: #78716c;
   border-radius: inherit;
-  background: linear-gradient(90deg, #6366f1 0%, #22c55e 100%);
 }
 
 .activity-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+  gap: 8px;
+  margin-top: 16px;
 }
 
 .activity-strip__item {
-  padding: 12px;
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.9);
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  padding: 9px;
+  background: rgba(250, 250, 249, 0.72);
+  border: 1px solid rgba(231, 229, 228, 0.72);
+  border-radius: 13px;
 }
 
-.activity-strip__day {
+.activity-strip__item strong {
   display: block;
-  font-size: 12px;
+  margin-top: 4px;
+  font-size: 16px;
+}
+
+.empty-note {
+  padding: 18px;
   color: #78716c;
-  margin-bottom: 4px;
+  text-align: center;
+  background: rgba(250, 250, 249, 0.58);
+  border: 1px dashed rgba(214, 211, 209, 0.78);
+  border-radius: 16px;
 }
 
-.activity-strip__count {
-  font-size: 18px;
+:global(html.theme-dark) .profile-page {
+  color: var(--dark-text);
+  background: var(--dark-bg);
 }
 
-@media (max-width: 1080px) {
-  .profile-grid {
-    grid-template-columns: 1fr 1fr;
+:global(html.theme-dark) .profile-header h1,
+:global(html.theme-dark) .profile-summary__main h2,
+:global(html.theme-dark) .summary-stat strong,
+:global(html.theme-dark) .summary-fact strong,
+:global(html.theme-dark) .panel__header h2,
+:global(html.theme-dark) .concept-row strong,
+:global(html.theme-dark) .weakspot-row strong,
+:global(html.theme-dark) .compact-row span,
+:global(html.theme-dark) .advice-list li,
+:global(html.theme-dark) .chapter-bar__meta {
+  color: var(--dark-text);
+}
+
+:global(html.theme-dark) .profile-header__subtitle,
+:global(html.theme-dark) .profile-summary__main p:not(.section-kicker),
+:global(html.theme-dark) .profile-eyebrow,
+:global(html.theme-dark) .section-kicker,
+:global(html.theme-dark) .summary-fact span,
+:global(html.theme-dark) .summary-stat span,
+:global(html.theme-dark) .panel__hint,
+:global(html.theme-dark) .row-meta,
+:global(html.theme-dark) .compact-row small,
+:global(html.theme-dark) .activity-strip__item span,
+:global(html.theme-dark) .empty-note {
+  color: var(--dark-text-muted);
+}
+
+:global(html.theme-dark) .panel,
+:global(html.theme-dark) .profile-summary {
+  background: var(--dark-panel);
+  border-color: var(--dark-border);
+  backdrop-filter: none;
+}
+
+:global(html.theme-dark) .summary-fact,
+:global(html.theme-dark) .summary-stat,
+:global(html.theme-dark) .concept-row,
+:global(html.theme-dark) .weakspot-row,
+:global(html.theme-dark) .compact-row,
+:global(html.theme-dark) .advice-list li,
+:global(html.theme-dark) .activity-strip__item {
+  background: var(--dark-panel-soft);
+  border-color: var(--dark-border);
+}
+
+:global(html.theme-dark) .weakspot-row--active {
+  background: rgba(245, 158, 11, 0.10);
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+:global(html.theme-dark) .count-chip,
+:global(html.theme-dark) .confidence-chip,
+:global(html.theme-dark) .advice-list li::before {
+  color: var(--dark-text-muted);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:global(html.theme-dark) .text-action {
+  color: var(--dark-text-muted);
+  border-color: var(--dark-border);
+}
+
+:global(html.theme-dark) .text-action:hover:not(:disabled) {
+  color: var(--dark-text);
+  background: var(--dark-hover);
+}
+
+:global(html.theme-dark) .subsection {
+  border-top-color: var(--dark-border-soft);
+}
+
+:global(html.theme-dark) .chapter-bar__track {
+  background: var(--dark-bg-subtle);
+}
+
+:global(html.theme-dark) .chapter-bar__fill {
+  background: var(--dark-text-faint);
+}
+
+:global(html.theme-dark) .empty-note {
+  background: transparent;
+  border-color: var(--dark-border);
+}
+
+@media (max-width: 980px) {
+  .profile-summary,
+  .profile-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-facts {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -654,30 +889,33 @@ onMounted(async () => {
     padding: 18px;
   }
 
-  .profile-hero {
+  .profile-header {
     flex-direction: column;
   }
 
-  .profile-hero__actions {
+  .profile-header__actions {
     width: 100%;
   }
 
-  .profile-metrics,
-  .profile-grid {
-    grid-template-columns: 1fr;
+  .profile-summary,
+  .profile-layout .panel {
+    padding: 16px;
   }
 
-  .concept-item {
+  .profile-summary__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .panel__header,
+  .concept-row,
+  .weakspot-row {
+    align-items: flex-start;
     flex-direction: column;
   }
 
-  .panel__header {
-    flex-direction: column;
-  }
-
-  .panel__caption {
-    text-align: left;
+  .panel__hint {
     max-width: none;
+    text-align: left;
   }
 }
 </style>
