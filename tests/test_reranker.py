@@ -12,6 +12,7 @@ except ModuleNotFoundError:
 from ds_course_agent.rag.reranker import CrossEncoderReranker, get_reranker
 from ds_course_agent.rag.hybrid_retriever import HybridRetriever
 import ds_course_agent.shared.config as config
+from ds_course_agent.shared import embeddings
 
 
 class MockCrossEncoder:
@@ -102,6 +103,8 @@ def test_get_reranker_respects_config():
 @patch("ds_course_agent.rag.hybrid_retriever.OpenAIEmbeddings")
 def test_hybrid_retriever_rerank_toggle(mock_embed, mock_client):
     """测试 HybridRetriever 在启用/禁用 rerank 时返回的文档数正确"""
+    embeddings.reset_embedding_circuit_breaker()
+    embeddings.clear_embedding_query_cache()
     # mock chromadb get
     mock_collection = MagicMock()
     mock_collection.get.return_value = {
@@ -135,6 +138,8 @@ def test_hybrid_retriever_rerank_toggle(mock_embed, mock_client):
 @patch("ds_course_agent.rag.hybrid_retriever.OpenAIEmbeddings")
 def test_hybrid_retriever_disables_unavailable_rerank(mock_embed, mock_client):
     """当 reranker 模型不可用时，应显式回退为纯 hybrid。"""
+    embeddings.reset_embedding_circuit_breaker()
+    embeddings.clear_embedding_query_cache()
     mock_collection = MagicMock()
     mock_collection.get.return_value = {
         "documents": ["doc1 text", "doc2 text"],

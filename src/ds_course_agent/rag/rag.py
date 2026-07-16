@@ -14,6 +14,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough, RunnableWithMessageHistory
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.shared.embeddings import embed_query_cached, embedding_model_kwargs
 from ds_course_agent.shared.llm import get_rag_text_model
 from ds_course_agent.shared.vector_store import VectorStoreService
 from ds_course_agent.shared.history import get_history
@@ -103,13 +104,7 @@ class RAGService(object):
         self.use_rerank = use_rerank if use_rerank is not None else config.ENABLE_RERANK
 
         # 初始化embedding
-        self.embedding = OpenAIEmbeddings(
-            model=config.MODEL_EMBEDDING,
-            api_key=config.API_KEY,
-            base_url=config.BASE_URL,
-            tiktoken_enabled=False,
-            check_embedding_ctx_length=False,
-        )
+        self.embedding = OpenAIEmbeddings(**embedding_model_kwargs())
 
         # 初始化检索器
         if use_hybrid:
@@ -207,7 +202,7 @@ class RAGService(object):
             from langchain_core.documents import Document
 
             # 获取查询的embedding
-            query_embedding = self.embedding.embed_query(question)
+            query_embedding = embed_query_cached(self.embedding, question)
 
             # 直接查询ChromaDB获取文档和距离
             import chromadb

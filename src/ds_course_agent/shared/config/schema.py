@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     EMBEDDING_API_KEY: str = ""
     EMBEDDING_BASE_URL: str = "https://api.siliconflow.cn/v1"
     EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"
+    EMBEDDING_TIMEOUT_SECONDS: float = 8.0
+    EMBEDDING_MAX_RETRIES: int = 0
+    EMBEDDING_QUERY_CACHE_SIZE: int = 512
+    EMBEDDING_CIRCUIT_BREAKER_SECONDS: float = 60.0
 
     # LLM configuration.
     CHAT_MODEL: str = "qwen3:8b"

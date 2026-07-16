@@ -19,10 +19,10 @@ from langchain_openai import OpenAIEmbeddings
 import chromadb
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.shared.embeddings import embed_query_cached, embedding_model_kwargs
 
 logger = logging.getLogger(__name__)
-from ds_course_agent.rag.reranker import get_reranker
-from ds_course_agent.rag.query_trace import trace_span
+from ds_course_agent.rag.query_trace import trace_span, trace_step
 
 
 def _normalize_latin_tokens(text: str) -> str:
@@ -123,13 +123,7 @@ class HybridRetriever:
         else:
             self.reranker = None
 
-        self.embedding = OpenAIEmbeddings(
-            model=config.MODEL_EMBEDDING,
-            api_key=config.API_KEY,
-            base_url=config.BASE_URL,
-            tiktoken_enabled=False,
-            check_embedding_ctx_length=False,
-        )
+        self.embedding = OpenAIEmbeddings(**embedding_model_kwargs())
 
         # 初始化BM25检索器
         self.bm25_retriever = BM25Retriever()
@@ -164,7 +158,7 @@ class HybridRetriever:
         """向量语义检索 - 使用ChromaDB"""
         query = _normalize_latin_tokens(query)
         with trace_span("retriever.embedding_query"):
-            query_embedding = self.embedding.embed_query(query)
+            query_embedding = embed_query_cached(self.embedding, query)
 
         with trace_span("retriever.chroma_query"):
             results = self.collection.query(
@@ -250,9 +244,21 @@ class HybridRetriever:
             bm25_results = self.bm25_retriever.retrieve(query, top_k=rerank_top_k)
         logger.debug("BM25返回 %d 个结果", len(bm25_results))
 
-        # 向量检索
-        with trace_span("retriever.vector"):
-            vector_results = self._vector_search(query, top_k=rerank_top_k)
+        # 向量检索。Embedding 服务不可用时，降级为 BM25-only，而不是让
+        # 整个 RAG 检索失败/空结果。
+        try:
+            with trace_span("retriever.vector"):
+                vector_results = self._vector_search(query, top_k=rerank_top_k)
+        except Exception as exc:
+            logger.warning("Vector retrieval failed; falling back to BM25-only: %s", exc)
+            trace_step(
+                "retriever.vector_fallback",
+                status="error",
+                reason="embedding_or_vector_error",
+                error_type=type(exc).__name__,
+                error=str(exc)[:200],
+            )
+            vector_results = []
         logger.debug("Vector返回 %d 个结果", len(vector_results))
 
         # RRF融合

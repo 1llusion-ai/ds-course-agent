@@ -88,7 +88,7 @@ class CourseKnowledgeBase:
     def __init__(self, course_name: Optional[str] = None):
         import ds_course_agent.shared.config as config
         from langchain_chroma import Chroma
-        from langchain_openai import OpenAIEmbeddings
+        from ds_course_agent.shared.embeddings import create_embedding_model
 
         self._chroma_cls = Chroma
         self._config = config
@@ -106,13 +106,7 @@ class CourseKnowledgeBase:
 
         os.makedirs(config.CHROMA_PERSIST_DIR, exist_ok=True)
 
-        self.embedding = OpenAIEmbeddings(
-            model=config.MODEL_EMBEDDING,
-            api_key=config.API_KEY,
-            base_url=config.BASE_URL,
-            tiktoken_enabled=False,
-            check_embedding_ctx_length=False,
-        )
+        self.embedding = create_embedding_model()
 
         self.vector_store = self._chroma_cls(
             collection_name=self.collection_name,

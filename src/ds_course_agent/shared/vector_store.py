@@ -18,15 +18,9 @@ class VectorStoreService(object):
         return retriever
 
 if __name__ == "__main__":
-    from langchain_openai import OpenAIEmbeddings
+    from ds_course_agent.shared.embeddings import create_embedding_model
 
-    embedding = OpenAIEmbeddings(
-        model=config.MODEL_EMBEDDING,
-        api_key=config.API_KEY,
-        base_url=config.BASE_URL,
-        tiktoken_enabled=False,
-        check_embedding_ctx_length=False,
-    )
+    embedding = create_embedding_model()
 
     retriever = VectorStoreService(embedding).get_retriever()
     res = retriever.invoke("我胸围96cm，性别男，应该穿什么尺码的衣服？")   #只需要字符串，input

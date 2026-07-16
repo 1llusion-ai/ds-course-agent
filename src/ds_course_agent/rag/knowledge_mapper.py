@@ -14,6 +14,7 @@ from pathlib import Path
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.shared.paths import PROJECT_ROOT
+from ds_course_agent.shared.embeddings import create_embedding_model, embed_query_cached
 
 import numpy as np
 
@@ -116,21 +117,12 @@ class KnowledgeGraph:
             return
 
         try:
-            from ds_course_agent.shared.config import MODEL_EMBEDDING, API_KEY, BASE_URL
-            from langchain_openai import OpenAIEmbeddings
-
-            embedding_model = OpenAIEmbeddings(
-                model=MODEL_EMBEDDING,
-                api_key=API_KEY,
-                base_url=BASE_URL,
-                tiktoken_enabled=False,
-                check_embedding_ctx_length=False,
-            )
+            embedding_model = create_embedding_model()
 
             for cid, concept in self.concepts.items():
                 text = concept["display_name"] + " " + " ".join(concept["aliases"][:3])
                 try:
-                    embedding = embedding_model.embed_query(text)
+                    embedding = embed_query_cached(embedding_model, text)
                     self.embeddings[cid] = np.array(embedding)
                 except Exception as e:
                     logger.warning("Embedding failed for %s: %s", cid, e)
@@ -181,22 +173,13 @@ def precompute_knowledge_graph_embeddings(
 
     concepts = {c["canonical_id"]: c for c in data["concepts"]}
 
-    from ds_course_agent.shared.config import MODEL_EMBEDDING, API_KEY, BASE_URL
-    from langchain_openai import OpenAIEmbeddings
-
-    embedding_model = OpenAIEmbeddings(
-        model=MODEL_EMBEDDING,
-        api_key=API_KEY,
-        base_url=BASE_URL,
-        tiktoken_enabled=False,
-        check_embedding_ctx_length=False,
-    )
+    embedding_model = create_embedding_model()
 
     embeddings: Dict[str, List[float]] = {}
     for cid, concept in concepts.items():
         text = concept["display_name"] + " " + " ".join(concept["aliases"][:3])
         try:
-            vec = embedding_model.embed_query(text)
+            vec = embed_query_cached(embedding_model, text)
             embeddings[cid] = [float(v) for v in vec]
         except Exception as e:
             logger.warning("Precompute failed for %s: %s", cid, e)
@@ -236,22 +219,13 @@ class KnowledgeMapper:
     def _get_embedding_model(self):
         """延迟加载 embedding 模型"""
         if self._embedding_model is None:
-            from ds_course_agent.shared.config import MODEL_EMBEDDING, API_KEY, BASE_URL
-            from langchain_openai import OpenAIEmbeddings
-
-            self._embedding_model = OpenAIEmbeddings(
-                model=MODEL_EMBEDDING,
-                api_key=API_KEY,
-                base_url=BASE_URL,
-                tiktoken_enabled=False,
-                check_embedding_ctx_length=False,
-            )
+            self._embedding_model = create_embedding_model()
         return self._embedding_model
 
     def _embed_text(self, text: str) -> np.ndarray:
         """获取文本 embedding"""
         model = self._get_embedding_model()
-        embedding = model.embed_query(text)
+        embedding = embed_query_cached(model, text)
         return np.array(embedding)
 
     def _cosine_similarity(self, v1: np.ndarray, v2: np.ndarray) -> float:

@@ -1,6 +1,7 @@
 from ds_course_agent.rag import knowledge_mapper
 from ds_course_agent.rag.knowledge_mapper import MatchedConcept
 from ds_course_agent.rag.query_pipeline import utils
+from ds_course_agent.shared import embeddings
 
 
 def test_map_question_to_concepts_uses_inprocess_cache(monkeypatch):
@@ -44,3 +45,64 @@ def test_query_normalize_cache_is_observable(monkeypatch):
     assert utils.normalize_query_text(" SVM 是什么？ ") == "svm是什么？"
     assert utils.normalize_query_text(" SVM 是什么？ ") == "svm是什么？"
     assert utils.query_text_cache_info().hits >= 1
+
+
+def test_embedding_query_cache_uses_model_base_and_text(monkeypatch):
+    embeddings.clear_embedding_query_cache()
+    embeddings.reset_embedding_circuit_breaker()
+    monkeypatch.setattr(embeddings.config, "EMBEDDING_QUERY_CACHE_SIZE", 8)
+    monkeypatch.setattr(embeddings.config, "MODEL_EMBEDDING", "test-embed")
+    monkeypatch.setattr(embeddings.config, "BASE_URL", "https://example.test/v1")
+
+    class FakeEmbeddingModel:
+        def __init__(self):
+            self.calls = 0
+
+        def embed_query(self, text):
+            self.calls += 1
+            return [1.0, 2.0, 3.0]
+
+    model = FakeEmbeddingModel()
+
+    first = embeddings.embed_query_cached(model, "SVM是什么？")
+    second = embeddings.embed_query_cached(model, "SVM是什么？")
+
+    assert first == [1.0, 2.0, 3.0]
+    assert second == [1.0, 2.0, 3.0]
+    assert first is not second
+    assert model.calls == 1
+    assert embeddings.embedding_query_cache_info().hits >= 1
+
+
+def test_embedding_circuit_breaker_fast_fails_after_error(monkeypatch):
+    embeddings.clear_embedding_query_cache()
+    embeddings.reset_embedding_circuit_breaker()
+    monkeypatch.setattr(embeddings.config, "EMBEDDING_QUERY_CACHE_SIZE", 0)
+    monkeypatch.setattr(embeddings.config, "EMBEDDING_CIRCUIT_BREAKER_SECONDS", 30)
+
+    class FailingEmbeddingModel:
+        def __init__(self):
+            self.calls = 0
+
+        def embed_query(self, text):
+            self.calls += 1
+            raise RuntimeError("network down")
+
+    model = FailingEmbeddingModel()
+
+    try:
+        embeddings.embed_query_cached(model, "第一次")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("first failing embedding call should raise")
+
+    try:
+        embeddings.embed_query_cached(model, "第二次")
+    except embeddings.EmbeddingUnavailable:
+        pass
+    else:
+        raise AssertionError("second call should fast-fail via circuit breaker")
+
+    assert model.calls == 1
+    embeddings.reset_embedding_circuit_breaker()

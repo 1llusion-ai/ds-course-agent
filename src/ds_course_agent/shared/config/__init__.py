@@ -18,6 +18,10 @@ _SETTING_NAMES = [
     "EMBEDDING_API_KEY",
     "EMBEDDING_BASE_URL",
     "EMBEDDING_MODEL",
+    "EMBEDDING_TIMEOUT_SECONDS",
+    "EMBEDDING_MAX_RETRIES",
+    "EMBEDDING_QUERY_CACHE_SIZE",
+    "EMBEDDING_CIRCUIT_BREAKER_SECONDS",
     "CHAT_MODEL",
     "CHAT_BASE_URL",
     "USE_REMOTE_LLM",
@@ -99,6 +103,10 @@ chat_disable_thinking = CHAT_DISABLE_THINKING
 chat_system_suffix = CHAT_SYSTEM_SUFFIX
 query_cache_enabled = QUERY_CACHE_ENABLED
 query_cache_size = QUERY_CACHE_SIZE
+embedding_timeout_seconds = EMBEDDING_TIMEOUT_SECONDS
+embedding_max_retries = EMBEDDING_MAX_RETRIES
+embedding_query_cache_size = EMBEDDING_QUERY_CACHE_SIZE
+embedding_circuit_breaker_seconds = EMBEDDING_CIRCUIT_BREAKER_SECONDS
 context_window_tokens = CONTEXT_WINDOW_TOKENS
 context_budget_ratio = CONTEXT_BUDGET_RATIO
 context_large_message_tokens = CONTEXT_LARGE_MESSAGE_TOKENS
@@ -140,6 +148,10 @@ __all__ = [
     "chat_system_suffix",
     "query_cache_enabled",
     "query_cache_size",
+    "embedding_timeout_seconds",
+    "embedding_max_retries",
+    "embedding_query_cache_size",
+    "embedding_circuit_breaker_seconds",
     "context_window_tokens",
     "context_budget_ratio",
     "context_large_message_tokens",

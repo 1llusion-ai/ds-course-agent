@@ -965,6 +965,53 @@ class AgentService(object):
                 retrieval_policy="optional",
             )
 
+        # Lightweight prepass: high-confidence code/tool-autonomous routes do
+        # not need the expensive profile/concept-map/rewrite path.  This keeps
+        # code review, Python execution, and code/example/demo requests fast
+        # while preserving the full QueryPipeline for grounded course questions.
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        with trace_span("prepare.lightweight_preprocess"):
+            pre_context = preprocessor.process(
+                user_input=user_input,
+                session_id=session_id,
+                student_id=student_id,
+                chat_history=chat_history,
+                profile=None,
+            )
+        pre_context.metadata["schedule_tool_query"] = self._build_schedule_tool_query(user_input)
+        pre_context.metadata["grounded_tool_query"] = pre_context.enriched_query or pre_context.normalized_query
+        with trace_span("prepare.lightweight_router"):
+            pre_decision = get_router().route(pre_context)
+
+        autonomous_tool_choice = bool((pre_decision.metadata or {}).get("autonomous_tool_choice"))
+        if pre_decision.route in {RouteType.PYTHON_EXEC, RouteType.CODE_REVIEW} or (
+            pre_decision.route == RouteType.GENERIC_AGENT
+            and pre_decision.retrieval_policy != "required"
+            and autonomous_tool_choice
+        ):
+            trace_step(
+                "query_pipeline.route",
+                route=pre_decision.route.value,
+                confidence=pre_decision.confidence,
+                reasons=pre_decision.reasons,
+                fast_path=True,
+                lightweight_prepass=True,
+            )
+            state = {
+                "student_id": student_id,
+                "history": history,
+                "chat_history": chat_history,
+                "profile": None,
+                "special_case_response": special_case_response,
+                "matched_concepts": [],
+                "skill_candidate_keys": pre_context.skill_candidate_keys,
+                "context": pre_context,
+                "decision": pre_decision,
+            }
+            self._get_hooks().before_route(state)
+            self._get_hooks().after_route(state, pre_decision)
+            return state
+
         with trace_span("prepare.profile_load"):
             profile = get_memory_core().get_profile(student_id)
 
@@ -976,7 +1023,6 @@ class AgentService(object):
 
         # 这里禁用 preprocessor 内部的概念识别，避免重复调用 heavy mapper；
         # 随后把旧逻辑得到的 matched_concepts 注入到 context。
-        preprocessor = get_preprocessor(enable_concept_detection=False)
         with trace_span("prepare.preprocess"):
             context = preprocessor.process(
                 user_input=user_input,
