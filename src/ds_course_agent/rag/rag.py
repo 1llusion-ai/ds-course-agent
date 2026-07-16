@@ -37,6 +37,41 @@ def _warn_large_rag_payload(payload: str, *, location: str, payload_type: str, *
         logger.debug("Failed to emit RAG payload size warning at %s", location, exc_info=True)
 
 
+def _trace_rag_context_trim(*, location: str, **metadata) -> None:
+    """Emit best-effort trace for RAG context trimming."""
+    try:
+        from ds_course_agent.rag.query_trace import trace_step
+
+        trace_step("rag.context_trim", location=location, **metadata)
+    except Exception:
+        logger.debug("Failed to emit RAG context trim trace at %s", location, exc_info=True)
+
+
+def _rag_context_trim_enabled() -> bool:
+    return bool(getattr(config, "RAG_CONTEXT_TRIM_ENABLED", True))
+
+
+def _rag_context_max_chars() -> int:
+    return max(1, int(getattr(config, "RAG_CONTEXT_MAX_CHARS", 4500) or 4500))
+
+
+def _rag_context_doc_max_chars() -> int:
+    return max(1, int(getattr(config, "RAG_CONTEXT_DOC_MAX_CHARS", 1500) or 1500))
+
+
+def _truncate_text(value: str, max_chars: int) -> tuple[str, bool]:
+    """Return ``value`` capped to ``max_chars`` without mutating caller data."""
+    text = str(value or "")
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text, False
+
+    marker = f"\n[片段已裁剪：原始 {len(text)} 字，保留前 {max_chars} 字]"
+    keep = max(0, max_chars - len(marker))
+    if keep <= 0:
+        return text[:max_chars], True
+    return f"{text[:keep].rstrip()}{marker}", True
+
+
 @dataclass
 class RetrievalResult:
     """检索结果"""
@@ -217,8 +252,150 @@ class RAGService(object):
             has_results=len(documents) > 0
         )
 
+    def _normalize_document_metadata(self, doc: Document) -> dict:
+        """Return prompt-facing metadata with stable textbook page labels."""
+        from ds_course_agent.tools.course_rag import _get_absolute_page
+
+        metadata = dict(getattr(doc, "metadata", {}) or {})
+        # 优先使用已存储的 book_page，否则动态计算；避免把 chunk 内相对页码
+        # 误展示给 LLM / UI。
+        abs_page = metadata.get('book_page') or metadata.get('book_page_start') or _get_absolute_page(doc)
+        if abs_page:
+            metadata['page'] = int(abs_page)
+            metadata['page_note'] = f"教材第{int(abs_page)}页"
+        elif 'page' in metadata:
+            del metadata['page']
+        return metadata
+
+    def _format_one_document(
+        self,
+        doc: Document,
+        *,
+        max_content_chars: int | None = None,
+    ) -> tuple[str, bool]:
+        """Format one retrieved document while preserving source metadata."""
+        content = str(getattr(doc, "page_content", "") or "")
+        trimmed = False
+        if _rag_context_trim_enabled() and max_content_chars is not None:
+            content, trimmed = _truncate_text(content, max_content_chars)
+        metadata = self._normalize_document_metadata(doc)
+        return f"文档片段：{content}\n文档元数据：{metadata}\n\n", trimmed
+
+    def _fit_document_to_remaining_budget(
+        self,
+        doc: Document,
+        *,
+        remaining_chars: int,
+    ) -> tuple[str, bool]:
+        """Fit a document block into the remaining total context budget.
+
+        The metadata suffix is treated as higher priority than the body because
+        it is what lets the answer cite the retrieved material correctly.  If a
+        caller configures an unrealistically tiny budget we may omit the body,
+        but we still try to keep the source metadata visible.
+        """
+        if remaining_chars <= 0:
+            return "", True
+
+        metadata = self._normalize_document_metadata(doc)
+        content = str(getattr(doc, "page_content", "") or "")
+        prefix = "文档片段："
+        suffix = f"\n文档元数据：{metadata}\n\n"
+        full = f"{prefix}{content}{suffix}"
+        if len(full) <= remaining_chars:
+            return full, False
+
+        marker = f"\n[片段已按总上下文预算裁剪：原始 {len(content)} 字]"
+        available_for_content = remaining_chars - len(prefix) - len(suffix) - len(marker)
+        if available_for_content > 0:
+            body = content[:available_for_content].rstrip()
+            return f"{prefix}{body}{marker}{suffix}", True
+
+        # Budget is too small to guarantee both a body and the full metadata.
+        # Drop this lower-ranked document instead of cutting source metadata in
+        # half; source/citation fidelity is more important than squeezing in a
+        # broken partial block.
+        minimal = f"{prefix}[片段因上下文预算省略]{suffix}"
+        if len(minimal) <= remaining_chars:
+            return minimal, True
+        return "", True
+
+    def _trim_context_text_for_prompt(self, context: str, *, location: str) -> str:
+        """Final guard for externally supplied RAG contexts.
+
+        ``retrieve()`` already formats and trims its own context.  This guard is
+        intentionally kept because tests and some integrations may call
+        ``answer_with_context`` directly with a large raw string.
+        """
+        text = str(context or "")
+        if not _rag_context_trim_enabled() or text == "无相关资料":
+            return text
+
+        max_chars = _rag_context_max_chars()
+        if len(text) <= max_chars:
+            return text
+
+        original_chars = len(text)
+        blocks = [block for block in text.split("\n\n") if block]
+        kept: list[str] = []
+        used = 0
+        for block in blocks:
+            candidate = f"{block}\n\n"
+            if used + len(candidate) <= max_chars:
+                kept.append(candidate)
+                used += len(candidate)
+                continue
+            remaining = max_chars - used
+            if remaining > 0:
+                fitted = self._fit_formatted_context_block(block, remaining_chars=remaining)
+                if fitted:
+                    kept.append(fitted)
+            break
+
+        trimmed = "".join(kept).rstrip()
+        if not trimmed:
+            trimmed = text[:max_chars].rstrip()
+
+        _trace_rag_context_trim(
+            location=location,
+            original_chars=original_chars,
+            trimmed_chars=len(trimmed),
+            max_chars=max_chars,
+            mode="prompt_guard",
+        )
+        return trimmed
+
+    def _fit_formatted_context_block(self, block: str, *, remaining_chars: int) -> str:
+        """Fit a pre-formatted context block without cutting metadata in half."""
+        if remaining_chars <= 0:
+            return ""
+
+        candidate = f"{block}\n\n"
+        if len(candidate) <= remaining_chars:
+            return candidate
+
+        delimiter = "\n文档元数据："
+        prefix = "文档片段："
+        if block.startswith(prefix) and delimiter in block:
+            content_part, metadata_part = block.split(delimiter, 1)
+            content = content_part[len(prefix):]
+            suffix = f"{delimiter}{metadata_part}\n\n"
+            marker = f"\n[片段已按总上下文预算裁剪：原始 {len(content)} 字]"
+            available_for_content = remaining_chars - len(prefix) - len(suffix) - len(marker)
+            if available_for_content > 0:
+                body = content[:available_for_content].rstrip()
+                return f"{prefix}{body}{marker}{suffix}"
+            minimal = f"{prefix}[片段因上下文预算省略]{suffix}"
+            if len(minimal) <= remaining_chars:
+                return minimal
+            return ""
+
+        truncated, _ = _truncate_text(candidate, remaining_chars)
+        return truncated[:remaining_chars]
+
     def stream_answer_with_context(self, question: str, context: str):
         """Stream an answer grounded in the retrieved context."""
+        context = self._trim_context_text_for_prompt(context, location="rag.stream_answer.context")
         prompt = self.prompt_template.format(
             context=context,
             history=[],
@@ -255,6 +432,10 @@ class RAGService(object):
         Returns:
             AnswerResult: 包含回答和来源信息
         """
+        context = self._trim_context_text_for_prompt(context, location="rag.answer.context")
+        if stream:
+            return self.stream_answer_with_context(question, context)
+
         prompt = self.prompt_template.format(
             context=context,
             history=[],
@@ -268,9 +449,6 @@ class RAGService(object):
             payload_type="llm_prompt",
             context_chars=len(context or ""),
         )
-
-        if stream:
-            return self.stream_answer_with_context(question, context)
 
         answer_msg = self.chat_model.invoke(prompt)
 
@@ -293,19 +471,64 @@ class RAGService(object):
         """格式化文档列表为上下文字符串"""
         if not docs:
             return "无相关资料"
-        formatted_docs = ""
+
+        if not _rag_context_trim_enabled():
+            return "".join(self._format_one_document(doc, max_content_chars=None)[0] for doc in docs)
+
+        max_chars = _rag_context_max_chars()
+        doc_max_chars = _rag_context_doc_max_chars()
+        untrimmed_docs = [self._format_one_document(doc, max_content_chars=None)[0] for doc in docs]
+        original_chars = sum(len(item) for item in untrimmed_docs)
+
+        formatted_parts: list[str] = []
+        used_chars = 0
+        trimmed_docs = 0
+        dropped_docs = 0
+
         for doc in docs:
-            # 构建包含绝对页码的元数据（删除相对页码避免混淆）
-            from ds_course_agent.tools.course_rag import _get_absolute_page
-            metadata = dict(doc.metadata)
-            # 优先使用已存储的 book_page，否则动态计算
-            abs_page = metadata.get('book_page') or metadata.get('book_page_start') or _get_absolute_page(doc)
-            if abs_page:
-                metadata['page'] = int(abs_page)  # 用绝对页码覆盖相对页码
-                metadata['page_note'] = f"教材第{int(abs_page)}页"
-            elif 'page' in metadata:
-                del metadata['page']  # 删除无法转换的相对页码
-            formatted_docs += f"文档片段：{doc.page_content}\n文档元数据：{metadata}\n\n"
+            doc_text, doc_trimmed = self._format_one_document(doc, max_content_chars=doc_max_chars)
+            if used_chars + len(doc_text) <= max_chars:
+                formatted_parts.append(doc_text)
+                used_chars += len(doc_text)
+                if doc_trimmed:
+                    trimmed_docs += 1
+                continue
+
+            remaining = max_chars - used_chars
+            fitted, fitted_trimmed = self._fit_document_to_remaining_budget(
+                doc,
+                remaining_chars=remaining,
+            )
+            if fitted:
+                formatted_parts.append(fitted)
+                used_chars += len(fitted)
+                if fitted_trimmed or doc_trimmed:
+                    trimmed_docs += 1
+            else:
+                dropped_docs += 1
+
+            # Once a document had to be fitted/dropped, later lower-ranked
+            # documents are outside the current prompt budget.
+            dropped_docs += max(0, len(docs) - (len(formatted_parts) + dropped_docs))
+            break
+
+        formatted_docs = "".join(formatted_parts).rstrip()
+        if not formatted_docs:
+            formatted_docs = "无相关资料"
+
+        if trimmed_docs or dropped_docs or len(formatted_docs) < original_chars:
+            _trace_rag_context_trim(
+                location="rag.format_documents",
+                original_chars=original_chars,
+                trimmed_chars=len(formatted_docs),
+                max_chars=max_chars,
+                doc_max_chars=doc_max_chars,
+                document_count=len(docs),
+                trimmed_docs=trimmed_docs,
+                dropped_docs=dropped_docs,
+                mode="retrieve_format",
+            )
+
         return formatted_docs
 
 

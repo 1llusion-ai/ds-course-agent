@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     CONTEXT_BUDGET_RATIO: float = 0.70
     CONTEXT_LARGE_MESSAGE_TOKENS: int = 2048
 
+    # RAG prompt/context trimming.  This is separate from the history/tool
+    # artifact compactor: it reduces the *current turn* retrieved context before
+    # it is sent to the answer LLM.
+    RAG_CONTEXT_TRIM_ENABLED: bool = True
+    RAG_CONTEXT_MAX_CHARS: int = 4500
+    RAG_CONTEXT_DOC_MAX_CHARS: int = 1500
+
     # Tool/RAG large-result artifact storage.
     TOOL_RESULT_ARTIFACTS_ENABLED: bool = True
     TOOL_RESULT_ARTIFACT_DIR: str = "var/artifacts/tool_results"

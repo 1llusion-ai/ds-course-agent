@@ -474,6 +474,64 @@ python -m pytest -q
 305 passed, 6 skipped, 2 warnings
 ```
 
+## 14. Phase 2.5：RAG current-turn context trim
+
+Phase 2 latency harness 显示剩余主要瓶颈在 `tool.course_rag.answer`，且当前 turn
+的 RAG prompt/context 仍有 6k-7.5k chars 的 large payload warning。因此追加
+Phase 2.5 小步优化：先缩短发送给回答 LLM 的检索上下文，不改 QueryPipeline，也不动
+`RetrievalResult.documents`。
+
+改动：
+
+- 新增配置：
+  - `RAG_CONTEXT_TRIM_ENABLED=true`
+  - `RAG_CONTEXT_MAX_CHARS=4500`
+  - `RAG_CONTEXT_DOC_MAX_CHARS=1500`
+- `RAGService._format_documents()`：
+  - 对单个检索片段做内容裁剪；
+  - 对总 formatted context 做预算限制；
+  - 保留 `文档元数据` block、`source`、`page`、`page_note`；
+  - 保持 `RetrievalResult.documents` 原样，确保 `build_sources_from_documents()` 和前端来源展示不丢。
+- `RAGService.answer_with_context()` / `stream_answer_with_context()`：
+  - 在 prompt format 前增加最后一道 context guard，覆盖直接传入超大 context 的调用方。
+- 新增 `rag.context_trim` trace event，记录 `original_chars`、`trimmed_chars`、预算和裁剪位置。
+
+验证：
+
+```text
+python -m pytest tests/test_rag_context_trim.py tests/test_config_settings.py tests/test_rag_tool.py tests/test_query_pipeline.py -q
+63 passed, 1 skipped, 1 warning
+
+python -m pytest -q
+310 passed, 6 skipped, 2 warnings
+```
+
+5 条真实 smoke harness：
+
+```bash
+PYTHONPATH=src python benchmarks/latency_harness.py --limit 5 \
+  --output var/artifacts/benchmarks/latency_harness_phase25_trim_smoke_report.json
+```
+
+结果：
+
+```text
+5/5 completed, 0 errors
+p50: 2677.335 ms
+p95: 4796.812 ms
+avg: 3215.876 ms
+routes: grounded_rag=5
+agent_force_grounded_count=0
+retrieval_guard_force_count=0
+```
+
+注意：本次 5 条 smoke harness 在当前环境出现 embedding connection error fail-open，
+所以 `used_retrieval_rate=0%`，它只能证明链路与预算保护可运行，不能替代 20 条真实
+baseline 对比。后续若需要评估 RAG answer 延迟收益，应在 embedding/LLM 服务稳定时重跑
+20 条 harness。
+
 ## 下一步
 
-Phase 2 后端架构现代化已完成。下一轮建议进入 UI polish，或按需开启 Phase 3（Dream-lite / WebSocket / 子代理代码审查）。
+Phase 2 后端架构现代化已完成，Phase 2.5 已补上 current-turn RAG prompt trimming。
+下一轮建议优先做 UI polish（Markdown sanitize、代码高亮/复制、来源 chips、route badge、
+progress timeline），或在服务稳定时重跑 20 条 latency harness 量化 RAG trim 收益。

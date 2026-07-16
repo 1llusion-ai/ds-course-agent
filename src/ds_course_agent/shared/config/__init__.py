@@ -43,6 +43,9 @@ _SETTING_NAMES = [
     "CONTEXT_WINDOW_TOKENS",
     "CONTEXT_BUDGET_RATIO",
     "CONTEXT_LARGE_MESSAGE_TOKENS",
+    "RAG_CONTEXT_TRIM_ENABLED",
+    "RAG_CONTEXT_MAX_CHARS",
+    "RAG_CONTEXT_DOC_MAX_CHARS",
     "TOOL_RESULT_ARTIFACTS_ENABLED",
     "TOOL_RESULT_ARTIFACT_DIR",
     "TOOL_RESULT_INLINE_MAX_CHARS",
@@ -99,6 +102,9 @@ query_cache_size = QUERY_CACHE_SIZE
 context_window_tokens = CONTEXT_WINDOW_TOKENS
 context_budget_ratio = CONTEXT_BUDGET_RATIO
 context_large_message_tokens = CONTEXT_LARGE_MESSAGE_TOKENS
+rag_context_trim_enabled = RAG_CONTEXT_TRIM_ENABLED
+rag_context_max_chars = RAG_CONTEXT_MAX_CHARS
+rag_context_doc_max_chars = RAG_CONTEXT_DOC_MAX_CHARS
 tool_result_artifacts_enabled = TOOL_RESULT_ARTIFACTS_ENABLED
 tool_result_artifact_dir = TOOL_RESULT_ARTIFACT_DIR
 tool_result_inline_max_chars = TOOL_RESULT_INLINE_MAX_CHARS
@@ -137,6 +143,9 @@ __all__ = [
     "context_window_tokens",
     "context_budget_ratio",
     "context_large_message_tokens",
+    "rag_context_trim_enabled",
+    "rag_context_max_chars",
+    "rag_context_doc_max_chars",
     "tool_result_artifacts_enabled",
     "tool_result_artifact_dir",
     "tool_result_inline_max_chars",
