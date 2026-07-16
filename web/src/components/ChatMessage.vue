@@ -1,10 +1,5 @@
 <template>
   <div class="message-wrapper" :class="{ 'user-message': message.role === 'user' }">
-    <div class="avatar" :class="message.role === 'user' ? 'user-avatar' : 'ai-avatar'">
-      <img v-if="message.role === 'user'" src="/avatar/Student.png" alt="学生" class="avatar-img" />
-      <img v-else src="/avatar/Assistant.png" alt="AI助手" class="avatar-img" />
-    </div>
-
     <div
       class="message-bubble"
       :class="[
@@ -359,54 +354,27 @@ async function handleMarkdownClick(event) {
 <style scoped>
 .message-wrapper {
   display: flex;
-  gap: 12px;
   align-items: flex-start;
 }
 
 .message-wrapper.user-message {
-  flex-direction: row-reverse;
+  justify-content: flex-end;
 }
 
-.avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  overflow: hidden;
-  box-shadow: 0 10px 26px rgba(28, 25, 23, 0.08);
-}
-
-.avatar-img {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.user-avatar {
-  color: #fff;
-  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
-}
-
-.ai-avatar {
-  color: #fff;
-  background: linear-gradient(135deg, #2563eb 0%, #0f766e 100%);
+.message-wrapper:not(.user-message) {
+  justify-content: flex-start;
 }
 
 .message-bubble {
-  max-width: min(76%, 860px);
+  max-width: min(78%, 880px);
   padding: 12px 16px;
-  border-radius: 20px;
+  border-radius: 18px;
   box-shadow: 0 16px 36px rgba(28, 25, 23, 0.06);
 }
 
 .user-bubble {
   color: #fff;
   background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
-  border-top-right-radius: 7px;
 }
 
 .ai-bubble {
@@ -415,7 +383,6 @@ async function handleMarkdownClick(event) {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(255, 252, 247, 0.93) 100%);
   border: 1px solid rgba(226, 232, 240, 0.92);
-  border-top-left-radius: 7px;
   backdrop-filter: blur(12px);
 }
 

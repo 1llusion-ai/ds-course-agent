@@ -1,23 +1,25 @@
 <template>
   <div class="chat-layout">
-    <ChatSidebar />
+    <ChatSidebar :collapsed="sidebarCollapsed" @toggle-collapse="toggleSidebar" />
 
     <div class="chat-main">
       <header class="chat-header">
-        <div class="header-content">
-          <img src="/icon/thought_logo.png" alt="logo" class="logo" />
-          <div>
-            <h1>数据科学导论教学Agent</h1>
-            <p>课程资料检索 · 个性化学习辅导 · 代码答疑</p>
-          </div>
+        <div class="thread-header-left">
+          <button
+            type="button"
+            class="thread-sidebar-toggle"
+            :aria-label="sidebarCollapsed ? '展开边栏' : '折叠边栏'"
+            :title="sidebarCollapsed ? '展开边栏' : '折叠边栏'"
+            @click="toggleSidebar"
+          >
+            <el-icon><Menu /></el-icon>
+          </button>
+          <span class="thread-title">{{ headerTitle }}</span>
         </div>
         <div class="header-status">
           <span class="status-pill">
             <span class="status-dot"></span>
             {{ chatStore.loading ? '回答生成中' : '随时可提问' }}
-          </span>
-          <span v-if="sessionStore.currentSession" class="session-pill">
-            {{ sessionStore.currentSession.title }}
           </span>
         </div>
       </header>
@@ -64,7 +66,7 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -82,6 +84,9 @@ const messagesContainer = ref(null)
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
 const profileStore = useProfileStore()
+const sidebarCollapsed = ref(readSidebarCollapsedPreference())
+
+const headerTitle = computed(() => sessionStore.currentSession?.title || '新对话')
 
 const starterPrompts = [
   '逻辑回归为什么能做分类？',
@@ -210,6 +215,21 @@ function handleStarterPrompt(prompt) {
   handleSend(prompt)
 }
 
+function readSidebarCollapsedPreference() {
+  if (typeof window === 'undefined') return false
+  return window.localStorage.getItem('ds-course-agent.sidebarCollapsed') === 'true'
+}
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(
+      'ds-course-agent.sidebarCollapsed',
+      sidebarCollapsed.value ? 'true' : 'false'
+    )
+  }
+}
+
 function scrollToBottom() {
   nextTick(() => {
     if (messagesContainer.value) {
@@ -249,43 +269,58 @@ onMounted(async () => {
 }
 
 .chat-header {
-  min-height: 72px;
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 0 28px;
-  background: rgba(255, 255, 255, 0.88);
-  border-bottom: 1px solid rgba(214, 211, 209, 0.9);
-  backdrop-filter: blur(18px);
+  padding: 0 18px;
+  background: rgba(255, 255, 255, 0.68);
+  border-bottom: 1px solid rgba(214, 211, 209, 0.62);
+  backdrop-filter: blur(16px);
   flex-shrink: 0;
 }
 
-.header-content {
+.thread-header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  min-width: 0;
 }
 
-.logo {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  object-fit: contain;
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24);
-}
-
-.chat-header h1 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: #1c1917;
-}
-
-.chat-header p {
-  margin: 0;
-  font-size: 12px;
+.thread-sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   color: #78716c;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.thread-sidebar-toggle:hover {
+  color: #292524;
+  background: rgba(245, 245, 244, 0.88);
+}
+
+.thread-sidebar-toggle:active {
+  transform: scale(0.96);
+}
+
+.thread-title {
+  max-width: min(58vw, 34rem);
+  overflow: hidden;
+  color: #78716c;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .header-status {
@@ -295,8 +330,7 @@ onMounted(async () => {
   min-width: 0;
 }
 
-.status-pill,
-.session-pill {
+.status-pill {
   display: inline-flex;
   align-items: center;
   min-height: 30px;
@@ -312,15 +346,6 @@ onMounted(async () => {
   color: #0f766e;
   background: rgba(20, 184, 166, 0.10);
   border: 1px solid rgba(20, 184, 166, 0.16);
-}
-
-.session-pill {
-  max-width: 260px;
-  overflow: hidden;
-  color: #475569;
-  text-overflow: ellipsis;
-  background: rgba(248, 250, 252, 0.82);
-  border: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .status-dot {
@@ -429,17 +454,11 @@ onMounted(async () => {
 
 @media (max-width: 900px) {
   .chat-header {
-    align-items: flex-start;
-    flex-direction: column;
-    padding: 14px 18px;
+    padding: 8px 12px;
   }
 
   .header-status {
-    width: 100%;
-  }
-
-  .session-pill {
-    max-width: 100%;
+    flex-shrink: 0;
   }
 
   .messages-area {

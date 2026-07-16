@@ -1,15 +1,43 @@
 <template>
-  <aside class="chat-sidebar">
+  <aside class="chat-sidebar" :class="{ 'chat-sidebar--collapsed': props.collapsed }">
+    <div class="sidebar-brand-row">
+      <button
+        type="button"
+        class="brand-icon-button"
+        :aria-label="props.collapsed ? '展开边栏' : '教学 Agent'"
+        :title="props.collapsed ? '展开边栏' : '教学 Agent'"
+        @click="handleBrandClick"
+      >
+        <img src="/icon/thought_logo.png" alt="" class="brand-icon" />
+      </button>
+
+      <button
+        v-if="!props.collapsed"
+        type="button"
+        class="sidebar-collapse-button"
+        aria-label="折叠边栏"
+        title="折叠边栏"
+        @click="handleSidebarToggle"
+      >
+        <el-icon><Menu /></el-icon>
+      </button>
+    </div>
+
     <div class="sidebar-top">
-      <button type="button" class="new-chat-button" @click="handleCreate">
+      <button
+        type="button"
+        class="new-chat-button"
+        :title="props.collapsed ? '新建聊天' : undefined"
+        @click="handleCreate"
+      >
         <span class="new-chat-button__icon">
           <el-icon><Plus /></el-icon>
         </span>
-        <span class="new-chat-button__text">新建聊天</span>
-        <span class="new-chat-button__hint">New</span>
+        <span v-if="!props.collapsed" class="new-chat-button__text">新建聊天</span>
+        <span v-if="!props.collapsed" class="new-chat-button__hint">New</span>
       </button>
 
-      <label class="session-search" aria-label="搜索会话">
+      <label v-if="!props.collapsed" class="session-search" aria-label="搜索会话">
         <el-icon class="session-search__icon"><Search /></el-icon>
         <input
           v-model="searchQuery"
@@ -21,12 +49,12 @@
       </label>
     </div>
 
-    <div class="session-list-heading">
+    <div v-if="!props.collapsed" class="session-list-heading">
       <span>最近对话</span>
       <span>{{ filteredSessionCount }} 个</span>
     </div>
 
-    <el-scrollbar class="session-scroll">
+    <el-scrollbar v-if="!props.collapsed" class="session-scroll">
       <div v-if="groupedSessions.length === 0" class="session-empty">
         <div class="session-empty__icon">
           <el-icon><Search /></el-icon>
@@ -108,21 +136,26 @@
     </el-scrollbar>
 
     <div class="sidebar-footer">
-      <button type="button" class="utility-entry" @click="handleProfileOpen">
+      <button type="button" class="utility-entry" title="学习快照" @click="handleProfileOpen">
         <span class="utility-entry__icon utility-entry__icon--profile">
           <el-icon><TrendCharts /></el-icon>
         </span>
-        <span class="utility-entry__body">
+        <span v-if="!props.collapsed" class="utility-entry__body">
           <span class="utility-entry__title">学习快照</span>
           <span class="utility-entry__meta">{{ profileSummaryText }}</span>
         </span>
       </button>
 
-      <button type="button" class="utility-entry utility-entry--muted" @click="handleSettingsClick">
+      <button
+        type="button"
+        class="utility-entry utility-entry--muted"
+        title="设置"
+        @click="handleSettingsClick"
+      >
         <span class="utility-entry__icon">
           <el-icon><Setting /></el-icon>
         </span>
-        <span class="utility-entry__body">
+        <span v-if="!props.collapsed" class="utility-entry__body">
           <span class="utility-entry__title">设置</span>
           <span class="utility-entry__meta">后续开放</span>
         </span>
@@ -139,6 +172,15 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useChatStore } from '../stores/chat'
 import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
+
+const props = defineProps({
+  collapsed: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const emit = defineEmits(['toggle-collapse'])
 
 const router = useRouter()
 const sessionStore = useSessionStore()
@@ -216,6 +258,16 @@ function handleProfileOpen() {
 
 function handleSettingsClick() {
   ElMessage.info('设置页后续开放')
+}
+
+function handleSidebarToggle() {
+  emit('toggle-collapse')
+}
+
+function handleBrandClick() {
+  if (props.collapsed) {
+    emit('toggle-collapse')
+  }
 }
 
 function handleSessionClick(id, event) {
@@ -363,13 +415,74 @@ onMounted(() => {
     radial-gradient(circle at 14% 0%, rgba(79, 70, 229, 0.08), transparent 28%),
     linear-gradient(180deg, #ffffff 0%, #fbfaf8 100%);
   border-right: 1px solid rgba(214, 211, 209, 0.82);
+  transition: width 0.18s ease;
+}
+
+.chat-sidebar--collapsed {
+  width: 4rem;
+}
+
+.sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 10px 12px 6px;
+}
+
+.chat-sidebar--collapsed .sidebar-brand-row {
+  justify-content: center;
+  padding: 10px 0 6px;
+}
+
+.brand-icon-button,
+.sidebar-collapse-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: #57534e;
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.brand-icon-button:hover,
+.sidebar-collapse-button:hover {
+  color: #312e81;
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.brand-icon-button:active,
+.sidebar-collapse-button:active {
+  transform: scale(0.96);
+}
+
+.brand-icon {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+.sidebar-collapse-button .el-icon {
+  font-size: 17px;
 }
 
 .sidebar-top {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px 14px 12px;
+  padding: 8px 14px 12px;
+}
+
+.chat-sidebar--collapsed .sidebar-top {
+  align-items: center;
+  padding: 6px 0 10px;
 }
 
 .new-chat-button {
@@ -389,6 +502,14 @@ onMounted(() => {
   transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
+.chat-sidebar--collapsed .new-chat-button {
+  justify-content: center;
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 13px;
+}
+
 .new-chat-button:hover {
   transform: translateY(-1px);
   border-color: rgba(79, 70, 229, 0.34);
@@ -405,6 +526,11 @@ onMounted(() => {
   background: linear-gradient(135deg, #6366f1, #4f46e5);
   border-radius: 10px;
   box-shadow: 0 8px 18px rgba(79, 70, 229, 0.24);
+}
+
+.chat-sidebar--collapsed .new-chat-button__icon {
+  width: 28px;
+  height: 28px;
 }
 
 .new-chat-button__text {
@@ -711,6 +837,14 @@ onMounted(() => {
   border-top: 1px solid rgba(231, 229, 228, 0.76);
 }
 
+.chat-sidebar--collapsed .sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: auto;
+  padding: 8px 0 12px;
+}
+
 .utility-entry {
   display: flex;
   align-items: center;
@@ -727,6 +861,16 @@ onMounted(() => {
   cursor: pointer;
   font: inherit;
   transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.chat-sidebar--collapsed .utility-entry {
+  justify-content: center;
+  width: 40px;
+  min-height: 40px;
+  height: 40px;
+  padding: 0;
+  margin: 4px 0;
+  border-radius: 13px;
 }
 
 .utility-entry:hover {
@@ -750,6 +894,11 @@ onMounted(() => {
   color: #78716c;
   background: rgba(245, 245, 244, 0.95);
   border-radius: 12px;
+}
+
+.chat-sidebar--collapsed .utility-entry__icon {
+  width: 30px;
+  height: 30px;
 }
 
 .utility-entry__icon--profile {
