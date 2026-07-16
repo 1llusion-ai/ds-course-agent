@@ -352,7 +352,29 @@ python -m pytest -q
 298 passed, 6 skipped, 2 warnings
 ```
 
+## 10. Pydantic config clean-cut
+
+目的：把扁平 `os.getenv` 配置实现替换为启动时统一校验的 typed settings，
+但不留下“旧 config 实现 + 新 settings 实现”两套逻辑。
+
+改动：
+
+- 删除 `src/ds_course_agent/shared/config.py`。
+- 新增 `src/ds_course_agent/shared/config/` 包：
+  - `schema.py`：Pydantic `Settings`，定义全部配置字段、路径归一化、课程集合名派生逻辑。
+  - `loader.py`：加载 `.env` 并缓存 settings；保留 `.env` 注入 `os.environ` 的副作用，兼容仍直接读环境变量的 Datalab parser 路径。
+  - `__init__.py`：保留公共 import path `ds_course_agent.shared.config`，但所有常量都从同一个 typed settings 对象派生。
+- 新增 `tests/test_config_settings.py` 覆盖 settings singleton、别名、路径归一化、课程集合 override。
+
+验证：
+
+```text
+python -m pytest tests/test_config_settings.py tests/test_agent_smoke.py tests/test_query_pipeline.py -q
+76 passed, 4 skipped, 1 warning
+python -m pytest -q
+301 passed, 6 skipped, 2 warnings
+```
+
 ## 下一步
 
-1. 做 Pydantic config clean-cut，将 `shared/config.py` 迁移为 `shared/config/` 包并统一导入。
-2. Skill prompt injection：将认知型教学 skill 注入系统提示词。
+1. Skill prompt injection：将认知型教学 skill 注入系统提示词。
