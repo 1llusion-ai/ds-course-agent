@@ -27,7 +27,7 @@ from ds_course_agent.rag.tools import course_rag_tool, record_misconception_even
 # ---- LLM helpers ----
 
 def _get_llm():
-    from ds_course_agent.rag.agent import get_chat_model
+    from ds_course_agent.shared.llm import get_chat_model
     return get_chat_model()
 
 

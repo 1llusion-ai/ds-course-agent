@@ -14,6 +14,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough, RunnableWithMessageHistory
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.shared.llm import get_rag_text_model
 from ds_course_agent.shared.vector_store import VectorStoreService
 from ds_course_agent.shared.history import get_history
 from ds_course_agent.rag.hybrid_retriever import HybridRetriever
@@ -34,26 +35,6 @@ def _warn_large_rag_payload(payload: str, *, location: str, payload_type: str, *
         )
     except Exception:
         logger.debug("Failed to emit RAG payload size warning at %s", location, exc_info=True)
-
-
-# 根据配置选择LLM类
-def get_chat_model():
-    """获取聊天模型（支持本地Ollama和远程API）"""
-    if config.USE_REMOTE_LLM:
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
-            model=config.REMOTE_MODEL_NAME,
-            api_key=config.API_KEY,
-            base_url=config.BASE_URL,
-            temperature=0.7,
-            max_completion_tokens=config.CHAT_MAX_TOKENS,
-            timeout=config.CHAT_TIMEOUT_SECONDS,
-            max_retries=config.CHAT_MAX_RETRIES,
-            extra_body={"enable_thinking": False} if config.CHAT_DISABLE_THINKING else None,
-        )
-    else:
-        from langchain_ollama import OllamaLLM
-        return OllamaLLM(model=config.MODEL_CHAT, base_url=config.BASE_URL_CHAT)
 
 
 @dataclass
@@ -122,7 +103,7 @@ class RAGService(object):
                 ("user", "请回答用户提问:\n{input}"),
             ]
         )
-        self.chat_model = get_chat_model()
+        self.chat_model = get_rag_text_model()
         self.chain = self._build_chain()
 
     def _build_chain(self):

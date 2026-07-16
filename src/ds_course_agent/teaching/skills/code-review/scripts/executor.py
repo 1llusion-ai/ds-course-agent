@@ -24,7 +24,7 @@ from ds_course_agent.rag.code_executor import (  # noqa: E402
 
 
 def _get_llm():
-    from ds_course_agent.rag.agent import get_chat_model
+    from ds_course_agent.shared.llm import get_chat_model
 
     return get_chat_model()
 

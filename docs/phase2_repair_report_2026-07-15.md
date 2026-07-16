@@ -277,7 +277,29 @@ retrieval_guard_force_count: 0
 
 说明：真实 LLM/embedding 服务存在波动，因此该 smoke 只作为方向性验证；正式比较仍应在后续 PR 用固定 20 条 harness 重跑。
 
+## 7. Shared LLM factory
+
+目的：按 clean-cut 原则去掉分散在 `rag/agent.py` 与 `rag/rag.py` 的重复 LLM factory，
+避免后续切模型、fallback 或摘要模型时多处漂移。
+
+改动：
+
+- 新增 `src/ds_course_agent/shared/llm.py`：
+  - `get_chat_model()`：AgentService、会话标题、skill executor 使用的 chat model。
+  - `get_rag_text_model()`：RAG chain 使用的模型；本地模式保留 `OllamaLLM` text-model 行为，避免改变 `prompt | llm | StrOutputParser` 输出语义。
+  - `get_summary_model()`：为后续 ContextGovernor 摘要模型预留单一入口。
+- 删除 `rag/agent.py` 和 `rag/rag.py` 中的重复 `get_chat_model()` 实现。
+- skill executors 与 API title generation 直接从 `shared.llm` 获取模型，不再依赖 `rag.agent`。
+
+验证：
+
+```text
+py_compile passed
+python -m pytest tests/test_agent_smoke.py tests/test_rag_tool.py tests/test_query_pipeline.py -q
+86 passed, 5 skipped, 1 warning
+```
+
 ## 下一步
 
 1. 基于 registry 逐步把 `rag/tools.py` 拆成一个 tool 一个文件。
-2. 做 Pydantic config + `shared/llm.py`，减少配置与 LLM factory 重复。
+2. 做 Pydantic config clean-cut，将 `shared/config.py` 迁移为 `shared/config/` 包并统一导入。

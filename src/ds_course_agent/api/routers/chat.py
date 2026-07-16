@@ -77,7 +77,7 @@ async def _generate_session_title(question: str) -> str:
 标题："""
 
     try:
-        from ds_course_agent.rag.agent import get_chat_model
+        from ds_course_agent.shared.llm import get_chat_model
         llm = get_chat_model()
         response = llm.invoke(prompt)
         title = ""

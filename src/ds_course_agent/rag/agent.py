@@ -22,6 +22,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import create_agent
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.shared.llm import get_chat_model
 from ds_course_agent.rag.prompt import get_system_prompt
 from ds_course_agent.rag.query_pipeline.utils import (
     build_grounded_query_from_history,
@@ -45,24 +46,6 @@ from ds_course_agent.rag.route_handlers import default_route_handlers
 # Skills are discovered from the `skills/` directory and loaded on demand.
 
 logger = logging.getLogger(__name__)
-
-def get_chat_model():
-    """获取聊天模型（支持本地Ollama和远程API）"""
-    if config.USE_REMOTE_LLM:
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
-            model=config.REMOTE_MODEL_NAME,
-            api_key=config.API_KEY,
-            base_url=config.BASE_URL,
-            temperature=0.7,
-            max_completion_tokens=config.CHAT_MAX_TOKENS,
-            timeout=config.CHAT_TIMEOUT_SECONDS,
-            max_retries=config.CHAT_MAX_RETRIES,
-            extra_body={"enable_thinking": False} if config.CHAT_DISABLE_THINKING else None,
-        )
-    else:
-        from langchain_ollama import ChatOllama
-        return ChatOllama(model=config.MODEL_CHAT, base_url=config.BASE_URL_CHAT)
 
 
 class AgentService(object):
