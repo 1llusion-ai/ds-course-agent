@@ -88,6 +88,10 @@ class FileChatMessageHistory(BaseChatMessageHistory):
         with self._lock:
             all_messages = list(self._read_messages_unlocked())
             all_messages.extend(messages)
+            all_messages = self._compact_stored_tool_results(
+                all_messages,
+                preserve_recent=max(1, len(messages)),
+            )
             all_messages = self._compact_messages(all_messages)
             self._warn_persisted_context(all_messages)
 
@@ -153,6 +157,25 @@ class FileChatMessageHistory(BaseChatMessageHistory):
         except Exception:
             # History persistence must never fail because telemetry failed.
             pass
+
+    def _compact_stored_tool_results(
+        self,
+        messages: list[BaseMessage],
+        *,
+        preserve_recent: int,
+    ) -> list[BaseMessage]:
+        """Offload old large tool messages while preserving newly added ones."""
+        try:
+            from ds_course_agent.shared.tool_result_store import compact_large_tool_messages
+
+            return compact_large_tool_messages(
+                messages,
+                preserve_recent=preserve_recent,
+                location="history.add_messages.tool_result_compaction",
+            )
+        except Exception:
+            # History persistence must never fail because compaction failed.
+            return messages
 
     def delete(self) -> bool:
         """删除历史记录文件"""

@@ -299,7 +299,32 @@ python -m pytest tests/test_agent_smoke.py tests/test_rag_tool.py tests/test_que
 86 passed, 5 skipped, 1 warning
 ```
 
+## 8. Tool result placeholder compaction
+
+目的：完成 nanobot-style tool result normalization 的安全版：大 tool/RAG payload 不只落盘观测，
+旧的 tool-like 历史消息也可以替换为短 placeholder，避免下一轮上下文被旧检索结果撑爆。
+
+改动：
+
+- `shared/tool_result_store.py` 新增 `compact_large_tool_messages()`：
+  - 返回新的 message list，不原地修改调用方消息。
+  - 只处理旧消息；通过 `preserve_recent` 保护最新/current-turn tool result。
+  - 只压缩 ToolMessage/function message 或明确标记为 tool/RAG payload 的消息，不压普通 human/ai/system。
+  - 原文写入 artifact store，placeholder 保留 `artifact://...`、tool 名、原始 chars 与估算 tokens。
+- `FileChatMessageHistory.add_messages()` 在持久化前调用 compaction，
+  `preserve_recent=max(1, len(messages))`，保证本次新增消息不被压缩。
+- compaction 失败只回退为原消息，不影响 history 持久化。
+
+验证：
+
+```text
+py_compile passed
+python -m pytest tests/test_tool_result_store.py tests/test_context_governor.py tests/test_short_term_memory.py -q
+17 passed, 1 warning
+```
+
 ## 下一步
 
 1. 基于 registry 逐步把 `rag/tools.py` 拆成一个 tool 一个文件。
 2. 做 Pydantic config clean-cut，将 `shared/config.py` 迁移为 `shared/config/` 包并统一导入。
+3. Skill prompt injection：将认知型教学 skill 注入系统提示词。

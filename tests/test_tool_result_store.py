@@ -3,9 +3,13 @@
 import json
 from pathlib import Path
 
+from langchain_core.messages import ToolMessage
+
 from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.shared.context_governor import ContextBudget
 from ds_course_agent.shared.tool_result_store import (
+    TOOL_RESULT_COMPACTED_MARKER,
+    compact_large_tool_messages,
     maybe_store_large_text_payload,
     store_text_artifact,
 )
@@ -89,4 +93,58 @@ def test_maybe_store_large_text_payload_can_be_warning_only(tmp_path, monkeypatc
 
     assert result is not None
     assert "artifact" not in result
+    assert list(tmp_path.rglob("*")) == []
+
+
+def test_compact_large_tool_messages_replaces_old_tool_result_with_placeholder(tmp_path):
+    old_payload = "教材片段" * 20
+    current_payload = "当前轮 RAG 结果" * 20
+    messages = [
+        ToolMessage(content=old_payload, name="course_rag_tool", tool_call_id="old-call"),
+        ToolMessage(content=current_payload, name="course_rag_tool", tool_call_id="current-call"),
+    ]
+
+    token = begin_query_trace({"entrypoint": "unit_test"})
+    compacted = compact_large_tool_messages(
+        messages,
+        preserve_recent=1,
+        budget=ContextBudget(large_message_tokens=2),
+        root=tmp_path,
+        location="unit.compact",
+    )
+    trace = end_query_trace(token)
+
+    assert compacted is not messages
+    assert messages[0].content == old_payload
+    assert compacted[0].content.startswith("[Prior course_rag_tool result compacted: artifact://")
+    assert "Full text saved at" in compacted[0].content
+    assert compacted[0].additional_kwargs[TOOL_RESULT_COMPACTED_MARKER] is True
+    assert compacted[0].additional_kwargs["original_chars"] == len(old_payload)
+    assert compacted[1].content == current_payload
+
+    artifact_path = Path(compacted[0].additional_kwargs["artifact"]["path"])
+    if not artifact_path.is_absolute():
+        from ds_course_agent.shared.paths import PROJECT_ROOT
+
+        artifact_path = PROJECT_ROOT / artifact_path
+    assert artifact_path.exists()
+    assert artifact_path.read_text(encoding="utf-8") == old_payload
+    assert any(event["stage"] == "tool_result.compaction" for event in trace["events"])
+
+
+def test_compact_large_tool_messages_preserve_recent_protects_current_tool_result(tmp_path):
+    current_payload = "当前轮 RAG 结果" * 20
+    messages = [
+        ToolMessage(content=current_payload, name="course_rag_tool", tool_call_id="current-call"),
+    ]
+
+    compacted = compact_large_tool_messages(
+        messages,
+        preserve_recent=1,
+        budget=ContextBudget(large_message_tokens=2),
+        root=tmp_path,
+        location="unit.compact",
+    )
+
+    assert compacted[0].content == current_payload
     assert list(tmp_path.rglob("*")) == []

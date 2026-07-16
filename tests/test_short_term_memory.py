@@ -2,13 +2,14 @@ import json
 import threading
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 import ds_course_agent.shared.history as history_module
 from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 import ds_course_agent.shared.context_governor as context_governor
 from ds_course_agent.shared.context_governor import ContextBudget
 from ds_course_agent.shared.history import FileChatMessageHistory, MemoryPolicy
+from ds_course_agent.shared.tool_result_store import TOOL_RESULT_COMPACTED_MARKER
 
 
 def _turn(i: int):
@@ -101,6 +102,37 @@ def test_history_large_message_warning_does_not_change_persisted_content(tmp_pat
         if event["stage"] == "context_governor.warning"
     ]
     assert any(event["data"]["kind"] == "large_message" for event in warning_events)
+
+
+def test_history_compacts_old_tool_results_but_preserves_incoming_tool_result(tmp_path, monkeypatch):
+    import ds_course_agent.shared.config as config
+
+    artifact_root = tmp_path / "artifacts"
+    monkeypatch.setattr(config, "TOOL_RESULT_ARTIFACTS_ENABLED", True)
+    monkeypatch.setattr(config, "TOOL_RESULT_ARTIFACT_DIR", str(artifact_root))
+    monkeypatch.setattr(config, "TOOL_RESULT_INLINE_MAX_CHARS", 10)
+    history = FileChatMessageHistory(
+        storage_path=str(tmp_path / "history"),
+        session_id="session-tools",
+        memory_policy=MemoryPolicy(max_recent_messages=10, summarize_after_messages=20),
+    )
+    old_payload = "旧工具结果" * 10
+    current_payload = "当前工具结果" * 10
+
+    history.add_messages([
+        ToolMessage(content=old_payload, name="course_rag_tool", tool_call_id="old-call"),
+    ])
+    assert history.messages[0].content == old_payload
+
+    history.add_messages([
+        ToolMessage(content=current_payload, name="course_rag_tool", tool_call_id="current-call"),
+    ])
+
+    messages = history.messages
+    assert messages[0].content.startswith("[Prior course_rag_tool result compacted: artifact://")
+    assert messages[0].additional_kwargs[TOOL_RESULT_COMPACTED_MARKER] is True
+    assert messages[1].content == current_payload
+    assert list(artifact_root.rglob("*.txt"))
 
 
 def test_file_chat_history_atomic_write_keeps_previous_file_on_replace_failure(tmp_path, monkeypatch):
