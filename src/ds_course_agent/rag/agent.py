@@ -761,10 +761,10 @@ class AgentService(object):
             return False
         if decision.retrieval_policy == "required":
             return False
-        return not self._generic_answer_needs_buffered_postprocess(route_state)
+        return not self._svm_kernel_answer_needs_buffered_postprocess(route_state)
 
-    def _generic_answer_needs_buffered_postprocess(self, route_state: dict) -> bool:
-        """Detect generic cases where postprocessor may prepend/modify content."""
+    def _svm_kernel_answer_needs_buffered_postprocess(self, route_state: dict) -> bool:
+        """Detect the SVM/kernel judgment case where postprocessor may prepend content."""
         context = route_state["context"]
         question = context.original_query
         normalized = normalize_query_text(question)
@@ -1224,6 +1224,8 @@ class AgentService(object):
         )
         route_state["history"].add_messages([HumanMessage(content=user_input)])
 
+        # TODO: move route-specific streaming into RouteHandler.stream_execute()
+        # so stream_chat_with_history does not drift from sync route dispatch.
         if route == RouteType.GROUNDED_RAG:
             yield self._progress_event(
                 "retrieval",

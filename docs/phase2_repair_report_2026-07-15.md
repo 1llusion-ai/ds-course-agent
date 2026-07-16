@@ -454,6 +454,26 @@ retrieval_guard.force: 17 -> 0
 | `single_007#turn1` | 24882.835 | grounded_rag | PCA 的核心公式或原理是什么？ |
 | `single_008#turn1` | 21931.607 | grounded_rag | 过拟合是什么意思？ |
 
+## 13. Phase 2 review fixes
+
+审查后修复/澄清：
+
+- `RetrievalGuardHook.after_llm()` 对 `RouteType.GROUNDED_RAG` 显式 skip，避免未来 handler 漏记 retrieval trace 时发生二次 RAG。
+- `_format_student_profile_for_prompt()` 已确认包含 `# Student Profile Context` 标题，无需改动。
+- `stream_chat_with_history()` 的 route-specific streaming dispatch 暂保留，但添加 TODO：后续应下沉到 `RouteHandler.stream_execute()` 或等价协议，避免 sync/stream dispatch 漂移。
+- `ToolSpec.result_policy` 注释明确：Phase 2 通过 artifact store + history compaction 落地 offload/compaction，尚未实现 LangGraph tool-return 拦截。
+- `_generic_answer_needs_buffered_postprocess()` 重命名为 `_svm_kernel_answer_needs_buffered_postprocess()`，避免把 SVM/核函数领域特例伪装成通用机制。
+- `HookManager` / `AgentHook` 文档补充 `after_llm(agent=..., stream=...)` 等 kwargs 约定。
+
+验证：
+
+```text
+python -m pytest tests/test_agent_hooks_route_handlers.py tests/test_query_pipeline.py tests/test_tool_registry.py -q
+56 passed, 1 warning
+python -m pytest -q
+305 passed, 6 skipped, 2 warnings
+```
+
 ## 下一步
 
 Phase 2 后端架构现代化已完成。下一轮建议进入 UI polish，或按需开启 Phase 3（Dream-lite / WebSocket / 子代理代码审查）。

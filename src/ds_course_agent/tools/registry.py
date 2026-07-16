@@ -15,6 +15,11 @@ class ToolSpec:
     ``side_effect`` marks writes or externally visible effects. Token/cost usage is
     captured separately via ``cost_class`` so retrieval+LLM tools can remain
     read-only while still being observable as expensive.
+
+    ``result_policy`` is a registry contract for normalization/offload decisions.
+    Phase 2 persists and compacts large tool results through
+    ``shared.tool_result_store`` and history compaction; generic LangGraph tool
+    return interception is intentionally not implemented yet.
     """
 
     name: str

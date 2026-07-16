@@ -12,7 +12,16 @@ from typing import Any, Iterable, Protocol
 
 
 class AgentHook(Protocol):
-    """Optional AgentService lifecycle callbacks."""
+    """Optional AgentService lifecycle callbacks.
+
+    Common keyword arguments:
+    - ``after_llm(..., agent=AgentService, stream=bool)`` is used by hooks that
+      need route-aware fallback behavior.
+    - ``after_tool(..., tool_spec=ToolSpec | None)`` is reserved for future
+      registry-driven tool normalization.
+    Hooks must ignore unknown ``**kwargs`` so the lifecycle can evolve without
+    breaking existing hooks.
+    """
 
     def before_route(self, state: dict[str, Any]) -> None: ...
     def after_route(self, state: dict[str, Any], decision: Any) -> None: ...
@@ -28,6 +37,8 @@ class HookManager:
 
     Transforming callbacks (`after_llm`, `after_tool`) pass the current result
     through each hook and use a non-None return value as the updated result.
+    `after_llm` currently forwards `agent` and `stream` keyword arguments; future
+    hook additions should remain keyword-only and optional.
     """
 
     def __init__(self, hooks: Iterable[Any] = ()) -> None:

@@ -79,6 +79,19 @@ def test_retrieval_guard_hook_preserves_result_when_skipped():
     assert RetrievalGuardHook().after_llm(state, "original", agent=FakeAgent()) == "original"
 
 
+def test_retrieval_guard_hook_skips_grounded_rag_route_without_agent_callbacks():
+    state = _route_state(route=RouteType.GROUNDED_RAG, retrieval_policy="required")
+
+    class FakeAgent:
+        def _retrieval_guard_skip_reason(self, route_state, result):
+            raise AssertionError("grounded RAG route should skip before guard callbacks")
+
+        def _maybe_force_grounded_answer(self, question, chat_history=None, skip=False):
+            raise AssertionError("grounded RAG route should not force a second RAG call")
+
+    assert RetrievalGuardHook().after_llm(state, "grounded", agent=FakeAgent()) == "grounded"
+
+
 def test_execute_route_dispatches_to_route_handler_without_if_ladder():
     from ds_course_agent.rag.agent import AgentService
 

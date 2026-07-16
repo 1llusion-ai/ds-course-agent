@@ -17,7 +17,13 @@ logger = logging.getLogger(__name__)
 
 
 class RouteHandler(Protocol):
-    """Execute one RouteDecision branch."""
+    """Execute one RouteDecision branch.
+
+    TODO: add a streaming execution contract (`stream_execute` or an
+    `execute(stream=True)` iterator return type) so `stream_chat_with_history`
+    can delegate route-specific streaming to handlers instead of branching on
+    route type itself.
+    """
 
     def can_handle(self, agent: Any, route_state: dict[str, Any]) -> bool: ...
     def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str: ...

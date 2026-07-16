@@ -20,12 +20,22 @@ class RetrievalGuardHook:
             return result
 
         from ds_course_agent.rag.query_trace import trace_step
+        from ds_course_agent.rag.query_pipeline import RouteType
 
         context = state["context"]
         decision = state["decision"]
         route = decision.route
         user_input = context.original_query
         chat_history = state.get("chat_history")
+
+        if route == RouteType.GROUNDED_RAG:
+            trace_step(
+                "retrieval_guard.skip",
+                route=route.value,
+                retrieval_policy=decision.retrieval_policy,
+                reason="grounded_rag_route",
+            )
+            return result
 
         skip_reason = agent._retrieval_guard_skip_reason(state, result)
         forced_result = agent._maybe_force_grounded_answer(
