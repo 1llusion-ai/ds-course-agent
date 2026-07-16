@@ -45,27 +45,37 @@
         ></div>
       </template>
 
-      <div v-if="showProgressTimeline" class="progress-timeline" aria-live="polite">
-        <div
-          v-for="(item, index) in progressItems"
-          :key="item.key"
-          class="progress-step"
-          :class="{
-            'progress-step--active': message.isLoading && index === progressItems.length - 1,
-            'progress-step--done': !message.isLoading || index < progressItems.length - 1
-          }"
-        >
-          <span class="progress-step__marker"></span>
-          <div class="progress-step__body">
-            <div class="progress-step__title">{{ item.message }}</div>
-            <div v-if="item.phase || item.route || item.time" class="progress-step__meta">
-              <span v-if="item.phase">{{ item.phase }}</span>
-              <span v-if="item.route">{{ item.route }}</span>
-              <span v-if="item.time">{{ item.time }}</span>
+      <details v-if="showProgressTimeline" class="progress-disclosure">
+        <summary class="progress-summary">
+          <span class="progress-summary__left">
+            <span class="progress-summary__chevron">›</span>
+            <span>{{ message.isLoading ? currentProgressMessage || '正在处理...' : '查看执行过程' }}</span>
+          </span>
+          <span class="progress-summary__meta">{{ progressSummary }}</span>
+        </summary>
+
+        <div class="progress-timeline" aria-live="polite">
+          <div
+            v-for="(item, index) in progressItems"
+            :key="item.key"
+            class="progress-step"
+            :class="{
+              'progress-step--active': message.isLoading && index === progressItems.length - 1,
+              'progress-step--done': !message.isLoading || index < progressItems.length - 1
+            }"
+          >
+            <span class="progress-step__marker"></span>
+            <div class="progress-step__body">
+              <div class="progress-step__title">{{ item.message }}</div>
+              <div v-if="item.phase || item.route || item.time" class="progress-step__meta">
+                <span v-if="item.phase">{{ item.phase }}</span>
+                <span v-if="item.route">{{ item.route }}</span>
+                <span v-if="item.time">{{ item.time }}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </details>
 
       <div v-if="sourceChips.length" class="source-panel">
         <div class="source-panel__label">来源</div>
@@ -228,6 +238,12 @@ const progressItems = computed(() => {
 const currentProgressMessage = computed(() => {
   const items = progressItems.value
   return items.length ? items[items.length - 1].message : ''
+})
+
+const progressSummary = computed(() => {
+  const count = progressItems.value.length
+  const route = routeBadge.value
+  return [count ? `${count} 步` : '', route].filter(Boolean).join(' · ')
 })
 
 const hasExplicitProgressEvents = computed(() => (
@@ -510,10 +526,76 @@ async function handleMarkdownClick(event) {
   font-weight: 650;
 }
 
+.progress-disclosure {
+  margin-top: 12px;
+}
+
+.progress-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  padding: 7px 10px;
+  color: #475569;
+  list-style: none;
+  background: rgba(248, 250, 252, 0.74);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.progress-summary::-webkit-details-marker {
+  display: none;
+}
+
+.progress-summary:hover {
+  background: rgba(239, 246, 255, 0.82);
+  border-color: rgba(37, 99, 235, 0.18);
+}
+
+.progress-summary__left {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.progress-summary__left span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-summary__chevron {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  border-radius: 999px;
+  transition: transform 0.16s ease;
+}
+
+.progress-disclosure[open] .progress-summary__chevron {
+  transform: rotate(90deg);
+}
+
+.progress-summary__meta {
+  flex-shrink: 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
 .progress-timeline {
   display: grid;
   gap: 0;
-  margin-top: 12px;
+  margin-top: 8px;
   padding: 10px 12px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 14px;
