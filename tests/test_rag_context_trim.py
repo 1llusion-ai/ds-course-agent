@@ -5,8 +5,15 @@ from langchain_core.documents import Document
 
 import ds_course_agent.rag.rag as rag_module
 from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
-from ds_course_agent.rag.rag import RAGService
+from ds_course_agent.rag.rag import RAGService, clear_rag_retrieval_cache
 from ds_course_agent.tools.course_rag import build_sources_from_documents
+
+
+@pytest.fixture(autouse=True)
+def _clear_retrieval_cache_between_tests():
+    clear_rag_retrieval_cache()
+    yield
+    clear_rag_retrieval_cache()
 
 
 class RecordingPromptTemplate:
@@ -38,6 +45,9 @@ def _set_trim_config(monkeypatch, *, enabled=True, max_chars=120, doc_max_chars=
     monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_MAX_CHARS", max_chars, raising=False)
     monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_DOC_MAX_CHARS", doc_max_chars, raising=False)
     monkeypatch.setattr(rag_module.config, "CHAT_SYSTEM_SUFFIX", "", raising=False)
+    monkeypatch.setattr(rag_module.config, "RAG_RETRIEVAL_CACHE_ENABLED", True, raising=False)
+    monkeypatch.setattr(rag_module.config, "RAG_RETRIEVAL_CACHE_TTL_SECONDS", 600.0, raising=False)
+    monkeypatch.setattr(rag_module.config, "RAG_RETRIEVAL_CACHE_SIZE", 128, raising=False)
 
 
 def _make_doc(source, page, content, extra_metadata=None):
@@ -84,6 +94,52 @@ def test_retrieve_trims_each_document_and_total_budget_preserves_metadata(monkey
     )
 
 
+def test_retrieve_cache_hit_avoids_second_retriever_call_and_returns_clones(monkeypatch):
+    _set_trim_config(monkeypatch, enabled=True, max_chars=300, doc_max_chars=35)
+
+    service = RAGService.__new__(RAGService)
+    service.use_hybrid = True
+    service.hybrid_retriever = MagicMock()
+    service.hybrid_retriever.retrieve.return_value = [
+        _make_doc("chapter-cache.pdf", 22, "PCA 可以用于降维", {"chapter": "第7章"})
+    ]
+
+    token = begin_query_trace({"entrypoint": "unit_test"})
+    first = service.retrieve("PCA 有什么作用？", top_k=1)
+    second = service.retrieve(" PCA 有什么作用？ ", top_k=1)
+    trace = end_query_trace(token)
+
+    assert first.formatted_context == second.formatted_context
+    assert first.documents[0].metadata == second.documents[0].metadata
+    assert first.documents[0] is not second.documents[0]
+    assert service.hybrid_retriever.retrieve.call_count == 1
+    assert any(event["stage"] == "rag.retrieve.cache_miss" for event in trace["events"])
+    assert any(event["stage"] == "rag.retrieve.cache_store" for event in trace["events"])
+    assert any(event["stage"] == "rag.retrieve.cache_hit" for event in trace["events"])
+
+
+def test_retrieve_cache_key_includes_top_k(monkeypatch):
+    _set_trim_config(monkeypatch, enabled=True, max_chars=500, doc_max_chars=80)
+
+    service = RAGService.__new__(RAGService)
+    service.use_hybrid = True
+    service.hybrid_retriever = MagicMock()
+    service.hybrid_retriever.retrieve.side_effect = [
+        [_make_doc("top1.pdf", 1, "top one")],
+        [
+            _make_doc("top1.pdf", 1, "top one"),
+            _make_doc("top2.pdf", 2, "top two"),
+        ],
+    ]
+
+    first = service.retrieve("PCA 有什么作用？", top_k=1)
+    second = service.retrieve("PCA 有什么作用？", top_k=2)
+
+    assert len(first.documents) == 1
+    assert len(second.documents) == 2
+    assert service.hybrid_retriever.retrieve.call_count == 2
+
+
 def test_format_documents_keeps_full_content_when_trim_disabled(monkeypatch):
     _set_trim_config(monkeypatch, enabled=False, max_chars=20, doc_max_chars=5)
 
@@ -116,17 +172,27 @@ def test_answer_with_context_applies_final_context_budget_protection(monkeypatch
         "文档元数据：{'source': 'final-guard.pdf', 'page': 8, 'page_note': '教材第8页'}"
     )
 
+    token = begin_query_trace({"entrypoint": "unit_test"})
     answer = service.answer_with_context("什么是数据科学？", context)
+    trace = end_query_trace(token)
 
     assert answer.answer == "mock-answer"
     assert fake_model.invoked_prompts
     assert prompt_template.calls, "prompt_template.format should be called"
 
     passed_context = prompt_template.calls[0]["context"]
+    expected_max_tokens = int(getattr(rag_module.config, "RAG_ANSWER_MAX_TOKENS", 384) or 384)
     assert len(passed_context) <= 150
     assert "final-guard.pdf" in passed_context
     assert "page_note" in passed_context
     assert "[片段已按总上下文预算裁剪" in passed_context or "[片段因上下文预算省略]" in passed_context
+    assert any(
+        event["stage"] == "rag.answer.prompt_compact"
+        and event["data"]["mode"] == "sync"
+        and event["data"]["context_chars"] == len(passed_context)
+        and event["data"]["max_tokens"] == expected_max_tokens
+        for event in trace["events"]
+    )
 
 
 def test_stream_answer_with_context_applies_final_context_budget_protection(monkeypatch):
@@ -143,14 +209,24 @@ def test_stream_answer_with_context_applies_final_context_budget_protection(monk
         "文档元数据：{'source': 'stream-guard.pdf', 'page': 9, 'page_note': '教材第9页'}"
     )
 
+    token = begin_query_trace({"entrypoint": "unit_test"})
     chunks = list(service.stream_answer_with_context("什么是数据科学？", context))
+    trace = end_query_trace(token)
 
     assert chunks == ["mock-answer"]
     assert fake_model.streamed_prompts
     assert prompt_template.calls, "prompt_template.format should be called"
 
     passed_context = prompt_template.calls[0]["context"]
+    expected_max_tokens = int(getattr(rag_module.config, "RAG_ANSWER_MAX_TOKENS", 384) or 384)
     assert len(passed_context) <= 150
     assert "stream-guard.pdf" in passed_context
     assert "page_note" in passed_context
     assert "[片段已按总上下文预算裁剪" in passed_context or "[片段因上下文预算省略]" in passed_context
+    assert any(
+        event["stage"] == "rag.answer.prompt_compact"
+        and event["data"]["mode"] == "stream"
+        and event["data"]["context_chars"] == len(passed_context)
+        and event["data"]["max_tokens"] == expected_max_tokens
+        for event in trace["events"]
+    )

@@ -53,20 +53,23 @@ def get_retrieval_trace() -> RetrievalTrace:
 
 def _merge_sources(existing: list[dict], incoming: list[dict]) -> list[dict]:
     merged = list(existing)
-    seen = {
-        item.get("reference")
-        for item in existing
-        if isinstance(item, dict) and item.get("reference")
-    }
+    seen = set()
+    for item in existing:
+        if not isinstance(item, dict):
+            continue
+        key = item.get("url") or item.get("href") or item.get("reference")
+        if key:
+            seen.add(key)
 
     for item in incoming:
         if not isinstance(item, dict):
             continue
         reference = item.get("reference")
-        if not reference or reference in seen:
+        key = item.get("url") or item.get("href") or reference
+        if not key or key in seen:
             continue
-        merged.append({"reference": reference})
-        seen.add(reference)
+        merged.append(dict(item))
+        seen.add(key)
 
     return merged
 

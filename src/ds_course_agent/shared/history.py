@@ -10,9 +10,7 @@ from typing import Sequence
 
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import (
-    AIMessage,
     BaseMessage,
-    HumanMessage,
     SystemMessage,
     message_to_dict,
     messages_from_dict,
@@ -273,32 +271,13 @@ class FileChatMessageHistory(BaseChatMessageHistory):
 
     def _summarize_messages(self, messages: list[BaseMessage]) -> str:
         """Deterministic extractive summary; no LLM call in persistence path."""
-        turns: list[str] = []
-        pending_user: str | None = None
+        from ds_course_agent.shared.context_governor import summarize_message_turns
 
-        for message in messages:
-            content = self._normalize_content(getattr(message, "content", ""))
-            if not content:
-                continue
-
-            if isinstance(message, HumanMessage) or getattr(message, "type", "") == "human":
-                if pending_user:
-                    turns.append(f"用户曾问：{pending_user}")
-                pending_user = self._truncate_text(content, 120)
-                continue
-
-            if isinstance(message, AIMessage) or getattr(message, "type", "") == "ai":
-                answer = self._truncate_text(content, 180)
-                if pending_user:
-                    turns.append(f"用户问：{pending_user}；助手答：{answer}")
-                    pending_user = None
-                else:
-                    turns.append(f"助手曾答：{answer}")
-
-        if pending_user:
-            turns.append(f"用户曾问：{pending_user}")
-
-        return "\n".join(f"- {turn}" for turn in turns)
+        return summarize_message_turns(
+            messages,
+            include_non_dialogue=False,
+            include_context_summaries=False,
+        )
 
     def _normalize_content(self, content) -> str:
         if isinstance(content, str):

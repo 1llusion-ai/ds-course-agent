@@ -11,6 +11,8 @@ benefits:
 
 from __future__ import annotations
 
+import concurrent.futures
+import contextvars
 from collections import OrderedDict, namedtuple
 import logging
 import threading
@@ -37,24 +39,29 @@ _CIRCUIT_OPEN_UNTIL = 0.0
 _LAST_ERROR = ""
 
 
-def embedding_model_kwargs() -> dict[str, Any]:
+def embedding_model_kwargs(*, timeout_seconds: float | None = None) -> dict[str, Any]:
     """Return normalized kwargs for LangChain OpenAI-compatible embeddings."""
 
+    timeout = (
+        float(timeout_seconds)
+        if timeout_seconds is not None
+        else float(getattr(config, "EMBEDDING_TIMEOUT_SECONDS", 8.0) or 8.0)
+    )
     return {
         "model": config.MODEL_EMBEDDING,
         "api_key": config.API_KEY,
         "base_url": config.BASE_URL,
         "tiktoken_enabled": False,
         "check_embedding_ctx_length": False,
-        "timeout": float(getattr(config, "EMBEDDING_TIMEOUT_SECONDS", 8.0) or 8.0),
+        "timeout": max(0.1, timeout),
         "max_retries": max(0, int(getattr(config, "EMBEDDING_MAX_RETRIES", 0) or 0)),
     }
 
 
-def create_embedding_model() -> OpenAIEmbeddings:
+def create_embedding_model(*, timeout_seconds: float | None = None) -> OpenAIEmbeddings:
     """Create the project's default embedding client."""
 
-    return OpenAIEmbeddings(**embedding_model_kwargs())
+    return OpenAIEmbeddings(**embedding_model_kwargs(timeout_seconds=timeout_seconds))
 
 
 def _cache_maxsize() -> int:
@@ -101,13 +108,45 @@ def _record_success() -> None:
         _LAST_ERROR = ""
 
 
-def embed_query_cached(model: Any, text: str) -> list[float]:
+def _embed_query_with_optional_timeout(
+    model: Any,
+    query: str,
+    *,
+    timeout_seconds: float | None = None,
+) -> Any:
+    """Call ``model.embed_query`` with an optional hard wait guard."""
+
+    timeout = None if timeout_seconds is None else float(timeout_seconds)
+    if timeout is None or timeout <= 0:
+        return model.embed_query(query)
+
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="embedding-query")
+    request_context = contextvars.copy_context()
+    future = executor.submit(request_context.run, model.embed_query, query)
+    try:
+        return future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError as exc:
+        future.cancel()
+        _trace_step(
+            "embedding.timeout",
+            status="error",
+            timeout_seconds=timeout,
+            text_chars=len(query),
+        )
+        raise EmbeddingUnavailable(f"Embedding query timed out after {timeout:.1f}s") from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def embed_query_cached(model: Any, text: str, *, timeout_seconds: float | None = None) -> list[float]:
     """Embed one query with cache and fast-fail circuit breaker.
 
     ``model`` is intentionally passed in so tests can still patch the local
     module's ``OpenAIEmbeddings`` constructor.  Cache keys use the configured
     model/base URL plus the normalized text, so different providers/models do
-    not collide.
+    not collide.  ``timeout_seconds`` is a caller-specific wait guard layered
+    on top of the embedding client's own HTTP timeout; cache hits do not spawn
+    a worker thread.
     """
 
     global _CACHE_HITS, _CACHE_MISSES
@@ -139,7 +178,11 @@ def embed_query_cached(model: Any, text: str) -> list[float]:
         )
 
     try:
-        vector = model.embed_query(query)
+        vector = _embed_query_with_optional_timeout(
+            model,
+            query,
+            timeout_seconds=timeout_seconds,
+        )
     except Exception as exc:
         _record_failure(exc)
         raise

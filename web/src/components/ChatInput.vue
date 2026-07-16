@@ -10,20 +10,39 @@
         @input="autoResize"
         ref="textareaRef"
       />
-      <button
-        class="send-btn"
-        :disabled="!inputText.trim() || loading"
-        @click="handleSend"
-      >
-        <svg v-if="!loading" class="send-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-        <span v-else class="send-loader"></span>
-      </button>
-    </div>
-    <div v-if="!hero" class="input-hint">
-      <span>Enter 发送 · Shift+Enter 换行</span>
-      <span>基于教材与学习画像回答</span>
+      <div class="composer-toolbar" :class="{ 'composer-toolbar--hero': hero }">
+        <div class="composer-toolbar-left">
+          <button
+            type="button"
+            class="web-search-toggle"
+            :class="{ 'web-search-toggle--active': webSearchEnabled }"
+            :aria-pressed="webSearchEnabled"
+            :title="webSearchEnabled ? '联网搜索已开启' : '开启联网搜索'"
+            :disabled="loading"
+            @click="handleToggleWebSearch"
+          >
+            <svg class="web-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <circle cx="12" cy="12" r="9" stroke-width="1.9" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M3.6 9h16.8M3.6 15h16.8M12 3c2.2 2.4 3.3 5.4 3.3 9S14.2 18.6 12 21M12 3C9.8 5.4 8.7 8.4 8.7 12s1.1 6.6 3.3 9" />
+            </svg>
+            <span class="web-search-label">联网搜索</span>
+          </button>
+          <div v-if="!hero" class="input-hint">
+            <span>Enter 发送 · Shift+Enter 换行</span>
+            <span>{{ webSearchEnabled ? '将使用外部搜索结果' : '基于教材与学习画像回答' }}</span>
+          </div>
+        </div>
+        <button
+          class="send-btn"
+          :disabled="!inputText.trim() || loading"
+          @click="handleSend"
+        >
+          <svg v-if="!loading" class="send-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+          <span v-else class="send-loader"></span>
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -33,9 +52,10 @@ import { computed, ref, nextTick } from 'vue'
 
 const props = defineProps({
   loading: Boolean,
-  hero: Boolean
+  hero: Boolean,
+  webSearchEnabled: Boolean
 })
-const emit = defineEmits(['send'])
+const emit = defineEmits(['send', 'toggle-web-search'])
 
 const inputText = ref('')
 const textareaRef = ref(null)
@@ -57,11 +77,16 @@ function autoResize() {
 function handleSend() {
   const text = inputText.value.trim()
   if (!text || props.loading) return
-  emit('send', text)
+  emit('send', text, { webSearch: props.webSearchEnabled })
   inputText.value = ''
   nextTick(() => {
     if (textareaRef.value) textareaRef.value.style.height = 'auto'
   })
+}
+
+function handleToggleWebSearch() {
+  if (props.loading) return
+  emit('toggle-web-search', !props.webSearchEnabled)
 }
 
 function handleEnterKey(event) {
@@ -86,8 +111,9 @@ function handleEnterKey(event) {
 
 .input-container {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.92));
   border: 1px solid rgba(148, 163, 184, 0.26);
@@ -103,7 +129,7 @@ function handleEnterKey(event) {
 .chat-input-wrapper--hero .input-container {
   border-color: rgba(15, 23, 42, 0.07);
   border-radius: 28px;
-  padding: 18px 18px 18px 22px;
+  padding: 18px 18px 14px 22px;
   box-shadow:
     0 24px 70px rgba(15, 23, 42, 0.10),
     0 1px 0 rgba(255, 255, 255, 0.92) inset;
@@ -118,7 +144,7 @@ function handleEnterKey(event) {
 }
 
 .input-field {
-  flex: 1;
+  width: 100%;
   background: transparent;
   border: none;
   outline: none;
@@ -130,6 +156,7 @@ function handleEnterKey(event) {
   max-height: 150px;
   font-family: inherit;
   padding: 4px 0;
+  box-sizing: border-box;
 }
 
 .chat-input-wrapper--hero .input-field {
@@ -139,6 +166,75 @@ function handleEnterKey(event) {
 
 .input-field::placeholder {
   color: #a8a29e;
+}
+
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 0;
+  padding: 0;
+}
+
+.composer-toolbar--hero {
+  justify-content: space-between;
+}
+
+.composer-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.web-search-toggle {
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.30);
+  background: rgba(255, 255, 255, 0.78);
+  color: #64748b;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+  transition: all 0.18s ease;
+}
+
+.web-search-toggle:hover:not(:disabled) {
+  color: #2563eb;
+  border-color: rgba(37, 99, 235, 0.36);
+  transform: translateY(-1px);
+}
+
+.web-search-toggle--active {
+  color: #0f766e;
+  border-color: rgba(15, 118, 110, 0.34);
+  background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(239, 246, 255, 0.96));
+  box-shadow: 0 12px 24px rgba(15, 118, 110, 0.12);
+}
+
+.web-search-toggle:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.web-search-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.chat-input-wrapper--hero .web-search-toggle {
+  height: 36px;
+  padding: 0 15px;
 }
 
 .send-btn {
@@ -183,12 +279,13 @@ function handleEnterKey(event) {
 
 .input-hint {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 14px;
   flex-wrap: wrap;
   font-size: 12px;
   color: #94a3b8;
-  margin-top: 10px;
+  margin-top: 0;
+  min-width: 0;
 }
 
 
@@ -200,6 +297,20 @@ function handleEnterKey(event) {
 @keyframes input-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 560px) {
+  .composer-toolbar {
+    gap: 10px;
+  }
+
+  .web-search-toggle {
+    padding: 0 12px;
+  }
+
+  .input-hint {
+    display: none;
   }
 }
 </style>

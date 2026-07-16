@@ -80,7 +80,7 @@
             rel="noopener noreferrer"
             :title="source.title"
           >
-            <span class="source-chip__icon">📚</span>
+            <span class="source-chip__icon">{{ source.icon }}</span>
             <span class="source-chip__text">{{ source.label }}</span>
             <span v-if="source.detail" class="source-chip__detail">{{ source.detail }}</span>
           </component>
@@ -145,7 +145,8 @@ const ROUTE_LABELS = {
   search: '检索增强',
   schedule: '课程安排',
   skill: '学习策略',
-  tool: '工具调用'
+  tool: '工具调用',
+  web_search: '联网搜索'
 }
 
 function extractRouteValue(route) {
@@ -196,7 +197,15 @@ function sourceText(source, index) {
 function sourceDetail(source) {
   if (!source || typeof source === 'string') return ''
   if (typeof source.score === 'number') return `${Math.round(source.score * 100)}%`
+  if (source.source === 'web') {
+    return [source.provider, source.published_at].filter(Boolean).join(' · ')
+  }
   return source.section || source.page || source.metadata?.section || source.metadata?.page || ''
+}
+
+function sourceIcon(source) {
+  if (!source || typeof source === 'string') return '📚'
+  return source.source === 'web' || source.url ? '🌐' : '📚'
 }
 
 function sourceUrl(source) {
@@ -287,6 +296,7 @@ const sourceChips = computed(() => {
         key,
         label,
         detail,
+        icon: sourceIcon(source),
         url,
         title: detail ? `${label} · ${detail}` : label
       }

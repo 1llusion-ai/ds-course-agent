@@ -15,17 +15,23 @@ from __future__ import annotations
 import ds_course_agent.shared.config as config
 
 
-def _remote_chat_kwargs() -> dict:
+def _remote_chat_kwargs(
+    *,
+    max_tokens: int | None = None,
+    timeout_seconds: float | None = None,
+    temperature: float = 0.7,
+) -> dict:
     """Build remote OpenAI-compatible chat kwargs from project config."""
 
     return {
         "model": config.REMOTE_MODEL_NAME,
         "api_key": config.API_KEY,
         "base_url": config.BASE_URL,
-        "temperature": 0.7,
-        "max_completion_tokens": config.CHAT_MAX_TOKENS,
-        "timeout": config.CHAT_TIMEOUT_SECONDS,
+        "temperature": temperature,
+        "max_completion_tokens": max_tokens if max_tokens is not None else config.CHAT_MAX_TOKENS,
+        "timeout": timeout_seconds if timeout_seconds is not None else config.CHAT_TIMEOUT_SECONDS,
         "max_retries": config.CHAT_MAX_RETRIES,
+        "streaming": True,
         "extra_body": {"enable_thinking": False} if config.CHAT_DISABLE_THINKING else None,
     }
 
@@ -45,15 +51,23 @@ def get_chat_model():
 
 def get_rag_text_model():
     """Return the model used by the RAG chain while preserving local text-mode behavior."""
+    max_tokens = max(64, int(getattr(config, "RAG_ANSWER_MAX_TOKENS", 384) or 384))
+    timeout = max(1.0, float(getattr(config, "RAG_ANSWER_TIMEOUT_SECONDS", 10.0) or 10.0))
 
     if config.USE_REMOTE_LLM:
         from langchain_openai import ChatOpenAI
 
-        return ChatOpenAI(**_remote_chat_kwargs())
+        return ChatOpenAI(**_remote_chat_kwargs(max_tokens=max_tokens, timeout_seconds=timeout, temperature=0.3))
 
     from langchain_ollama import OllamaLLM
 
-    return OllamaLLM(model=config.MODEL_CHAT, base_url=config.BASE_URL_CHAT)
+    return OllamaLLM(
+        model=config.MODEL_CHAT,
+        base_url=config.BASE_URL_CHAT,
+        num_predict=max_tokens,
+        temperature=0.3,
+        sync_client_kwargs={"timeout": timeout},
+    )
 
 
 def get_summary_model():

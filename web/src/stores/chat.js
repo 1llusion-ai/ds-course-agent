@@ -254,7 +254,8 @@ export const useChatStore = defineStore('chat', () => {
     const response = await chatApi.send({
       session_id: sessionId,
       message,
-      student_id: studentId
+      student_id: studentId,
+      web_search: Boolean(options.webSearch)
     })
 
     const nextMessage = {
@@ -273,7 +274,8 @@ export const useChatStore = defineStore('chat', () => {
       const source = chatApi.sendStream({
         session_id: sessionId,
         message,
-        student_id: studentId
+        student_id: studentId,
+        web_search: Boolean(options.webSearch)
       })
 
       let settled = false
@@ -360,7 +362,8 @@ export const useChatStore = defineStore('chat', () => {
     const userMessage = {
       role: 'user',
       content: message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      metadata: options.webSearch ? { web_search: true } : undefined
     }
     const optimisticMessages = [
       ...(messagesBySession.value[sessionId] || []),

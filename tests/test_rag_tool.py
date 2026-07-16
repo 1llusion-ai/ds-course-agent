@@ -1,19 +1,31 @@
 """
 RAG Tool 单元测试
 """
+import time
+from types import SimpleNamespace
+
 import pytest
 from unittest.mock import patch, MagicMock
 
 from langchain_core.documents import Document
 
+import ds_course_agent.tools.course_rag as course_rag_module
 from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.tools.course_rag import (
     begin_retrieval_trace,
+    clear_rag_answer_cache,
     course_rag_tool,
     end_retrieval_trace,
 )
 from ds_course_agent.tools.knowledge_base_status import check_knowledge_base_status
 from ds_course_agent.tools.registry import get_rag_tools
+
+
+@pytest.fixture(autouse=True)
+def _clear_rag_answer_cache_between_tests():
+    clear_rag_answer_cache()
+    yield
+    clear_rag_answer_cache()
 
 
 class TestCourseRAGTool:
@@ -92,6 +104,42 @@ class TestCourseRAGTool:
         assert result == "PCA 是一种降维方法"
         assert trace.used_retrieval is True
         assert trace.sources == [{"reference": "《第7章 无监督学习算法》第123页"}]
+
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
+    def test_tool_degrades_to_extractive_fallback_when_answer_llm_fails(self, mock_get_service):
+        """检索成功但回答 LLM 失败时，应降级为教材片段而不是整轮报错。"""
+        mock_service = MagicMock()
+        mock_result = MagicMock()
+        mock_result.has_results = True
+        mock_result.formatted_context = "context"
+        mock_result.documents = [
+            Document(
+                page_content="PCA 通过投影到方差最大的方向来实现降维，同时尽量保留数据中的主要信息。",
+                metadata={
+                    "chapter": "无监督学习算法",
+                    "chapter_no": "第7章",
+                    "book_page": 140,
+                },
+            )
+        ]
+        mock_service.retrieve.return_value = mock_result
+        mock_service.answer_with_context.side_effect = RuntimeError("llm unavailable")
+        mock_get_service.return_value = mock_service
+
+        token = begin_query_trace({"entrypoint": "unit_test"})
+        result = course_rag_tool.invoke("PCA 的核心思想是什么？")
+        trace = end_query_trace(token)
+
+        assert "生成式回答服务暂时不可用" in result
+        assert "PCA 通过投影" in result
+        assert "《第7章 无监督学习算法》第140页" in result
+        assert trace["status"] == "ok"
+        assert any(
+            event["stage"] == "tool.course_rag.answer_degraded"
+            and event["status"] == "warning"
+            and event["data"]["mode"] == "sync"
+            for event in trace["events"]
+        )
 
 
 
@@ -183,6 +231,109 @@ class TestCourseRAGTool:
             event["stage"] == "context_governor.warning"
             and event["data"]["kind"] == "large_text_payload"
             and event["data"]["tool"] == "course_rag_tool"
+            for event in trace["events"]
+        )
+
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
+    def test_tool_answer_cache_hit_avoids_second_answer_llm_call(self, mock_get_service):
+        """同一问题+同一检索上下文命中进程内缓存，第二次不再调回答 LLM。"""
+        mock_service = MagicMock()
+        mock_result = MagicMock()
+        mock_result.has_results = True
+        mock_result.formatted_context = "教材上下文：PCA 是降维算法"
+        mock_result.documents = [
+            Document(page_content="PCA 是降维算法", metadata={"chapter_no": "第7章", "book_page": 140})
+        ]
+        mock_service.retrieve.return_value = mock_result
+        mock_service.answer_with_context.return_value = SimpleNamespace(answer="PCA 可以用于降维。")
+        mock_get_service.return_value = mock_service
+
+        token = begin_query_trace({"entrypoint": "unit_test"})
+        first = course_rag_tool.invoke("PCA 有什么作用？")
+        second = course_rag_tool.invoke(" PCA 有什么作用？ ")
+        trace = end_query_trace(token)
+
+        assert first == "PCA 可以用于降维。"
+        assert second == first
+        assert mock_service.answer_with_context.call_count == 1
+        assert any(event["stage"] == "rag.answer.cache_store" for event in trace["events"])
+        assert any(event["stage"] == "rag.answer.cache_hit" for event in trace["events"])
+        assert any(
+            event["stage"] == "tool.result"
+            and event["status"] == "cache_hit"
+            and event["data"].get("tool") == "course_rag_tool"
+            for event in trace["events"]
+        )
+
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
+    def test_tool_answer_cache_key_includes_retrieved_context(self, mock_get_service):
+        """同一问题但检索上下文不同，不应复用旧答案。"""
+        mock_service = MagicMock()
+        result_a = MagicMock()
+        result_a.has_results = True
+        result_a.formatted_context = "上下文 A：PCA 用于降维"
+        result_a.documents = [Document(page_content="A", metadata={"source": "a.pdf"})]
+        result_b = MagicMock()
+        result_b.has_results = True
+        result_b.formatted_context = "上下文 B：PCA 用于可视化"
+        result_b.documents = [Document(page_content="B", metadata={"source": "b.pdf"})]
+        mock_service.retrieve.side_effect = [result_a, result_b]
+        mock_service.answer_with_context.side_effect = [
+            SimpleNamespace(answer="答案 A"),
+            SimpleNamespace(answer="答案 B"),
+        ]
+        mock_get_service.return_value = mock_service
+
+        token = begin_query_trace({"entrypoint": "unit_test"})
+        first = course_rag_tool.invoke("PCA 有什么作用？")
+        second = course_rag_tool.invoke("PCA 有什么作用？")
+        trace = end_query_trace(token)
+
+        assert first == "答案 A"
+        assert second == "答案 B"
+        assert mock_service.answer_with_context.call_count == 2
+        assert sum(1 for event in trace["events"] if event["stage"] == "rag.answer.cache_miss") == 2
+
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
+    def test_tool_answer_timeout_degrades_to_extractive_fallback(self, mock_get_service, monkeypatch):
+        """回答 LLM 超时后，应在超时保护窗口内降级为教材片段。"""
+        monkeypatch.setattr(course_rag_module.config, "RAG_ANSWER_TIMEOUT_SECONDS", 0.001, raising=False)
+
+        class SlowAnswerService:
+            def retrieve(self, question):
+                return SimpleNamespace(
+                    has_results=True,
+                    formatted_context="context",
+                    documents=[
+                        Document(
+                            page_content="PCA 通过投影到方差最大的方向来实现降维。",
+                            metadata={"chapter": "无监督学习算法", "chapter_no": "第7章", "book_page": 140},
+                        )
+                    ],
+                )
+
+            def answer_with_context(self, question, context):
+                time.sleep(0.05)
+                return SimpleNamespace(answer="迟到的生成式答案")
+
+        mock_get_service.return_value = SlowAnswerService()
+
+        token = begin_query_trace({"entrypoint": "unit_test"})
+        result = course_rag_tool.invoke("PCA 的核心思想是什么？")
+        trace = end_query_trace(token)
+
+        assert "生成式回答服务暂时不可用" in result
+        assert "PCA 通过投影" in result
+        assert "《第7章 无监督学习算法》第140页" in result
+        assert any(
+            event["stage"] == "rag.answer.timeout_degraded"
+            and event["status"] == "warning"
+            for event in trace["events"]
+        )
+        assert any(
+            event["stage"] == "tool.course_rag.answer_degraded"
+            and event["status"] == "warning"
+            and event["data"]["error_type"] == "TimeoutError"
             for event in trace["events"]
         )
 

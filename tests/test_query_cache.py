@@ -1,4 +1,9 @@
+import time
+
+import pytest
+
 from ds_course_agent.rag import knowledge_mapper
+from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.rag.knowledge_mapper import MatchedConcept
 from ds_course_agent.rag.query_pipeline import utils
 from ds_course_agent.shared import embeddings
@@ -104,5 +109,40 @@ def test_embedding_circuit_breaker_fast_fails_after_error(monkeypatch):
     else:
         raise AssertionError("second call should fast-fail via circuit breaker")
 
+    assert model.calls == 1
+    embeddings.reset_embedding_circuit_breaker()
+
+
+def test_embedding_query_timeout_guard_opens_circuit(monkeypatch):
+    embeddings.clear_embedding_query_cache()
+    embeddings.reset_embedding_circuit_breaker()
+    monkeypatch.setattr(embeddings.config, "EMBEDDING_QUERY_CACHE_SIZE", 0)
+    monkeypatch.setattr(embeddings.config, "EMBEDDING_CIRCUIT_BREAKER_SECONDS", 30)
+
+    class SlowEmbeddingModel:
+        def __init__(self):
+            self.calls = 0
+
+        def embed_query(self, text):
+            self.calls += 1
+            time.sleep(0.05)
+            return [1.0]
+
+    model = SlowEmbeddingModel()
+
+    token = begin_query_trace({"entrypoint": "unit_test"})
+    with pytest.raises(embeddings.EmbeddingUnavailable):
+        embeddings.embed_query_cached(model, "慢查询", timeout_seconds=0.001)
+    trace = end_query_trace(token)
+
+    assert model.calls == 1
+    assert any(
+        event["stage"] == "embedding.timeout"
+        and event["status"] == "error"
+        for event in trace["events"]
+    )
+
+    with pytest.raises(embeddings.EmbeddingUnavailable):
+        embeddings.embed_query_cached(model, "第二次")
     assert model.calls == 1
     embeddings.reset_embedding_circuit_breaker()

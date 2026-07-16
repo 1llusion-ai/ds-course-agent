@@ -265,6 +265,10 @@ class TestQueryRouter:
             "为什么 alpha=0.01 比 alpha=0.1 效果好？",
             "SVM 的 C=1 和 C=10 有什么区别？",
             "learning_rate=0.001 时梯度下降为什么不收敛？",
+            "为什么 epsilon=0.1 效果不好？",
+            "momentum=0.9 有什么作用？",
+            "dropout=0.5 会不会太大？",
+            "KMeans 的 k=3 应该怎么选？",
         ],
     )
     def test_hyperparameter_assignment_questions_are_not_code_routes(self, query):
@@ -283,6 +287,82 @@ class TestQueryRouter:
         assert "python_execution" not in context.detected_intents
         assert "code_review" not in context.detected_intents
         assert decision.route == RouteType.GROUNDED_RAG
+        assert decision.retrieval_policy == "required"
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "x=5 为什么不对？",
+            "a=1 和 b=2 的区别是什么？",
+            "c=1 为什么效果不好？",
+        ],
+    )
+    def test_non_ml_assignment_concept_questions_are_not_forced_grounded_rag(self, query):
+        """普通变量赋值 + 概念疑问词不能伪装成 ML 超参数课程题。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input=query,
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        decision = router.route(context)
+
+        assert "python_execution" not in context.detected_intents
+        assert "code_review" not in context.detected_intents
+        assert decision.route == RouteType.GENERIC_AGENT
+        assert decision.retrieval_policy == "optional"
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "学习率应该是什么值？",
+            "交叉验证应该算什么方法？",
+        ],
+    )
+    def test_should_be_fact_question_is_not_misconception_route(self, query):
+        """“应该是什么/应该算什么”是事实提问，不是错误前提断言。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input=query,
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        context.skill_candidate_keys.add("misconception-handling")
+
+        decision = router.route(context)
+
+        assert decision.route == RouteType.GROUNDED_RAG
+        assert decision.retrieval_policy == "required"
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "我以为 KMeans 是监督学习",
+            "难道不是越大越好吗",
+            "学习率应该不是越大越好吗？",
+        ],
+    )
+    def test_explicit_misconception_signals_still_route_to_skill(self, query):
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input=query,
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        context.skill_candidate_keys.add("misconception-handling")
+
+        decision = router.route(context)
+
+        assert decision.route == RouteType.MISCONCEPTION_SKILL
         assert decision.retrieval_policy == "required"
 
     def test_explicit_misconception_preempts_autonomous_code_payload(self):

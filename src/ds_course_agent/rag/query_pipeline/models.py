@@ -18,6 +18,7 @@ class RouteType(str, Enum):
     PYTHON_EXEC = "python_exec"
     CODE_REVIEW = "code_review"
     GROUNDED_RAG = "grounded_rag"
+    WEB_SEARCH = "web_search"
     GENERIC_AGENT = "generic_agent"
     OFF_TOPIC = "off_topic"
 

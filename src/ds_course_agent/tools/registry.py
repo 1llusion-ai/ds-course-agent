@@ -131,6 +131,8 @@ def build_default_tool_registry() -> ToolRegistry:
     from ds_course_agent.tools.knowledge_base_status import check_knowledge_base_status
     from ds_course_agent.tools.misconception import record_misconception_event
     from ds_course_agent.tools.python_exec import python_exec_tool
+    from ds_course_agent.tools.web_fetch import web_fetch_tool
+    from ds_course_agent.tools.web_search import web_search_tool
 
     return ToolRegistry(
         [
@@ -185,6 +187,30 @@ def build_default_tool_registry() -> ToolRegistry:
                 progress_label="正在执行 Python 代码...",
                 result_policy="offload_candidate",
                 description="在受限 sandbox 中执行 Python 代码。",
+            ),
+            ToolSpec(
+                name="web_search_tool",
+                tool=web_search_tool,
+                read_only=True,
+                side_effect=False,
+                concurrency_safe=True,
+                cost_class="network",
+                progress_label="正在联网搜索...",
+                expose_to_agent=False,
+                result_policy="offload_candidate",
+                description="用户显式开启联网搜索时，检索外部网页并返回压缩证据摘要。",
+            ),
+            ToolSpec(
+                name="web_fetch_tool",
+                tool=web_fetch_tool,
+                read_only=True,
+                side_effect=False,
+                concurrency_safe=True,
+                cost_class="network",
+                progress_label="正在读取网页内容...",
+                expose_to_agent=False,
+                result_policy="offload_candidate",
+                description="显式联网搜索后的深度网页阅读工具，抓取并压缩网页正文。",
             ),
             ToolSpec(
                 name="record_misconception_event",

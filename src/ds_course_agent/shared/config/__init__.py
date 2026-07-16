@@ -33,6 +33,11 @@ _SETTING_NAMES = [
     "CHAT_SYSTEM_SUFFIX",
     "QUERY_CACHE_ENABLED",
     "QUERY_CACHE_SIZE",
+    "CONCEPT_MAP_EMBEDDING_MODE",
+    "CONCEPT_MAP_QUERY_EMBEDDING_TIMEOUT_SECONDS",
+    "CONCEPT_MAP_SKIP_EMBEDDING_IF_RULE_MATCH",
+    "CONCEPT_MAP_MIN_RULE_MATCHES_TO_SKIP",
+    "CONCEPT_MAP_ONLINE_PRECOMPUTE_ENABLED",
     "COURSE_NAME",
     "COURSE_DESCRIPTION",
     "COURSE_COLLECTION_NAME",
@@ -50,9 +55,32 @@ _SETTING_NAMES = [
     "RAG_CONTEXT_TRIM_ENABLED",
     "RAG_CONTEXT_MAX_CHARS",
     "RAG_CONTEXT_DOC_MAX_CHARS",
+    "RAG_ANSWER_MAX_TOKENS",
+    "RAG_ANSWER_TIMEOUT_SECONDS",
+    "RAG_ANSWER_CACHE_ENABLED",
+    "RAG_ANSWER_CACHE_TTL_SECONDS",
+    "RAG_ANSWER_CACHE_SIZE",
+    "RAG_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS",
+    "RAG_RETRIEVAL_CACHE_ENABLED",
+    "RAG_RETRIEVAL_CACHE_TTL_SECONDS",
+    "RAG_RETRIEVAL_CACHE_SIZE",
     "TOOL_RESULT_ARTIFACTS_ENABLED",
     "TOOL_RESULT_ARTIFACT_DIR",
     "TOOL_RESULT_INLINE_MAX_CHARS",
+    "WEB_SEARCH_ENABLED",
+    "WEB_SEARCH_PROVIDER",
+    "WEB_SEARCH_API_KEY",
+    "WEB_SEARCH_TOP_K",
+    "WEB_SEARCH_TIMEOUT_SECONDS",
+    "WEB_SEARCH_CONTEXT_MAX_CHARS",
+    "WEB_SEARCH_SNIPPET_MAX_CHARS",
+    "WEB_FETCH_ENABLED",
+    "WEB_FETCH_TOP_N",
+    "WEB_FETCH_TIMEOUT_SECONDS",
+    "WEB_FETCH_MAX_BYTES",
+    "WEB_FETCH_MAX_CHARS_PER_PAGE",
+    "WEB_FETCH_CONTEXT_MAX_CHARS",
+    "WEB_FETCH_USE_JINA_READER",
     "CHUNK_SIZE",
     "CHUNK_OVERLAP",
     "MAX_SPLIT_CHAR_NUMBER",
@@ -103,6 +131,11 @@ chat_disable_thinking = CHAT_DISABLE_THINKING
 chat_system_suffix = CHAT_SYSTEM_SUFFIX
 query_cache_enabled = QUERY_CACHE_ENABLED
 query_cache_size = QUERY_CACHE_SIZE
+concept_map_embedding_mode = CONCEPT_MAP_EMBEDDING_MODE
+concept_map_query_embedding_timeout_seconds = CONCEPT_MAP_QUERY_EMBEDDING_TIMEOUT_SECONDS
+concept_map_skip_embedding_if_rule_match = CONCEPT_MAP_SKIP_EMBEDDING_IF_RULE_MATCH
+concept_map_min_rule_matches_to_skip = CONCEPT_MAP_MIN_RULE_MATCHES_TO_SKIP
+concept_map_online_precompute_enabled = CONCEPT_MAP_ONLINE_PRECOMPUTE_ENABLED
 embedding_timeout_seconds = EMBEDDING_TIMEOUT_SECONDS
 embedding_max_retries = EMBEDDING_MAX_RETRIES
 embedding_query_cache_size = EMBEDDING_QUERY_CACHE_SIZE
@@ -113,9 +146,32 @@ context_large_message_tokens = CONTEXT_LARGE_MESSAGE_TOKENS
 rag_context_trim_enabled = RAG_CONTEXT_TRIM_ENABLED
 rag_context_max_chars = RAG_CONTEXT_MAX_CHARS
 rag_context_doc_max_chars = RAG_CONTEXT_DOC_MAX_CHARS
+rag_answer_max_tokens = RAG_ANSWER_MAX_TOKENS
+rag_answer_timeout_seconds = RAG_ANSWER_TIMEOUT_SECONDS
+rag_answer_cache_enabled = RAG_ANSWER_CACHE_ENABLED
+rag_answer_cache_ttl_seconds = RAG_ANSWER_CACHE_TTL_SECONDS
+rag_answer_cache_size = RAG_ANSWER_CACHE_SIZE
+rag_retrieval_embedding_timeout_seconds = RAG_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS
+rag_retrieval_cache_enabled = RAG_RETRIEVAL_CACHE_ENABLED
+rag_retrieval_cache_ttl_seconds = RAG_RETRIEVAL_CACHE_TTL_SECONDS
+rag_retrieval_cache_size = RAG_RETRIEVAL_CACHE_SIZE
 tool_result_artifacts_enabled = TOOL_RESULT_ARTIFACTS_ENABLED
 tool_result_artifact_dir = TOOL_RESULT_ARTIFACT_DIR
 tool_result_inline_max_chars = TOOL_RESULT_INLINE_MAX_CHARS
+web_search_enabled = WEB_SEARCH_ENABLED
+web_search_provider = WEB_SEARCH_PROVIDER
+web_search_api_key = WEB_SEARCH_API_KEY
+web_search_top_k = WEB_SEARCH_TOP_K
+web_search_timeout_seconds = WEB_SEARCH_TIMEOUT_SECONDS
+web_search_context_max_chars = WEB_SEARCH_CONTEXT_MAX_CHARS
+web_search_snippet_max_chars = WEB_SEARCH_SNIPPET_MAX_CHARS
+web_fetch_enabled = WEB_FETCH_ENABLED
+web_fetch_top_n = WEB_FETCH_TOP_N
+web_fetch_timeout_seconds = WEB_FETCH_TIMEOUT_SECONDS
+web_fetch_max_bytes = WEB_FETCH_MAX_BYTES
+web_fetch_max_chars_per_page = WEB_FETCH_MAX_CHARS_PER_PAGE
+web_fetch_context_max_chars = WEB_FETCH_CONTEXT_MAX_CHARS
+web_fetch_use_jina_reader = WEB_FETCH_USE_JINA_READER
 
 __all__ = [
     "Settings",
@@ -148,6 +204,11 @@ __all__ = [
     "chat_system_suffix",
     "query_cache_enabled",
     "query_cache_size",
+    "concept_map_embedding_mode",
+    "concept_map_query_embedding_timeout_seconds",
+    "concept_map_skip_embedding_if_rule_match",
+    "concept_map_min_rule_matches_to_skip",
+    "concept_map_online_precompute_enabled",
     "embedding_timeout_seconds",
     "embedding_max_retries",
     "embedding_query_cache_size",
@@ -158,8 +219,31 @@ __all__ = [
     "rag_context_trim_enabled",
     "rag_context_max_chars",
     "rag_context_doc_max_chars",
+    "rag_answer_max_tokens",
+    "rag_answer_timeout_seconds",
+    "rag_answer_cache_enabled",
+    "rag_answer_cache_ttl_seconds",
+    "rag_answer_cache_size",
+    "rag_retrieval_embedding_timeout_seconds",
+    "rag_retrieval_cache_enabled",
+    "rag_retrieval_cache_ttl_seconds",
+    "rag_retrieval_cache_size",
     "tool_result_artifacts_enabled",
     "tool_result_artifact_dir",
     "tool_result_inline_max_chars",
+    "web_search_enabled",
+    "web_search_provider",
+    "web_search_api_key",
+    "web_search_top_k",
+    "web_search_timeout_seconds",
+    "web_search_context_max_chars",
+    "web_search_snippet_max_chars",
+    "web_fetch_enabled",
+    "web_fetch_top_n",
+    "web_fetch_timeout_seconds",
+    "web_fetch_max_bytes",
+    "web_fetch_max_chars_per_page",
+    "web_fetch_context_max_chars",
+    "web_fetch_use_jina_reader",
     *_SETTING_NAMES,
 ]

@@ -14,6 +14,8 @@ EXPECTED_REGISTRY_NAMES = [
     "course_schedule_tool",
     "current_datetime_tool",
     "python_exec_tool",
+    "web_search_tool",
+    "web_fetch_tool",
     "record_misconception_event",
 ]
 
@@ -60,6 +62,18 @@ def test_default_registry_marks_safe_read_only_tools_parallelizable():
     assert event_spec.cost_class == "write"
     assert event_spec.can_run_in_parallel is False
 
+    web_spec = registry.get("web_search_tool")
+    assert web_spec.read_only is True
+    assert web_spec.side_effect is False
+    assert web_spec.can_run_in_parallel is True
+    assert web_spec.expose_to_agent is False
+
+    fetch_spec = registry.get("web_fetch_tool")
+    assert fetch_spec.read_only is True
+    assert fetch_spec.side_effect is False
+    assert fetch_spec.can_run_in_parallel is True
+    assert fetch_spec.expose_to_agent is False
+
 
 def test_tool_metadata_helpers_are_json_serializable_and_hide_callables():
     metadata = get_rag_tool_metadata()
@@ -74,6 +88,8 @@ def test_tool_metadata_helpers_are_json_serializable_and_hide_callables():
     assert [item["name"] for item in exposed] == EXPECTED_AGENT_TOOL_NAMES
 
     assert get_rag_tool_spec("current_datetime_tool").progress_label == "正在读取当前时间..."
+    assert get_rag_tool_spec("web_search_tool").progress_label == "正在联网搜索..."
+    assert get_rag_tool_spec("web_fetch_tool").progress_label == "正在读取网页内容..."
 
 
 def test_registry_validates_duplicate_and_mismatched_specs():

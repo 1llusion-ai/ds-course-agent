@@ -110,6 +110,14 @@ class AgentService(object):
             self.route_handlers = handlers
         return handlers
 
+    def _select_route_handler(self, route_state: dict):
+        """Return the first route handler that accepts the route state."""
+
+        for handler in self._get_route_handlers():
+            if handler.can_handle(self, route_state):
+                return handler
+        raise RuntimeError("No route handler available")
+
     def _warn_context_budget(self, messages: list, *, location: str, **metadata) -> None:
         """Emit warning-only context budget telemetry without mutating messages."""
         try:
@@ -118,6 +126,27 @@ class AgentService(object):
             warn_if_context_over_budget(messages, location=location, **metadata)
         except Exception:
             logger.debug("Context budget warning failed at %s", location, exc_info=True)
+
+    def _govern_context_budget(self, messages: list, *, location: str, **metadata) -> list:
+        """Apply pre-LLM context compaction while preserving warning telemetry."""
+
+        try:
+            from ds_course_agent.shared.context_governor import (
+                compact_messages_to_budget,
+                warn_if_context_over_budget,
+            )
+
+            warn_if_context_over_budget(messages, location=location, **metadata)
+            return compact_messages_to_budget(messages, location=location, **metadata)
+        except Exception as exc:
+            try:
+                from ds_course_agent.rag.query_trace import trace_error
+
+                trace_error("context_governor.compaction_failed", exc, location=location, **metadata)
+            except Exception:
+                pass
+            logger.warning("Context budget compaction failed at %s", location, exc_info=True)
+            return messages
 
     def _classify_llm_error(self, exc: Exception) -> str:
         """Classify LLM/provider errors for retry/degrade decisions."""
@@ -250,6 +279,91 @@ class AgentService(object):
                 return error_response
 
         return self._build_error_response("未知错误", "请稍后重试", is_retryable=True)
+
+    def _extract_message_content(self, message) -> str:
+        """Extract text from a direct chat-model response/chunk."""
+
+        content = getattr(message, "content", message)
+        if isinstance(content, bytes):
+            return content.decode("utf-8", errors="ignore")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    text = item.get("text") or item.get("content")
+                    if text:
+                        parts.append(str(text))
+            return "".join(parts)
+        return "" if content is None else str(content)
+
+    def _invoke_direct_messages_with_retry(
+        self,
+        messages: list,
+        *,
+        fallback_input: str,
+        start_attempt: int = 0,
+    ) -> str:
+        """Invoke the underlying chat model directly, without the LangGraph agent.
+
+        Web-search answering already has its evidence/context prepared and does
+        not need tool calling.  Going directly to the chat model avoids agent
+        graph buffering in providers that only emit the final AIMessage through
+        ``create_agent(...).stream(...)``.
+        """
+
+        max_retries = max(0, int(config.CHAT_MAX_RETRIES))
+        for attempt in range(start_attempt, max_retries + 1):
+            try:
+                response = self._extract_message_content(self.llm.invoke(messages))
+                if not response or not response.strip():
+                    if attempt < max_retries:
+                        self._sleep_before_retry(attempt, reason="direct_empty_response")
+                        continue
+                    return self._build_error_response(
+                        "生成回复失败",
+                        "AI未能生成有效回复，请重试。",
+                        is_retryable=True,
+                    )
+                return response
+            except Exception as e:
+                error_response = self._handle_llm_exception(
+                    e,
+                    attempt=attempt,
+                    max_retries=max_retries,
+                    fallback_input=fallback_input,
+                )
+                if error_response is None:
+                    continue
+                return error_response
+
+        return self._build_error_response("未知错误", "请稍后重试", is_retryable=True)
+
+    def _stream_direct_messages_with_retry(self, messages: list, *, fallback_input: str) -> Iterator[str]:
+        """Stream directly from the underlying chat model with invoke fallback."""
+
+        max_retries = max(0, int(config.CHAT_MAX_RETRIES))
+        emitted = False
+        try:
+            for chunk in self.llm.stream(messages):
+                text = self._extract_message_content(chunk)
+                if text:
+                    emitted = True
+                    yield text
+            return
+        except Exception as exc:
+            if emitted or self._classify_llm_error(exc) != "retryable" or max_retries <= 0:
+                raise
+            self._sleep_before_retry(0, reason="direct_stream_retryable")
+            recovered = self._invoke_direct_messages_with_retry(
+                messages,
+                fallback_input=fallback_input,
+                start_attempt=1,
+            )
+            yield from self._yield_text_chunks(recovered)
 
     def _handle_llm_exception(
         self,
@@ -401,11 +515,45 @@ class AgentService(object):
             messages.append(SystemMessage(content=turn_context.strip()))
         messages.extend(formatted_history)
         messages.append(HumanMessage(content=user_input))
+        messages = self._govern_context_budget(
+            messages,
+            location="agent.chat.pre_llm",
+            stream=stream,
+        )
 
         if stream:
             return self._stream_chat_with_retry(messages, fallback_input=user_input)
 
         return self._invoke_messages_with_retry(messages, fallback_input=user_input)
+
+    def direct_chat(
+        self,
+        user_input: str,
+        chat_history: Optional[list] = None,
+        stream: bool = False,
+        turn_context: Optional[str] = None,
+    ):
+        """Chat directly with the base LLM, bypassing the tool-calling agent."""
+
+        if chat_history is None:
+            chat_history = []
+
+        formatted_history = self._format_chat_history(chat_history)
+        messages = []
+        if turn_context and turn_context.strip():
+            messages.append(SystemMessage(content=turn_context.strip()))
+        messages.extend(formatted_history)
+        messages.append(HumanMessage(content=user_input))
+        messages = self._govern_context_budget(
+            messages,
+            location="agent.direct_chat.pre_llm",
+            stream=stream,
+        )
+
+        if stream:
+            return self._stream_direct_messages_with_retry(messages, fallback_input=user_input)
+
+        return self._invoke_direct_messages_with_retry(messages, fallback_input=user_input)
 
     def _stream_chat(self, messages: list) -> Iterator[str]:
         """流式输出对话响应"""
@@ -847,6 +995,7 @@ class AgentService(object):
             RouteType.CURRENT_DATETIME,
             RouteType.PYTHON_EXEC,
             RouteType.CODE_REVIEW,
+            RouteType.WEB_SEARCH,
             RouteType.LEARNING_PATH_SKILL,
             RouteType.MISCONCEPTION_SKILL,
             RouteType.PERSONALIZED_EXPLANATION_SKILL,
@@ -871,6 +1020,7 @@ class AgentService(object):
         user_input: str,
         session_id: str,
         student_id: str = None,
+        web_search: bool = False,
     ) -> dict:
         """
         构建 QueryContext 并执行统一路由决策。
@@ -894,7 +1044,11 @@ class AgentService(object):
             student_id=student_id,
         )
 
-        special_case_response = self._handle_special_case(user_input)
+        # When the user explicitly clicks the web-search switch, treat that as
+        # a turn-level mode choice rather than a keyword heuristic.  Do not let
+        # generic special-case/off-topic guards short-circuit the requested
+        # search path.
+        special_case_response = None if web_search else self._handle_special_case(user_input)
 
         def lightweight_state(route, confidence, reasons, *, required_tools=None, retrieval_policy="disabled"):
             context = QueryContext(
@@ -907,6 +1061,7 @@ class AgentService(object):
                 metadata={
                     "schedule_tool_query": self._build_schedule_tool_query(user_input),
                     "fast_path": True,
+                    "web_search_requested": bool(web_search),
                 },
             )
             decision = RouteDecision(
@@ -939,6 +1094,15 @@ class AgentService(object):
             return state
 
         from ds_course_agent.rag.query_pipeline import RouteType
+
+        if web_search:
+            return lightweight_state(
+                RouteType.WEB_SEARCH,
+                1.0,
+                ["用户显式开启联网搜索"],
+                required_tools=["web_search_tool"],
+                retrieval_policy="required",
+            )
 
         # Fast path: system/special-case requests do not need profile, concept map, or rewrite.
         if special_case_response:
@@ -1100,28 +1264,20 @@ class AgentService(object):
         self._get_hooks().after_route(state, decision)
         return state
 
-    def _execute_route(self, route_state: dict, stream: bool = False) -> str:
-        """按统一 RouteDecision 执行回答；sync/stream 共享此执行核心。"""
+    def _finalize_route_result(self, route_state: dict, result, *, stream: bool = False) -> str:
+        """Apply route-level hooks and empty-result fallback to a handler result."""
         from ds_course_agent.rag.query_trace import trace_error
 
         user_input = route_state["context"].original_query
         chat_history = route_state["chat_history"]
 
-        result = None
-
         try:
-            for handler in self._get_route_handlers():
-                if handler.can_handle(self, route_state):
-                    result = handler.execute(self, route_state, stream=stream)
-                    break
-
+            result = self._get_hooks().after_llm(route_state, result, agent=self, stream=stream)
         except Exception as e:
-            stage = "agent.stream_generate" if stream else "agent.generate"
-            trace_error(stage, e)
-            logger.error("%s failed: %s", stage, e, exc_info=stream)
-            result = ""
-
-        result = self._get_hooks().after_llm(route_state, result, agent=self, stream=stream)
+            trace_error("hook.after_llm", e)
+            logger.error("after_llm hook failed: %s", e, exc_info=True)
+            if result is None:
+                result = ""
 
         if not result or not isinstance(result, str) or not result.strip():
             try:
@@ -1146,14 +1302,78 @@ class AgentService(object):
 
         return result
 
+    def _observe_stream_end(self, route_state: dict, result: str, *, stream: bool = True) -> None:
+        """Run observational stream-end hooks after direct streaming completes.
+
+        Direct streaming intentionally yields tokens before postprocessing can
+        transform the full answer.  This hook point is therefore observation-only:
+        it lets hooks record trace/telemetry for the complete streamed text
+        without changing already-sent chunks.
+        """
+        from ds_course_agent.rag.query_trace import trace_error
+
+        try:
+            self._get_hooks().after_stream_end(route_state, result, agent=self, stream=stream)
+        except Exception as e:
+            trace_error("hook.after_stream_end", e)
+            logger.error("after_stream_end hook failed: %s", e, exc_info=True)
+
+    def _execute_selected_route_handler(self, handler, route_state: dict, stream: bool = False) -> str:
+        """Execute an already-selected route handler without re-running selection."""
+        from ds_course_agent.rag.query_trace import trace_error
+
+        try:
+            result = handler.execute(self, route_state, stream=stream)
+
+        except Exception as e:
+            stage = "agent.stream_generate" if stream else "agent.generate"
+            trace_error(stage, e)
+            logger.error("%s failed: %s", stage, e, exc_info=stream)
+            result = ""
+
+        return self._finalize_route_result(route_state, result, stream=stream)
+
+    def _execute_route(self, route_state: dict, stream: bool = False) -> str:
+        """按统一 RouteDecision 执行回答；sync/stream 共享此执行核心。"""
+        from ds_course_agent.rag.query_trace import trace_error
+
+        try:
+            handler = self._select_route_handler(route_state)
+        except Exception as e:
+            stage = "agent.stream_generate" if stream else "agent.generate"
+            trace_error(stage, e)
+            logger.error("%s failed: %s", stage, e, exc_info=stream)
+            return self._finalize_route_result(route_state, "", stream=stream)
+
+        return self._execute_selected_route_handler(handler, route_state, stream=stream)
+
     def _execute_route_sync(self, route_state: dict) -> str:
         """Compatibility wrapper for non-streaming route execution."""
         return self._execute_route(route_state, stream=False)
 
+    def _iter_route_response(self, route_state: dict) -> Iterator[str]:
+        """Delegate streaming route execution to the selected RouteHandler."""
+
+        from ds_course_agent.rag.query_trace import trace_error
+
+        try:
+            handler = self._select_route_handler(route_state)
+            yield from handler.stream_execute(self, route_state)
+        except Exception as exc:
+            trace_error("agent.stream_generate", exc)
+            logger.error("agent.stream_generate failed: %s", exc, exc_info=True)
+            raise
+
     def _iter_grounded_rag_response(self, route_state: dict) -> Iterator[str]:
         """Stream the common grounded-RAG route directly from the RAG model call."""
         from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
-        from ds_course_agent.tools.course_rag import build_sources_from_documents, get_rag_service
+        from ds_course_agent.tools.course_rag import (
+            build_extractive_rag_fallback,
+            build_no_results_message,
+            build_sources_from_documents,
+            get_rag_service,
+            trace_answer_degraded,
+        )
         from ds_course_agent.tools._shared import _track_retrieval
 
         question = self._route_execution_query(route_state["context"], route_state["decision"])
@@ -1171,27 +1391,33 @@ class AgentService(object):
 
             if not result.has_results:
                 trace_step("tool.result", tool="course_rag_tool", status="no_results")
-                message = (
-                    f"抱歉，在《{config.COURSE_NAME}》课程资料中未找到与你问题直接相关的内容。\n"
-                    "建议你：\n"
-                    "1. 换一个更具体的关键词重新提问\n"
-                    "2. 说明你想问的概念、章节或例子\n"
-                    "3. 如果是课程外问题，我也可以先帮你判断是否属于本课程范围"
-                )
-                yield from self._yield_text_chunks(message)
+                yield from self._yield_text_chunks(build_no_results_message())
                 return
 
             yielded = False
-            with trace_span("tool.course_rag.answer_stream"):
-                for chunk in service.stream_answer_with_context(question, result.formatted_context):
-                    if chunk:
-                        yielded = True
-                        yield chunk
+            try:
+                with trace_span("tool.course_rag.answer_stream"):
+                    for chunk in service.stream_answer_with_context(question, result.formatted_context):
+                        if chunk:
+                            yielded = True
+                            yield chunk
 
-            if not yielded:
-                with trace_span("tool.course_rag.answer"):
-                    answer_result = service.answer_with_context(question, result.formatted_context)
-                yield from self._yield_text_chunks(answer_result.answer)
+                if not yielded:
+                    with trace_span("tool.course_rag.answer"):
+                        answer_result = service.answer_with_context(question, result.formatted_context)
+                    yield from self._yield_text_chunks(answer_result.answer)
+            except Exception as answer_exc:
+                trace_answer_degraded(answer_exc, mode="stream")
+                fallback = build_extractive_rag_fallback(
+                    question,
+                    result.documents,
+                    error=answer_exc,
+                )
+                if yielded:
+                    yield "\n\n"
+                yield from self._yield_text_chunks(fallback)
+                trace_step("tool.result", tool="course_rag_tool", status="degraded")
+                return
 
             trace_step("tool.result", tool="course_rag_tool", status="ok")
         except Exception as exc:
@@ -1204,6 +1430,7 @@ class AgentService(object):
         session_id: str,
         stream: bool = False,
         student_id: str = None,
+        web_search: bool = False,
     ):
         """
         带历史记录的聊天。
@@ -1213,9 +1440,24 @@ class AgentService(object):
         from langchain_core.messages import HumanMessage, AIMessage
 
         if stream:
-            return self.stream_chat_with_history(user_input, session_id, student_id=student_id)
+            if web_search:
+                return self.stream_chat_with_history(
+                    user_input,
+                    session_id,
+                    student_id=student_id,
+                    web_search=True,
+                )
+            return self.stream_chat_with_history(
+                user_input,
+                session_id,
+                student_id=student_id,
+            )
 
-        route_state = self._prepare_query_route(user_input, session_id, student_id)
+        route_state = (
+            self._prepare_query_route(user_input, session_id, student_id, web_search=True)
+            if web_search
+            else self._prepare_query_route(user_input, session_id, student_id)
+        )
         route_state["history"].add_messages([HumanMessage(content=user_input)])
         result = self._execute_route(route_state, stream=False)
 
@@ -1230,6 +1472,7 @@ class AgentService(object):
         user_input: str,
         session_id: str,
         student_id: str = None,
+        web_search: bool = False,
     ):
         """流式聊天，复用 sync 路由准备和执行核心。"""
         from langchain_core.messages import HumanMessage, AIMessage
@@ -1242,7 +1485,11 @@ class AgentService(object):
             stream_id=stream_id,
             resuming=False,
         )
-        route_state = self._prepare_query_route(user_input, session_id, student_id)
+        route_state = (
+            self._prepare_query_route(user_input, session_id, student_id, web_search=True)
+            if web_search
+            else self._prepare_query_route(user_input, session_id, student_id)
+        )
         decision = route_state["decision"]
         route = decision.route
         yield self._progress_event(
@@ -1255,9 +1502,16 @@ class AgentService(object):
         )
         route_state["history"].add_messages([HumanMessage(content=user_input)])
 
-        # TODO: move route-specific streaming into RouteHandler.stream_execute()
-        # so stream_chat_with_history does not drift from sync route dispatch.
-        if route == RouteType.GROUNDED_RAG:
+        if route == RouteType.WEB_SEARCH:
+            yield self._progress_event(
+                "web_search",
+                self._tool_progress_label("web_search_tool", "正在联网搜索..."),
+                stream_id=stream_id,
+                route=route.value,
+                tool="web_search_tool",
+                resuming=False,
+            )
+        elif route == RouteType.GROUNDED_RAG:
             yield self._progress_event(
                 "retrieval",
                 self._tool_progress_label("course_rag_tool", "正在检索课程资料..."),
@@ -1266,11 +1520,6 @@ class AgentService(object):
                 tool="course_rag_tool",
                 resuming=False,
             )
-            chunks = []
-            for chunk in self._iter_grounded_rag_response(route_state):
-                chunks.append(chunk)
-                yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
-            final_result = "".join(chunks)
         else:
             yield self._progress_event(
                 "generation",
@@ -1279,28 +1528,17 @@ class AgentService(object):
                 route=route.value,
                 resuming=False,
             )
-            if self._can_direct_stream_route(route_state):
-                chunks = []
-                execution_query = self._route_execution_query(route_state["context"], decision)
-                turn_context = self._build_turn_system_context(route_state)
-                for chunk in self.chat(
-                    execution_query,
-                    route_state["chat_history"],
-                    stream=True,
-                    turn_context=turn_context,
-                ):
-                    if chunk:
-                        chunks.append(chunk)
-                        yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
-                final_result = "".join(chunks)
-                if not final_result.strip():
-                    final_result = self._execute_route(route_state, stream=False)
-                    for chunk in self._yield_text_chunks(final_result):
-                        yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
-            else:
-                final_result = self._execute_route(route_state, stream=True)
-                for chunk in self._yield_text_chunks(final_result):
-                    yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
+
+        chunks = []
+        for chunk in self._iter_route_response(route_state):
+            if chunk:
+                chunks.append(chunk)
+                yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
+        final_result = "".join(chunks)
+        if not final_result.strip():
+            final_result = self._execute_route(route_state, stream=False)
+            for chunk in self._yield_text_chunks(final_result):
+                yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
 
         yield self._progress_event(
             "postprocess",

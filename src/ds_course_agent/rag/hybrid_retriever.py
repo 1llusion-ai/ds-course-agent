@@ -28,6 +28,18 @@ from ds_course_agent.rag.query_trace import trace_span, trace_step
 _jieba = None
 
 
+def _rag_retrieval_embedding_timeout_seconds() -> float:
+    return max(
+        0.0,
+        float(getattr(config, "RAG_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS", 2.0) or 0.0),
+    )
+
+
+def _is_timeout_like_exception(exc: Exception) -> bool:
+    text = f"{type(exc).__name__}: {exc}".lower()
+    return "timeout" in text or "timed out" in text
+
+
 def _get_jieba():
     """Import jieba lazily while suppressing its setuptools deprecation noise.
 
@@ -148,7 +160,9 @@ class HybridRetriever:
         else:
             self.reranker = None
 
-        self.embedding = OpenAIEmbeddings(**embedding_model_kwargs())
+        self.embedding = OpenAIEmbeddings(
+            **embedding_model_kwargs(timeout_seconds=_rag_retrieval_embedding_timeout_seconds())
+        )
 
         # 初始化BM25检索器
         self.bm25_retriever = BM25Retriever()
@@ -183,7 +197,11 @@ class HybridRetriever:
         """向量语义检索 - 使用ChromaDB"""
         query = _normalize_latin_tokens(query)
         with trace_span("retriever.embedding_query"):
-            query_embedding = embed_query_cached(self.embedding, query)
+            query_embedding = embed_query_cached(
+                self.embedding,
+                query,
+                timeout_seconds=_rag_retrieval_embedding_timeout_seconds(),
+            )
 
         with trace_span("retriever.chroma_query"):
             results = self.collection.query(
@@ -276,6 +294,22 @@ class HybridRetriever:
                 vector_results = self._vector_search(query, top_k=rerank_top_k)
         except Exception as exc:
             logger.warning("Vector retrieval failed; falling back to BM25-only: %s", exc)
+            if _is_timeout_like_exception(exc):
+                trace_step(
+                    "rag.retrieve.vector_timeout_degraded",
+                    status="warning",
+                    timeout_seconds=_rag_retrieval_embedding_timeout_seconds(),
+                    error_type=type(exc).__name__,
+                    error=str(exc)[:200],
+                )
+            else:
+                trace_step(
+                    "rag.retrieve.vector_degraded",
+                    status="warning",
+                    reason="embedding_or_vector_error",
+                    error_type=type(exc).__name__,
+                    error=str(exc)[:200],
+                )
             trace_step(
                 "retriever.vector_fallback",
                 status="error",

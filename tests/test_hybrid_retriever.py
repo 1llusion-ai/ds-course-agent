@@ -1,5 +1,8 @@
 from unittest.mock import MagicMock, patch
 
+from langchain_core.documents import Document
+
+from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.rag.hybrid_retriever import BM25Retriever, HybridRetriever, _normalize_latin_tokens
 from ds_course_agent.shared import embeddings
 
@@ -41,3 +44,38 @@ def test_hybrid_retriever_falls_back_to_bm25_when_vector_fails(mock_embed, mock_
 
     assert len(docs) == 1
     assert docs[0].metadata["chunk_id"] == "svm"
+
+
+def test_hybrid_retriever_traces_vector_timeout_degraded(monkeypatch):
+    """向量检索超时时快速降级 BM25，并留下可观测 trace。"""
+    monkeypatch.setattr(
+        "ds_course_agent.rag.hybrid_retriever.config.RAG_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS",
+        0.01,
+        raising=False,
+    )
+    monkeypatch.setattr("ds_course_agent.rag.hybrid_retriever.config.RERANK_TOP_K", 3, raising=False)
+
+    retriever = HybridRetriever.__new__(HybridRetriever)
+    retriever.k = 1
+    retriever.use_rerank = False
+    retriever.reranker = None
+    retriever.documents = [
+        Document(page_content="SVM 使用核函数处理非线性问题", metadata={"chunk_id": "svm"})
+    ]
+    retriever.bm25_retriever = MagicMock()
+    retriever.bm25_retriever.retrieve.return_value = [(0, 1.0)]
+    retriever._vector_search = MagicMock(side_effect=TimeoutError("embedding timed out"))
+
+    token = begin_query_trace({"entrypoint": "unit_test"})
+    docs = retriever.retrieve("SVM 核函数", top_k=1)
+    trace = end_query_trace(token)
+
+    assert len(docs) == 1
+    assert docs[0].metadata["chunk_id"] == "svm"
+    assert retriever._vector_search.call_count == 1
+    assert any(
+        event["stage"] == "rag.retrieve.vector_timeout_degraded"
+        and event["status"] == "warning"
+        and event["data"]["timeout_seconds"] == 0.01
+        for event in trace["events"]
+    )

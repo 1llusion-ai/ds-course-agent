@@ -55,22 +55,31 @@ def get_agent_service():
     return _agent_service
 
 
-def chat_with_history(message: str, session_id: str, student_id: str) -> dict:
+def chat_with_history(message: str, session_id: str, student_id: str, web_search: bool = False) -> dict:
     from ds_course_agent.tools.course_rag import begin_retrieval_trace, end_retrieval_trace
     from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
 
-    q_token = begin_query_trace(meta={"session_id": session_id, "student_id": student_id})
+    q_token = begin_query_trace(meta={
+        "session_id": session_id,
+        "student_id": student_id,
+        "web_search": bool(web_search),
+    })
     token = begin_retrieval_trace()
 
     try:
         with trace_span("core_bridge.get_agent_service"):
             service = get_agent_service()
         with trace_span("core_bridge.agent_chat"):
-            content = service.chat_with_history(
-                user_input=message,
-                session_id=session_id,
-                student_id=student_id
-            )
+            kwargs = {
+                "user_input": message,
+                "session_id": session_id,
+                "student_id": student_id,
+            }
+            # Preserve backward-compatible call signatures for tests and older
+            # service implementations unless the explicit web-search switch is on.
+            if web_search:
+                kwargs["web_search"] = True
+            content = service.chat_with_history(**kwargs)
     except Exception as e:
         logger.error("Agent调用出错: %s", e, exc_info=True)
         trace_error("core_bridge.chat", e)
@@ -89,11 +98,15 @@ def chat_with_history(message: str, session_id: str, student_id: str) -> dict:
     }
 
 
-def stream_chat_with_history(message: str, session_id: str, student_id: str):
+def stream_chat_with_history(message: str, session_id: str, student_id: str, web_search: bool = False):
     from ds_course_agent.tools.course_rag import begin_retrieval_trace, end_retrieval_trace
     from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
 
-    q_token = begin_query_trace(meta={"session_id": session_id, "student_id": student_id})
+    q_token = begin_query_trace(meta={
+        "session_id": session_id,
+        "student_id": student_id,
+        "web_search": bool(web_search),
+    })
     token = begin_retrieval_trace()
     final_content = ""
     stream_id = None
@@ -103,11 +116,14 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str):
         with trace_span("core_bridge.get_agent_service"):
             service = get_agent_service()
         with trace_span("core_bridge.agent_stream"):
-            for event in service.stream_chat_with_history(
-                user_input=message,
-                session_id=session_id,
-                student_id=student_id,
-            ):
+            kwargs = {
+                "user_input": message,
+                "session_id": session_id,
+                "student_id": student_id,
+            }
+            if web_search:
+                kwargs["web_search"] = True
+            for event in service.stream_chat_with_history(**kwargs):
                 event_type = event.get("type")
                 if event_type == "delta":
                     yield event

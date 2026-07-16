@@ -7,10 +7,108 @@ import logging
 import re
 from typing import Optional
 from .models import QueryContext, RouteDecision, RouteType
-from .preprocessor import _assignment_counts_as_code, _has_concept_question_cue, _has_strong_python_signal
+from .preprocessor import (
+    _assignment_counts_as_code,
+    _has_assignment_signal,
+    _has_concept_question_cue,
+    _has_strong_python_signal,
+)
 from .utils import is_datetime_request, is_judgement_question, is_schedule_request, normalize_query_text
 
 logger = logging.getLogger(__name__)
+
+
+_UNAMBIGUOUS_HYPERPARAMETER_NAMES = [
+    "alpha",
+    "learning_rate",
+    "lr",
+    "eta",
+    "gamma",
+    "lambda",
+    "lambda_",
+    "max_depth",
+    "min_samples_split",
+    "min_samples_leaf",
+    "n_estimators",
+    "n_neighbors",
+    "degree",
+    "coef0",
+    "batch_size",
+    "epoch",
+    "epochs",
+    "epsilon",
+    "eps",
+    "momentum",
+    "dropout",
+    "dropout_rate",
+    "beta",
+    "beta1",
+    "beta2",
+    "weight_decay",
+    "tol",
+    "tolerance",
+]
+
+_AMBIGUOUS_HYPERPARAMETER_NAMES = [
+    # Single-letter names are common ML hyperparameters, but too ambiguous to
+    # route as course RAG without an ML/domain cue.
+    "c",
+    "k",
+]
+
+_UNAMBIGUOUS_HYPERPARAMETER_ASSIGNMENT_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:"
+    + "|".join(re.escape(name) for name in _UNAMBIGUOUS_HYPERPARAMETER_NAMES)
+    + r")\s*=",
+    flags=re.IGNORECASE,
+)
+
+_AMBIGUOUS_HYPERPARAMETER_ASSIGNMENT_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:"
+    + "|".join(re.escape(name) for name in _AMBIGUOUS_HYPERPARAMETER_NAMES)
+    + r")\s*=",
+    flags=re.IGNORECASE,
+)
+
+_HYPERPARAMETER_DOMAIN_CUES = [
+    "超参数",
+    "调参",
+    "学习率",
+    "正则化系数",
+    "惩罚系数",
+    "机器学习",
+    "深度学习",
+    "神经网络",
+    "模型",
+    "算法",
+    "训练",
+    "梯度下降",
+    "正则化",
+    "svm",
+    "支持向量机",
+    "kmeans",
+    "k-means",
+    "knn",
+    "k近邻",
+    "聚类",
+    "分类",
+    "回归",
+    "决策树",
+    "随机森林",
+]
+
+
+def _has_hyperparameter_domain_cue(query: str) -> bool:
+    return any(cue in query for cue in _HYPERPARAMETER_DOMAIN_CUES)
+
+
+def _has_hyperparameter_assignment(query: str) -> bool:
+    if _UNAMBIGUOUS_HYPERPARAMETER_ASSIGNMENT_RE.search(query):
+        return True
+    return bool(
+        _AMBIGUOUS_HYPERPARAMETER_ASSIGNMENT_RE.search(query)
+        and _has_hyperparameter_domain_cue(query)
+    )
 
 
 class QueryRouter:
@@ -88,8 +186,8 @@ class QueryRouter:
 
         # 3. 高置信误认知信号仍然优先进入教学策略。
         #
-        # 代码/示例类请求默认交给 agent 自主选工具，但明确带有“我以为/难道不是/
-        # 应该是”等错误前提时，misconception skill 是更合适的教学路径。
+        # 代码/示例类请求默认交给 agent 自主选工具，但明确带有“我以为/难道不是”
+        # 等错误前提时，misconception skill 是更合适的教学路径。
         # code_review / python_exec 已在更高优先级拦截，所以这里不会抢走明确
         # 的运行或审查请求。
         if self._should_use_misconception_skill(context) and self._has_explicit_misconception_signal(context):
@@ -334,9 +432,17 @@ class QueryRouter:
         # skill 候选中有 misconception
         in_candidates = "misconception-handling" in context.skill_candidate_keys
 
-        # 保持与旧逻辑一致：只要 SkillLoader 选中了 misconception-handling，
-        # 就允许进入该技能。
-        return in_candidates
+        # SkillLoader 的候选只表示“可能可用”，不能单独抢走事实/概念题。
+        # 只有反复澄清、判断题或明确错误前提才进入 misconception skill；
+        # 普通 “为什么/是什么/应该是什么值” 仍应走 grounded RAG。
+        return bool(
+            in_candidates
+            and (
+                has_clarification
+                or has_judgment
+                or self._has_explicit_misconception_signal(context)
+            )
+        )
 
     def _get_misconception_reasons(self, context: QueryContext) -> list:
         """获取错误理解路由的原因"""
@@ -371,9 +477,7 @@ class QueryRouter:
             "我觉得是",
             "我认为",
             "不该是",
-            "应该算",
             "应该不是",
-            "应该是",
             "本质上",
             "就是无监督",
             "就是监督",
@@ -479,16 +583,26 @@ class QueryRouter:
         if context.detected_concepts:
             return True
 
+        query = self._normalize(context.normalized_query)
+        is_hyperparameter_concept = self._is_hyperparameter_concept_question(query)
+        assignment_concept_without_course_signal = (
+            _has_assignment_signal(query)
+            and _has_concept_question_cue(query)
+            and not is_hyperparameter_concept
+        )
+
         course_related_intents = [
             "concept_explanation",
             "comparison",
             "application",
         ]
-        if any(intent in context.detected_intents for intent in course_related_intents):
+        if (
+            any(intent in context.detected_intents for intent in course_related_intents)
+            and not assignment_concept_without_course_signal
+        ):
             return True
 
-        query = self._normalize(context.normalized_query)
-        if self._is_hyperparameter_concept_question(query):
+        if is_hyperparameter_concept:
             return True
 
         course_keywords = [
@@ -511,20 +625,13 @@ class QueryRouter:
         if not _has_concept_question_cue(query):
             return False
 
-        hyperparameter_pattern = (
-            r"(?<![A-Za-z0-9_])"
-            r"(?:"
-            r"alpha|learning_rate|lr|gamma|lambda|lambda_|c|k|"
-            r"max_depth|min_samples_split|min_samples_leaf|n_estimators|"
-            r"n_neighbors|degree|coef0|batch_size|epoch|epochs"
-            r")\s*="
-        )
-        return bool(
-            "超参数" in query
-            or "正则化系数" in query
-            or "惩罚系数" in query
-            or re.search(hyperparameter_pattern, query, flags=re.IGNORECASE)
-        )
+        if any(
+            cue in query
+            for cue in ["超参数", "调参", "学习率", "正则化系数", "惩罚系数"]
+        ):
+            return True
+
+        return _has_hyperparameter_assignment(query)
 
 
 _router: Optional[QueryRouter] = None

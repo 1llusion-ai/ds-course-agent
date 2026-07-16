@@ -39,8 +39,10 @@
               <ChatInput
                 hero
                 :loading="chatStore.loading"
+                :web-search-enabled="webSearchEnabled"
                 class="empty-composer"
                 @send="handleSend"
+                @toggle-web-search="toggleWebSearch"
               />
               <div class="prompt-grid">
                 <button
@@ -66,7 +68,12 @@
         </div>
 
         <div v-if="chatStore.messages.length > 0" class="input-area">
-          <ChatInput :loading="chatStore.loading" @send="handleSend" />
+          <ChatInput
+            :loading="chatStore.loading"
+            :web-search-enabled="webSearchEnabled"
+            @send="handleSend"
+            @toggle-web-search="toggleWebSearch"
+          />
         </div>
       </div>
     </div>
@@ -94,6 +101,7 @@ const chatStore = useChatStore()
 const profileStore = useProfileStore()
 const sidebarCollapsed = ref(readSidebarCollapsedPreference())
 const theme = ref(readThemePreference())
+const webSearchEnabled = ref(readWebSearchPreference())
 
 const headerTitle = computed(() => sessionStore.currentSession?.title || '新对话')
 const isDarkTheme = computed(() => theme.value === 'dark')
@@ -181,8 +189,9 @@ async function loadSession(sessionId) {
   scrollToBottom()
 }
 
-async function handleSend(message) {
-  const streamOptions = { onProgress: scrollToBottom }
+async function handleSend(message, sendOptions = {}) {
+  const useWebSearch = Boolean(sendOptions?.webSearch ?? webSearchEnabled.value)
+  const streamOptions = { onProgress: scrollToBottom, webSearch: useWebSearch }
   const currentSessionId = sessionStore.currentSessionId
   let targetSessionId = currentSessionId
   let shouldRefreshTitle = false
@@ -220,6 +229,11 @@ function handleStarterPrompt(prompt) {
   handleSend(prompt)
 }
 
+function readWebSearchPreference() {
+  if (typeof window === 'undefined') return false
+  return window.localStorage.getItem('ds-course-agent.webSearchEnabled') === 'true'
+}
+
 function readSidebarCollapsedPreference() {
   if (typeof window === 'undefined') return false
   return window.localStorage.getItem('ds-course-agent.sidebarCollapsed') === 'true'
@@ -242,6 +256,16 @@ function toggleTheme() {
   theme.value = isDarkTheme.value ? 'light' : 'dark'
   if (typeof window !== 'undefined') {
     window.localStorage.setItem('ds-course-agent.theme', theme.value)
+  }
+}
+
+function toggleWebSearch(nextValue) {
+  webSearchEnabled.value = Boolean(nextValue)
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(
+      'ds-course-agent.webSearchEnabled',
+      webSearchEnabled.value ? 'true' : 'false'
+    )
   }
 }
 

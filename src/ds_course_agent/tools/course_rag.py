@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+import contextvars
+import hashlib
 import os
 import re
+import threading
+import time
+from collections import OrderedDict
 from typing import Optional
 
+from langchain_core.documents import Document
 from langchain_core.tools import tool
 
 import ds_course_agent.shared.config as config
@@ -54,6 +61,17 @@ def _get_chapter_start_pages() -> dict[str, int]:
 
 
 _CHAPTER_START_PAGES: dict[str, int] = {}
+_ANSWER_CACHE_LOCK = threading.RLock()
+_ANSWER_CACHE: OrderedDict[str, tuple[float, str]] = OrderedDict()
+
+
+def _normalize_excerpt_text(text: str, *, max_chars: int = 360) -> str:
+    """Return a compact, single-line excerpt safe to show in degraded mode."""
+
+    compact = re.sub(r"\s+", " ", str(text or "")).strip()
+    if len(compact) <= max_chars:
+        return compact
+    return compact[:max_chars].rstrip() + "..."
 
 
 def _extract_chapter_no(metadata: dict) -> str:
@@ -182,6 +200,184 @@ def build_sources_from_documents(documents) -> list[dict]:
     return sources
 
 
+def build_extractive_rag_fallback(
+    question: str,
+    documents: list[Document] | list,
+    *,
+    error: Exception | str | None = None,
+    max_docs: int = 3,
+) -> str:
+    """Build a grounded fallback answer when the answer LLM is unavailable.
+
+    Retrieval has already succeeded in this branch, so returning a generic
+    retry message wastes useful course evidence. This deterministic fallback
+    keeps the response grounded by exposing short textbook excerpts and source
+    references without pretending that a synthesized LLM answer was produced.
+    """
+
+    _ = question  # Reserved for future query-aware extractive scoring.
+    usable_docs = [doc for doc in (documents or []) if getattr(doc, "page_content", None)]
+    sources = build_sources_from_documents(usable_docs)
+
+    lines = [
+        "已检索到课程资料，但生成式回答服务暂时不可用。",
+        "先给你可核验的教材片段，便于继续学习：",
+        "",
+    ]
+
+    if not usable_docs:
+        lines.extend([
+            f"抱歉，在《{config.COURSE_NAME}》课程资料中暂时无法整理出可展示的片段。",
+            "你可以稍后重试，或换一个更具体的关键词重新提问。",
+        ])
+        return "\n".join(lines)
+
+    for index, doc in enumerate(usable_docs[:max_docs], start=1):
+        source = ""
+        if index <= len(sources):
+            source = sources[index - 1].get("reference") or ""
+        excerpt = _normalize_excerpt_text(getattr(doc, "page_content", ""))
+        prefix = f"{index}. "
+        if source:
+            prefix += f"{source}："
+        lines.append(f"{prefix}{excerpt}")
+
+    lines.extend([
+        "",
+        "建议：根据上面的片段先定位关键词；等生成服务恢复后，可以继续追问“请基于这些片段总结/举例”。",
+    ])
+
+    if error is not None:
+        lines.append("[系统注：本轮已降级为教材片段模式。]")
+
+    return "\n".join(lines)
+
+
+def build_no_results_message() -> str:
+    """Return the standard no-results message for course RAG."""
+
+    return (
+        f"抱歉，在《{config.COURSE_NAME}》课程资料中未找到与你问题直接相关的内容。\n"
+        "建议你：\n"
+        "1. 换一个更具体的关键词重新提问\n"
+        "2. 说明你想问的概念、章节或例子\n"
+        "3. 如果是课程外问题，我也可以先帮你判断是否属于本课程范围"
+    )
+
+
+def trace_answer_degraded(exc: Exception, *, mode: str) -> None:
+    """Record a warning-level RAG answer degradation without failing the turn."""
+
+    from ds_course_agent.rag.query_trace import trace_step
+
+    trace_step(
+        "tool.course_rag.answer_degraded",
+        status="warning",
+        mode=mode,
+        error_type=type(exc).__name__,
+        error=str(exc)[:200],
+    )
+
+
+def _answer_cache_enabled() -> bool:
+    return bool(getattr(config, "RAG_ANSWER_CACHE_ENABLED", True))
+
+
+def _answer_cache_ttl_seconds() -> float:
+    return max(0.0, float(getattr(config, "RAG_ANSWER_CACHE_TTL_SECONDS", 900.0) or 0.0))
+
+
+def _answer_cache_size() -> int:
+    return max(0, int(getattr(config, "RAG_ANSWER_CACHE_SIZE", 128) or 0))
+
+
+def _rag_answer_timeout_seconds() -> float:
+    return max(0.0, float(getattr(config, "RAG_ANSWER_TIMEOUT_SECONDS", 10.0) or 0.0))
+
+
+def _normalize_answer_cache_question(question: str) -> str:
+    return re.sub(r"\s+", "", str(question or "").lower())
+
+
+def _answer_cache_key(question: str, context: str) -> str:
+    context_hash = hashlib.sha256(str(context or "").encode("utf-8")).hexdigest()
+    raw = f"{_normalize_answer_cache_question(question)}\n{context_hash}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _trace_answer_cache(stage: str, **data) -> None:
+    try:
+        from ds_course_agent.rag.query_trace import trace_step
+
+        trace_step(stage, **data)
+    except Exception:
+        pass
+
+
+def _get_cached_answer(question: str, context: str) -> Optional[str]:
+    maxsize = _answer_cache_size()
+    ttl = _answer_cache_ttl_seconds()
+    if not _answer_cache_enabled() or maxsize <= 0 or ttl <= 0:
+        return None
+
+    key = _answer_cache_key(question, context)
+    now = time.monotonic()
+    with _ANSWER_CACHE_LOCK:
+        cached = _ANSWER_CACHE.get(key)
+        if cached is None:
+            _trace_answer_cache("rag.answer.cache_miss", reason="not_found", cache_size=len(_ANSWER_CACHE))
+            return None
+        created_at, answer = cached
+        if now - created_at > ttl:
+            _ANSWER_CACHE.pop(key, None)
+            _trace_answer_cache("rag.answer.cache_miss", reason="expired", cache_size=len(_ANSWER_CACHE))
+            return None
+        _ANSWER_CACHE.move_to_end(key)
+        _trace_answer_cache("rag.answer.cache_hit", cache_size=len(_ANSWER_CACHE), answer_chars=len(answer))
+        return answer
+
+
+def _store_cached_answer(question: str, context: str, answer: str) -> None:
+    maxsize = _answer_cache_size()
+    ttl = _answer_cache_ttl_seconds()
+    if not _answer_cache_enabled() or maxsize <= 0 or ttl <= 0 or not str(answer or "").strip():
+        return
+
+    key = _answer_cache_key(question, context)
+    with _ANSWER_CACHE_LOCK:
+        _ANSWER_CACHE[key] = (time.monotonic(), str(answer))
+        _ANSWER_CACHE.move_to_end(key)
+        while len(_ANSWER_CACHE) > maxsize:
+            _ANSWER_CACHE.popitem(last=False)
+    _trace_answer_cache("rag.answer.cache_store", cache_size=len(_ANSWER_CACHE), answer_chars=len(str(answer)))
+
+
+def clear_rag_answer_cache() -> None:
+    """Clear in-process RAG answer cache; useful for tests/benchmarks."""
+    with _ANSWER_CACHE_LOCK:
+        _ANSWER_CACHE.clear()
+
+
+def _answer_with_context_timeout_guard(service, question: str, context: str):
+    """Invoke answer LLM with a hard per-turn timeout guard."""
+    timeout = _rag_answer_timeout_seconds()
+    if timeout <= 0:
+        return service.answer_with_context(question, context)
+
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="rag-answer")
+    request_context = contextvars.copy_context()
+    future = executor.submit(request_context.run, service.answer_with_context, question, context)
+    try:
+        return future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError as exc:
+        future.cancel()
+        timeout_exc = TimeoutError(f"RAG answer timed out after {timeout:.1f}s")
+        _trace_answer_cache("rag.answer.timeout_degraded", status="warning", timeout_seconds=timeout)
+        raise timeout_exc from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 @tool
 def course_rag_tool(question: str) -> str:
     """课程资料检索与问答工具。用于基于教材内容回答课程相关问题。"""
@@ -197,21 +393,37 @@ def course_rag_tool(question: str) -> str:
 
         if not result.has_results:
             trace_step("tool.result", tool="course_rag_tool", status="no_results")
-            no_results_message = (
-                f"抱歉，在《{config.COURSE_NAME}》课程资料中未找到与你问题直接相关的内容。\n"
-                "建议你：\n"
-                "1. 换一个更具体的关键词重新提问\n"
-                "2. 说明你想问的概念、章节或例子\n"
-                "3. 如果是课程外问题，我也可以先帮你判断是否属于本课程范围"
-            )
+            no_results_message = build_no_results_message()
             _warn_large_tool_result("course_rag_tool", no_results_message, status="no_results")
             return no_results_message
 
-        with trace_span("tool.course_rag.answer"):
-            answer_result = service.answer_with_context(question, result.formatted_context)
-        trace_step("tool.result", tool="course_rag_tool", status="ok")
-        _warn_large_tool_result("course_rag_tool", answer_result.answer, status="ok")
-        return answer_result.answer
+        cached_answer = _get_cached_answer(question, result.formatted_context)
+        if cached_answer is not None:
+            trace_step("tool.result", tool="course_rag_tool", status="cache_hit")
+            _warn_large_tool_result("course_rag_tool", cached_answer, status="cache_hit")
+            return cached_answer
+
+        try:
+            with trace_span("tool.course_rag.answer"):
+                answer_result = _answer_with_context_timeout_guard(
+                    service,
+                    question,
+                    result.formatted_context,
+                )
+            trace_step("tool.result", tool="course_rag_tool", status="ok")
+            _warn_large_tool_result("course_rag_tool", answer_result.answer, status="ok")
+            _store_cached_answer(question, result.formatted_context, answer_result.answer)
+            return answer_result.answer
+        except Exception as answer_exc:
+            trace_answer_degraded(answer_exc, mode="sync")
+            fallback = build_extractive_rag_fallback(
+                question,
+                result.documents,
+                error=answer_exc,
+            )
+            trace_step("tool.result", tool="course_rag_tool", status="degraded")
+            _warn_large_tool_result("course_rag_tool", fallback, status="degraded")
+            return fallback
     except Exception as exc:
         trace_error("tool.invoke", exc, tool="course_rag_tool")
         return f"检索过程中发生错误：{exc}。请稍后重试。"
@@ -224,6 +436,10 @@ __all__ = [
     "get_retrieval_trace",
     "get_rag_service",
     "build_sources_from_documents",
+    "build_extractive_rag_fallback",
+    "build_no_results_message",
+    "trace_answer_degraded",
+    "clear_rag_answer_cache",
     "course_rag_tool",
     "_get_absolute_page",
     "_track_retrieval",

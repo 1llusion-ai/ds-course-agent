@@ -229,12 +229,16 @@ async def send_message(data: ChatRequest):
     _schedule_title_generation(data.session_id, data.message, is_first_message=is_first_message)
 
     try:
-        assistant_result = await run_in_threadpool(
-            chat_with_history,
-            message=data.message,
-            session_id=data.session_id,
-            student_id=data.student_id,
-        )
+        assistant_kwargs = {
+            "message": data.message,
+            "session_id": data.session_id,
+            "student_id": data.student_id,
+        }
+        # Keep legacy monkeypatched call signatures working unless the user
+        # explicitly enabled web search for this turn.
+        if data.web_search:
+            assistant_kwargs["web_search"] = True
+        assistant_result = await run_in_threadpool(chat_with_history, **assistant_kwargs)
     except Exception as exc:
         logger.error("Agent处理失败: %s", exc, exc_info=True)
         _chat_history[data.session_id].pop()
@@ -254,8 +258,8 @@ async def send_message(data: ChatRequest):
     assistant_route = None
     if isinstance(query_trace, dict):
         for event in reversed(query_trace.get("events", [])):
-            data = event.get("data") or {}
-            assistant_route = data.get("route") or data.get("final_route")
+            event_data = event.get("data") or {}
+            assistant_route = event_data.get("route") or event_data.get("final_route")
             if assistant_route:
                 break
 
@@ -267,6 +271,7 @@ async def send_message(data: ChatRequest):
         metadata={
             "route": assistant_route,
             "used_retrieval": assistant_result.get("used_retrieval"),
+            "web_search": bool(data.web_search),
         } if isinstance(assistant_result, dict) and (assistant_route or assistant_result.get("used_retrieval") is not None) else None,
     )
     _append_message(data.session_id, assistant_msg, save=False)
@@ -281,6 +286,7 @@ async def send_message_stream(
     session_id: str,
     message: str,
     student_id: str = "default_student",
+    web_search: bool = False,
 ):
     # 判断是否首次消息
     is_first_message = len(_chat_history.get(session_id, [])) == 0
@@ -298,11 +304,14 @@ async def send_message_stream(
 
         def worker():
             try:
-                for event in stream_chat_with_history(
-                    message=message,
-                    session_id=session_id,
-                    student_id=student_id,
-                ):
+                stream_kwargs = {
+                    "message": message,
+                    "session_id": session_id,
+                    "student_id": student_id,
+                }
+                if web_search:
+                    stream_kwargs["web_search"] = True
+                for event in stream_chat_with_history(**stream_kwargs):
                     loop.call_soon_threadsafe(queue.put_nowait, event)
             except Exception as exc:
                 loop.call_soon_threadsafe(
@@ -370,6 +379,7 @@ async def send_message_stream(
                         metadata={
                             "route": event.get("route"),
                             "used_retrieval": event.get("used_retrieval"),
+                            "web_search": bool(web_search),
                         },
                     )
                     _append_message(session_id, assistant_msg, save=False)

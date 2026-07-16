@@ -21,6 +21,15 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+def _trace_concept_map(stage: str, **data) -> None:
+    try:
+        from ds_course_agent.rag.query_trace import trace_step
+
+        trace_step(stage, **data)
+    except Exception:
+        logger.debug("Failed to emit concept map trace", exc_info=True)
+
+
 @dataclass
 class MatchedConcept:
     """匹配结果"""
@@ -57,7 +66,7 @@ class KnowledgeGraph:
         # 预编译正则规则（在精确匹配之后应用）
         self.regex_rules = self._build_regex_rules()
 
-        # 预计算 embedding（如果可用）
+        # 加载离线 embedding cache（请求链路默认不在线预计算）
         self._precompute_embeddings()
 
     def _normalize_text(self, text: str) -> str:
@@ -112,8 +121,13 @@ class KnowledgeGraph:
             except Exception as e:
                 logger.warning("Cache load failed: %s, falling back to online embedding", e)
 
-        if os.environ.get("KNOWLEDGE_MAPPER_DISABLE_ONLINE_EMBEDDINGS") == "1":
-            logger.info("Online knowledge mapper embeddings disabled by environment")
+        online_disabled_by_env = os.environ.get("KNOWLEDGE_MAPPER_DISABLE_ONLINE_EMBEDDINGS") == "1"
+        online_enabled_by_config = bool(getattr(config, "CONCEPT_MAP_ONLINE_PRECOMPUTE_ENABLED", False))
+        if online_disabled_by_env or not online_enabled_by_config:
+            logger.info(
+                "Online knowledge mapper concept embedding precompute disabled; "
+                "using rule matching and offline cache only"
+            )
             return
 
         try:
@@ -219,7 +233,12 @@ class KnowledgeMapper:
     def _get_embedding_model(self):
         """延迟加载 embedding 模型"""
         if self._embedding_model is None:
-            self._embedding_model = create_embedding_model()
+            self._embedding_model = create_embedding_model(
+                timeout_seconds=float(
+                    getattr(config, "CONCEPT_MAP_QUERY_EMBEDDING_TIMEOUT_SECONDS", 0.5)
+                    or 0.5
+                )
+            )
         return self._embedding_model
 
     def _embed_text(self, text: str) -> np.ndarray:
@@ -322,9 +341,56 @@ class KnowledgeMapper:
                 matched_ids.add(cid)
 
         # ===== Layer 3: Embedding语义匹配（兜底）=====
-        # 只有当精确匹配不足 top_k 时才使用
-        if len(matches) < top_k and self.graph.embeddings:
+        # 主请求链路采用 offline-first 策略：
+        # - concept embeddings 只从离线 cache 加载，默认不在线预计算；
+        # - exact/regex 已命中足够高置信概念时，不再为了补满 top_k 调 query embedding；
+        # - 只有规则未命中/不足且 embedding 服务健康时，才短超时尝试 query embedding。
+        embedding_mode = str(getattr(config, "CONCEPT_MAP_EMBEDDING_MODE", "offline_first") or "offline_first").lower()
+        min_rule_matches = max(1, int(getattr(config, "CONCEPT_MAP_MIN_RULE_MATCHES_TO_SKIP", 1) or 1))
+        skip_if_rule_match = bool(getattr(config, "CONCEPT_MAP_SKIP_EMBEDDING_IF_RULE_MATCH", True))
+        should_skip_embedding = (
+            embedding_mode in {"disabled", "off", "none"}
+            or not self.graph.embeddings
+            or (
+                skip_if_rule_match
+                and len(matches) >= min_rule_matches
+            )
+            or len(matches) >= top_k
+        )
+
+        if should_skip_embedding:
+            reason = "unknown"
+            if embedding_mode in {"disabled", "off", "none"}:
+                reason = "mode_disabled"
+            elif not self.graph.embeddings:
+                reason = "no_offline_cache"
+            elif skip_if_rule_match and len(matches) >= min_rule_matches:
+                reason = "rule_match"
+            elif len(matches) >= top_k:
+                reason = "top_k_satisfied"
+            _trace_concept_map(
+                "concept_map.embedding_skipped",
+                reason=reason,
+                rule_match_count=len(matches),
+                top_k=top_k,
+                mode=embedding_mode,
+                offline_embedding_count=len(self.graph.embeddings),
+            )
+
+        if not should_skip_embedding:
             try:
+                _trace_concept_map(
+                    "concept_map.embedding_used",
+                    status="started",
+                    rule_match_count=len(matches),
+                    top_k=top_k,
+                    mode=embedding_mode,
+                    timeout_seconds=float(
+                        getattr(config, "CONCEPT_MAP_QUERY_EMBEDDING_TIMEOUT_SECONDS", 0.5)
+                        or 0.5
+                    ),
+                    offline_embedding_count=len(self.graph.embeddings),
+                )
                 query_vec = self._embed_text(question)
 
                 embedding_matches = []
@@ -344,9 +410,26 @@ class KnowledgeMapper:
 
                 # 按相似度排序，补充到 matches
                 embedding_matches.sort(key=lambda x: x.score, reverse=True)
-                matches.extend(embedding_matches[:top_k - len(matches)])
+                added_matches = embedding_matches[:top_k - len(matches)]
+                matches.extend(added_matches)
+                _trace_concept_map(
+                    "concept_map.embedding_used",
+                    status="ok",
+                    added_count=len(added_matches),
+                    candidate_count=len(embedding_matches),
+                    final_match_count=len(matches),
+                    top_k=top_k,
+                    mode=embedding_mode,
+                )
 
             except Exception as e:
+                _trace_concept_map(
+                    "concept_map.embedding_failed",
+                    status="warning",
+                    error_type=type(e).__name__,
+                    error=str(e)[:200],
+                    mode=embedding_mode,
+                )
                 logger.warning("Embedding match failed: %s", e)
 
         # 最终排序，取 top_k

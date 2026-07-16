@@ -6,10 +6,12 @@ import sys
 from pathlib import Path
 
 import pytest
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
+from ds_course_agent.rag.knowledge_mapper import KnowledgeGraph, KnowledgeMapper, map_question_to_concepts
+from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 
 
 QUESTION_CASES = [
@@ -115,6 +117,103 @@ def test_edge_cases():
             print(f"      匹配到: {[(m.concept_id, m.method, m.score) for m in matches]}")
         else:
             print(f"      未匹配到任何概念（符合预期）")
+
+
+def test_rule_match_skips_query_embedding(monkeypatch):
+    """高置信规则/别名命中后不再在线 query embedding 补满 top_k。"""
+    import ds_course_agent.shared.config as config
+
+    monkeypatch.setattr(config, "CONCEPT_MAP_EMBEDDING_MODE", "offline_first")
+    monkeypatch.setattr(config, "CONCEPT_MAP_SKIP_EMBEDDING_IF_RULE_MATCH", True)
+    monkeypatch.setattr(config, "CONCEPT_MAP_MIN_RULE_MATCHES_TO_SKIP", 1)
+
+    mapper = KnowledgeMapper()
+
+    def fail_if_called(text):
+        raise AssertionError("query embedding should be skipped after rule hit")
+
+    monkeypatch.setattr(mapper, "_embed_text", fail_if_called)
+
+    token = begin_query_trace({"entrypoint": "unit_test"})
+    matches = mapper.map_question("什么是支持向量机？", top_k=3)
+    trace = end_query_trace(token)
+
+    assert matches
+    assert matches[0].concept_id == "svm"
+    assert any(
+        event["stage"] == "concept_map.embedding_skipped"
+        and event["data"]["reason"] == "rule_match"
+        for event in trace["events"]
+    )
+
+
+def test_embedding_fallback_uses_offline_cache_only_when_rules_miss(monkeypatch):
+    """规则没命中时才用离线概念向量 + 短超时 query embedding 兜底。"""
+    import ds_course_agent.shared.config as config
+
+    monkeypatch.setattr(config, "CONCEPT_MAP_EMBEDDING_MODE", "offline_first")
+    monkeypatch.setattr(config, "CONCEPT_MAP_SKIP_EMBEDDING_IF_RULE_MATCH", True)
+
+    class FakeGraph:
+        alias_to_concept = {}
+        regex_rules = []
+        embeddings = {
+            "overfitting": np.array([1.0, 0.0]),
+            "svm": np.array([0.0, 1.0]),
+        }
+
+        def _normalize_text(self, text):
+            return text
+
+        def get_concept(self, concept_id):
+            return {
+                "display_name": concept_id,
+                "chapter": "unit",
+            }
+
+    mapper = KnowledgeMapper(graph=FakeGraph())
+    monkeypatch.setattr(mapper, "_embed_text", lambda text: np.array([1.0, 0.0]))
+
+    matches = mapper.map_question("语义上指向泛化变差但没有显式别名", top_k=1, embedding_threshold=0.8)
+
+    assert [(match.concept_id, match.method) for match in matches] == [("overfitting", "embedding")]
+
+
+def test_knowledge_graph_does_not_online_precompute_without_cache(tmp_path, monkeypatch):
+    """请求路径默认只加载离线 cache；cache 缺失时不在线预计算概念 embedding。"""
+    import ds_course_agent.rag.knowledge_mapper as knowledge_mapper
+    import ds_course_agent.shared.config as config
+
+    graph_path = tmp_path / "knowledge_graph.json"
+    graph_path.write_text(
+        """
+        {
+          "concepts": [
+            {
+              "canonical_id": "unit_concept",
+              "display_name": "单元概念",
+              "chapter": "unit",
+              "aliases": ["单元概念"],
+              "related_concepts": []
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    missing_cache = tmp_path / "missing_embeddings.json"
+
+    monkeypatch.setenv("KNOWLEDGE_MAPPER_EMBEDDING_CACHE", str(missing_cache))
+    monkeypatch.setattr(config, "CONCEPT_MAP_ONLINE_PRECOMPUTE_ENABLED", False)
+    monkeypatch.setattr(
+        knowledge_mapper,
+        "create_embedding_model",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not create online model")),
+    )
+
+    graph = KnowledgeGraph(graph_path=str(graph_path))
+
+    assert graph.embeddings == {}
 
 
 if __name__ == "__main__":

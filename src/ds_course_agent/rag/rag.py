@@ -3,7 +3,11 @@ RAG 服务模块
 提供检索和问答能力，支持被 Tool 和 Agent 调用
 支持纯向量检索和BM25混合检索
 """
+import hashlib
 import logging
+import threading
+import time
+from collections import OrderedDict
 from typing import Optional
 from dataclasses import dataclass
 
@@ -48,16 +52,43 @@ def _trace_rag_context_trim(*, location: str, **metadata) -> None:
         logger.debug("Failed to emit RAG context trim trace at %s", location, exc_info=True)
 
 
+def _trace_rag_answer_event(stage: str, **metadata) -> None:
+    """Emit best-effort trace for answer prompt/cache/latency guards."""
+    try:
+        from ds_course_agent.rag.query_trace import trace_step
+
+        trace_step(stage, **metadata)
+    except Exception:
+        logger.debug("Failed to emit RAG answer trace event at %s", stage, exc_info=True)
+
+
+def _trace_rag_retrieve_event(stage: str, **metadata) -> None:
+    """Emit best-effort trace for retrieval cache/tail guards."""
+    try:
+        from ds_course_agent.rag.query_trace import trace_step
+
+        trace_step(stage, **metadata)
+    except Exception:
+        logger.debug("Failed to emit RAG retrieve trace event at %s", stage, exc_info=True)
+
+
 def _rag_context_trim_enabled() -> bool:
     return bool(getattr(config, "RAG_CONTEXT_TRIM_ENABLED", True))
 
 
 def _rag_context_max_chars() -> int:
-    return max(1, int(getattr(config, "RAG_CONTEXT_MAX_CHARS", 4500) or 4500))
+    return max(1, int(getattr(config, "RAG_CONTEXT_MAX_CHARS", 3200) or 3200))
 
 
 def _rag_context_doc_max_chars() -> int:
-    return max(1, int(getattr(config, "RAG_CONTEXT_DOC_MAX_CHARS", 1500) or 1500))
+    return max(1, int(getattr(config, "RAG_CONTEXT_DOC_MAX_CHARS", 1000) or 1000))
+
+
+def _rag_retrieval_embedding_timeout_seconds() -> float:
+    return max(
+        0.0,
+        float(getattr(config, "RAG_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS", 2.0) or 0.0),
+    )
 
 
 def _truncate_text(value: str, max_chars: int) -> tuple[str, bool]:
@@ -89,6 +120,159 @@ class AnswerResult:
     has_context: bool
 
 
+_RETRIEVAL_CACHE_LOCK = threading.RLock()
+_RETRIEVAL_CACHE: OrderedDict[str, tuple[float, RetrievalResult]] = OrderedDict()
+
+
+def _rag_retrieval_cache_enabled() -> bool:
+    return bool(getattr(config, "RAG_RETRIEVAL_CACHE_ENABLED", True))
+
+
+def _rag_retrieval_cache_ttl_seconds() -> float:
+    return max(0.0, float(getattr(config, "RAG_RETRIEVAL_CACHE_TTL_SECONDS", 600.0) or 0.0))
+
+
+def _rag_retrieval_cache_size() -> int:
+    return max(0, int(getattr(config, "RAG_RETRIEVAL_CACHE_SIZE", 128) or 0))
+
+
+def _normalize_retrieval_cache_question(question: str) -> str:
+    return "".join(str(question or "").lower().split())
+
+
+def _retrieval_cache_key(
+    question: str,
+    *,
+    top_k: int,
+    similarity_threshold: Optional[float],
+    use_hybrid: bool,
+) -> str:
+    threshold_key = "none" if similarity_threshold is None else f"{float(similarity_threshold):.6g}"
+    raw = "|".join(
+        [
+            _normalize_retrieval_cache_question(question),
+            f"top_k={int(top_k)}",
+            f"threshold={threshold_key}",
+            f"hybrid={bool(use_hybrid)}",
+            f"collection={getattr(config, 'collection_name', getattr(config, 'COLLECTION_NAME', ''))}",
+            f"persist={getattr(config, 'CHROMA_PERSIST_DIR', '')}",
+            f"trim={bool(getattr(config, 'RAG_CONTEXT_TRIM_ENABLED', True))}",
+            f"max_chars={int(getattr(config, 'RAG_CONTEXT_MAX_CHARS', 3200) or 3200)}",
+            f"doc_chars={int(getattr(config, 'RAG_CONTEXT_DOC_MAX_CHARS', 1000) or 1000)}",
+            f"rerank={bool(getattr(config, 'ENABLE_RERANK', False))}",
+            f"rerank_top_k={int(getattr(config, 'RERANK_TOP_K', 20) or 20)}",
+        ]
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _clone_documents(documents: list[Document]) -> list[Document]:
+    return [
+        Document(
+            page_content=str(getattr(doc, "page_content", "") or ""),
+            metadata=dict(getattr(doc, "metadata", {}) or {}),
+        )
+        for doc in (documents or [])
+    ]
+
+
+def _clone_retrieval_result(result: RetrievalResult) -> RetrievalResult:
+    return RetrievalResult(
+        documents=_clone_documents(result.documents),
+        formatted_context=str(result.formatted_context or ""),
+        has_results=bool(result.has_results),
+    )
+
+
+def _get_cached_retrieval_result(
+    question: str,
+    *,
+    top_k: int,
+    similarity_threshold: Optional[float],
+    use_hybrid: bool,
+) -> Optional[RetrievalResult]:
+    maxsize = _rag_retrieval_cache_size()
+    ttl = _rag_retrieval_cache_ttl_seconds()
+    if not _rag_retrieval_cache_enabled() or maxsize <= 0 or ttl <= 0:
+        return None
+
+    key = _retrieval_cache_key(
+        question,
+        top_k=top_k,
+        similarity_threshold=similarity_threshold,
+        use_hybrid=use_hybrid,
+    )
+    now = time.monotonic()
+    with _RETRIEVAL_CACHE_LOCK:
+        cached = _RETRIEVAL_CACHE.get(key)
+        if cached is None:
+            _trace_rag_retrieve_event(
+                "rag.retrieve.cache_miss",
+                reason="not_found",
+                cache_size=len(_RETRIEVAL_CACHE),
+                top_k=top_k,
+            )
+            return None
+        created_at, result = cached
+        if now - created_at > ttl:
+            _RETRIEVAL_CACHE.pop(key, None)
+            _trace_rag_retrieve_event(
+                "rag.retrieve.cache_miss",
+                reason="expired",
+                cache_size=len(_RETRIEVAL_CACHE),
+                top_k=top_k,
+            )
+            return None
+        _RETRIEVAL_CACHE.move_to_end(key)
+        _trace_rag_retrieve_event(
+            "rag.retrieve.cache_hit",
+            cache_size=len(_RETRIEVAL_CACHE),
+            document_count=len(result.documents),
+            context_chars=len(result.formatted_context or ""),
+            top_k=top_k,
+        )
+        return _clone_retrieval_result(result)
+
+
+def _store_cached_retrieval_result(
+    question: str,
+    result: RetrievalResult,
+    *,
+    top_k: int,
+    similarity_threshold: Optional[float],
+    use_hybrid: bool,
+) -> None:
+    maxsize = _rag_retrieval_cache_size()
+    ttl = _rag_retrieval_cache_ttl_seconds()
+    if not _rag_retrieval_cache_enabled() or maxsize <= 0 or ttl <= 0:
+        return
+
+    key = _retrieval_cache_key(
+        question,
+        top_k=top_k,
+        similarity_threshold=similarity_threshold,
+        use_hybrid=use_hybrid,
+    )
+    with _RETRIEVAL_CACHE_LOCK:
+        _RETRIEVAL_CACHE[key] = (time.monotonic(), _clone_retrieval_result(result))
+        _RETRIEVAL_CACHE.move_to_end(key)
+        while len(_RETRIEVAL_CACHE) > maxsize:
+            _RETRIEVAL_CACHE.popitem(last=False)
+    _trace_rag_retrieve_event(
+        "rag.retrieve.cache_store",
+        cache_size=len(_RETRIEVAL_CACHE),
+        document_count=len(result.documents),
+        context_chars=len(result.formatted_context or ""),
+        top_k=top_k,
+    )
+
+
+def clear_rag_retrieval_cache() -> None:
+    """Clear in-process retrieval cache; useful for tests/benchmarks."""
+    with _RETRIEVAL_CACHE_LOCK:
+        _RETRIEVAL_CACHE.clear()
+
+
 class RAGService(object):
     """RAG 服务类，提供检索和问答能力"""
 
@@ -104,7 +288,9 @@ class RAGService(object):
         self.use_rerank = use_rerank if use_rerank is not None else config.ENABLE_RERANK
 
         # 初始化embedding
-        self.embedding = OpenAIEmbeddings(**embedding_model_kwargs())
+        self.embedding = OpenAIEmbeddings(
+            **embedding_model_kwargs(timeout_seconds=_rag_retrieval_embedding_timeout_seconds())
+        )
 
         # 初始化检索器
         if use_hybrid:
@@ -126,11 +312,15 @@ class RAGService(object):
 
         self.prompt_template = ChatPromptTemplate.from_messages(
             [
-                ("system", "以我提供的参考材料为主，"
-                 "简洁和专业的回答用户问题。参考资料：\n{context}。"),
-                ("system", "并且我提供用户的对话历史记录，如下：\n"),
+                (
+                    "system",
+                    "你是数据科学课程助教。只能依据参考材料回答；材料不足时请明确说明。"
+                    "默认用3-6句或最多4个要点，先给结论，再给必要解释。"
+                    "不要展开无关背景，不要编造教材外信息。参考材料：\n{context}",
+                ),
+                ("system", "用户的对话历史如下：\n"),
                 MessagesPlaceholder("history"),
-                ("user", "请回答用户提问:\n{input}"),
+                ("user", "请简洁回答用户提问：\n{input}"),
             ]
         )
         self.chat_model = get_rag_text_model()
@@ -193,6 +383,22 @@ class RAGService(object):
             RetrievalResult: 包含文档列表和格式化上下文
         """
         k = top_k if top_k is not None else config.similarity_top_k
+        cached_result = _get_cached_retrieval_result(
+            question,
+            top_k=k,
+            similarity_threshold=similarity_threshold,
+            use_hybrid=bool(self.use_hybrid and self.hybrid_retriever),
+        )
+        if cached_result is not None:
+            _warn_large_rag_payload(
+                cached_result.formatted_context,
+                location="rag.retrieve.formatted_context",
+                payload_type="rag_context",
+                document_count=len(cached_result.documents),
+                top_k=k,
+                cache_hit=True,
+            )
+            return cached_result
 
         if self.use_hybrid and self.hybrid_retriever:
             # 使用BM25混合检索
@@ -202,7 +408,11 @@ class RAGService(object):
             from langchain_core.documents import Document
 
             # 获取查询的embedding
-            query_embedding = embed_query_cached(self.embedding, question)
+            query_embedding = embed_query_cached(
+                self.embedding,
+                question,
+                timeout_seconds=_rag_retrieval_embedding_timeout_seconds(),
+            )
 
             # 直接查询ChromaDB获取文档和距离
             import chromadb
@@ -241,11 +451,19 @@ class RAGService(object):
             top_k=k,
         )
 
-        return RetrievalResult(
+        result = RetrievalResult(
             documents=documents,
             formatted_context=formatted_context,
             has_results=len(documents) > 0
         )
+        _store_cached_retrieval_result(
+            question,
+            result,
+            top_k=k,
+            similarity_threshold=similarity_threshold,
+            use_hybrid=bool(self.use_hybrid and self.hybrid_retriever),
+        )
+        return result
 
     def _normalize_document_metadata(self, doc: Document) -> dict:
         """Return prompt-facing metadata with stable textbook page labels."""
@@ -398,6 +616,13 @@ class RAGService(object):
         )
         if config.CHAT_SYSTEM_SUFFIX:
             prompt = f"{prompt}\n\n{config.CHAT_SYSTEM_SUFFIX}"
+        _trace_rag_answer_event(
+            "rag.answer.prompt_compact",
+            mode="stream",
+            prompt_chars=len(prompt),
+            context_chars=len(context or ""),
+            max_tokens=int(getattr(config, "RAG_ANSWER_MAX_TOKENS", 384) or 384),
+        )
         _warn_large_rag_payload(
             prompt,
             location="rag.stream_answer.prompt",
@@ -438,6 +663,13 @@ class RAGService(object):
         )
         if config.CHAT_SYSTEM_SUFFIX:
             prompt = f"{prompt}\n\n{config.CHAT_SYSTEM_SUFFIX}"
+        _trace_rag_answer_event(
+            "rag.answer.prompt_compact",
+            mode="sync",
+            prompt_chars=len(prompt),
+            context_chars=len(context or ""),
+            max_tokens=int(getattr(config, "RAG_ANSWER_MAX_TOKENS", 384) or 384),
+        )
         _warn_large_rag_payload(
             prompt,
             location="rag.answer.prompt",

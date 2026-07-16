@@ -26,9 +26,13 @@ _CONCEPT_QUESTION_CUES = [
     "什么意思", "怎么写", "示例", "为什么", "区别", "原理",
     "作用", "影响", "含义", "对比", "比较", "不同", "关系",
     "效果", "不收敛", "收敛", "调参", "超参数",
+    "会不会", "太大", "太小", "怎么选", "如何选",
 ]
 
-_ASSIGNMENT_RE = re.compile(r"\b[a-zA-Z_]\w*\s*=\s*[^=]", flags=re.IGNORECASE)
+_ASSIGNMENT_RE = re.compile(
+    r"(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^=]",
+    flags=re.IGNORECASE,
+)
 
 
 def _has_strong_python_signal(text: str) -> bool:

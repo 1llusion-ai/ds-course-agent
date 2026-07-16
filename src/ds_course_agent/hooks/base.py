@@ -17,6 +17,9 @@ class AgentHook(Protocol):
     Common keyword arguments:
     - ``after_llm(..., agent=AgentService, stream=bool)`` is used by hooks that
       need route-aware fallback behavior.
+    - ``after_stream_end(..., agent=AgentService, stream=True)`` observes direct
+      streaming routes after all chunks have been sent; returned values are
+      ignored by AgentService because chunks are already user-visible.
     - ``after_tool(..., tool_spec=ToolSpec | None)`` is reserved for future
       registry-driven tool normalization.
     Hooks must ignore unknown ``**kwargs`` so the lifecycle can evolve without
@@ -27,6 +30,7 @@ class AgentHook(Protocol):
     def after_route(self, state: dict[str, Any], decision: Any) -> None: ...
     def before_llm(self, messages: list[Any]) -> None: ...
     def after_llm(self, state: dict[str, Any], result: Any, **kwargs: Any) -> Any: ...
+    def after_stream_end(self, state: dict[str, Any], result: Any, **kwargs: Any) -> None: ...
     def after_tool(self, name: str, result: Any, **kwargs: Any) -> Any: ...
     def after_turn(self, state: dict[str, Any], result: Any) -> None: ...
     def on_session_end(self, session_id: str, **kwargs: Any) -> None: ...
@@ -76,6 +80,12 @@ class HookManager:
             if updated is not None:
                 current = updated
         return current
+
+    def after_stream_end(self, state: dict[str, Any], result: Any, **kwargs: Any) -> None:
+        for hook in self._hooks:
+            callback = getattr(hook, "after_stream_end", None)
+            if callback:
+                callback(state, result, **kwargs)
 
     def after_tool(self, name: str, result: Any, **kwargs: Any) -> Any:
         current = result

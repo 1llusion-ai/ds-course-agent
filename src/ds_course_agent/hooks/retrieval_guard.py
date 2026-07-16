@@ -68,5 +68,30 @@ class RetrievalGuardHook:
         )
         return result
 
+    def after_stream_end(self, state: dict[str, Any], result: Any, **kwargs: Any) -> None:
+        """Record RetrievalGuard disposition for direct-streamed optional routes.
+
+        Direct streaming has already sent chunks to the client, so this hook is
+        intentionally observational.  It should only be reached for routes that
+        AgentService deemed safe for direct streaming (currently optional generic
+        routes), where RetrievalGuard would skip rather than force a second RAG
+        call.
+        """
+        agent = kwargs.get("agent")
+        if agent is None:
+            return
+
+        from ds_course_agent.rag.query_trace import trace_step
+
+        decision = state["decision"]
+        route = decision.route
+        skip_reason = agent._retrieval_guard_skip_reason(state, result)
+        trace_step(
+            "retrieval_guard.skip",
+            route=route.value,
+            retrieval_policy=decision.retrieval_policy,
+            reason=f"direct_stream:{skip_reason or 'already_sent'}",
+        )
+
 
 __all__ = ["RetrievalGuardHook"]

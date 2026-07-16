@@ -58,6 +58,16 @@ class Settings(BaseSettings):
     QUERY_CACHE_ENABLED: bool = True
     QUERY_CACHE_SIZE: int = 512
 
+    # Concept mapping.  Concept embeddings should be precomputed offline and
+    # loaded from ``data/knowledge_graph_embeddings.json`` in request paths.
+    # Query embedding is only a short-timeout semantic fallback after exact/regex
+    # matching fails to find enough concepts.
+    CONCEPT_MAP_EMBEDDING_MODE: str = "offline_first"
+    CONCEPT_MAP_QUERY_EMBEDDING_TIMEOUT_SECONDS: float = 0.5
+    CONCEPT_MAP_SKIP_EMBEDDING_IF_RULE_MATCH: bool = True
+    CONCEPT_MAP_MIN_RULE_MATCHES_TO_SKIP: int = 1
+    CONCEPT_MAP_ONLINE_PRECOMPUTE_ENABLED: bool = False
+
     COURSE_NAME: str = "数据科学导论"
     COURSE_DESCRIPTION: str = "概念答疑、课程资料问答、学习建议"
     COURSE_COLLECTION_NAME: str = ""
@@ -83,13 +93,40 @@ class Settings(BaseSettings):
     # artifact compactor: it reduces the *current turn* retrieved context before
     # it is sent to the answer LLM.
     RAG_CONTEXT_TRIM_ENABLED: bool = True
-    RAG_CONTEXT_MAX_CHARS: int = 4500
-    RAG_CONTEXT_DOC_MAX_CHARS: int = 1500
+    RAG_CONTEXT_MAX_CHARS: int = 3200
+    RAG_CONTEXT_DOC_MAX_CHARS: int = 1000
+    RAG_ANSWER_MAX_TOKENS: int = 384
+    RAG_ANSWER_TIMEOUT_SECONDS: float = 10.0
+    RAG_ANSWER_CACHE_ENABLED: bool = True
+    RAG_ANSWER_CACHE_TTL_SECONDS: float = 900.0
+    RAG_ANSWER_CACHE_SIZE: int = 128
+    RAG_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS: float = 2.0
+    RAG_RETRIEVAL_CACHE_ENABLED: bool = True
+    RAG_RETRIEVAL_CACHE_TTL_SECONDS: float = 600.0
+    RAG_RETRIEVAL_CACHE_SIZE: int = 128
 
     # Tool/RAG large-result artifact storage.
     TOOL_RESULT_ARTIFACTS_ENABLED: bool = True
     TOOL_RESULT_ARTIFACT_DIR: str = "var/artifacts/tool_results"
     TOOL_RESULT_INLINE_MAX_CHARS: int = 3000
+
+    # Explicit user-triggered web search.  Disabled by default so the assistant
+    # never reaches external networks unless the deployment config and request
+    # both opt in.
+    WEB_SEARCH_ENABLED: bool = False
+    WEB_SEARCH_PROVIDER: str = "tavily"
+    WEB_SEARCH_API_KEY: str = ""
+    WEB_SEARCH_TOP_K: int = 5
+    WEB_SEARCH_TIMEOUT_SECONDS: float = 12.0
+    WEB_SEARCH_CONTEXT_MAX_CHARS: int = 2500
+    WEB_SEARCH_SNIPPET_MAX_CHARS: int = 300
+    WEB_FETCH_ENABLED: bool = False
+    WEB_FETCH_TOP_N: int = 2
+    WEB_FETCH_TIMEOUT_SECONDS: float = 15.0
+    WEB_FETCH_MAX_BYTES: int = 1_000_000
+    WEB_FETCH_MAX_CHARS_PER_PAGE: int = 6000
+    WEB_FETCH_CONTEXT_MAX_CHARS: int = 4000
+    WEB_FETCH_USE_JINA_READER: bool = True
 
     CHUNK_SIZE: int = 1300
     CHUNK_OVERLAP: int = 300
