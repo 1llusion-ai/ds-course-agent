@@ -1,8 +1,6 @@
 <template>
   <aside class="chat-sidebar">
     <div class="sidebar-top">
-      <ProfileCard compact />
-
       <button type="button" class="new-chat-button" @click="handleCreate">
         <span class="new-chat-button__icon">
           <el-icon><Plus /></el-icon>
@@ -108,21 +106,44 @@
         </section>
       </template>
     </el-scrollbar>
+
+    <div class="sidebar-footer">
+      <button type="button" class="utility-entry" @click="handleProfileOpen">
+        <span class="utility-entry__icon utility-entry__icon--profile">
+          <el-icon><TrendCharts /></el-icon>
+        </span>
+        <span class="utility-entry__body">
+          <span class="utility-entry__title">学习快照</span>
+          <span class="utility-entry__meta">{{ profileSummaryText }}</span>
+        </span>
+      </button>
+
+      <button type="button" class="utility-entry utility-entry--muted" @click="handleSettingsClick">
+        <span class="utility-entry__icon">
+          <el-icon><Setting /></el-icon>
+        </span>
+        <span class="utility-entry__body">
+          <span class="utility-entry__title">设置</span>
+          <span class="utility-entry__meta">后续开放</span>
+        </span>
+      </button>
+    </div>
   </aside>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import ProfileCard from './ProfileCard.vue'
 import { useChatStore } from '../stores/chat'
+import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
 
 const router = useRouter()
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
+const profileStore = useProfileStore()
 const searchQuery = ref('')
 
 const filteredSessions = computed(() => {
@@ -166,9 +187,35 @@ const groupedSessions = computed(() => {
   return groups
 })
 
+const profileSummaryText = computed(() => {
+  const summary = profileStore.summary
+  if (!summary) {
+    return profileStore.loading ? '同步中...' : '查看学习状态'
+  }
+
+  const weakCount = Array.isArray(summary.weak_spots) ? summary.weak_spots.length : 0
+  const pendingCount = Array.isArray(summary.pending_weak_spots) ? summary.pending_weak_spots.length : 0
+  const recentCount = Array.isArray(summary.recent_concepts) ? summary.recent_concepts.length : 0
+  const totalWeak = weakCount + pendingCount
+
+  if (totalWeak || recentCount) {
+    return `薄弱点 ${totalWeak} · 近期关注 ${recentCount}`
+  }
+
+  return '暂无明显薄弱点'
+})
+
 function selectSession(id) {
   sessionStore.setCurrentSession(id)
   router.push(`/chat/${id}`)
+}
+
+function handleProfileOpen() {
+  router.push('/profile')
+}
+
+function handleSettingsClick() {
+  ElMessage.info('设置页后续开放')
 }
 
 function handleSessionClick(id, event) {
@@ -292,6 +339,14 @@ function isSameDate(left, right) {
 function startOfDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
+
+onMounted(() => {
+  if (!profileStore.summary && !profileStore.loading) {
+    profileStore.fetchSummary().catch(error => {
+      console.warn('加载学习快照失败:', error)
+    })
+  }
+})
 </script>
 
 <style scoped>
@@ -645,6 +700,88 @@ function startOfDay(date) {
 
 .session-empty span {
   font-size: 12px;
+}
+
+.sidebar-footer {
+  flex-shrink: 0;
+  padding: 10px 12px 14px;
+  background:
+    linear-gradient(180deg, rgba(251, 250, 248, 0), rgba(251, 250, 248, 0.96) 22%),
+    rgba(251, 250, 248, 0.92);
+  border-top: 1px solid rgba(231, 229, 228, 0.76);
+}
+
+.utility-entry {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 46px;
+  gap: 10px;
+  padding: 8px 9px;
+  margin-top: 4px;
+  color: #44403c;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.utility-entry:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(231, 229, 228, 0.92);
+  box-shadow: 0 10px 22px rgba(28, 25, 23, 0.05);
+}
+
+.utility-entry--muted {
+  color: #78716c;
+}
+
+.utility-entry__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  color: #78716c;
+  background: rgba(245, 245, 244, 0.95);
+  border-radius: 12px;
+}
+
+.utility-entry__icon--profile {
+  color: #4f46e5;
+  background: rgba(99, 102, 241, 0.10);
+}
+
+.utility-entry__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.utility-entry__title {
+  color: #292524;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.utility-entry--muted .utility-entry__title {
+  color: #57534e;
+}
+
+.utility-entry__meta {
+  overflow: hidden;
+  color: #a8a29e;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 @keyframes session-spin {
