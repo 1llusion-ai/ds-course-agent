@@ -8,7 +8,7 @@
 """
 import logging
 import re
-import jieba
+import warnings
 import numpy as np
 from typing import List, Optional
 from dataclasses import dataclass
@@ -23,6 +23,31 @@ from ds_course_agent.shared.embeddings import embed_query_cached, embedding_mode
 
 logger = logging.getLogger(__name__)
 from ds_course_agent.rag.query_trace import trace_span, trace_step
+
+
+_jieba = None
+
+
+def _get_jieba():
+    """Import jieba lazily while suppressing its setuptools deprecation noise.
+
+    jieba currently imports ``pkg_resources`` in ``jieba._compat`` on import,
+    which emits a third-party deprecation warning under newer setuptools.  The
+    warning is not actionable for this project, so keep test output clean while
+    preserving jieba-based tokenization.
+    """
+    global _jieba
+    if _jieba is None:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"pkg_resources is deprecated as an API.*",
+                category=UserWarning,
+            )
+            import jieba as jieba_module
+
+        _jieba = jieba_module
+    return _jieba
 
 
 def _normalize_latin_tokens(text: str) -> str:
@@ -50,8 +75,8 @@ class BM25Retriever:
     def _tokenize(self, text: str) -> List[str]:
         """中文分词"""
         text = _normalize_latin_tokens(text)
-        # 使用jieba分词
-        tokens = list(jieba.cut(text))
+        # 使用 jieba 分词；lazy import 避免第三方 pkg_resources 警告污染测试输出。
+        tokens = list(_get_jieba().cut(text))
         # 过滤停用词和短词
         stopwords = {'的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一', '一个', '上', '也', '很', '到', '说', '要', '去', '你', '会', '着', '没有', '看', '好', '自己', '这'}
         return [t.strip() for t in tokens if len(t.strip()) > 1 and t.strip() not in stopwords]
