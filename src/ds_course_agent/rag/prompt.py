@@ -12,7 +12,7 @@ _SYSTEM_PROMPT_PATH = _PROMPT_DIR / "system_prompt.txt"
 
 
 def get_system_prompt() -> str:
-    """Load the base system prompt and append the skill catalog."""
+    """Load the base system prompt and append inline teaching skill instructions."""
     if _SYSTEM_PROMPT_PATH.exists():
         base_prompt = _SYSTEM_PROMPT_PATH.read_text(encoding="utf-8").strip()
     else:

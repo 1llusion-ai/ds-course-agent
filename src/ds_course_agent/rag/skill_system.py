@@ -113,6 +113,20 @@ class Skill:
             text = text.replace(f"${{{self.argument_hint}}}", args)
         return text
 
+    @property
+    def has_executor(self) -> bool:
+        """Whether this skill has backend code support."""
+
+        if not self.skill_root or not self.executor_path:
+            return False
+        return (Path(self.skill_root) / self.executor_path).exists()
+
+    @property
+    def skill_kind(self) -> str:
+        """Human-readable skill category for prompt/context rendering."""
+
+        return "backend" if self.has_executor else "cognitive"
+
 
 @dataclass(frozen=True)
 class SkillMatch:
@@ -277,17 +291,71 @@ class SkillRegistry:
         self._discovered = True
         return loaded
 
-    def build_skills_prompt_section(self) -> str:
+    def build_skills_summary(self) -> str:
         skills = self.list_skills(user_invocable_only=False)
         if not skills:
             return ""
 
-        lines = ["# Available Skills", ""]
+        lines = ["## Skill catalog", ""]
         for skill in skills:
             line = f"- /{skill.name}: {skill.description or '(no description)'}"
             if skill.when_to_use:
                 line += f" - {skill.when_to_use}"
+            line += f" [kind={skill.skill_kind}]"
             lines.append(line)
+        return "\n".join(lines)
+
+    def build_inline_skill_instructions(self) -> str:
+        """Render full inline SKILL.md bodies for LLM cognition.
+
+        There are only four project skills today, so Phase 2 injects all inline
+        skill instructions. The separate method keeps a clean path for future
+        summary-only / lazy-loading behavior if the skill catalog grows.
+        """
+
+        skills = [
+            skill
+            for skill in self.list_skills(user_invocable_only=False)
+            if skill.context == "inline"
+        ]
+        if not skills:
+            return ""
+
+        lines = [
+            "## Inline Skill Instructions",
+            "",
+            "Use these SKILL.md instructions as teaching-strategy guidance. "
+            "Backend skills may also be executed by the router; cognitive guidance still applies when generating responses.",
+            "",
+        ]
+        for skill in skills:
+            allowed_tools = ", ".join(skill.allowed_tools) if skill.allowed_tools else "none"
+            lines.extend(
+                [
+                    f'<skill name="{skill.name}" kind="{skill.skill_kind}">',
+                    f"Description: {skill.description or '(no description)'}",
+                    f"When to use: {skill.when_to_use or '(unspecified)'}",
+                    f"Allowed tools: {allowed_tools}",
+                    f"Executor: {skill.executor_path if skill.has_executor else 'none'}",
+                    "",
+                    skill.get_prompt().strip(),
+                    "</skill>",
+                    "",
+                ]
+            )
+        return "\n".join(lines).strip()
+
+    def build_skills_prompt_section(self) -> str:
+        summary = self.build_skills_summary().strip()
+        inline = self.build_inline_skill_instructions().strip()
+        if not summary and not inline:
+            return ""
+
+        lines = ["# Available Teaching Skills", ""]
+        if summary:
+            lines.append(summary)
+        if inline:
+            lines.extend(["", inline])
         return "\n".join(lines)
 
     def select_candidates(self, question: str, limit: int | None = None) -> list[SkillMatch]:

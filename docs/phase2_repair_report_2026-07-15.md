@@ -375,6 +375,33 @@ python -m pytest -q
 301 passed, 6 skipped, 2 warnings
 ```
 
+## 11. Skill prompt injection
+
+目的：把 skill 从“代码层路由分支”进一步提升为 LLM 可见的教学策略说明，
+借鉴 nanobot 的 SKILL.md 注入方式，但保持本项目的 QueryPipeline 路由与现有 skill executor。
+
+改动：
+
+- `SkillRegistry` 新增：
+  - `build_skills_summary()`：输出技能摘要目录。
+  - `build_inline_skill_instructions()`：输出当前 4 个 inline `SKILL.md` 全文。
+  - `Skill.has_executor` / `Skill.skill_kind`：区分 backend/cognitive 元数据。
+- `get_system_prompt()` 现在追加 skill catalog + inline SKILL.md instructions。
+- Generic agent 分支新增 per-turn system context：
+  - 学生画像自然语言摘要。
+  - 当前 turn 匹配到的 skill hints。
+  - 当前 turn 的概念标签。
+- 不改变 QueryPipeline 的路由职责；skill route 仍可调用 executor，generic branch 则让 LLM 使用注入的认知策略。
+
+验证：
+
+```text
+python -m pytest tests/test_skill_loader.py tests/test_agent_hooks_route_handlers.py tests/test_agent_smoke.py tests/test_query_pipeline.py -q
+84 passed, 4 skipped, 1 warning
+python -m pytest -q
+304 passed, 6 skipped, 2 warnings
+```
+
 ## 下一步
 
-1. Skill prompt injection：将认知型教学 skill 注入系统提示词。
+Phase 2 后端架构现代化已完成。下一轮建议进入 UI polish，或按需开启 Phase 3（Dream-lite / WebSocket / 子代理代码审查）。

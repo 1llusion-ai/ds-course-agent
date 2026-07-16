@@ -167,22 +167,38 @@ class GenericAgentRouteHandler:
         decision = route_state["decision"]
         chat_history = route_state["chat_history"]
         execution_query = agent._route_execution_query(context, decision)
+        turn_context = agent._build_turn_system_context(route_state)
 
         trace_step("agent.branch", branch="generic_agent")
         if stream:
             with trace_span("execute.agent_chat_stream"):
                 streamed_parts = [
                     chunk
-                    for chunk in agent.chat(execution_query, chat_history, stream=True)
+                    for chunk in agent.chat(
+                        execution_query,
+                        chat_history,
+                        stream=True,
+                        turn_context=turn_context,
+                    )
                     if chunk
                 ]
             result = "".join(streamed_parts)
             if result == "":
                 with trace_span("execute.agent_chat"):
-                    result = agent.chat(execution_query, chat_history, stream=False)
+                    result = agent.chat(
+                        execution_query,
+                        chat_history,
+                        stream=False,
+                        turn_context=turn_context,
+                    )
         else:
             with trace_span("execute.agent_chat"):
-                result = agent.chat(execution_query, chat_history, stream=False)
+                result = agent.chat(
+                    execution_query,
+                    chat_history,
+                    stream=False,
+                    turn_context=turn_context,
+                )
 
         if hasattr(result, "__iter__") and not isinstance(result, str):
             result = "".join(result)

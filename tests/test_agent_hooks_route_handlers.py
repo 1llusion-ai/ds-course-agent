@@ -101,3 +101,67 @@ def test_execute_route_dispatches_to_route_handler_without_if_ladder():
 
     assert result == "handled by route handler"
     assert calls == [("can", "course_schedule"), ("execute", True)]
+
+
+def test_student_profile_context_is_natural_language_summary():
+    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.rag.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
+
+    service = AgentService.__new__(AgentService)
+    profile = StudentProfile(student_id="student-hooks")
+    profile.recent_concepts["decision_tree"] = ConceptFocus(
+        concept_id="decision_tree",
+        display_name="决策树",
+        chapter="第6章",
+        mention_count=3,
+        last_mentioned_at=2.0,
+    )
+    profile.weak_spot_candidates.append(
+        WeakSpotCandidate(
+            concept_id="feature_selection",
+            display_name="特征选择",
+            confidence=0.8,
+        )
+    )
+
+    summary = service._format_student_profile_for_prompt(profile)
+
+    assert "Student Profile Context" in summary
+    assert "最近关注概念：决策树（第6章）x3" in summary
+    assert "当前薄弱点：特征选择" in summary
+
+
+def test_generic_route_passes_turn_context_to_chat(monkeypatch):
+    from ds_course_agent.rag.route_handlers import GenericAgentRouteHandler
+
+    state = _route_state(route=RouteType.GENERIC_AGENT, retrieval_policy="optional")
+    captured = {}
+
+    class FakePostprocessor:
+        def process(self, context, decision, result, chat_history=None):
+            class Response:
+                content = result
+
+            return Response()
+
+    monkeypatch.setattr(
+        "ds_course_agent.rag.query_pipeline.get_postprocessor",
+        lambda: FakePostprocessor(),
+    )
+
+    class FakeAgent:
+        def _route_execution_query(self, context, decision):
+            return context.original_query
+
+        def _build_turn_system_context(self, route_state):
+            assert route_state is state
+            return "turn profile context"
+
+        def chat(self, user_input, chat_history=None, stream=False, turn_context=None):
+            captured["turn_context"] = turn_context
+            return "answer"
+
+    result = GenericAgentRouteHandler().execute(FakeAgent(), state, stream=False)
+
+    assert result == "answer"
+    assert captured["turn_context"] == "turn profile context"

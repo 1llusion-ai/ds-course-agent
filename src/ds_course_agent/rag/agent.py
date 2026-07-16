@@ -378,7 +378,8 @@ class AgentService(object):
         self,
         user_input: str,
         chat_history: Optional[list] = None,
-        stream: bool = False
+        stream: bool = False,
+        turn_context: Optional[str] = None,
     ):
         """
         与 Agent 进行对话
@@ -395,7 +396,11 @@ class AgentService(object):
             chat_history = []
 
         formatted_history = self._format_chat_history(chat_history)
-        messages = formatted_history + [HumanMessage(content=user_input)]
+        messages = []
+        if turn_context and turn_context.strip():
+            messages.append(SystemMessage(content=turn_context.strip()))
+        messages.extend(formatted_history)
+        messages.append(HumanMessage(content=user_input))
 
         if stream:
             return self._stream_chat_with_retry(messages, fallback_input=user_input)
@@ -586,6 +591,93 @@ class AgentService(object):
         loader = getattr(self, "skill_loader", None) or get_skill_loader()
         matches = loader.select_candidates(question)
         return {item.skill.key for item in matches}
+
+    def _build_turn_system_context(self, route_state: dict) -> str:
+        """Build per-turn system context for the generic agent branch."""
+
+        sections: list[str] = []
+        profile_summary = self._format_student_profile_for_prompt(route_state.get("profile"))
+        if profile_summary:
+            sections.append(profile_summary)
+
+        skill_keys = sorted(route_state.get("skill_candidate_keys") or [])
+        if skill_keys:
+            sections.append(
+                "# Matched Teaching Skill Hints\n"
+                "The router/keyword matcher found these potentially relevant skills for this turn: "
+                + ", ".join(skill_keys)
+                + ". Use the inline SKILL.md instructions in the main system prompt when appropriate."
+            )
+
+        matched_concepts = route_state.get("matched_concepts") or []
+        concept_labels = []
+        for item in matched_concepts[:5]:
+            display_name = getattr(item, "display_name", None) or getattr(item, "concept_id", "")
+            chapter = getattr(item, "chapter", "")
+            if display_name and chapter:
+                concept_labels.append(f"{display_name}（{chapter}）")
+            elif display_name:
+                concept_labels.append(str(display_name))
+        if concept_labels:
+            sections.append("# Current Turn Concepts\n" + "、".join(concept_labels))
+
+        return "\n\n".join(sections)
+
+    def _format_student_profile_for_prompt(self, profile) -> str:
+        """Render a compact natural-language student profile for LLM context."""
+
+        if profile is None:
+            return ""
+
+        lines: list[str] = []
+
+        progress = getattr(profile, "progress", None)
+        current_chapter = getattr(progress, "current_chapter", None)
+        covered_chapters = list(getattr(progress, "covered_chapters", []) or [])
+        if current_chapter:
+            lines.append(f"当前学习进度：{current_chapter}")
+        if covered_chapters:
+            lines.append("已覆盖章节：" + "、".join(map(str, covered_chapters[:6])))
+
+        recent_concepts = list((getattr(profile, "recent_concepts", {}) or {}).values())
+        recent_concepts.sort(key=lambda item: getattr(item, "last_mentioned_at", 0) or 0, reverse=True)
+        if recent_concepts:
+            labels = []
+            for item in recent_concepts[:5]:
+                name = getattr(item, "display_name", "") or getattr(item, "concept_id", "")
+                chapter = getattr(item, "chapter", "")
+                count = getattr(item, "mention_count", 0) or 0
+                label = str(name)
+                if chapter:
+                    label += f"（{chapter}）"
+                if count:
+                    label += f"x{count}"
+                labels.append(label)
+            lines.append("最近关注概念：" + "、".join(labels))
+
+        active_weak = list(getattr(profile, "weak_spot_candidates", []) or [])
+        pending_weak = list(getattr(profile, "pending_weak_spots", []) or [])
+        if active_weak:
+            labels = [
+                getattr(item, "display_name", "") or getattr(item, "concept_id", "")
+                for item in active_weak[:5]
+            ]
+            lines.append("当前薄弱点：" + "、".join(filter(None, labels)))
+        if pending_weak:
+            labels = [
+                getattr(item, "display_name", "") or getattr(item, "concept_id", "")
+                for item in pending_weak[:5]
+            ]
+            lines.append("待观察薄弱点：" + "、".join(filter(None, labels)))
+
+        if not lines:
+            return ""
+
+        return (
+            "# Student Profile Context\n"
+            "以下是学生当前学习画像摘要，只用于调整讲解粒度和例子选择，不要逐字暴露内部标签：\n"
+            + "\n".join(f"- {line}" for line in lines if line)
+        )
 
     def _handle_special_case(self, question: str) -> Optional[str]:
         normalized = normalize_query_text(question)
@@ -1157,7 +1249,13 @@ class AgentService(object):
             if self._can_direct_stream_route(route_state):
                 chunks = []
                 execution_query = self._route_execution_query(route_state["context"], decision)
-                for chunk in self.chat(execution_query, route_state["chat_history"], stream=True):
+                turn_context = self._build_turn_system_context(route_state)
+                for chunk in self.chat(
+                    execution_query,
+                    route_state["chat_history"],
+                    stream=True,
+                    turn_context=turn_context,
+                ):
                     if chunk:
                         chunks.append(chunk)
                         yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}

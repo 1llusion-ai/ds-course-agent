@@ -600,7 +600,7 @@ class TestAgentStreamPostprocessRegressions:
 
         monkeypatch.setattr(service, "_prepare_query_route", fake_prepare)
 
-        def fake_chat(user_input, chat_history=None, stream=False):
+        def fake_chat(user_input, chat_history=None, stream=False, turn_context=None):
             if stream:
                 return iter(chat_stream_chunks)
             return chat_sync_result if chat_sync_result is not None else "".join(chat_stream_chunks)

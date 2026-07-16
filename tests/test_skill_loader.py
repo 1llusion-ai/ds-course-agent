@@ -36,3 +36,17 @@ def test_skill_loader_blocks_conflicting_skill_with_avoid_keywords():
 
     assert "learning-path" in keys
     assert "personalized-explanation" not in keys
+
+
+def test_skill_prompt_section_injects_inline_skill_bodies():
+    loader = SkillRegistry()
+
+    section = loader.build_skills_prompt_section()
+
+    assert "# Available Teaching Skills" in section
+    assert "## Skill catalog" in section
+    assert "## Inline Skill Instructions" in section
+    assert '<skill name="personalized-explanation"' in section
+    assert "# Personalized Explanation Skill" in section
+    assert '<skill name="learning-path"' in section
+    assert "# Learning Path Skill" in section
