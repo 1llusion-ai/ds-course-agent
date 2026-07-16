@@ -6,13 +6,15 @@ import { chatApi } from '../api/chat'
 import { useSessionStore } from './session'
 
 function buildPendingMessage(requestId) {
+  const startedAt = new Date().toISOString()
   return {
     role: 'assistant',
     content: '',
-    timestamp: new Date().toISOString(),
+    timestamp: startedAt,
     isLoading: true,
     requestId,
-    progress: null
+    progress: null,
+    progressEvents: []
   }
 }
 
@@ -23,6 +25,24 @@ function buildErrorMessage(content) {
     timestamp: new Date().toISOString(),
     isError: true
   }
+}
+
+function normalizeProgressEvent(progress = {}) {
+  return {
+    phase: progress.phase || progress.status || progress.type || '',
+    message: progress.message || '',
+    route: progress.route || '',
+    tool: progress.tool || '',
+    stream_id: progress.stream_id || '',
+    resuming: Boolean(progress.resuming),
+    timestamp: progress.timestamp || new Date().toISOString()
+  }
+}
+
+function latestRouteFromProgress(events = []) {
+  const reversed = [...events].reverse()
+  const event = reversed.find(item => item?.route)
+  return event?.route || ''
 }
 
 export const useChatStore = defineStore('chat', () => {
@@ -97,14 +117,21 @@ export const useChatStore = defineStore('chat', () => {
 
   function updatePendingMessageProgress(sessionId, requestId, progress) {
     const currentMessages = messagesBySession.value[sessionId] || []
+    const nextProgress = normalizeProgressEvent(progress)
     const nextMessages = currentMessages.map(message => {
       if (message.requestId !== requestId) {
         return message
       }
 
+      const progressEvents = Array.isArray(message.progressEvents)
+        ? [...message.progressEvents, nextProgress]
+        : [nextProgress]
+
       return {
         ...message,
-        progress,
+        progress: nextProgress,
+        progressEvents,
+        route: message.route || nextProgress.route || undefined,
         timestamp: new Date().toISOString(),
         isLoading: true
       }
@@ -118,7 +145,21 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function finalizeSessionMessage(sessionId, requestId, nextMessage) {
-    const nextMessages = replacePendingMessage(sessionId, requestId, nextMessage)
+    const pendingMessage = getPendingMessage(sessionId, requestId)
+    const progressEvents = pendingMessage?.progressEvents || nextMessage.progressEvents || []
+    const latestRoute = nextMessage.route || pendingMessage?.route || latestRouteFromProgress(progressEvents)
+    const mergedMessage = {
+      ...nextMessage,
+      route: latestRoute || nextMessage.route,
+      metadata: {
+        ...(pendingMessage?.metadata || {}),
+        ...(nextMessage.metadata || {}),
+        ...(latestRoute ? { route: latestRoute } : {})
+      },
+      progress: nextMessage.progress || pendingMessage?.progress || null,
+      progressEvents
+    }
+    const nextMessages = replacePendingMessage(sessionId, requestId, mergedMessage)
     setSessionMessages(sessionId, nextMessages)
     return nextMessages
   }
@@ -215,6 +256,7 @@ export const useChatStore = defineStore('chat', () => {
             phase: payload.phase,
             message: payload.message,
             route: payload.route,
+            tool: payload.tool,
             stream_id: payload.stream_id,
             resuming: Boolean(payload.resuming)
           })
@@ -228,7 +270,8 @@ export const useChatStore = defineStore('chat', () => {
 
           const nextMessage = {
             ...(payload.message || {}),
-            isLoading: false
+            isLoading: false,
+            stream_id: payload.stream_id
           }
 
           finalizeSessionMessage(sessionId, requestId, nextMessage)

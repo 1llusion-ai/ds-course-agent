@@ -8,8 +8,17 @@
           <img src="/icon/thought_logo.png" alt="logo" class="logo" />
           <div>
             <h1>数据科学导论教学Agent</h1>
-            <p>数据科学导论</p>
+            <p>课程资料检索 · 个性化学习辅导 · 代码答疑</p>
           </div>
+        </div>
+        <div class="header-status">
+          <span class="status-pill">
+            <span class="status-dot"></span>
+            {{ chatStore.loading ? '回答生成中' : '随时可提问' }}
+          </span>
+          <span v-if="sessionStore.currentSession" class="session-pill">
+            {{ sessionStore.currentSession.title }}
+          </span>
         </div>
       </header>
 
@@ -23,6 +32,17 @@
                 可以直接提问课程概念、公式推导、案例理解，
                 也可以让我帮你梳理最近卡住的知识点。
               </p>
+              <div class="prompt-grid">
+                <button
+                  v-for="prompt in starterPrompts"
+                  :key="prompt"
+                  class="prompt-card"
+                  type="button"
+                  @click="handleStarterPrompt(prompt)"
+                >
+                  {{ prompt }}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -62,6 +82,13 @@ const messagesContainer = ref(null)
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
 const profileStore = useProfileStore()
+
+const starterPrompts = [
+  '逻辑回归为什么能做分类？',
+  'K-means 的基本步骤是什么？',
+  '帮我区分过拟合和欠拟合',
+  '请用 Python 演示一次交叉验证'
+]
 
 watch(
   [() => route.params.sessionId, () => sessionStore.loaded, () => sessionStore.sortedSessions.length],
@@ -178,6 +205,11 @@ async function handleSend(message) {
   scrollToBottom()
 }
 
+function handleStarterPrompt(prompt) {
+  if (chatStore.loading) return
+  handleSend(prompt)
+}
+
 function scrollToBottom() {
   nextTick(() => {
     if (messagesContainer.value) {
@@ -210,16 +242,19 @@ onMounted(async () => {
   flex-direction: column;
   min-width: 0;
   background:
-    radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 24%),
-    radial-gradient(circle at right center, rgba(59, 130, 246, 0.1), transparent 28%),
-    linear-gradient(140deg, #fafaf9 0%, #f5f5f4 46%, #f1f5f9 100%);
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.16), transparent 26%),
+    radial-gradient(circle at 82% 12%, rgba(79, 70, 229, 0.14), transparent 30%),
+    radial-gradient(circle at right center, rgba(20, 184, 166, 0.10), transparent 30%),
+    linear-gradient(140deg, #fafaf9 0%, #f8fafc 46%, #eef2ff 100%);
 }
 
 .chat-header {
-  height: 64px;
+  min-height: 72px;
   display: flex;
   align-items: center;
-  padding: 0 24px;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 28px;
   background: rgba(255, 255, 255, 0.88);
   border-bottom: 1px solid rgba(214, 211, 209, 0.9);
   backdrop-filter: blur(18px);
@@ -253,6 +288,49 @@ onMounted(async () => {
   color: #78716c;
 }
 
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.status-pill,
+.session-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-pill {
+  gap: 7px;
+  color: #0f766e;
+  background: rgba(20, 184, 166, 0.10);
+  border: 1px solid rgba(20, 184, 166, 0.16);
+}
+
+.session-pill {
+  max-width: 260px;
+  overflow: hidden;
+  color: #475569;
+  text-overflow: ellipsis;
+  background: rgba(248, 250, 252, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #14b8a6;
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.12);
+}
+
 .chat-content {
   flex: 1;
   display: flex;
@@ -264,13 +342,15 @@ onMounted(async () => {
 .messages-area {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 28px 28px 18px;
 }
 
 .messages-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+  width: min(100%, 1120px);
+  margin: 0 auto;
 }
 
 .empty-state {
@@ -281,13 +361,15 @@ onMounted(async () => {
 }
 
 .empty-content {
-  max-width: 420px;
+  max-width: 720px;
   text-align: center;
-  padding: 28px 32px;
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.76);
+  padding: 34px;
+  border-radius: 32px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.68));
   border: 1px solid rgba(231, 229, 228, 0.9);
-  box-shadow: 0 18px 40px rgba(28, 25, 23, 0.06);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.10);
+  backdrop-filter: blur(18px);
 }
 
 .robot-icon {
@@ -306,13 +388,70 @@ onMounted(async () => {
 }
 
 .empty-content p {
-  margin: 0;
+  margin: 0 auto;
+  max-width: 520px;
   color: #57534e;
   line-height: 1.7;
 }
 
+.prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.prompt-card {
+  min-height: 54px;
+  padding: 12px 14px;
+  color: #334155;
+  text-align: left;
+  background: rgba(248, 250, 252, 0.84);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 16px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.prompt-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(79, 70, 229, 0.32);
+  box-shadow: 0 14px 30px rgba(79, 70, 229, 0.10);
+}
+
 .input-area {
-  padding: 16px 24px;
+  padding: 16px 28px 18px;
   flex-shrink: 0;
+  background: linear-gradient(180deg, transparent, rgba(248, 250, 252, 0.86) 42%);
+}
+
+@media (max-width: 900px) {
+  .chat-header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 14px 18px;
+  }
+
+  .header-status {
+    width: 100%;
+  }
+
+  .session-pill {
+    max-width: 100%;
+  }
+
+  .messages-area {
+    padding: 18px 14px;
+  }
+
+  .prompt-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .input-area {
+    padding: 12px 14px 14px;
+  }
 }
 </style>

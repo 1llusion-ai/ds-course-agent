@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import List, Optional, Literal
+from typing import Any, List, Optional, Literal
 
 
 class ChatMessage(BaseModel):
@@ -8,6 +8,8 @@ class ChatMessage(BaseModel):
     content: str
     timestamp: datetime = Field(default_factory=datetime.now)
     sources: Optional[List[dict]] = None
+    route: Optional[str] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 class ChatRequest(BaseModel):

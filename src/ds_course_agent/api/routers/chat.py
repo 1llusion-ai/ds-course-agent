@@ -99,6 +99,8 @@ def _msg_to_dict(msg: ChatMessage) -> dict:
         "content": msg.content,
         "timestamp": msg.timestamp.isoformat() if msg.timestamp else datetime.now().isoformat(),
         "sources": msg.sources or None,
+        "route": msg.route or None,
+        "metadata": msg.metadata or None,
     }
 
 
@@ -111,6 +113,8 @@ def _msg_from_dict(data: dict) -> ChatMessage:
         content=data.get("content", ""),
         timestamp=ts or datetime.now(),
         sources=data.get("sources"),
+        route=data.get("route"),
+        metadata=data.get("metadata"),
     )
 
 
@@ -201,11 +205,24 @@ async def send_message(data: ChatRequest):
 
     assistant_content = assistant_result.get("content", "") if isinstance(assistant_result, dict) else str(assistant_result)
     assistant_sources = assistant_result.get("sources") if isinstance(assistant_result, dict) else None
+    query_trace = assistant_result.get("query_trace") if isinstance(assistant_result, dict) else None
+    assistant_route = None
+    if isinstance(query_trace, dict):
+        for event in reversed(query_trace.get("events", [])):
+            data = event.get("data") or {}
+            assistant_route = data.get("route") or data.get("final_route")
+            if assistant_route:
+                break
 
     assistant_msg = ChatMessage(
         role="assistant",
         content=assistant_content,
         sources=assistant_sources or None,
+        route=assistant_route,
+        metadata={
+            "route": assistant_route,
+            "used_retrieval": assistant_result.get("used_retrieval"),
+        } if isinstance(assistant_result, dict) and (assistant_route or assistant_result.get("used_retrieval") is not None) else None,
     )
     _append_message(data.session_id, assistant_msg, save=False)
     _update_session_metadata(data.session_id, assistant_msg.timestamp.isoformat(), save=False)
@@ -297,6 +314,11 @@ async def send_message_stream(
                         role="assistant",
                         content=event.get("content", ""),
                         sources=event.get("sources") or None,
+                        route=event.get("route"),
+                        metadata={
+                            "route": event.get("route"),
+                            "used_retrieval": event.get("used_retrieval"),
+                        },
                     )
                     _append_message(session_id, assistant_msg, save=False)
                     _update_session_metadata(session_id, assistant_msg.timestamp.isoformat(), save=False)
@@ -306,6 +328,7 @@ async def send_message_stream(
                             "type": "final",
                             "session_id": session_id,
                             "stream_id": event.get("stream_id"),
+                            "route": event.get("route"),
                             "message": _msg_to_dict(assistant_msg),
                         }
                     )

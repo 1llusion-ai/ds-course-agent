@@ -5,8 +5,8 @@
         v-model="inputText"
         rows="1"
         class="input-field"
-        placeholder="输入问题，按 Enter 发送..."
-        @keydown.enter.prevent="handleSend"
+        placeholder="问一个课程概念、公式推导或代码问题..."
+        @keydown.enter="handleEnterKey"
         @input="autoResize"
         ref="textareaRef"
       />
@@ -16,12 +16,15 @@
         @click="handleSend"
       >
         <svg v-if="!loading" class="send-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 12h14M12 5l7 7-7 7"/>
         </svg>
-        <span v-else>...</span>
+        <span v-else class="send-loader"></span>
       </button>
     </div>
-    <p class="input-hint">教学 Agent 基于教材回答，仅供参考。</p>
+    <div class="input-hint">
+      <span>Enter 发送 · Shift+Enter 换行</span>
+      <span>基于教材与学习画像回答</span>
+    </div>
   </div>
 </template>
 
@@ -53,22 +56,45 @@ function handleSend() {
     if (textareaRef.value) textareaRef.value.style.height = 'auto'
   })
 }
+
+function handleEnterKey(event) {
+  if (event.shiftKey || event.isComposing) {
+    return
+  }
+  event.preventDefault()
+  handleSend()
+}
 </script>
 
 <style scoped>
 .chat-input-wrapper {
   width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
 }
 
 .input-container {
   display: flex;
   align-items: flex-end;
   gap: 12px;
-  background: white;
-  border: 1px solid #e7e5e4;
-  border-radius: 16px;
-  padding: 12px 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 12px rgba(0,0,0,0.04);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.92));
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 22px;
+  padding: 12px 14px 12px 18px;
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.10),
+    0 1px 0 rgba(255, 255, 255, 0.88) inset;
+  backdrop-filter: blur(18px);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.input-container:focus-within {
+  border-color: rgba(79, 70, 229, 0.46);
+  box-shadow:
+    0 24px 60px rgba(79, 70, 229, 0.13),
+    0 0 0 4px rgba(79, 70, 229, 0.08);
+  transform: translateY(-1px);
 }
 
 .input-field {
@@ -77,12 +103,13 @@ function handleSend() {
   border: none;
   outline: none;
   resize: none;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.65;
   color: #44403c;
-  min-height: 24px;
-  max-height: 120px;
+  min-height: 28px;
+  max-height: 150px;
   font-family: inherit;
+  padding: 4px 0;
 }
 
 .input-field::placeholder {
@@ -90,10 +117,10 @@ function handleSend() {
 }
 
 .send-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: #4f46e5;
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #4f46e5 0%, #2563eb 52%, #0f766e 100%);
   color: white;
   border: none;
   cursor: pointer;
@@ -102,10 +129,12 @@ function handleSend() {
   justify-content: center;
   transition: all 0.2s;
   flex-shrink: 0;
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.25);
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #4338ca;
+  transform: translateY(-1px);
+  box-shadow: 0 18px 34px rgba(37, 99, 235, 0.32);
 }
 
 .send-btn:disabled {
@@ -118,11 +147,28 @@ function handleSend() {
   height: 20px;
 }
 
+.send-loader {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.42);
+  border-top-color: #fff;
+  border-radius: 999px;
+  animation: input-spin 0.8s linear infinite;
+}
+
 .input-hint {
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
   font-size: 12px;
-  color: #a8a29e;
-  margin-top: 8px;
-  margin-bottom: 0;
+  color: #94a3b8;
+  margin-top: 10px;
+}
+
+@keyframes input-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
