@@ -170,6 +170,39 @@ service 中移出，但暂时不改变 QueryPipeline、LearningEvent 与 skill e
 - 这一步不改变 public `chat_with_history` / stream event 协议。
 - 这一步不改变 grounded RAG 直连优化、tool registry、artifact 行为。
 
+## 6. ClarificationDetectorHook + LearningEventHook
+
+目的：继续拆 `AgentService` 中的教学横切逻辑，把纯规则检测和
+LearningEvent 写入搬到独立 hook 对象中，同时保留现有 LearningEvent
+领域模型。
+
+改动：
+
+- `src/ds_course_agent/hooks/clarification.py`
+  - 新增 `ClarificationDetectorHook`。
+  - 接管 clarification/mastery 规则：
+    `is_clarification_request()`、`is_mastery_signal()`、
+    `infer_clarification_type()`。
+  - 接管 distinction 概念规则：
+    `sanitize_distinction_fragment()`、`extract_distinction_labels()`、
+    `build_distinction_learning_concept()`。
+- `src/ds_course_agent/hooks/learning_event.py`
+  - 新增 `LearningEventHook`。
+  - 接管最近 session concept event 解析、contextual follow-up concept 解析、
+    `CONCEPT_MENTIONED` / `CLARIFICATION` / `MASTERY_SIGNAL` 事件写入。
+  - `on_session_end()` 接管画像聚合触发。
+- `src/ds_course_agent/rag/agent.py`
+  - `AgentService` 初始化 `clarification_detector` 与 `learning_event_hook`。
+  - 原 `_is_clarification_request()`、`_record_learning_events()` 等私有方法
+    保留为 thin wrapper，避免现有测试/monkeypatch 和外部调用漂移。
+  - `end_session()` 改为通过 hook lifecycle 调用。
+
+边界：
+
+- 不改 `EventType` / `BaseEvent` / `MemoryCore` 数据模型。
+- 不改变当前事件记录时机；仍在 route prepare 阶段记录，避免把行为风险混入
+  本次结构拆分。后续如果要严格移动到 `after_turn`，再单独做行为迁移。
+
 ## 验证
 
 ### 单测 / 编译
@@ -187,6 +220,9 @@ python -m pytest tests/test_tool_result_store.py tests/test_context_governor.py 
 python -m py_compile src/ds_course_agent/hooks/base.py src/ds_course_agent/hooks/retrieval_guard.py src/ds_course_agent/hooks/__init__.py src/ds_course_agent/rag/route_handlers.py src/ds_course_agent/rag/agent.py tests/test_agent_hooks_route_handlers.py
 python -m pytest tests/test_agent_hooks_route_handlers.py tests/test_agent_smoke.py tests/test_query_pipeline.py tests/test_agent_grounded_fallback.py -q
 python -m pytest tests/test_agent_hooks_route_handlers.py tests/test_agent_smoke.py tests/test_query_pipeline.py tests/test_agent_grounded_fallback.py tests/test_tool_result_store.py tests/test_context_governor.py tests/test_rag_tool.py tests/test_tool_registry.py tests/integration/api/test_chat_stream.py -q
+python -m py_compile src/ds_course_agent/hooks/clarification.py src/ds_course_agent/hooks/learning_event.py src/ds_course_agent/hooks/__init__.py src/ds_course_agent/rag/agent.py tests/test_learning_event_hooks.py
+python -m pytest tests/test_learning_event_hooks.py tests/test_agent_smoke.py tests/test_query_pipeline.py tests/integration/api/test_profile.py -q
+python -m pytest tests/test_learning_event_hooks.py tests/test_agent_hooks_route_handlers.py tests/test_agent_smoke.py tests/test_query_pipeline.py tests/test_agent_grounded_fallback.py tests/test_tool_result_store.py tests/test_context_governor.py tests/test_rag_tool.py tests/test_tool_registry.py tests/integration/api/test_chat_stream.py tests/integration/api/test_profile.py tests/test_profile_memory.py -q
 python -m pytest -q
 ```
 
@@ -206,6 +242,9 @@ full suite after artifact storage: 286 passed, 6 skipped, 2 warnings
 hooks/route handlers targeted: 80 passed, 4 skipped, 1 warning
 hooks/route handlers affected paths: 109 passed, 5 skipped, 1 warning
 full suite after hooks/route handlers: 291 passed, 6 skipped, 2 warnings
+learning hooks targeted: 83 passed, 4 skipped, 1 warning
+learning hooks affected paths: 123 passed, 5 skipped, 1 warning
+full suite after learning hooks: 295 passed, 6 skipped, 2 warnings
 ```
 
 ### 真实 latency harness smoke
@@ -240,5 +279,5 @@ retrieval_guard_force_count: 0
 
 ## 下一步
 
-1. 基于 registry 逐步把 `rag/tools.py` 拆成一个 tool 一个文件，并准备 tool result offload。
-2. 然后做 hooks + route handlers，一次性拆薄 `AgentService`。
+1. 基于 registry 逐步把 `rag/tools.py` 拆成一个 tool 一个文件。
+2. 做 Pydantic config + `shared/llm.py`，减少配置与 LLM factory 重复。

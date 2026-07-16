@@ -5,8 +5,6 @@ Agent 服务模块
 """
 
 # 修复SSL证书路径（必须在导入其他模块前设置）
-import base64
-import json
 import logging
 import os
 import re
@@ -28,7 +26,6 @@ from ds_course_agent.rag.prompt import get_system_prompt
 from ds_course_agent.rag.query_pipeline.utils import (
     build_grounded_query_from_history,
     collect_recent_context,
-    is_contextual_followup,
     is_datetime_request,
     is_judgement_question,
     is_schedule_request,
@@ -36,15 +33,12 @@ from ds_course_agent.rag.query_pipeline.utils import (
 )
 from ds_course_agent.rag.skill_system import get_skill_loader
 from ds_course_agent.rag.tools import get_rag_tool_registry
-from ds_course_agent.rag.memory_core import get_memory_core, record_event, aggregate_profile
+from ds_course_agent.rag.memory_core import get_memory_core, record_event
 from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
-from ds_course_agent.rag.events import (
-    EventType,
-    build_clarification_event,
-    build_concept_mentioned_event,
-    build_mastery_signal_event,
-)
-from ds_course_agent.hooks import HookManager, RetrievalGuardHook
+from ds_course_agent.hooks.base import HookManager
+from ds_course_agent.hooks.clarification import ClarificationDetectorHook
+from ds_course_agent.hooks.learning_event import LearningEventHook
+from ds_course_agent.hooks.retrieval_guard import RetrievalGuardHook
 from ds_course_agent.rag.route_handlers import default_route_handlers
 
 # 延迟导入 skills 避免循环导入
@@ -79,7 +73,9 @@ class AgentService(object):
         self.tool_registry = get_rag_tool_registry()
         self.tools = self.tool_registry.as_langchain_tools(exposed_only=True)
         self.system_prompt = self._load_system_prompt()
-        self.hooks = HookManager([RetrievalGuardHook()])
+        self.clarification_detector = ClarificationDetectorHook()
+        self.learning_event_hook = LearningEventHook(self.clarification_detector)
+        self.hooks = HookManager([RetrievalGuardHook(), self.learning_event_hook])
         self.route_handlers = default_route_handlers()
 
         # 延迟导入避免循环导入
@@ -104,9 +100,23 @@ class AgentService(object):
 
         hooks = getattr(self, "hooks", None)
         if hooks is None:
-            hooks = HookManager([RetrievalGuardHook()])
+            hooks = HookManager([RetrievalGuardHook(), self._get_learning_event_hook()])
             self.hooks = hooks
         return hooks
+
+    def _get_clarification_detector(self) -> ClarificationDetectorHook:
+        detector = getattr(self, "clarification_detector", None)
+        if detector is None:
+            detector = ClarificationDetectorHook()
+            self.clarification_detector = detector
+        return detector
+
+    def _get_learning_event_hook(self) -> LearningEventHook:
+        hook = getattr(self, "learning_event_hook", None)
+        if hook is None:
+            hook = LearningEventHook(self._get_clarification_detector())
+            self.learning_event_hook = hook
+        return hook
 
     def _get_route_handlers(self):
         """Return route handlers, lazily initialized for tests using __new__."""
@@ -531,115 +541,22 @@ class AgentService(object):
         return formatted
 
     def _is_clarification_request(self, question: str) -> bool:
-        normalized = normalize_query_text(question)
-        cues = [
-            "没懂", "不懂", "没明白", "还是不懂", "还是没懂", "再讲", "再解释",
-            "怎么理解", "看不懂", "有点混", "混淆", "通俗", "直观", "举个例子",
-            "再说一遍", "梳理一下", "为什么", "为什么会",
-        ]
-        return any(cue in normalized for cue in cues)
+        return self._get_clarification_detector().is_clarification_request(question)
 
     def _is_mastery_signal(self, question: str) -> bool:
-        normalized = normalize_query_text(question)
-        cues = [
-            "懂了", "明白了", "会了", "清楚了", "知道了", "理解了", "学会了", "搞懂了",
-        ]
-        return any(cue in normalized for cue in cues)
+        return self._get_clarification_detector().is_mastery_signal(question)
 
     def _infer_clarification_type(self, question: str) -> str:
-        normalized = normalize_query_text(question)
-        if any(cue in normalized for cue in ["举个例子", "例子", "案例"]):
-            return "example_request"
-        if any(cue in normalized for cue in ["通俗", "直观", "看不懂", "怎么理解"]):
-            return "simplify_request"
-        if any(cue in normalized for cue in ["混淆", "区别", "分不清"]):
-            return "distinction_request"
-        return "clarification_request"
+        return self._get_clarification_detector().infer_clarification_type(question)
 
     def _sanitize_distinction_fragment(self, fragment: str) -> str:
-        value = re.sub(r"[，。？！,.!?；;：:（）()“”\"'《》【】\[\]]", "", fragment or "")
-        value = re.sub(
-            r"^(我感觉|我觉得|我有点|我还是|我总是|我老是|总是|老是|一直|就是|其实|搞不懂|分不清|不太懂|不懂|没懂|没明白)+",
-            "",
-            value,
-        )
-        value = re.sub(
-            r"(到底|究竟|有什么|有啥|什么|之间|怎么|为何|为什么|的|区别|差别|不同|差异|怎么区分|怎么理解)+$",
-            "",
-            value,
-        )
-        return re.sub(r"\s+", "", value).strip("和与跟及、/-")
+        return self._get_clarification_detector().sanitize_distinction_fragment(fragment)
 
     def _extract_distinction_labels(self, question: str, matched_concepts: list) -> list[str]:
-        prefix = question
-        for cue in ["有什么区别", "有什么差别", "区别是什么", "差别是什么", "区别", "差别", "分不清", "混淆", "对比", "比较", "区分"]:
-            idx = prefix.find(cue)
-            if idx != -1:
-                prefix = prefix[:idx]
-                break
-
-        parsed_labels = []
-        for part in re.split(r"(?:和|与|跟|及|vs|VS|/)", prefix):
-            cleaned = self._sanitize_distinction_fragment(part)
-            if cleaned:
-                parsed_labels.append(cleaned)
-
-        if len(parsed_labels) >= 2:
-            return parsed_labels[-2:]
-
-        if len(matched_concepts) >= 2:
-            return [matched_concepts[0].display_name, matched_concepts[1].display_name]
-
-        if len(matched_concepts) == 1 and parsed_labels:
-            labels = [matched_concepts[0].display_name]
-            for label in parsed_labels:
-                if normalize_query_text(label) != normalize_query_text(labels[0]):
-                    labels.append(label)
-                    break
-            if len(labels) >= 2:
-                return labels[:2]
-
-        return []
+        return self._get_clarification_detector().extract_distinction_labels(question, matched_concepts)
 
     def _build_distinction_learning_concept(self, question: str, matched_concepts: list):
-        labels = self._extract_distinction_labels(question, matched_concepts)
-        if len(labels) < 2:
-            return None
-
-        stable_labels = sorted(
-            dict.fromkeys(labels),
-            key=normalize_query_text,
-        )
-        if len(stable_labels) < 2:
-            return None
-
-        related_ids = sorted(
-            {
-                match.concept_id
-                for match in matched_concepts[:2]
-                if getattr(match, "concept_id", None)
-            }
-        )
-        chapter = next(
-            (match.chapter for match in matched_concepts if getattr(match, "chapter", None)),
-            "",
-        )
-        payload = {
-            "labels": stable_labels,
-            "chapter": chapter,
-            "related_ids": related_ids,
-        }
-        encoded = base64.urlsafe_b64encode(
-            json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
-        ).decode("ascii").rstrip("=")
-
-        return {
-            "concept_id": f"distinction::{encoded}",
-            "concept_name": " vs ".join(stable_labels),
-            "chapter": chapter,
-            "score": max((getattr(match, "score", 0.0) for match in matched_concepts[:2]), default=0.85),
-            "source_event_id": None,
-        }
+        return self._get_clarification_detector().build_distinction_learning_concept(question, matched_concepts)
 
     def _get_recent_session_concept_event(
         self,
@@ -647,51 +564,21 @@ class AgentService(object):
         session_id: str,
         concept_id: Optional[str] = None,
     ):
-        memory = get_memory_core()
-        events = memory.load_events(student_id)
-        fallback_event = None
-
-        for event in reversed(events):
-            payload = getattr(event, "payload", {}) or {}
-            if event.session_id != session_id:
-                continue
-            if payload.get("concept_id") == "general_question":
-                continue
-            if concept_id and payload.get("concept_id") != concept_id:
-                continue
-            if payload.get("concept_id"):
-                if event.event_type == EventType.CONCEPT_MENTIONED:
-                    return event
-                if fallback_event is None:
-                    fallback_event = event
-        return fallback_event
+        return self._get_learning_event_hook().get_recent_session_concept_event(
+            student_id,
+            session_id,
+            concept_id,
+            get_memory_core_fn=get_memory_core,
+        )
 
     def _resolve_learning_concept(self, question: str, matched_concepts: list, student_id: str, session_id: str):
-        if matched_concepts:
-            primary = matched_concepts[0]
-            return {
-                "concept_id": primary.concept_id,
-                "concept_name": primary.display_name,
-                "chapter": primary.chapter,
-                "score": primary.score,
-                "source_event_id": None,
-            }
-
-        if not (is_contextual_followup(question, allow_short_question=False) or self._is_mastery_signal(question)):
-            return None
-
-        recent_event = self._get_recent_session_concept_event(student_id, session_id)
-        if not recent_event:
-            return None
-
-        payload = getattr(recent_event, "payload", {}) or {}
-        return {
-            "concept_id": payload.get("concept_id"),
-            "concept_name": payload.get("concept_name") or payload.get("concept_id"),
-            "chapter": payload.get("chapter") or "",
-            "score": float(payload.get("matched_score") or 0.75),
-            "source_event_id": recent_event.event_id,
-        }
+        return self._get_learning_event_hook().resolve_learning_concept(
+            question,
+            matched_concepts,
+            student_id,
+            session_id,
+            get_memory_core_fn=get_memory_core,
+        )
 
     def _record_learning_events(
         self,
@@ -701,99 +588,16 @@ class AgentService(object):
         matched_concepts: list,
         special_case_response: Optional[str] = None,
     ) -> None:
-        if special_case_response and not self._is_mastery_signal(question):
-            return
-
-        learning_concept = self._resolve_learning_concept(
-            question,
-            matched_concepts,
-            student_id,
-            session_id,
+        self._get_learning_event_hook().record_learning_events(
+            question=question,
+            session_id=session_id,
+            student_id=student_id,
+            matched_concepts=matched_concepts,
+            special_case_response=special_case_response,
+            get_memory_core_fn=get_memory_core,
+            record_event_fn=record_event,
+            classify_question_type_fn=self._classify_question_type,
         )
-        if not learning_concept:
-            return
-
-        normalized = normalize_query_text(question)
-        is_mastery_signal = self._is_mastery_signal(question)
-        is_clarification = self._is_clarification_request(question)
-        is_plain_greeting = normalized in {"你好", "您好", "hi", "hello"}
-        clarification_type = self._infer_clarification_type(question) if is_clarification else None
-        distinction_concept = (
-            self._build_distinction_learning_concept(question, matched_concepts)
-            if clarification_type == "distinction_request"
-            else None
-        )
-
-        concept_event = None
-        if not is_mastery_signal and not is_plain_greeting:
-            concept_event = build_concept_mentioned_event(
-                session_id=session_id,
-                student_id=student_id,
-                concept_id=learning_concept["concept_id"],
-                concept_name=learning_concept["concept_name"],
-                chapter=learning_concept["chapter"],
-                question_type=self._classify_question_type(question),
-                matched_score=float(learning_concept["score"]),
-                raw_question=question,
-                enable_hash=False,
-            )
-            record_event(concept_event)
-
-        distinction_event = None
-        if (
-            distinction_concept
-            and not is_mastery_signal
-            and not is_plain_greeting
-            and distinction_concept["concept_id"] != learning_concept["concept_id"]
-        ):
-            distinction_event = build_concept_mentioned_event(
-                session_id=session_id,
-                student_id=student_id,
-                concept_id=distinction_concept["concept_id"],
-                concept_name=distinction_concept["concept_name"],
-                chapter=distinction_concept["chapter"],
-                question_type="概念对比",
-                matched_score=float(distinction_concept["score"]),
-                raw_question=question,
-                enable_hash=False,
-            )
-            record_event(distinction_event)
-
-        parent_event_id = (
-            distinction_event.event_id
-            if distinction_event is not None
-            else (
-                concept_event.event_id
-                if concept_event is not None
-                else learning_concept.get("source_event_id")
-            )
-            or ""
-        )
-        clarification_concept_id = (
-            distinction_concept["concept_id"]
-            if distinction_concept is not None and distinction_event is not None
-            else learning_concept["concept_id"]
-        )
-
-        if is_clarification and parent_event_id:
-            clarification_event = build_clarification_event(
-                session_id=session_id,
-                student_id=student_id,
-                concept_id=clarification_concept_id,
-                parent_event_id=parent_event_id,
-                clarification_type=clarification_type,
-            )
-            record_event(clarification_event)
-
-        if is_mastery_signal and parent_event_id:
-            mastery_event = build_mastery_signal_event(
-                session_id=session_id,
-                student_id=student_id,
-                concept_id=learning_concept["concept_id"],
-                source_event_id=parent_event_id,
-                signal_type="explicit_understanding",
-            )
-            record_event(mastery_event)
 
     def _select_skill_candidates(self, question: str) -> set[str]:
         loader = getattr(self, "skill_loader", None) or get_skill_loader()
@@ -1429,7 +1233,11 @@ class AgentService(object):
         触发画像聚合
         """
         logger.info("会话结束，聚合画像: %s", student_id)
-        get_memory_core().aggregate_profile(student_id)
+        self._get_hooks().on_session_end(
+            session_id,
+            student_id=student_id,
+            get_memory_core_fn=get_memory_core,
+        )
 
     def get_student_profile(self, student_id: str):
         """获取学生画像"""
