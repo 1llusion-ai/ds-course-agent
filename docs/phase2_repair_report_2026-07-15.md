@@ -402,6 +402,58 @@ python -m pytest -q
 304 passed, 6 skipped, 2 warnings
 ```
 
+## 12. Phase 2 final real latency harness
+
+命令：
+
+```bash
+python benchmarks/latency_harness.py --limit 20 --output var/artifacts/benchmarks/latency_harness_phase2_final_report.json
+```
+
+结果：
+
+```text
+20/20 completed, 0 errors
+p50: 13705.396 ms
+p95: 40152.331 ms
+max: 72524.749 ms
+avg: 17479.193 ms
+routes: grounded_rag=19, generic_agent=1
+used_retrieval_rate: 95%
+avg_sources_count: 2.35
+agent_force_grounded_count: 0
+retrieval_guard_force_count: 0
+```
+
+相对原始 20 条 baseline：
+
+```text
+p50: 16075.444 -> 13705.396 ms  (-14.7%)
+p95: 125785.697 -> 40152.331 ms (-68.1%)
+max: 149079.176 -> 72524.749 ms (-51.4%)
+avg: 30244.960 -> 17479.193 ms (-42.2%)
+forced RAG: 17 -> 0
+retrieval_guard.force: 17 -> 0
+```
+
+主要观察：
+
+- RetrievalGuard 二次 RAG 已完全消除，这是 tail latency 改善的最大来源。
+- `execute.agent_chat` 从 baseline 的 20 次降为 1 次；19 条 grounded RAG 走 `execute.grounded_rag_tool` 直连。
+- `tool.course_rag.retrieve` avg 从 `6152 ms` 降到 `1127 ms`，embedding 查询长尾明显下降。
+- `tool.course_rag.answer` 仍是主要耗时来源，final p50 `9140 ms`、p95 `39442 ms`。后续若继续降时延，优先考虑缩短 RAG prompt、控制检索片段长度、答案模型/连接复用/流式 TTFB。
+- 本轮仍出现 large payload warnings（RAG context/prompt 约 6k-7.5k chars），说明 tool-result/history compaction 已解决旧消息膨胀，但当前 turn 的 RAG prompt 仍需要后续优化。
+
+最慢 5 条：
+
+| query_id | latency_ms | route | note |
+| --- | ---: | --- | --- |
+| `single_003#turn1` | 72524.749 | grounded_rag | 逻辑回归为什么能做分类？ |
+| `single_006#turn1` | 38448.519 | grounded_rag | K-means 的基本步骤是什么？ |
+| `single_005#turn1` | 26946.100 | grounded_rag | 交叉验证为什么能帮助评估泛化能力？ |
+| `single_007#turn1` | 24882.835 | grounded_rag | PCA 的核心公式或原理是什么？ |
+| `single_008#turn1` | 21931.607 | grounded_rag | 过拟合是什么意思？ |
+
 ## 下一步
 
 Phase 2 后端架构现代化已完成。下一轮建议进入 UI polish，或按需开启 Phase 3（Dream-lite / WebSocket / 子代理代码审查）。
