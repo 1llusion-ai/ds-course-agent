@@ -46,6 +46,27 @@
       "disallowed_routes": ["grounded_rag"]
     },
     {
+      "id": "hyperparam_alpha_concept",
+      "query": "为什么 alpha=0.01 比 alpha=0.1 效果好？",
+      "expected_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "disallowed_routes": ["python_exec", "code_review", "generic_agent"]
+    },
+    {
+      "id": "hyperparam_svm_c_concept",
+      "query": "SVM 的 C=1 和 C=10 有什么区别？",
+      "expected_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "disallowed_routes": ["python_exec", "code_review", "generic_agent"]
+    },
+    {
+      "id": "hyperparam_learning_rate_concept",
+      "query": "learning_rate=0.001 时梯度下降为什么不收敛？",
+      "expected_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "disallowed_routes": ["python_exec", "code_review", "generic_agent"]
+    },
+    {
       "id": "concept_overfitting",
       "query": "什么是过拟合？",
       "expected_route": "grounded_rag",

@@ -7,6 +7,7 @@ import logging
 import re
 from typing import Optional
 from .models import QueryContext, RouteDecision, RouteType
+from .preprocessor import _assignment_counts_as_code, _has_concept_question_cue, _has_strong_python_signal
 from .utils import is_datetime_request, is_judgement_question, is_schedule_request, normalize_query_text
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,23 @@ class QueryRouter:
                 retrieval_policy="optional",
             )
 
-        # 3. 模糊/代码类请求：交给通用 agent 自主选择工具。
+        # 3. 高置信误认知信号仍然优先进入教学策略。
+        #
+        # 代码/示例类请求默认交给 agent 自主选工具，但明确带有“我以为/难道不是/
+        # 应该是”等错误前提时，misconception skill 是更合适的教学路径。
+        # code_review / python_exec 已在更高优先级拦截，所以这里不会抢走明确
+        # 的运行或审查请求。
+        if self._should_use_misconception_skill(context) and self._has_explicit_misconception_signal(context):
+            return RouteDecision(
+                route=RouteType.MISCONCEPTION_SKILL,
+                confidence=0.89,
+                reasons=self._get_misconception_reasons(context) + ["明确误认知信号优先于 autonomous tool choice"],
+                skill_name="misconception-handling",
+                retrieval_policy="required",
+                fallback_route=RouteType.GROUNDED_RAG,
+            )
+
+        # 4. 模糊/代码类请求：交给通用 agent 自主选择工具。
         #
         # 这是借鉴 nanobot 的关键边界：Router 只抢占高置信、低歧义路径；
         # 带代码/示例/实现意图的请求即使命中课程概念，也不应被直接强制
@@ -95,9 +112,9 @@ class QueryRouter:
         if autonomous_decision is not None:
             return autonomous_decision
 
-        # 4. 教学策略类
+        # 5. 教学策略类
 
-        # 4.1 学习路径 skill
+        # 5.1 学习路径 skill
         if self._should_use_learning_path_skill(context):
             return RouteDecision(
                 route=RouteType.LEARNING_PATH_SKILL,
@@ -108,7 +125,7 @@ class QueryRouter:
                 fallback_route=RouteType.GROUNDED_RAG,
             )
 
-        # 4.2 错误理解 / misconception skill
+        # 5.2 错误理解 / misconception skill
         if self._should_use_misconception_skill(context):
             return RouteDecision(
                 route=RouteType.MISCONCEPTION_SKILL,
@@ -119,7 +136,7 @@ class QueryRouter:
                 fallback_route=RouteType.GROUNDED_RAG,
             )
 
-        # 4.3 个性化解释 skill
+        # 5.3 个性化解释 skill
         if self._should_use_explanation_skill(context):
             return RouteDecision(
                 route=RouteType.PERSONALIZED_EXPLANATION_SKILL,
@@ -130,12 +147,12 @@ class QueryRouter:
                 fallback_route=RouteType.GROUNDED_RAG,
             )
 
-        # 5. Query rewrite 指向明确课程追问时，优先进入 grounded RAG。
+        # 6. Query rewrite 指向明确课程追问时，优先进入 grounded RAG。
         rewrite_decision = self._route_rewritten_followup(context)
         if rewrite_decision is not None:
             return rewrite_decision
 
-        # 6. 课程知识问答类 - 明确概念/原理/定义类问题使用 grounded RAG
+        # 7. 课程知识问答类 - 明确概念/原理/定义类问题使用 grounded RAG
         if self._is_likely_course_question(context):
             return RouteDecision(
                 route=RouteType.GROUNDED_RAG,
@@ -145,7 +162,7 @@ class QueryRouter:
                 fallback_route=RouteType.GENERIC_AGENT,
             )
 
-        # 7. 通用 agent fallback
+        # 8. 通用 agent fallback
         return RouteDecision(
             route=RouteType.GENERIC_AGENT,
             confidence=0.60,
@@ -188,10 +205,10 @@ class QueryRouter:
     def _contains_code_payload(self, query: str) -> bool:
         """Best-effort broad code-payload detector used only to avoid forced RAG."""
 
+        compact = "".join(query.split())
         return bool(
-            "```" in query
-            or re.search(r"\b(print|import|from|def|class|for|while|if)\b", query, flags=re.IGNORECASE)
-            or re.search(r"\b[a-zA-Z_]\w*\s*=\s*[^=]", query)
+            _has_strong_python_signal(query)
+            or _assignment_counts_as_code(query, compact)
         )
 
     def _route_rewritten_followup(self, context: QueryContext) -> Optional[RouteDecision]:
@@ -337,6 +354,39 @@ class QueryRouter:
 
         return reasons
 
+    def _has_explicit_misconception_signal(self, context: QueryContext) -> bool:
+        """Whether the question contains a strong wrong-premise signal.
+
+        This intentionally stays narrower than generic clarification signals
+        like “不懂/为什么”.  It only lets misconception skill preempt autonomous
+        tool choice when the student appears to assert or test a possibly wrong
+        belief.
+        """
+
+        query = self._normalize(context.normalized_query)
+        cues = [
+            "我以为",
+            "一直以为",
+            "难道不是",
+            "我觉得是",
+            "我认为",
+            "不该是",
+            "应该算",
+            "应该不是",
+            "应该是",
+            "本质上",
+            "就是无监督",
+            "就是监督",
+            "属于无监督",
+            "属于监督",
+            "等于降维",
+            "就是算法",
+            "就是模型",
+            "是无监督算法",
+            "是监督学习",
+        ]
+        return any(cue in query for cue in cues)
+
     def _should_use_explanation_skill(self, context: QueryContext) -> bool:
         """判断是否使用个性化解释 skill。
 
@@ -438,6 +488,9 @@ class QueryRouter:
             return True
 
         query = self._normalize(context.normalized_query)
+        if self._is_hyperparameter_concept_question(query):
+            return True
+
         course_keywords = [
             "数据科学", "数据分析", "机器学习", "深度学习",
             "统计", "概率", "模型", "算法", "特征", "训练",
@@ -447,6 +500,31 @@ class QueryRouter:
             "交叉验证", "贝叶斯", "神经网络",
         ]
         return any(keyword in query for keyword in course_keywords)
+
+    def _is_hyperparameter_concept_question(self, query: str) -> bool:
+        """Detect natural-language ML hyperparameter questions with ``name=value``.
+
+        These look syntactically like assignments but semantically ask about a
+        course concept, e.g. ``alpha=0.01 为什么更好`` or ``C=1 和 C=10 的区别``.
+        """
+
+        if not _has_concept_question_cue(query):
+            return False
+
+        hyperparameter_pattern = (
+            r"(?<![A-Za-z0-9_])"
+            r"(?:"
+            r"alpha|learning_rate|lr|gamma|lambda|lambda_|c|k|"
+            r"max_depth|min_samples_split|min_samples_leaf|n_estimators|"
+            r"n_neighbors|degree|coef0|batch_size|epoch|epochs"
+            r")\s*="
+        )
+        return bool(
+            "超参数" in query
+            or "正则化系数" in query
+            or "惩罚系数" in query
+            or re.search(hyperparameter_pattern, query, flags=re.IGNORECASE)
+        )
 
 
 _router: Optional[QueryRouter] = None

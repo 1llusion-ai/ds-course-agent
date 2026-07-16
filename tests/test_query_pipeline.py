@@ -259,6 +259,58 @@ class TestQueryRouter:
         assert decision.route == RouteType.GENERIC_AGENT
         assert decision.retrieval_policy == "optional"
 
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "为什么 alpha=0.01 比 alpha=0.1 效果好？",
+            "SVM 的 C=1 和 C=10 有什么区别？",
+            "learning_rate=0.001 时梯度下降为什么不收敛？",
+        ],
+    )
+    def test_hyperparameter_assignment_questions_are_not_code_routes(self, query):
+        """ML 超参数概念题里的 name=value 不是 Python 执行/审查请求。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input=query,
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        decision = router.route(context)
+
+        assert "python_execution" not in context.detected_intents
+        assert "code_review" not in context.detected_intents
+        assert decision.route == RouteType.GROUNDED_RAG
+        assert decision.retrieval_policy == "required"
+
+    def test_explicit_misconception_preempts_autonomous_code_payload(self):
+        """代码/示例请求带明确错误前提时，应优先进入 misconception skill。"""
+        preprocessor = get_preprocessor(enable_concept_detection=False)
+        router = get_router()
+
+        context = preprocessor.process(
+            user_input=(
+                "我以为 KMeans 就是监督学习，帮我结合这段代码解释一下：\n"
+                "```python\n"
+                "from sklearn.cluster import KMeans\n"
+                "model = KMeans(n_clusters=3)\n"
+                "```"
+            ),
+            session_id="test",
+            student_id="test",
+            chat_history=[],
+        )
+        context.skill_candidate_keys.add("misconception-handling")
+
+        decision = router.route(context)
+
+        assert "code_review" not in context.detected_intents
+        assert "python_execution" not in context.detected_intents
+        assert decision.route == RouteType.MISCONCEPTION_SKILL
+        assert decision.retrieval_policy == "required"
+
     def test_schedule_question_is_not_marked_as_rag_retrieval(self):
         """课表工具不应污染 used_retrieval/RAG 语义。"""
         from ds_course_agent.rag.agent import AgentService

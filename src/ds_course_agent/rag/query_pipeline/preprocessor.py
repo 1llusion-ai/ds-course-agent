@@ -13,6 +13,52 @@ from .utils import collect_recent_context, is_contextual_followup
 
 logger = logging.getLogger(__name__)
 
+_CODE_STRONG_PATTERNS = [
+    r"```(?:python|py)?\s*[\s\S]+?```",
+    r"\bprint\s*\(",
+    r"\bimport\s+[a-zA-Z_]",
+    r"\bfrom\s+[a-zA-Z_][\w.]*\s+import\b",
+    r"\b(def|class|for|while|if)\s+.+:",
+]
+
+_CONCEPT_QUESTION_CUES = [
+    "什么是", "是什么", "解释", "解析", "说明", "做什么",
+    "什么意思", "怎么写", "示例", "为什么", "区别", "原理",
+    "作用", "影响", "含义", "对比", "比较", "不同", "关系",
+    "效果", "不收敛", "收敛", "调参", "超参数",
+]
+
+_ASSIGNMENT_RE = re.compile(r"\b[a-zA-Z_]\w*\s*=\s*[^=]", flags=re.IGNORECASE)
+
+
+def _has_strong_python_signal(text: str) -> bool:
+    return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in _CODE_STRONG_PATTERNS)
+
+
+def _has_assignment_signal(text: str) -> bool:
+    return bool(_ASSIGNMENT_RE.search(text))
+
+
+def _has_concept_question_cue(compact_text: str) -> bool:
+    return any(cue in compact_text for cue in _CONCEPT_QUESTION_CUES)
+
+
+def _assignment_counts_as_code(text: str, compact_text: str) -> bool:
+    """Return whether a bare ``name=value`` should be treated as code.
+
+    ML students frequently ask natural-language hyperparameter questions such
+    as ``alpha=0.01 为什么更好`` or ``SVM 的 C=1 和 C=10 有什么区别``.
+    Those should remain course concept questions, not be executed/reviewed as
+    Python.  Bare assignment is therefore only a weak code signal: it counts
+    when the user explicitly frames it as code/program/script, or when there is
+    no concept-question cue.
+    """
+
+    if not _has_assignment_signal(text):
+        return False
+    explicit_code_frame = any(cue in compact_text for cue in ["代码", "程序", "脚本", "code"])
+    return explicit_code_frame or not _has_concept_question_cue(compact_text)
+
 
 class QueryPreprocessor:
     """查询预处理器"""
@@ -200,23 +246,15 @@ class QueryPreprocessor:
         ]
         has_execution_cue = any(cue in compact for cue in execution_cues)
 
-        code_patterns = [
-            r"```(?:python|py)?\s*[\s\S]+?```",
-            r"\bprint\s*\(",
-            r"\bimport\s+[a-zA-Z_]",
-            r"\bfrom\s+[a-zA-Z_][\w.]*\s+import\b",
-            r"\b(def|class|for|while|if)\s+.+:",
-            r"\b[a-zA-Z_]\w*\s*=\s*[^=]",
-        ]
-        has_code = any(re.search(pattern, q, flags=re.IGNORECASE) for pattern in code_patterns)
+        has_strong_code = _has_strong_python_signal(q)
+        has_assignment_code = _assignment_counts_as_code(q, compact)
+        has_code = has_strong_code or has_assignment_code
 
         # 整条消息本身就是简短 Python 语句时，也应直接进入执行路由。
         looks_like_standalone_code = bool(
             has_code
-            and not any(cue in compact for cue in [
-                "什么是", "是什么", "解释", "解析", "说明", "做什么",
-                "什么意思", "怎么写", "示例",
-            ])
+            and has_strong_code
+            and not _has_concept_question_cue(compact)
             and len(query.strip().splitlines()) <= 8
         )
 
@@ -232,16 +270,9 @@ class QueryPreprocessor:
         "运行/调试"等词干扰路由。
         """
         q = query.lower()
+        compact = "".join(q.split())
 
-        code_patterns = [
-            r"```(?:python|py)?\s*[\s\S]+?```",
-            r"\bprint\s*\(",
-            r"\bimport\s+[a-zA-Z_]",
-            r"\bfrom\s+[a-zA-Z_][\w.]*\s+import\b",
-            r"\b(def|class|for|while|if)\s+.+:",
-            r"\b[a-zA-Z_]\w*\s*=\s*[^=]",
-        ]
-        has_code = any(re.search(pattern, q, flags=re.IGNORECASE) for pattern in code_patterns)
+        has_code = _has_strong_python_signal(q) or _assignment_counts_as_code(q, compact)
         if not has_code:
             return False
 
