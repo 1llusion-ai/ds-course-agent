@@ -106,6 +106,89 @@ def _stats(values: list[Any]) -> dict[str, Any]:
     }
 
 
+def _top_stage_events(result: dict[str, Any], *, limit: int = 5) -> list[dict[str, Any]]:
+    """Return the slowest traced stage events for a single benchmark result."""
+    trace = result.get("query_trace") if isinstance(result.get("query_trace"), dict) else {}
+    events = trace.get("stage_duration_events") if isinstance(trace, dict) else []
+    if not isinstance(events, list):
+        return []
+
+    stage_events: list[dict[str, Any]] = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        duration_ms = _round_ms(event.get("duration_ms"))
+        if duration_ms is None:
+            continue
+        stage_events.append(
+            {
+                "stage": str(event.get("stage") or "unknown"),
+                "status": event.get("status"),
+                "duration_ms": duration_ms,
+                "offset_ms": _round_ms(event.get("offset_ms")),
+            }
+        )
+
+    stage_events.sort(key=lambda item: item["duration_ms"], reverse=True)
+    return stage_events[:limit]
+
+
+def _slow_query_diagnostics(results: list[dict[str, Any]], *, limit: int = 5) -> list[dict[str, Any]]:
+    """Summarize the slowest queries with their dominant trace stages."""
+    ordered = sorted(
+        results,
+        key=lambda item: _to_float(item.get("total_latency_ms")) or 0.0,
+        reverse=True,
+    )
+
+    diagnostics: list[dict[str, Any]] = []
+    for result in ordered[:limit]:
+        diagnostics.append(
+            {
+                "query_id": result.get("query_id"),
+                "task_id": result.get("task_id"),
+                "category": result.get("category", ""),
+                "route": result.get("route") or "unknown",
+                "used_retrieval": bool(result.get("used_retrieval")),
+                "total_latency_ms": _round_ms(result.get("total_latency_ms")),
+                "query_trace_duration_ms": _round_ms(result.get("query_trace_duration_ms")),
+                "content_chars": result.get("content_chars"),
+                "query_preview": str(result.get("query") or "")[:120],
+                "top_stage_events": _top_stage_events(result, limit=5),
+            }
+        )
+    return diagnostics
+
+
+def _stage_hotspots(stage_values: dict[str, list[float]], *, limit: int = 10) -> list[dict[str, Any]]:
+    """Rank traced stages by p95 latency, then max latency."""
+    rows: list[dict[str, Any]] = []
+    for stage, durations in stage_values.items():
+        stats = _stats(durations)
+        if stats["count"] <= 0:
+            continue
+        rows.append(
+            {
+                "stage": stage,
+                "count": stats["count"],
+                "p50": stats["p50"],
+                "p95": stats["p95"],
+                "max": stats["max"],
+                "avg": stats["avg"],
+            }
+        )
+
+    rows.sort(
+        key=lambda item: (
+            _to_float(item.get("p95")) or 0.0,
+            _to_float(item.get("max")) or 0.0,
+            _to_float(item.get("avg")) or 0.0,
+        ),
+        reverse=True,
+    )
+    return rows[:limit]
+
+
 def load_fixed_queries(
     benchmark_path: Path | str = DEFAULT_BENCHMARK_PATH,
     limit: Optional[int] = None,
@@ -366,6 +449,8 @@ def build_latency_report(
                 stage: _stats(durations)
                 for stage, durations in sorted(stage_values.items(), key=lambda item: item[0])
             },
+            "stage_hotspots": _stage_hotspots(stage_values),
+            "slow_queries": _slow_query_diagnostics(results),
         },
         "results": results,
     }
@@ -430,6 +515,22 @@ def run_latency_harness(
     safe_print(f"Latency p50: {report['summary']['latency_ms']['p50']} ms")
     safe_print(f"Latency p95: {report['summary']['latency_ms']['p95']} ms")
     safe_print(f"Routes: {report['summary']['routes']}")
+    hotspots = report["summary"].get("stage_hotspots") or []
+    if hotspots:
+        safe_print("Top stage hotspots by p95:")
+        for hotspot in hotspots[:5]:
+            safe_print(
+                f"  - {hotspot['stage']}: p95={hotspot['p95']} ms, "
+                f"max={hotspot['max']} ms, count={hotspot['count']}"
+            )
+    slow_queries = report["summary"].get("slow_queries") or []
+    if slow_queries:
+        safe_print("Slowest queries:")
+        for item in slow_queries[:3]:
+            safe_print(
+                f"  - {item['query_id']}: {item['total_latency_ms']} ms, "
+                f"route={item['route']}"
+            )
     safe_print(f"Saved report to: {output_file}")
 
     return report
