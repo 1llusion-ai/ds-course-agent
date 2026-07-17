@@ -14,6 +14,7 @@ from collections import Counter, defaultdict
 
 from ds_course_agent.rag.events import BaseEvent, EventType, build_mastery_signal_event
 from ds_course_agent.rag.profile_models import StudentProfile, ConceptFocus, WeakSpotCandidate
+import ds_course_agent.shared.config as config
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 class MemoryCore:
     def __init__(self, base_dir: Optional[str] = None):
         if base_dir is None:
-            base_dir = Path(__file__).parent.parent / "chat_history"
+            base_dir = config.CHAT_HISTORY_DIR
 
         self.base_dir = Path(base_dir)
         self.events_dir = self.base_dir / "learning_events"

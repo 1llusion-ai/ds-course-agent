@@ -6,7 +6,13 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 from ..schemas.session import SessionCreate, SessionList, SessionResponse, SessionUpdate
-from ..state import DEFAULT_SESSION_TITLE, _sessions, _save as _save_state, purge_session
+from ..state import (
+    DEFAULT_SESSION_TITLE,
+    _sessions,
+    _save as _save_state,
+    purge_session,
+    state_lock,
+)
 
 router = APIRouter()
 
@@ -43,8 +49,9 @@ async def create_session(data: SessionCreate):
         "updated_at": now.isoformat(),
         "message_count": 0,
     }
-    _sessions[session_id] = session_data
-    _save_state()
+    with state_lock():
+        _sessions[session_id] = session_data
+        _save_state()
 
     return _session_to_response(session_id, session_data)
 
@@ -88,11 +95,12 @@ async def update_session(session_id: str, data: SessionUpdate):
     if session_id not in _sessions:
         raise HTTPException(status_code=404, detail="会话不存在")
 
-    session = _sessions[session_id]
-    if data.title is not None:
-        session["title"] = data.title
-        session["title_source"] = "manual"
-    session["updated_at"] = datetime.now().isoformat()
-    _save_state()
+    with state_lock():
+        session = _sessions[session_id]
+        if data.title is not None:
+            session["title"] = data.title
+            session["title_source"] = "manual"
+        session["updated_at"] = datetime.now().isoformat()
+        _save_state()
 
-    return _session_to_response(session_id, session)
+        return _session_to_response(session_id, session)

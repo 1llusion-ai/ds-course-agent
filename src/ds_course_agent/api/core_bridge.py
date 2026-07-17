@@ -83,11 +83,12 @@ def chat_with_history(message: str, session_id: str, student_id: str, web_search
     except Exception as e:
         logger.error("Agent调用出错: %s", e, exc_info=True)
         trace_error("core_bridge.chat", e)
-        content = f"关于「{message}」的问题，我需要查阅课程资料后才能回答。\n\n（Agent调用出错：{str(e)[:100]}）"
+        end_query_trace(q_token, status="error")
+        raise
     finally:
         trace = end_retrieval_trace(token)
 
-    q_trace = end_query_trace(q_token, status="error" if not content or "调用出错" in content else "ok")
+    q_trace = end_query_trace(q_token, status="error" if not content else "ok")
     logger.info("QueryTrace: %s", q_trace)
 
     return {

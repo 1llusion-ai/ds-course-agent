@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, Iterator, List
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.api.title_generation import (
@@ -26,13 +28,22 @@ STATE_FILE = Path(config.CHAT_HISTORY_DIR) / "backend_state.json"
 _sessions: Dict[str, dict] = {}
 _chat_history: Dict[str, List[dict]] = {}
 _deleted_session_ids: set[str] = set()
-_save_lock: bool = False  # 简单锁防止并发写入
+_state_lock = threading.RLock()
+_save_lock = threading.Lock()
 _last_save_time: float = 0.0
 
 _UUID_PATTERN = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
+
+
+@contextmanager
+def state_lock() -> Iterator[None]:
+    """Serialize all in-memory state mutations across routers."""
+
+    with _state_lock:
+        yield
 
 
 def _parse_timestamp(value, fallback: datetime) -> datetime:
@@ -203,27 +214,28 @@ def _repair_session_metadata() -> bool:
 
 
 def purge_session(session_id: str) -> bool:
-    changed = False
+    with state_lock():
+        changed = False
 
-    if session_id in _sessions:
-        del _sessions[session_id]
-        changed = True
+        if session_id in _sessions:
+            del _sessions[session_id]
+            changed = True
 
-    if session_id in _chat_history:
-        del _chat_history[session_id]
-        changed = True
+        if session_id in _chat_history:
+            del _chat_history[session_id]
+            changed = True
 
-    if session_id not in _deleted_session_ids:
-        _deleted_session_ids.add(session_id)
-        changed = True
+        if session_id not in _deleted_session_ids:
+            _deleted_session_ids.add(session_id)
+            changed = True
 
-    if _delete_legacy_session_file(session_id):
-        changed = True
+        if _delete_legacy_session_file(session_id):
+            changed = True
 
-    if changed:
-        _save()
+        if changed:
+            _save()
 
-    return changed
+        return changed
 
 
 def _load():
@@ -264,27 +276,21 @@ def _load():
 
 
 def _save():
-    global _save_lock
-    # 如果正在保存，直接返回（丢弃这次写入，由下一次保存覆盖）
-    if _save_lock:
-        return
-    _save_lock = True
-    try:
-        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        STATE_FILE.write_text(
-            json.dumps(
-                {
-                    "sessions": _sessions,
-                    "chat_history": _chat_history,
-                    "deleted_session_ids": sorted(_deleted_session_ids),
-                },
-                ensure_ascii=False,
-                default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else str(obj),
-            ),
-            encoding="utf-8",
-        )
-    finally:
-        _save_lock = False
+    with _state_lock:
+        with _save_lock:
+            STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            STATE_FILE.write_text(
+                json.dumps(
+                    {
+                        "sessions": _sessions,
+                        "chat_history": _chat_history,
+                        "deleted_session_ids": sorted(_deleted_session_ids),
+                    },
+                    ensure_ascii=False,
+                    default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else str(obj),
+                ),
+                encoding="utf-8",
+            )
 
 
 _load()

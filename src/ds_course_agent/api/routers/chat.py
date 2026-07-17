@@ -20,7 +20,7 @@ from fastapi.responses import StreamingResponse
 
 from ..core_bridge import chat_with_history, stream_chat_with_history
 from ..schemas.chat import ChatHistoryResponse, ChatMessage, ChatRequest, ChatResponse
-from ..state import DEFAULT_SESSION_TITLE, _chat_history, _save as _save_state, _sessions
+from ..state import DEFAULT_SESSION_TITLE, _chat_history, _save as _save_state, _sessions, state_lock
 from ..title_generation import (
     SESSION_TITLE_MAX_CHARS,
     _clean_generated_title,
@@ -224,46 +224,50 @@ async def _session_operation_guard(session_id: str):
 
 
 def _append_message(session_id: str, message: ChatMessage, *, save: bool = True) -> None:
-    _ensure_session_history(session_id)
-    _chat_history[session_id].append(_msg_to_dict(message))
-    if save:
-        _save_state()
+    with state_lock():
+        _ensure_session_history(session_id)
+        _chat_history[session_id].append(_msg_to_dict(message))
+        if save:
+            _save_state()
 
 
 def _append_message_locked(session_id: str, message: ChatMessage, *, save: bool = True) -> dict:
     with _history_lock(session_id):
-        item = _msg_to_dict(message)
-        _ensure_session_history(session_id)
-        _chat_history[session_id].append(item)
-        if save:
-            _save_state()
-        return item
+        with state_lock():
+            item = _msg_to_dict(message)
+            _ensure_session_history(session_id)
+            _chat_history[session_id].append(item)
+            if save:
+                _save_state()
+            return item
 
 
 def _remove_message_by_identity(session_id: str, message_item: dict, *, save: bool = True) -> bool:
     """Remove exactly the message object previously appended for this turn."""
 
     with _history_lock(session_id):
-        history = _chat_history.get(session_id)
-        if not history:
+        with state_lock():
+            history = _chat_history.get(session_id)
+            if not history:
+                return False
+            for index in range(len(history) - 1, -1, -1):
+                if history[index] is message_item:
+                    del history[index]
+                    if save:
+                        _save_state()
+                    return True
             return False
-        for index in range(len(history) - 1, -1, -1):
-            if history[index] is message_item:
-                del history[index]
-                if save:
-                    _save_state()
-                return True
-        return False
 
 
 def _update_session_metadata(session_id: str, timestamp: str | None = None, *, save: bool = True) -> None:
-    if session_id not in _sessions:
-        return
+    with state_lock():
+        if session_id not in _sessions:
+            return
 
-    _sessions[session_id]["message_count"] = len(_chat_history.get(session_id, []))
-    _sessions[session_id]["updated_at"] = timestamp or datetime.now().isoformat()
-    if save:
-        _save_state()
+        _sessions[session_id]["message_count"] = len(_chat_history.get(session_id, []))
+        _sessions[session_id]["updated_at"] = timestamp or datetime.now().isoformat()
+        if save:
+            _save_state()
 
 
 def _first_user_message(session_id: str, fallback: str = "") -> str:
@@ -332,10 +336,11 @@ def _apply_immediate_fallback_title(session_id: str, message: str, *, is_first_m
     if not fallback or fallback == title:
         return
 
-    session["title"] = fallback
-    session["title_source"] = "heuristic"
-    session["title_generation_pending"] = True
-    _save_state()
+    with state_lock():
+        session["title"] = fallback
+        session["title_source"] = "heuristic"
+        session["title_generation_pending"] = True
+        _save_state()
 
 
 def _schedule_title_generation(session_id: str, message: str, *, is_first_message: bool) -> None:
@@ -361,24 +366,26 @@ def _schedule_title_generation(session_id: str, message: str, *, is_first_messag
                 )
                 else "llm"
             )
-            if session_id in _sessions:
-                _sessions[session_id]["title"] = generated_title
-                _sessions[session_id]["title_source"] = source
-                _sessions[session_id].pop("title_generation_pending", None)
-                _sessions[session_id]["title_generation_attempts"] = (
-                    int(_sessions[session_id].get("title_generation_attempts") or 0) + 1
-                )
-                _save_state()
+            with state_lock():
+                if session_id in _sessions:
+                    _sessions[session_id]["title"] = generated_title
+                    _sessions[session_id]["title_source"] = source
+                    _sessions[session_id].pop("title_generation_pending", None)
+                    _sessions[session_id]["title_generation_attempts"] = (
+                        int(_sessions[session_id].get("title_generation_attempts") or 0) + 1
+                    )
+                    _save_state()
         except Exception:
             logger.debug("会话标题生成失败", exc_info=True)
-            if session_id in _sessions:
-                _sessions[session_id]["title"] = build_fallback_session_title(message)
-                _sessions[session_id]["title_source"] = "heuristic"
-                _sessions[session_id].pop("title_generation_pending", None)
-                _sessions[session_id]["title_generation_attempts"] = (
-                    int(_sessions[session_id].get("title_generation_attempts") or 0) + 1
-                )
-                _save_state()
+            with state_lock():
+                if session_id in _sessions:
+                    _sessions[session_id]["title"] = build_fallback_session_title(message)
+                    _sessions[session_id]["title_source"] = "heuristic"
+                    _sessions[session_id].pop("title_generation_pending", None)
+                    _sessions[session_id]["title_generation_attempts"] = (
+                        int(_sessions[session_id].get("title_generation_attempts") or 0) + 1
+                    )
+                    _save_state()
         finally:
             _title_generation_pending.discard(session_id)
 
@@ -789,7 +796,8 @@ async def get_chat_history(session_id: str, student_id: str = "default_student")
 
 @router.delete("/history/{session_id}")
 async def clear_chat_history(session_id: str):
-    if session_id in _chat_history:
-        del _chat_history[session_id]
-        _save_state()
+    with state_lock():
+        if session_id in _chat_history:
+            del _chat_history[session_id]
+            _save_state()
     return {"message": "聊天记录已清空"}

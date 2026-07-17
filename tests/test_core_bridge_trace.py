@@ -1,3 +1,5 @@
+import pytest
+
 import ds_course_agent.api.core_bridge as core_bridge
 
 
@@ -37,13 +39,8 @@ def test_core_bridge_chat_trace_records_errors(monkeypatch):
 
     monkeypatch.setattr(core_bridge, "get_agent_service", lambda: _BadService())
 
-    result = core_bridge.chat_with_history("hello", "sess_1", "stu_1")
-
-    assert "Agent调用出错" in result["content"]
-    trace = result["query_trace"]
-    assert trace["errors"]
-    assert trace["errors"][0]["stage"] == "core_bridge.chat"
-    assert trace["errors"][0]["type"] == "ValueError"
+    with pytest.raises(ValueError, match="bad service"):
+        core_bridge.chat_with_history("hello", "sess_1", "stu_1")
 
 
 def test_core_bridge_stream_final_includes_query_trace(monkeypatch):

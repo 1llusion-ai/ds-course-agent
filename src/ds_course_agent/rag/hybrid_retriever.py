@@ -6,6 +6,7 @@
 2. 向量语义检索: 基于embedding的语义相似度
 3. 融合排序: RR (Reciprocal Rank Fusion)
 """
+import copy
 import logging
 import re
 import warnings
@@ -330,8 +331,9 @@ class HybridRetriever:
         candidate_docs = []
         for doc_idx, fused_score in fused_results[:candidate_count]:
             if 0 <= doc_idx < len(self.documents):
-                doc = self.documents[doc_idx]
-                # 添加融合分数到元数据
+                doc = copy.copy(self.documents[doc_idx])
+                # 添加融合分数到返回文档副本，避免污染共享索引文档
+                doc.metadata = dict(doc.metadata or {})
                 doc.metadata['fused_score'] = fused_score
                 candidate_docs.append(doc)
 
