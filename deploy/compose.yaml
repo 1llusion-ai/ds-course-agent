@@ -5,6 +5,12 @@ services:
       context: ..
       dockerfile: deploy/api.Dockerfile
     container_name: rag-backend
+    # Load model/embedding/RAG config from the repo-root .env at runtime.
+    # The image itself does not bake .env; values here are injected into the
+    # container. Secrets in the `environment:` block below override any
+    # same-named key from this file.
+    env_file:
+      - ../.env
     ports:
       - "8000:8000"
     volumes:
