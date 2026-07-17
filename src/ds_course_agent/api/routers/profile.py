@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 
 from fastapi.concurrency import run_in_threadpool
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pypdf import PdfReader
 
 from ..schemas.profile import (
@@ -23,6 +23,7 @@ from ..schemas.profile import (
 )
 from ds_course_agent.tools.course_rag import build_sources_from_documents, get_rag_service
 from ds_course_agent.kb.toc_parser import get_toc_parser
+from ..auth.deps import get_current_student_id
 
 router = APIRouter()
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -287,8 +288,8 @@ def _retrieve_distinction_excerpt_with_rag(labels: list[str]) -> tuple[str | Non
     return excerpt[:320], sources
 
 
-@router.get("/summary/{student_id}", response_model=ProfileSummary)
-async def get_profile_summary(student_id: str):
+@router.get("/summary", response_model=ProfileSummary)
+async def get_profile_summary(student_id: str = Depends(get_current_student_id)):
     memory_core = get_memory()
     memory_core.aggregate_profile(student_id)
     profile = memory_core.get_profile(student_id)
@@ -310,8 +311,8 @@ async def get_profile_summary(student_id: str):
     )
 
 
-@router.get("/detail/{student_id}", response_model=ProfileDetail)
-async def get_profile_detail(student_id: str):
+@router.get("/detail", response_model=ProfileDetail)
+async def get_profile_detail(student_id: str = Depends(get_current_student_id)):
     memory_core = get_memory()
     memory_core.aggregate_profile(student_id)
     profile = memory_core.get_profile(student_id)
@@ -346,8 +347,11 @@ async def get_profile_detail(student_id: str):
     )
 
 
-@router.post("/weak-spots/{student_id}/{concept_id}/resolve")
-async def resolve_weak_spot(student_id: str, concept_id: str):
+@router.post("/weak-spots/{concept_id}/resolve")
+async def resolve_weak_spot(
+    concept_id: str,
+    student_id: str = Depends(get_current_student_id),
+):
     memory_core = get_memory()
 
     try:
@@ -477,8 +481,8 @@ async def get_concept_detail(concept_id: str):
     )
 
 
-@router.post("/aggregate/{student_id}")
-async def aggregate_profile(student_id: str):
+@router.post("/aggregate")
+async def aggregate_profile(student_id: str = Depends(get_current_student_id)):
     memory_core = get_memory()
     memory_core.aggregate_profile(student_id)
     return {"message": "画像已更新", "student_id": student_id}

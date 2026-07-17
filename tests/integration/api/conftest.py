@@ -1,6 +1,8 @@
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 from ds_course_agent.api.main import app
+from ds_course_agent.api.auth.deps import get_current_student_id
 
 
 @pytest.fixture
@@ -41,3 +43,20 @@ def isolated_backend_runtime(monkeypatch):
     monkeypatch.setattr(chat_module, "stream_chat_with_history", fake_stream_chat_with_history)
     monkeypatch.setattr(chat_module, "run_in_threadpool", same_thread_run_in_threadpool)
     monkeypatch.setattr(profile_module, "run_in_threadpool", same_thread_run_in_threadpool)
+
+    async def test_current_student_id(request: Request) -> str:
+        if request.headers.get("x-test-student-id"):
+            return request.headers["x-test-student-id"]
+        if request.query_params.get("student_id"):
+            return str(request.query_params["student_id"])
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if isinstance(body, dict) and body.get("student_id"):
+            return str(body["student_id"])
+        return "student001"
+
+    app.dependency_overrides[get_current_student_id] = test_current_student_id
+    yield
+    app.dependency_overrides.pop(get_current_student_id, None)

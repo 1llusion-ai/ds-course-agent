@@ -258,11 +258,11 @@ async function handleSend(message, sendOptions = {}) {
     shouldRefreshTitle = true
     chatStore.setActiveSession(newSession.id)
     await router.push(`/chat/${newSession.id}`)
-    await chatStore.sendMessage(newSession.id, message, undefined, streamOptions)
+    await chatStore.sendMessage(newSession.id, message, streamOptions)
   } else {
     shouldRefreshTitle = sessionStore.shouldAutoTitle(currentSessionId)
     chatStore.setActiveSession(currentSessionId)
-    await chatStore.sendMessage(currentSessionId, message, undefined, streamOptions)
+    await chatStore.sendMessage(currentSessionId, message, streamOptions)
   }
 
   if (shouldRefreshTitle) {

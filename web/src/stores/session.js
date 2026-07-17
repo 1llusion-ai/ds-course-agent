@@ -1,7 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import { DEFAULT_STUDENT_ID } from '../config'
 import { sessionsApi } from '../api/sessions'
 
 const DEFAULT_SESSION_TITLE = '新会话'
@@ -57,12 +56,12 @@ export const useSessionStore = defineStore('session', () => {
     })
   )
 
-  async function runFetchSessions(studentId) {
+  async function runFetchSessions() {
     let lastError = null
 
     for (let attempt = 0; attempt <= SESSION_FETCH_RETRIES; attempt += 1) {
       try {
-        const response = await sessionsApi.list(studentId)
+        const response = await sessionsApi.list()
         const nextSessions = Array.isArray(response.sessions) ? response.sessions : []
         sessions.value = nextSessions
         prunePinnedSessions(nextSessions)
@@ -80,13 +79,13 @@ export const useSessionStore = defineStore('session', () => {
     throw lastError
   }
 
-  async function fetchSessions(studentId = DEFAULT_STUDENT_ID) {
+  async function fetchSessions() {
     if (fetchPromise) {
       return fetchPromise
     }
 
     loading.value = true
-    fetchPromise = runFetchSessions(studentId)
+    fetchPromise = runFetchSessions()
       .finally(() => {
         loading.value = false
         fetchPromise = null
@@ -95,11 +94,8 @@ export const useSessionStore = defineStore('session', () => {
     return fetchPromise
   }
 
-  async function createSession(title = DEFAULT_SESSION_TITLE, studentId = DEFAULT_STUDENT_ID) {
-    const response = await sessionsApi.create({
-      title,
-      student_id: studentId
-    })
+  async function createSession(title = DEFAULT_SESSION_TITLE) {
+    const response = await sessionsApi.create({ title })
     sessions.value.unshift(response)
     currentSessionId.value = response.id
     return response
@@ -150,8 +146,8 @@ export const useSessionStore = defineStore('session', () => {
     return session.title === DEFAULT_SESSION_TITLE && (session.message_count || 0) === 0
   }
 
-  async function deleteSession(sessionId, studentId = DEFAULT_STUDENT_ID) {
-    await sessionsApi.delete(sessionId, studentId)
+  async function deleteSession(sessionId) {
+    await sessionsApi.delete(sessionId)
     sessions.value = sessions.value.filter(session => session.id !== sessionId)
     if (isPinned(sessionId)) {
       togglePin(sessionId)

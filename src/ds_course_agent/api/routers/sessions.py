@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from ..auth.deps import get_current_student_id
 from ..schemas.session import SessionCreate, SessionList, SessionResponse, SessionUpdate
 from ..state import (
     DEFAULT_SESSION_TITLE,
@@ -21,7 +22,7 @@ def _session_to_response(session_id: str, data: dict) -> SessionResponse:
     return SessionResponse(
         id=session_id,
         title=data.get("title", DEFAULT_SESSION_TITLE),
-        student_id=data.get("student_id", "default_student"),
+        student_id=data.get("student_id", ""),
         created_at=(
             datetime.fromisoformat(data["created_at"])
             if isinstance(data.get("created_at"), str)
@@ -37,14 +38,14 @@ def _session_to_response(session_id: str, data: dict) -> SessionResponse:
 
 
 @router.post("", response_model=SessionResponse)
-async def create_session(data: SessionCreate):
+async def create_session(data: SessionCreate, student_id: str = Depends(get_current_student_id)):
     session_id = str(uuid.uuid4())
     now = datetime.now()
 
     session_data = {
         "title": data.title,
         "title_source": "default" if data.title == DEFAULT_SESSION_TITLE else "manual",
-        "student_id": data.student_id,
+        "student_id": student_id,
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "message_count": 0,
@@ -57,7 +58,7 @@ async def create_session(data: SessionCreate):
 
 
 @router.get("", response_model=SessionList)
-async def list_sessions(student_id: str = "default_student"):
+async def list_sessions(student_id: str = Depends(get_current_student_id)):
     sessions = [
         _session_to_response(session_id, session_data)
         for session_id, session_data in _sessions.items()
@@ -68,7 +69,7 @@ async def list_sessions(student_id: str = "default_student"):
 
 
 @router.get("/{session_id}", response_model=SessionResponse)
-async def get_session(session_id: str, student_id: str = "default_student"):
+async def get_session(session_id: str, student_id: str = Depends(get_current_student_id)):
     if session_id not in _sessions:
         raise HTTPException(status_code=404, detail="会话不存在")
 
@@ -79,7 +80,7 @@ async def get_session(session_id: str, student_id: str = "default_student"):
 
 
 @router.delete("/{session_id}")
-async def delete_session(session_id: str, student_id: str = "default_student"):
+async def delete_session(session_id: str, student_id: str = Depends(get_current_student_id)):
     if session_id not in _sessions:
         raise HTTPException(status_code=404, detail="会话不存在")
 
@@ -91,9 +92,16 @@ async def delete_session(session_id: str, student_id: str = "default_student"):
 
 
 @router.patch("/{session_id}", response_model=SessionResponse)
-async def update_session(session_id: str, data: SessionUpdate):
+async def update_session(
+    session_id: str,
+    data: SessionUpdate,
+    student_id: str = Depends(get_current_student_id),
+):
     if session_id not in _sessions:
         raise HTTPException(status_code=404, detail="会话不存在")
+
+    if _sessions[session_id].get("student_id") != student_id:
+        raise HTTPException(status_code=403, detail="无权修改此会话")
 
     with state_lock():
         session = _sessions[session_id]

@@ -14,11 +14,12 @@ from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 
 from ..core_bridge import chat_with_history, stream_chat_with_history
+from ..auth.deps import get_current_student_id
 from ..schemas.chat import ChatHistoryResponse, ChatMessage, ChatRequest, ChatResponse
 from ..state import DEFAULT_SESSION_TITLE, _chat_history, _save as _save_state, _sessions, state_lock
 from ..title_generation import (
@@ -410,8 +411,19 @@ def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+def _ensure_session_owner(session_id: str, student_id: str) -> None:
+    if session_id not in _sessions:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    if _sessions[session_id].get("student_id") != student_id:
+        raise HTTPException(status_code=403, detail="无权访问此会话")
+
+
 @router.post("/send", response_model=ChatResponse)
-async def send_message(data: ChatRequest):
+async def send_message(
+    data: ChatRequest,
+    student_id: str = Depends(get_current_student_id),
+):
+    _ensure_session_owner(data.session_id, student_id)
     async with _session_operation_guard(data.session_id):
         # 判断是否首次消息
         is_first_message = len(_chat_history.get(data.session_id, [])) == 0
@@ -426,7 +438,7 @@ async def send_message(data: ChatRequest):
             assistant_kwargs = {
                 "message": data.message,
                 "session_id": data.session_id,
-                "student_id": data.student_id,
+                "student_id": student_id,
             }
             # Keep legacy monkeypatched call signatures working unless the user
             # explicitly enabled web search for this turn.
@@ -480,9 +492,11 @@ async def send_message(data: ChatRequest):
 async def send_message_stream(
     session_id: str,
     message: str,
-    student_id: str = "default_student",
     web_search: bool = False,
+    student_id: str = Depends(get_current_student_id),
 ):
+    _ensure_session_owner(session_id, student_id)
+
     async def generate() -> AsyncGenerator[str, None]:
         operation_lock = _session_operation_lock(session_id)
         operation_lock_acquired = False
@@ -778,12 +792,11 @@ async def send_message_stream(
 
 
 @router.get("/history/{session_id}", response_model=ChatHistoryResponse)
-async def get_chat_history(session_id: str, student_id: str = "default_student"):
-    if session_id not in _sessions:
-        raise HTTPException(status_code=404, detail="会话不存在")
-
-    if _sessions[session_id].get("student_id") != student_id:
-        raise HTTPException(status_code=403, detail="无权访问此会话")
+async def get_chat_history(
+    session_id: str,
+    student_id: str = Depends(get_current_student_id),
+):
+    _ensure_session_owner(session_id, student_id)
 
     raw_messages = _chat_history.get(session_id, [])
     messages = [_msg_from_dict(item) for item in raw_messages]
@@ -795,7 +808,11 @@ async def get_chat_history(session_id: str, student_id: str = "default_student")
 
 
 @router.delete("/history/{session_id}")
-async def clear_chat_history(session_id: str):
+async def clear_chat_history(
+    session_id: str,
+    student_id: str = Depends(get_current_student_id),
+):
+    _ensure_session_owner(session_id, student_id)
     with state_lock():
         if session_id in _chat_history:
             del _chat_history[session_id]

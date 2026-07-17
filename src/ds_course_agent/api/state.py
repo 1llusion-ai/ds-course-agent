@@ -133,7 +133,7 @@ def _derive_session_metadata(session_id: str, messages: List[dict], fallback_ts:
     return {
         "title": title,
         "title_source": "legacy",
-        "student_id": "default_student",
+        "student_id": "legacy_import",
         "created_at": created_at.isoformat(),
         "updated_at": updated_at.isoformat(),
         "message_count": len(messages),

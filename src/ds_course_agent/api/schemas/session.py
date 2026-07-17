@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 
 class SessionCreate(BaseModel):
     title: str = Field(default="新会话", min_length=1, max_length=100)
-    student_id: str = Field(default="default_student")
 
 
 class SessionResponse(BaseModel):

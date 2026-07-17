@@ -17,7 +17,6 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     session_id: str
     message: str = Field(min_length=1, max_length=2000)
-    student_id: str = Field(default="default_student")
     stream: bool = False
     web_search: bool = False
 

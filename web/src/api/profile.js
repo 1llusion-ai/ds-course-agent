@@ -1,10 +1,10 @@
 import client from './client'
 
 export const profileApi = {
-  getSummary: (studentId) => client.get(`/profile/summary/${studentId}`),
-  getDetail: (studentId) => client.get(`/profile/detail/${studentId}`),
+  getSummary: () => client.get('/profile/summary'),
+  getDetail: () => client.get('/profile/detail'),
   getConcept: (conceptId) => client.get(`/profile/concepts/${conceptId}`),
-  aggregate: (studentId) => client.post(`/profile/aggregate/${studentId}`),
-  resolveWeakSpot: (studentId, conceptId) =>
-    client.post(`/profile/weak-spots/${encodeURIComponent(studentId)}/${encodeURIComponent(conceptId)}/resolve`)
+  aggregate: () => client.post('/profile/aggregate'),
+  resolveWeakSpot: (conceptId) =>
+    client.post(`/profile/weak-spots/${encodeURIComponent(conceptId)}/resolve`)
 }

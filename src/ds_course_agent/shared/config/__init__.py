@@ -44,6 +44,11 @@ _SETTING_NAMES = [
     "CHROMA_PERSIST_DIR",
     "CHAT_HISTORY_DIR",
     "MD5_RECORD_FILE",
+    "AUTH_SECRET_KEY",
+    "AUTH_SESSION_TTL_HOURS",
+    "AUTH_COOKIE_SECURE",
+    "AUTH_DB_PATH",
+    "CORS_ALLOW_ORIGINS",
     "COLLECTION_NAME",
     "SIMILARITY_TOP_K",
     "SHORT_MEMORY_RECENT_MESSAGES",
@@ -218,6 +223,11 @@ python_exec_memory_mb = PYTHON_EXEC_MEMORY_MB
 python_exec_cpus = PYTHON_EXEC_CPUS
 python_exec_tmpfs_mb = PYTHON_EXEC_TMPFS_MB
 python_exec_pids_limit = PYTHON_EXEC_PIDS_LIMIT
+auth_secret_key = AUTH_SECRET_KEY
+auth_session_ttl_hours = AUTH_SESSION_TTL_HOURS
+auth_cookie_secure = AUTH_COOKIE_SECURE
+auth_db_path = AUTH_DB_PATH
+cors_allow_origins = CORS_ALLOW_ORIGINS
 
 __all__ = [
     "Settings",
@@ -312,5 +322,10 @@ __all__ = [
     "python_exec_cpus",
     "python_exec_tmpfs_mb",
     "python_exec_pids_limit",
+    "auth_secret_key",
+    "auth_session_ttl_hours",
+    "auth_cookie_secure",
+    "auth_db_path",
+    "cors_allow_origins",
     *_SETTING_NAMES,
 ]

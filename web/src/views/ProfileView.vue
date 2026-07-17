@@ -228,7 +228,6 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { DEFAULT_STUDENT_ID } from '../config'
 import { useProfileStore } from '../stores/profile'
 
 const router = useRouter()
@@ -337,8 +336,8 @@ function formatTime(value) {
 }
 
 async function loadProfile(showToast = false) {
-  await profileStore.fetchDetail(DEFAULT_STUDENT_ID)
-  await profileStore.fetchSummary(DEFAULT_STUDENT_ID)
+  await profileStore.fetchDetail()
+  await profileStore.fetchSummary()
   if (showToast) {
     ElMessage.success('画像已刷新')
   }
@@ -365,7 +364,7 @@ async function handleResolveWeakSpot(spot) {
 
   resolvingConceptId.value = spot.concept_id
   try {
-    await profileStore.resolveWeakSpot(DEFAULT_STUDENT_ID, spot.concept_id)
+    await profileStore.resolveWeakSpot(spot.concept_id)
     await loadProfile()
     ElMessage.success('已移出活跃薄弱点')
   } catch (error) {

@@ -12,6 +12,8 @@ import ds_course_agent.shared.config as config
 # 在应用启动时初始化日志（必须在导入其他业务模块之前）
 setup_logging(level=config.LOG_LEVEL)
 
+from .auth import models as auth_models
+from .auth.router import router as auth_router
 from .routers import chat, profile, sessions
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("RAG Tutor Backend Service starting...")
+    auth_models.init_db()
     yield
     logger.info("RAG Tutor Backend Service stopped")
 
@@ -31,20 +34,31 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+_cors_origins = [
+    origin.strip()
+    for origin in str(getattr(config, "CORS_ALLOW_ORIGINS", "") or "").split(",")
+    if origin.strip()
+]
+if not _cors_origins:
+    _cors_origins = [
         "http://localhost:5173",
         "http://localhost:3000",
         "http://localhost:5174",
         "http://localhost:5175",
         "http://localhost:5176",
-    ],
+    ]
+
+auth_models.init_db()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(profile.router, prefix="/api/profile", tags=["profile"])

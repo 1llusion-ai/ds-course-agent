@@ -18,3 +18,6 @@ httpx==0.26.0
 
 # CORS
 python-jose[cryptography]==3.3.0
+
+# Auth
+bcrypt>=4.0.0

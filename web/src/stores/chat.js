@@ -1,7 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import { DEFAULT_STUDENT_ID } from '../config'
 import { chatApi } from '../api/chat'
 import { useSessionStore } from './session'
 
@@ -262,9 +261,9 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function fetchHistory(sessionId, studentId = DEFAULT_STUDENT_ID) {
+  async function fetchHistory(sessionId) {
     activeSessionId.value = sessionId
-    const response = await chatApi.getHistory(sessionId, studentId)
+    const response = await chatApi.getHistory(sessionId)
     const history = Array.isArray(response.messages) ? response.messages : []
     const localMessages = messagesBySession.value[sessionId] || []
 
@@ -279,11 +278,10 @@ export const useChatStore = defineStore('chat', () => {
     return response
   }
 
-  async function sendMessageViaHttp(sessionId, message, studentId, requestId, options = {}) {
+  async function sendMessageViaHttp(sessionId, message, requestId, options = {}) {
     const response = await chatApi.send({
       session_id: sessionId,
       message,
-      student_id: studentId,
       web_search: Boolean(options.webSearch)
     })
 
@@ -298,12 +296,11 @@ export const useChatStore = defineStore('chat', () => {
     return nextMessage
   }
 
-  function sendMessageViaStream(sessionId, message, studentId, requestId, options = {}) {
+  function sendMessageViaStream(sessionId, message, requestId, options = {}) {
     return new Promise((resolve, reject) => {
       const source = chatApi.sendStream({
         session_id: sessionId,
         message,
-        student_id: studentId,
         web_search: Boolean(options.webSearch)
       })
 
@@ -387,7 +384,7 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
-  async function sendMessage(sessionId, message, studentId = DEFAULT_STUDENT_ID, options = {}) {
+  async function sendMessage(sessionId, message, options = {}) {
     const requestId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const userMessage = {
       role: 'user',
@@ -409,10 +406,10 @@ export const useChatStore = defineStore('chat', () => {
       const supportsStream = typeof window !== 'undefined' && 'EventSource' in window
 
       if (supportsStream) {
-        return await sendMessageViaStream(sessionId, message, studentId, requestId, options)
+        return await sendMessageViaStream(sessionId, message, requestId, options)
       }
 
-      return await sendMessageViaHttp(sessionId, message, studentId, requestId, options)
+      return await sendMessageViaHttp(sessionId, message, requestId, options)
     } catch (error) {
       if (getPendingMessage(sessionId, requestId)?.isLoading) {
         const timeoutMessage = error?.code === 'ECONNABORTED'

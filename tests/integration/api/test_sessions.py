@@ -78,6 +78,7 @@ def test_update_session():
 
     patch_resp = client.patch(
         f"/api/sessions/{session_id}",
+        headers={"x-test-student-id": "student_003"},
         json={"title": "更新后的标题"},
     )
     assert patch_resp.status_code == 200
@@ -126,7 +127,7 @@ def test_restore_legacy_session_file(monkeypatch, tmp_path):
     assert legacy_session_id in state_module._chat_history
     assert legacy_session_id in state_module._sessions
     assert state_module._sessions[legacy_session_id]["title"] == "旧会话里的第一条问题"
-    assert state_module._sessions[legacy_session_id]["student_id"] == "default_student"
+    assert state_module._sessions[legacy_session_id]["student_id"] == "legacy_import"
 
 
 def test_restore_legacy_session_file_skips_deleted_sessions(monkeypatch, tmp_path):

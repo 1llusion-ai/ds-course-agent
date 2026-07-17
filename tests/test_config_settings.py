@@ -1,6 +1,11 @@
 from pathlib import Path
 
 from ds_course_agent.shared.config import (
+    AUTH_COOKIE_SECURE,
+    AUTH_DB_PATH,
+    AUTH_SECRET_KEY,
+    AUTH_SESSION_TTL_HOURS,
+    CORS_ALLOW_ORIGINS,
     MODEL_CHAT,
     RAG_ANSWER_CACHE_ENABLED,
     RAG_ANSWER_CACHE_SIZE,
@@ -43,6 +48,11 @@ from ds_course_agent.shared.config import (
     python_exec_enabled,
     python_exec_max_concurrent,
     context_semantic_summary_enabled,
+    auth_cookie_secure,
+    auth_db_path,
+    auth_secret_key,
+    auth_session_ttl_hours,
+    cors_allow_origins,
     context_semantic_summary_timeout_seconds,
     settings,
 )
@@ -166,3 +176,30 @@ def test_context_semantic_summary_settings_are_exported():
     assert CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS == settings.CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS
     assert context_semantic_summary_enabled == settings.CONTEXT_SEMANTIC_SUMMARY_ENABLED
     assert context_semantic_summary_timeout_seconds == settings.CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS
+
+
+def test_auth_settings_are_exported_and_paths_resolved():
+    cfg = Settings(
+        AUTH_SECRET_KEY="secret",
+        AUTH_SESSION_TTL_HOURS=6,
+        AUTH_COOKIE_SECURE=True,
+        AUTH_DB_PATH="var/custom_auth.db",
+        CORS_ALLOW_ORIGINS="https://example.edu",
+    )
+
+    assert cfg.AUTH_SECRET_KEY == "secret"
+    assert cfg.AUTH_SESSION_TTL_HOURS == 6
+    assert cfg.AUTH_COOKIE_SECURE is True
+    assert Path(cfg.AUTH_DB_PATH).is_absolute()
+    assert cfg.AUTH_DB_PATH == str(PROJECT_ROOT / "var/custom_auth.db")
+    assert cfg.CORS_ALLOW_ORIGINS == "https://example.edu"
+    assert AUTH_SECRET_KEY == settings.AUTH_SECRET_KEY
+    assert AUTH_SESSION_TTL_HOURS == settings.AUTH_SESSION_TTL_HOURS
+    assert AUTH_COOKIE_SECURE == settings.AUTH_COOKIE_SECURE
+    assert AUTH_DB_PATH == settings.AUTH_DB_PATH
+    assert CORS_ALLOW_ORIGINS == settings.CORS_ALLOW_ORIGINS
+    assert auth_secret_key == settings.AUTH_SECRET_KEY
+    assert auth_session_ttl_hours == settings.AUTH_SESSION_TTL_HOURS
+    assert auth_cookie_secure == settings.AUTH_COOKIE_SECURE
+    assert auth_db_path == settings.AUTH_DB_PATH
+    assert cors_allow_origins == settings.CORS_ALLOW_ORIGINS

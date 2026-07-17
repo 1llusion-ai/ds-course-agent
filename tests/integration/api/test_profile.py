@@ -73,7 +73,7 @@ class TestProfileAPI:
         profile.stats["total_resolved_weak_spots"] = 1
         self.memory.save_profile(profile)
 
-        resp = client.get("/api/profile/summary/student001")
+        resp = client.get("/api/profile/summary", headers={"x-test-student-id": "student001"})
         assert resp.status_code == 200
         data = resp.json()
 
@@ -105,7 +105,7 @@ class TestProfileAPI:
         )
         self.memory.save_profile(profile)
 
-        resp = client.get("/api/profile/detail/student002")
+        resp = client.get("/api/profile/detail", headers={"x-test-student-id": "student002"})
         assert resp.status_code == 200
         data = resp.json()
 
@@ -163,7 +163,7 @@ class TestProfileAPI:
         )
         self.memory.save_profile(profile)
 
-        resp = client.get("/api/profile/detail/student003")
+        resp = client.get("/api/profile/detail", headers={"x-test-student-id": "student003"})
         assert resp.status_code == 200
         data = resp.json()
 
@@ -278,7 +278,7 @@ class TestProfileAPI:
 
         self.memory.aggregate_profile("student004")
 
-        resp = client.post("/api/profile/weak-spots/student004/cross_validation/resolve")
+        resp = client.post("/api/profile/weak-spots/cross_validation/resolve", headers={"x-test-student-id": "student004"})
         assert resp.status_code == 200
         data = resp.json()
 
@@ -286,7 +286,7 @@ class TestProfileAPI:
         assert data["resolved_weak_spot"]["concept_id"] == "cross_validation"
         assert data["resolved_weak_spot"]["resolution_note"] == "manual_resolve"
 
-        detail_resp = client.get("/api/profile/detail/student004")
+        detail_resp = client.get("/api/profile/detail", headers={"x-test-student-id": "student004"})
         assert detail_resp.status_code == 200
         detail_data = detail_resp.json()
         assert detail_data["weak_spots"] == []

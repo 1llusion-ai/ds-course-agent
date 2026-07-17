@@ -112,7 +112,9 @@ class TestChatAPI:
         assert resp.status_code == 405  # Method Not Allowed
 
         # GET 应该被支持
-        resp = client.get("/api/chat/send/stream?session_id=test&message=hello&student_id=test")
+        session_resp = client.post("/api/sessions", json={"title": "stream", "student_id": "test"})
+        session_id = session_resp.json()["id"]
+        resp = client.get(f"/api/chat/send/stream?session_id={session_id}&message=hello&student_id=test")
         assert resp.status_code == 200
 
     def test_clear_history(self):

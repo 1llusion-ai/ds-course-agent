@@ -76,6 +76,13 @@ class Settings(BaseSettings):
     CHAT_HISTORY_DIR: str = "var/chat_history"
     MD5_RECORD_FILE: str = "md5.text"
 
+    # Local login / cookie session authentication.
+    AUTH_SECRET_KEY: str = ""
+    AUTH_SESSION_TTL_HOURS: int = 12
+    AUTH_COOKIE_SECURE: bool = False
+    AUTH_DB_PATH: str = "var/auth.db"
+    CORS_ALLOW_ORIGINS: str = ""
+
     COLLECTION_NAME: str = "rag_knowledge_base"
     SIMILARITY_TOP_K: int = 3
 
@@ -192,6 +199,7 @@ class Settings(BaseSettings):
         "CHAT_HISTORY_DIR",
         "MD5_RECORD_FILE",
         "TOOL_RESULT_ARTIFACT_DIR",
+        "AUTH_DB_PATH",
     )
     @classmethod
     def _resolve_project_paths(cls, value: str) -> str:

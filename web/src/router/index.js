@@ -1,12 +1,45 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import ChatView from '../views/ChatView.vue'
 import ProfileView from '../views/ProfileView.vue'
+import LoginView from '../views/LoginView.vue'
+import { useAuthStore } from '../stores/auth'
 
 const routes = [
   { path: '/', redirect: '/chat' },
+  { path: '/login', name: 'Login', component: LoginView, meta: { public: true } },
   { path: '/chat', name: 'Chat', component: ChatView },
   { path: '/chat/:sessionId', name: 'ChatWithSession', component: ChatView },
   { path: '/profile', name: 'Profile', component: ProfileView },
 ]
 
-export default createRouter({ history: createWebHistory(), routes })
+const router = createRouter({ history: createWebHistory(), routes })
+
+router.beforeEach(async (to) => {
+  const authStore = useAuthStore()
+
+  if (!authStore.initialized) {
+    try {
+      await authStore.fetchMe()
+    } catch (error) {
+      // Unauthenticated is handled below without storing any client-side token.
+    }
+  }
+
+  if (to.meta.public) {
+    if (to.path === '/login' && authStore.isAuthenticated) {
+      return typeof to.query.redirect === 'string' ? to.query.redirect : '/chat'
+    }
+    return true
+  }
+
+  if (!authStore.isAuthenticated) {
+    return {
+      path: '/login',
+      query: { redirect: to.fullPath }
+    }
+  }
+
+  return true
+})
+
+export default router
