@@ -102,20 +102,36 @@ class TestChatAPI:
         session_resp = client.get(f"/api/sessions/{session_id}?student_id=student001")
         assert session_resp.json()["message_count"] == 2  # user + assistant
 
-    def test_stream_endpoint_is_get(self):
-        """测试流式接口是 GET 方法"""
-        # POST 应该不被支持
-        resp = client.post("/api/chat/send/stream", json={
-            "session_id": "test",
-            "message": "test"
-        })
-        assert resp.status_code == 405  # Method Not Allowed
-
-        # GET 应该被支持
+    def test_stream_endpoint_is_post(self):
+        """测试流式接口是 POST 方法"""
         session_resp = client.post("/api/sessions", json={"title": "stream", "student_id": "test"})
         session_id = session_resp.json()["id"]
-        resp = client.get(f"/api/chat/send/stream?session_id={session_id}&message=hello&student_id=test")
+
+        # GET 不再支持，避免 GET 写入副作用
+        get_resp = client.get(f"/api/chat/send/stream?session_id={session_id}&message=hello&student_id=test")
+        assert get_resp.status_code == 405
+
+        # POST 应该被支持
+        resp = client.post(
+            "/api/chat/send/stream",
+            headers={"x-test-student-id": "test"},
+            json={"session_id": session_id, "message": "hello"},
+        )
         assert resp.status_code == 200
+
+    def test_stream_endpoint_accepts_long_message_body(self):
+        """测试流式接口长消息走请求体，不受 URL 长度限制。"""
+        session_resp = client.post("/api/sessions", json={"title": "stream", "student_id": "test"})
+        session_id = session_resp.json()["id"]
+        long_message = "x" * 2500
+
+        resp = client.post(
+            "/api/chat/send/stream",
+            headers={"x-test-student-id": "test"},
+            json={"session_id": session_id, "message": long_message},
+        )
+        assert resp.status_code == 200
+        assert '"type": "final"' in resp.text
 
     def test_clear_history(self):
         """测试清空历史"""

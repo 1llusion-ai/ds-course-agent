@@ -1,6 +1,6 @@
 """API schema package."""
 
-from .chat import ChatHistoryResponse, ChatMessage, ChatRequest, ChatResponse
+from .chat import ChatHistoryResponse, ChatMessage, ChatRequest, ChatResponse, ChatStreamRequest
 from .profile import (
     ConceptDetail,
     ConceptFocus,
@@ -19,6 +19,7 @@ __all__ = [
     "ChatMessage",
     "ChatRequest",
     "ChatResponse",
+    "ChatStreamRequest",
     "ConceptDetail",
     "ConceptFocus",
     "LearningProgress",

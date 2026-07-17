@@ -37,8 +37,10 @@ def test_stream_does_not_block_on_first_title_generation(monkeypatch):
     session_id = session_resp.json()["id"]
 
     started = time.perf_counter()
-    response = client.get(
-        f"/api/chat/send/stream?session_id={session_id}&message=hello&student_id=test"
+    response = client.post(
+        "/api/chat/send/stream",
+        headers={"x-test-student-id": "test"},
+        json={"session_id": session_id, "message": "hello"},
     )
     elapsed = time.perf_counter() - started
 

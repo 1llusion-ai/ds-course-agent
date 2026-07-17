@@ -368,7 +368,7 @@ export const useChatStore = defineStore('chat', () => {
         }
       }
 
-      source.onerror = () => {
+      source.onerror = (error) => {
         if (settled) {
           return
         }
@@ -379,7 +379,7 @@ export const useChatStore = defineStore('chat', () => {
           ? `${partialContent}\n\n⚠️ 流式连接中断，回答可能不完整。`
           : '⚠️ 发送失败：流式连接已中断，请稍后重试。'
 
-        finishWithError(fallbackContent, new Error('stream connection interrupted'))
+        finishWithError(fallbackContent, error || new Error('stream connection interrupted'))
       }
     })
   }
@@ -403,7 +403,7 @@ export const useChatStore = defineStore('chat', () => {
     options.onProgress?.()
 
     try {
-      const supportsStream = typeof window !== 'undefined' && 'EventSource' in window
+      const supportsStream = typeof fetch !== 'undefined' && typeof window !== 'undefined' && 'ReadableStream' in window
 
       if (supportsStream) {
         return await sendMessageViaStream(sessionId, message, requestId, options)

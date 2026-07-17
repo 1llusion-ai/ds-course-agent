@@ -20,7 +20,7 @@ from fastapi.responses import StreamingResponse
 
 from ..core_bridge import chat_with_history, stream_chat_with_history
 from ..auth.deps import get_current_student_id
-from ..schemas.chat import ChatHistoryResponse, ChatMessage, ChatRequest, ChatResponse
+from ..schemas.chat import ChatHistoryResponse, ChatMessage, ChatRequest, ChatResponse, ChatStreamRequest
 from ..state import DEFAULT_SESSION_TITLE, _chat_history, _save as _save_state, _sessions, state_lock
 from ..title_generation import (
     SESSION_TITLE_MAX_CHARS,
@@ -488,13 +488,14 @@ async def send_message(
         return ChatResponse(message=assistant_msg, session_id=data.session_id)
 
 
-@router.get("/send/stream")
+@router.post("/send/stream")
 async def send_message_stream(
-    session_id: str,
-    message: str,
-    web_search: bool = False,
+    data: ChatStreamRequest,
     student_id: str = Depends(get_current_student_id),
 ):
+    session_id = data.session_id
+    message = data.message
+    web_search = data.web_search
     _ensure_session_owner(session_id, student_id)
 
     async def generate() -> AsyncGenerator[str, None]:

@@ -60,8 +60,10 @@ def test_stream_endpoint_returns_real_sse(fresh_client):
     assert session_resp.status_code == 200
     session_id = session_resp.json()["id"]
 
-    response = fresh_client.get(
-        f"/api/chat/send/stream?session_id={session_id}&message=hello&student_id=test"
+    response = fresh_client.post(
+        "/api/chat/send/stream",
+        headers={"x-test-student-id": "test"},
+        json={"session_id": session_id, "message": "hello"},
     )
 
     assert response.status_code == 200

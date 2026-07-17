@@ -21,6 +21,12 @@ class ChatRequest(BaseModel):
     web_search: bool = False
 
 
+class ChatStreamRequest(BaseModel):
+    session_id: str
+    message: str = Field(min_length=1, max_length=20000)
+    web_search: bool = False
+
+
 class ChatResponse(BaseModel):
     message: ChatMessage
     session_id: str
