@@ -79,14 +79,22 @@
           @click="openWebSources"
         >
           <span class="web-source-block__favicons" aria-hidden="true">
-            <img
+            <span
               v-for="source in webSourceFavicons"
               :key="source.key"
               class="web-source-block__favicon"
-              :src="source.favicon"
-              :alt="source.domain || source.label"
-              @error="$event.target.style.display = 'none'"
-            />
+            >
+              <span class="web-source-block__favicon-fallback">🌐</span>
+              <img
+                class="web-source-block__favicon-img"
+                :src="source.favicon"
+                :alt="source.domain || source.label"
+                @error="$event.target.style.display = 'none'"
+              />
+            </span>
+            <span v-if="!webSourceFavicons.length" class="web-source-block__favicon">
+              <span class="web-source-block__favicon-fallback">🌐</span>
+            </span>
           </span>
           <span class="web-source-block__body">
             <span class="web-source-block__title">{{ webSourceCards.length }} 个网页</span>
@@ -445,7 +453,7 @@ const webSourceCards = computed(() => (
     .filter(source => source.isWeb && source.url)
     .map((source, index) => {
       const raw = source.raw && typeof source.raw === 'object' ? source.raw : {}
-      const domain = domainFromUrl(source.url)
+      const domain = raw.domain || domainFromUrl(source.url)
 
       return {
         ...source,
@@ -1020,10 +1028,11 @@ onBeforeUnmount(() => {
 .markdown-body :deep(.code-block) {
   margin: 14px 0;
   overflow: hidden;
-  border: 1px solid rgba(15, 23, 42, 0.12);
+  border: 1px solid rgba(203, 213, 225, 0.9);
   border-radius: 14px;
-  background: #0f172a;
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
 }
 
 .markdown-body :deep(.code-block__header) {
@@ -1032,20 +1041,20 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 10px;
   padding: 8px 10px 8px 12px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-  background: linear-gradient(180deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.96));
+  border-bottom: 1px solid rgba(203, 213, 225, 0.82);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.95));
 }
 
 .markdown-body :deep(.code-block__footer) {
   display: flex;
   justify-content: flex-end;
   padding: 8px 10px;
-  border-top: 1px solid rgba(148, 163, 184, 0.16);
-  background: rgba(15, 23, 42, 0.98);
+  border-top: 1px solid rgba(203, 213, 225, 0.82);
+  background: rgba(248, 250, 252, 0.96);
 }
 
 .markdown-body :deep(.code-block__lang) {
-  color: #cbd5e1;
+  color: #475569;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -1058,44 +1067,44 @@ onBeforeUnmount(() => {
   gap: 5px;
   min-height: 28px;
   padding: 5px 10px;
-  color: #cbd5e1;
+  color: #475569;
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(203, 213, 225, 0.88);
   border-radius: 8px;
   transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
 }
 
 .markdown-body :deep(.code-copy:hover) {
-  color: #fff;
-  background: rgba(37, 99, 235, 0.38);
-  border-color: rgba(96, 165, 250, 0.45);
+  color: #0f172a;
+  background: rgba(239, 246, 255, 0.96);
+  border-color: rgba(147, 197, 253, 0.78);
   transform: translateY(-1px);
 }
 
 .markdown-body :deep(.code-copy--success) {
-  color: #dcfce7;
-  background: rgba(22, 163, 74, 0.35);
-  border-color: rgba(74, 222, 128, 0.45);
+  color: #166534;
+  background: rgba(220, 252, 231, 0.82);
+  border-color: rgba(74, 222, 128, 0.34);
 }
 
 .markdown-body :deep(.code-copy--error) {
-  color: #fee2e2;
-  background: rgba(220, 38, 38, 0.35);
-  border-color: rgba(248, 113, 113, 0.45);
+  color: #b91c1c;
+  background: rgba(254, 226, 226, 0.84);
+  border-color: rgba(248, 113, 113, 0.34);
 }
 
 .markdown-body :deep(.code-block__pre) {
   margin: 0;
   padding: 14px 16px;
   overflow-x: auto;
-  color: #dbeafe;
+  color: #0f172a;
   background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.17), transparent 32%),
-    #0f172a;
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
   border-radius: 0;
 }
 
@@ -1133,20 +1142,20 @@ onBeforeUnmount(() => {
 }
 
 .markdown-body :deep(.token-string) {
-  color: #86efac;
+  color: #0f766e;
 }
 
 .markdown-body :deep(.token-keyword) {
-  color: #93c5fd;
+  color: #2563eb;
   font-weight: 800;
 }
 
 .markdown-body :deep(.token-function) {
-  color: #fde68a;
+  color: #b45309;
 }
 
 .markdown-body :deep(.token-number) {
-  color: #fca5a5;
+  color: #dc2626;
 }
 
 .markdown-body :deep(blockquote) {
@@ -1262,12 +1271,31 @@ onBeforeUnmount(() => {
 }
 
 .web-source-block__favicon {
+  position: relative;
   width: 22px;
   height: 22px;
   border: 2px solid rgba(248, 250, 252, 0.98);
   border-radius: 999px;
   background: #fff;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.10);
+  overflow: hidden;
+}
+
+.web-source-block__favicon-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.web-source-block__favicon-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 

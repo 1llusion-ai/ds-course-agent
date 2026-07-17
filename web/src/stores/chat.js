@@ -229,6 +229,11 @@ export const useChatStore = defineStore('chat', () => {
     const latestRoute = nextMessage.route || pendingMessage?.route || latestRouteFromProgress(progressEvents)
     const mergedMessage = {
       ...nextMessage,
+      // Preserve the pending message's requestId so the chat list can keep a
+      // stable v-for :key across the pending -> final transition. Without this,
+      // the timestamp-based key mutates on every streaming delta and Vue
+      // remounts the message component, collapsing the "查看执行过程" disclosure.
+      requestId: pendingMessage?.requestId || nextMessage.requestId || undefined,
       route: latestRoute || nextMessage.route,
       metadata: {
         ...(pendingMessage?.metadata || {}),

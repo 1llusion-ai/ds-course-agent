@@ -61,7 +61,7 @@
           <div v-else ref="messagesList" class="messages-list">
             <ChatMessage
               v-for="(message, index) in chatStore.messages"
-              :key="`${message.timestamp || index}-${index}`"
+              :key="message.requestId || `${message.timestamp || index}-${index}`"
               :message="message"
               @open-sources="openSourcesPanel"
             />
@@ -92,16 +92,18 @@
       </div>
 
       <div class="sources-panel__list">
-        <a
+        <component
+          :is="source.isExternal ? 'a' : 'div'"
           v-for="source in sourcesPanelSources"
           :key="source.key"
           class="sources-panel__card"
-          :href="source.url"
-          target="_blank"
-          rel="noopener noreferrer"
+          :href="source.isExternal ? source.url : undefined"
+          :target="source.isExternal ? '_blank' : undefined"
+          :rel="source.isExternal ? 'noopener noreferrer' : undefined"
           :title="source.title"
         >
           <span class="sources-panel__favicon-wrap">
+            <span class="sources-panel__favicon-fallback" aria-hidden="true">🌐</span>
             <img
               v-if="source.favicon"
               class="sources-panel__favicon"
@@ -118,7 +120,7 @@
               {{ [source.provider, source.published_at].filter(Boolean).join(' · ') }}
             </span>
           </span>
-        </a>
+        </component>
       </div>
     </aside>
   </div>
@@ -135,7 +137,7 @@ import ChatSidebar from '../components/ChatSidebar.vue'
 import { useChatStore } from '../stores/chat'
 import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
-import { domainFromUrl, faviconUrl } from '../utils/url'
+import { domainFromUrl, faviconUrl, isExternalUrl } from '../utils/url'
 
 const route = useRoute()
 const router = useRouter()
@@ -340,6 +342,7 @@ function toggleSidebar() {
 function normalizePanelSource(source, index) {
   const url = source?.url || ''
   const domain = source?.domain || domainFromUrl(url)
+  const isExternal = isExternalUrl(url)
 
   return {
     key: source?.key || `${url || source?.label || 'source'}-${index}`,
@@ -348,6 +351,7 @@ function normalizePanelSource(source, index) {
     title: source?.title || source?.label || domain || url || `网页 ${index + 1}`,
     url,
     domain,
+    isExternal,
     favicon: source?.favicon || faviconUrl(url, domain),
     snippet: source?.snippet || '',
     provider: source?.provider || '',
@@ -501,6 +505,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   background: transparent;
 }
 
@@ -770,18 +775,32 @@ onBeforeUnmount(() => {
 }
 
 .sources-panel__favicon-wrap {
+  position: relative;
   display: block;
   width: 30px;
   height: 30px;
   flex: 0 0 auto;
-}
-
-.sources-panel__favicon {
-  width: 30px;
-  height: 30px;
   border: 1px solid rgba(203, 213, 225, 0.78);
   border-radius: 999px;
   background: #fff;
+  overflow: hidden;
+}
+
+.sources-panel__favicon-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.sources-panel__favicon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 

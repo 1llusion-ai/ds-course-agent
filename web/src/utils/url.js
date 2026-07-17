@@ -11,5 +11,19 @@ export function domainFromUrl(url) {
 export function faviconUrl(url, domain = '') {
   const host = domain || domainFromUrl(url)
   if (!host) return ''
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`
+  // Use the site's own favicon instead of a third-party favicon service.
+  // The previous Google S2 endpoint is unreachable in some regions, which
+  // silently broke every web-source icon. Per-site favicon.ico has no such
+  // dependency; callers render an emoji fallback when this is empty or 404s.
+  return `https://${host}/favicon.ico`
+}
+
+export function isExternalUrl(value) {
+  if (!value) return false
+  try {
+    const parsed = new URL(String(value))
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch (error) {
+    return false
+  }
 }
