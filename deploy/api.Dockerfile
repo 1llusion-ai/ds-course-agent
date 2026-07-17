@@ -20,6 +20,9 @@ RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r re
 # Active API implementation.
 COPY src/ ./src/
 
+# Operational scripts (e.g. scripts/create_user.py to seed login accounts).
+COPY scripts/ ./scripts/
+
 # Runtime inputs and local state directories.
 COPY data/ ./data/
 RUN mkdir -p var/chroma_db var/chat_history var/logs var/artifacts var/cache
