@@ -8,8 +8,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ../var/chroma_db:/app/var/chroma_db
-      - ../var/chat_history:/app/var/chat_history
+      - ../var:/app/var
       - ../data:/app/data
       # Optional: required only when PYTHON_EXEC_BACKEND=docker and the API
       # container should launch sibling sandbox containers. See docs/python_sandbox.md.
@@ -21,6 +20,13 @@ services:
       # Docker daemon socket above.
       - PYTHON_EXEC_ENABLED=false
       - PYTHON_EXEC_BACKEND=docker
+      # Deployment secrets/config are injected at runtime; the API image does
+      # not copy .env. Set these in your shell, CI/CD secret store, or a Compose
+      # env file before starting production.
+      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-}
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-http://localhost}
+      - AUTH_COOKIE_SECURE=${AUTH_COOKIE_SECURE:-false}
+      - AUTH_DB_PATH=/app/var/auth.db
     networks:
       - rag-network
     healthcheck:

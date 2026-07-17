@@ -99,7 +99,7 @@ npm run dev
 ### 7. Health check
 
 ```bash
-curl http://127.0.0.1:8083/health
+curl http://127.0.0.1:8084/health
 ```
 
 ## Common Commands
@@ -176,7 +176,25 @@ docker compose -f deploy/compose.yaml config
 docker compose -f deploy/compose.yaml up --build
 ```
 
-The second command requires a running Docker daemon.
+The second command requires a running Docker daemon. The local CLI runner
+(`python main.py api` or `python scripts/run_api.py`) binds to
+`127.0.0.1:8084` by default. The Docker image runs Uvicorn on
+`0.0.0.0:8000`, and `deploy/compose.yaml` publishes that as host port `8000`.
+
+Deployment configuration is injected at runtime; `deploy/api.Dockerfile` does
+not copy `.env` into the image. For production, set secrets and browser origins
+through your shell, CI/CD secret manager, or an explicit Compose env file, for
+example:
+
+```bash
+export AUTH_SECRET_KEY="$(openssl rand -hex 32)"
+export CORS_ALLOW_ORIGINS="https://course.example.edu,https://www.course.example.edu"
+export AUTH_COOKIE_SECURE=true
+docker compose -f deploy/compose.yaml up --build
+```
+
+For local HTTP-only Docker smoke tests, keep `AUTH_COOKIE_SECURE=false` and use
+local origins such as `http://localhost` or `http://localhost:5173`.
 
 ## License
 

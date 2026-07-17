@@ -21,8 +21,6 @@ COPY src/ ./src/
 COPY data/ ./data/
 RUN mkdir -p var/chroma_db var/chat_history var/logs var/artifacts var/cache
 
-COPY .env ./
-
 EXPOSE 8000
 
 CMD ["uvicorn", "ds_course_agent.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
