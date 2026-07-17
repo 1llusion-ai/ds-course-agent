@@ -384,7 +384,11 @@ def _schedule_title_generation(session_id: str, message: str, *, is_first_messag
 
     task = asyncio.create_task(_bg_generate_title())
     _title_generation_tasks.add(task)
-    task.add_done_callback(_title_generation_tasks.discard)
+    add_done_callback = getattr(task, "add_done_callback", None)
+    if callable(add_done_callback):
+        add_done_callback(_title_generation_tasks.discard)
+    else:  # Compatibility with tests/extensions that monkeypatch create_task.
+        _title_generation_tasks.discard(task)
 
 
 def _build_stream_error_message(text: str) -> ChatMessage:

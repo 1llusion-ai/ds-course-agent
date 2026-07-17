@@ -4,19 +4,8 @@ from __future__ import annotations
 
 from langchain_core.tools import tool
 
+from ds_course_agent.rag.code_executor import _python_error_hint as _python_exec_error_hint
 from ds_course_agent.tools._shared import _warn_large_tool_result
-
-
-def _python_exec_error_hint(stderr: str) -> str:
-    if "IndentationError" in stderr:
-        return "提示：请检查代码缩进是否一致。"
-    if "NameError" in stderr:
-        return "提示：请检查变量或函数名是否已定义。"
-    if "SyntaxError" in stderr:
-        return "提示：请检查 Python 语法是否完整、括号/冒号是否匹配。"
-    if "ModuleNotFoundError" in stderr:
-        return "提示：当前运行环境缺少该模块，请改用已安装库或提供替代实现。"
-    return ""
 
 
 @tool

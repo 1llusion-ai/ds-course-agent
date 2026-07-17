@@ -27,7 +27,7 @@
       </header>
 
       <div class="chat-content">
-        <div ref="messagesContainer" class="messages-area">
+        <div ref="messagesContainer" class="messages-area" @scroll.passive="handleMessagesScroll">
           <div v-if="chatStore.messages.length === 0" class="empty-state">
             <div class="empty-content">
               <div class="empty-kicker">DATA SCIENCE COURSE AGENT</div>
@@ -58,13 +58,14 @@
             </div>
           </div>
 
-          <div v-else class="messages-list">
+          <div v-else ref="messagesList" class="messages-list">
             <ChatMessage
               v-for="(message, index) in chatStore.messages"
               :key="`${message.timestamp || index}-${index}`"
               :message="message"
               @open-sources="openSourcesPanel"
             />
+            <div ref="bottomAnchor" class="messages-bottom-anchor" aria-hidden="true"></div>
           </div>
         </div>
 
@@ -124,7 +125,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -139,6 +140,9 @@ import { domainFromUrl, faviconUrl } from '../utils/url'
 const route = useRoute()
 const router = useRouter()
 const messagesContainer = ref(null)
+const messagesList = ref(null)
+const bottomAnchor = ref(null)
+const stickToBottom = ref(true)
 
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
@@ -149,6 +153,8 @@ const webSearchEnabled = ref(readWebSearchPreference())
 const sourcesPanelOpen = ref(false)
 const sourcesPanelTitle = ref('搜索来源')
 const sourcesPanelSources = ref([])
+let scrollFrameId = null
+let messagesResizeObserver = null
 
 const headerTitle = computed(() => sessionStore.currentSession?.title || '新对话')
 const isDarkTheme = computed(() => theme.value === 'dark')
@@ -233,7 +239,7 @@ async function loadSession(sessionId) {
     }
   }
 
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 async function handleSend(message, sendOptions = {}) {
@@ -242,6 +248,7 @@ async function handleSend(message, sendOptions = {}) {
   const currentSessionId = sessionStore.currentSessionId
   let targetSessionId = currentSessionId
   let shouldRefreshTitle = false
+  stickToBottom.value = true
 
   if (!currentSessionId) {
     const newSession = await sessionStore.createSession()
@@ -272,7 +279,7 @@ async function handleSend(message, sendOptions = {}) {
   }
 
   await profileStore.fetchSummary()
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 function handleStarterPrompt(prompt) {
@@ -361,15 +368,98 @@ function closeSourcesPanel() {
   sourcesPanelOpen.value = false
 }
 
-function scrollToBottom() {
+function isNearBottom(container = messagesContainer.value) {
+  if (!container) return true
+  const threshold = 48
+  return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold
+}
+
+function handleMessagesScroll() {
+  const container = messagesContainer.value
+  if (!container) return
+
+  const shouldStick = isNearBottom(container)
+  stickToBottom.value = shouldStick
+
+  if (!shouldStick && scrollFrameId !== null && typeof window !== 'undefined') {
+    window.cancelAnimationFrame(scrollFrameId)
+    scrollFrameId = null
+  }
+}
+
+function performScroll() {
   nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    const anchor = bottomAnchor.value
+    const container = messagesContainer.value
+
+    if (anchor && typeof anchor.scrollIntoView === 'function') {
+      anchor.scrollIntoView({ block: 'end', inline: 'nearest' })
+      return
+    }
+
+    if (container) {
+      container.scrollTop = container.scrollHeight
     }
   })
 }
 
+function scheduleScroll(force = false) {
+  if (!force && !stickToBottom.value) return
+  if (typeof window === 'undefined') return
+
+  stickToBottom.value = true
+
+  if (scrollFrameId !== null) {
+    return
+  }
+
+  scrollFrameId = window.requestAnimationFrame(() => {
+    scrollFrameId = null
+    performScroll()
+  })
+}
+
+function scrollToBottom(force = false) {
+  scheduleScroll(force)
+}
+
+function syncMessagesResizeObserver() {
+  if (messagesResizeObserver) {
+    messagesResizeObserver.disconnect()
+    messagesResizeObserver = null
+  }
+
+  if (typeof window === 'undefined' || typeof window.ResizeObserver === 'undefined') {
+    return
+  }
+
+  const target = messagesList.value
+  if (!target) {
+    return
+  }
+
+  messagesResizeObserver = new ResizeObserver(() => {
+    if (stickToBottom.value) {
+      scheduleScroll(true)
+    }
+  })
+
+  messagesResizeObserver.observe(target)
+}
+
 watch(theme, applyThemePreference, { immediate: true })
+
+watch(
+  () => chatStore.messages.length,
+  async () => {
+    await nextTick()
+    syncMessagesResizeObserver()
+    if (stickToBottom.value) {
+      scheduleScroll(true)
+    }
+  },
+  { immediate: true, flush: 'post' }
+)
 
 onMounted(async () => {
   try {
@@ -377,6 +467,18 @@ onMounted(async () => {
   } catch (error) {
     console.error('加载会话列表失败:', error)
     ElMessage.error('加载会话列表失败，请稍后重试。')
+  }
+})
+
+onBeforeUnmount(() => {
+  if (scrollFrameId !== null && typeof window !== 'undefined') {
+    window.cancelAnimationFrame(scrollFrameId)
+    scrollFrameId = null
+  }
+
+  if (messagesResizeObserver) {
+    messagesResizeObserver.disconnect()
+    messagesResizeObserver = null
   }
 })
 </script>
@@ -475,12 +577,16 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
 .messages-area {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 28px 28px 18px;
 }
 
@@ -490,6 +596,12 @@ onMounted(async () => {
   gap: 18px;
   width: min(100%, 820px);
   margin: 0 auto;
+}
+
+.messages-bottom-anchor {
+  width: 100%;
+  height: 1px;
+  flex: 0 0 auto;
 }
 
 .empty-state {

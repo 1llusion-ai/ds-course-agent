@@ -443,16 +443,16 @@ const sourceChips = computed(() => {
 const webSourceCards = computed(() => (
   sourceChips.value
     .filter(source => source.isWeb && source.url)
-	    .map((source, index) => {
-	      const raw = source.raw && typeof source.raw === 'object' ? source.raw : {}
-	      const domain = domainFromUrl(source.url)
+    .map((source, index) => {
+      const raw = source.raw && typeof source.raw === 'object' ? source.raw : {}
+      const domain = domainFromUrl(source.url)
 
-	      return {
-	        ...source,
-	        index: index + 1,
-	        sourceId: source.sourceId || sourceIdFromSource(raw, index),
-	        domain,
-	        snippet: raw.snippet || raw.summary || raw.description || '',
+      return {
+        ...source,
+        index: index + 1,
+        sourceId: source.sourceId || sourceIdFromSource(raw, index),
+        domain,
+        snippet: raw.snippet || raw.summary || raw.description || '',
         provider: raw.provider || '',
         published_at: raw.published_at || raw.publishedAt || '',
         fetched: raw.fetched,

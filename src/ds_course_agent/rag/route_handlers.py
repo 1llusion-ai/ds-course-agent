@@ -13,6 +13,15 @@ from collections.abc import Iterator
 from typing import Any, Protocol
 
 from ds_course_agent.rag.query_pipeline import RouteType
+from ds_course_agent.shared.error_response import truncate_error
+from ds_course_agent.rag.taxonomy import (
+    LOW_SUCCESS_FETCH_DOMAINS,
+    RELIABLE_WEB_DOMAINS,
+    SCHOLARLY_PDF_DOMAINS,
+    domain_matches,
+    web_query_traits,
+)
+from ds_course_agent.shared.config_utils import config_bool, config_float, config_int
 
 logger = logging.getLogger(__name__)
 
@@ -139,30 +148,11 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             host = ""
         return host[4:] if host.startswith("www.") else host
 
-    def _short_text(self, text: Any, max_chars: int = 60) -> str:
+    def _short_text(self, text: Any, max_chars: int = 72) -> str:
         value = " ".join(str(text or "").split())
         if len(value) <= max_chars:
             return value
         return value[:max_chars].rstrip() + "..."
-
-    def _config_int(
-        self,
-        name: str,
-        default: int,
-        *,
-        minimum: int = 0,
-        maximum: int | None = None,
-    ) -> int:
-        import ds_course_agent.shared.config as config
-
-        try:
-            value = int(getattr(config, name, default))
-        except (TypeError, ValueError):
-            value = default
-        value = max(value, minimum)
-        if maximum is not None:
-            value = min(value, maximum)
-        return value
 
     def _result_url(self, result: Any) -> str:
         if isinstance(result, dict):
@@ -222,40 +212,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         }
 
     def _web_query_traits(self, question: str) -> dict[str, bool]:
-        import re
-
-        raw = str(question or "")
-        compact = "".join(raw.split())
-        lowered = raw.lower()
-        ascii_alnum = "".join(ch for ch in compact if ch.isascii() and ch.isalnum())
-        is_short_acronym = bool(
-            ascii_alnum
-            and ascii_alnum.upper() == ascii_alnum
-            and 2 <= len(ascii_alnum) <= 8
-        )
-        project_terms = (
-            "github", "开源", "项目", "repo", "repository", "stars", "star",
-            "高星", "列表", "推荐", "有哪些", "盘点", "排行", "工具", "论文",
-            "paper", "arxiv",
-        )
-        current_terms = (
-            "最新", "最近", "today", "2025", "2026", "版本", "发布", "更新",
-            "新闻", "政策", "current", "latest", "recent",
-        )
-        compare_terms = ("对比", "比较", "区别", "vs", "versus", "优缺点", "选型")
-        high_stakes_terms = (
-            "医疗", "诊断", "法律", "合同", "诉讼", "投资", "股票", "基金", "金融建议",
-            "medical", "legal", "investment", "finance",
-        )
-        return {
-            "short_acronym": is_short_acronym,
-            "very_short": len(compact) <= 12,
-            "project_or_list": any(term in lowered or term in raw for term in project_terms),
-            "current": any(term in lowered or term in raw for term in current_terms),
-            "compare": any(term in lowered or term in raw for term in compare_terms),
-            "high_stakes": any(term in lowered or term in raw for term in high_stakes_terms),
-            "has_question_mark": bool(re.search(r"[?？]", raw)),
-        }
+        return web_query_traits(question).as_dict()
 
     def _adaptive_fetch_target(self, question: str) -> int:
         traits = self._web_query_traits(question)
@@ -270,12 +227,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         return 1
 
     def _fetch_total_timeout_seconds(self, question: str) -> float:
-        import ds_course_agent.shared.config as config
-
-        try:
-            configured = float(getattr(config, "WEB_FETCH_TOTAL_TIMEOUT_SECONDS", 0.0))
-        except (TypeError, ValueError):
-            configured = 0.0
+        configured = config_float("WEB_FETCH_TOTAL_TIMEOUT_SECONDS", 0.0, minimum=0.0)
         if configured > 0:
             return max(configured, 0.5)
 
@@ -289,26 +241,26 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         return 6.0
 
     def _fetch_plan(self, question: str = "") -> tuple[int, int, int]:
-        configured_target = self._config_int("WEB_FETCH_TOP_N", 2, minimum=0, maximum=8)
+        configured_target = config_int("WEB_FETCH_TOP_N", 4, minimum=0, maximum=8)
         # WEB_FETCH_ENABLED is the off switch.  Treat TOP_N=0 as "no explicit
         # cap" (bounded by the internal safety maximum) instead of silently
         # disabling page reads.
         if configured_target <= 0:
             configured_target = 8
-        adaptive_enabled = self._config_bool("WEB_FETCH_ADAPTIVE_ENABLED", True)
+        adaptive_enabled = config_bool("WEB_FETCH_ADAPTIVE_ENABLED", True)
         if adaptive_enabled and configured_target > 0:
             target_successes = min(configured_target, self._adaptive_fetch_target(question))
         else:
             target_successes = configured_target
 
-        dynamic_attempts = {
-            0: 0,
-            1: 4,
-            2: 6,
-            3: 8,
-            4: 10,
-        }.get(target_successes, max(target_successes * 3, target_successes))
-        max_attempts = self._config_int(
+        dynamic_attempts = (
+            0
+            if target_successes <= 0
+            else min(target_successes * 2 + 2, 10)
+            if target_successes <= 4
+            else max(target_successes * 3, target_successes)
+        )
+        max_attempts = config_int(
             "WEB_FETCH_MAX_ATTEMPTS",
             dynamic_attempts,
             minimum=target_successes,
@@ -316,18 +268,8 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         )
         if adaptive_enabled and target_successes > 0:
             max_attempts = min(max_attempts, max(dynamic_attempts, target_successes))
-        max_workers = self._config_int("WEB_FETCH_MAX_WORKERS", 4, minimum=1, maximum=8)
+        max_workers = config_int("WEB_FETCH_MAX_WORKERS", 4, minimum=1, maximum=8)
         return target_successes, max_attempts, max_workers
-
-    def _config_bool(self, name: str, default: bool = False) -> bool:
-        import ds_course_agent.shared.config as config
-
-        value = getattr(config, name, default)
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            return value.strip().lower() in {"1", "true", "yes", "on"}
-        return bool(value)
 
     def _is_low_success_fetch_target(self, url: str, question: str = "") -> bool:
         from urllib.parse import urlsplit
@@ -345,23 +287,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         def _explicitly_requested(*terms: str) -> bool:
             return any(term and term in q for term in terms)
 
-        low_success_domains = (
-            "youtube.com",
-            "youtu.be",
-            "twitter.com",
-            "x.com",
-            "facebook.com",
-            "instagram.com",
-            "tiktok.com",
-            "linkedin.com",
-            "reddit.com",
-            "bilibili.com",
-            "zhihu.com",
-            "weixin.qq.com",
-            "mp.weixin.qq.com",
-            "quora.com",
-        )
-        if any(domain == item or domain.endswith("." + item) for item in low_success_domains):
+        if domain_matches(domain, LOW_SUCCESS_FETCH_DOMAINS):
             if (
                 ("youtube" in domain or "youtu.be" in domain)
                 and _explicitly_requested("youtube", "youtu.be", "视频", "教程")
@@ -376,15 +302,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             return True
 
         if parsed_path.endswith(".pdf"):
-            scholarly_pdf_domains = (
-                "arxiv.org",
-                "openreview.net",
-                "aclweb.org",
-                "papers.nips.cc",
-                "proceedings.mlr.press",
-                "jmlr.org",
-            )
-            if any(domain == item or domain.endswith("." + item) for item in scholarly_pdf_domains):
+            if domain_matches(domain, SCHOLARLY_PDF_DOMAINS):
                 return False
             return not _explicitly_requested("pdf", "论文", "paper", "arxiv")
 
@@ -410,24 +328,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             source_index = 999
 
         score = source_index
-        reliable_domains = (
-            "arxiv.org",
-            "openreview.net",
-            "github.com",
-            "docs.python.org",
-            "readthedocs.io",
-            "huggingface.co",
-            "wikipedia.org",
-            "acm.org",
-            "ieee.org",
-            "springer.com",
-            "nature.com",
-            "edu",
-            "edu.cn",
-            "gov",
-            "gov.cn",
-        )
-        if any(domain == item or domain.endswith("." + item) for item in reliable_domains):
+        if domain_matches(domain, RELIABLE_WEB_DOMAINS):
             score -= 30
         if domain.startswith("docs.") or ".docs." in domain or "/docs" in url:
             score -= 15
@@ -536,7 +437,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
     def _web_search_scope_response(self, question: str) -> str | None:
         """Return a polite refusal when explicit web search is outside scope."""
 
-        if not self._config_bool("WEB_SEARCH_TEACHING_SCOPE_ENABLED", True):
+        if not config_bool("WEB_SEARCH_TEACHING_SCOPE_ENABLED", True):
             return None
 
         from ds_course_agent.rag.scope_guard import assess_query_scope
@@ -599,19 +500,20 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
 
     def _choose_chat_fn(self, agent: Any):
         direct_chat = getattr(agent, "direct_chat", None)
-        return (
-            direct_chat
-            if callable(direct_chat) and ("direct_chat" in getattr(agent, "__dict__", {}) or hasattr(agent, "llm"))
-            else agent.chat
-        )
+        explicit_direct_chat = vars(agent).get("direct_chat") if hasattr(agent, "__dict__") else None
+        if callable(explicit_direct_chat):
+            return explicit_direct_chat
+        if callable(direct_chat) and getattr(agent, "llm", None) is not None:
+            return direct_chat
+        return agent.chat
 
     def _search_top_k(self, question: str) -> int | None:
-        explicit = self._config_int("WEB_SEARCH_TOP_K", 0, minimum=0, maximum=20)
+        explicit = config_int("WEB_SEARCH_TOP_K", 0, minimum=0, maximum=20)
         if explicit > 0:
             return explicit
 
-        min_top_k = self._config_int("WEB_SEARCH_MIN_TOP_K", 6, minimum=1, maximum=20)
-        max_top_k = self._config_int("WEB_SEARCH_MAX_TOP_K", 12, minimum=min_top_k, maximum=20)
+        min_top_k = config_int("WEB_SEARCH_MIN_TOP_K", 8, minimum=1, maximum=20)
+        max_top_k = config_int("WEB_SEARCH_MAX_TOP_K", 16, minimum=min_top_k, maximum=20)
         traits = self._web_query_traits(question)
 
         # Short acronyms / ambiguous terms need a larger candidate pool so the
@@ -671,7 +573,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             return {
                 "fallback": (
                     "联网搜索暂时不可用。请稍后重试，或关闭“联网搜索”后继续使用课程资料问答。\n\n"
-                    f"（错误信息：{str(exc)[:120]}）"
+                    f"（错误信息：{truncate_error(exc)}）"
                 )
             }
 
@@ -710,9 +612,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         fetch_pages = []
         fetch_context = ""
         try:
-            import ds_course_agent.shared.config as config
-
-            if bool(getattr(config, "WEB_FETCH_ENABLED", False)):
+            if config_bool("WEB_FETCH_ENABLED", False):
                 from ds_course_agent.tools.web_fetch import (
                     compact_fetched_pages,
                     enrich_sources_with_fetch_metadata,
@@ -837,139 +737,25 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             result = "".join(result)
         return result
 
-    def stream_execute(self, agent: Any, route_state: dict[str, Any]) -> Iterator[Any]:
+    def _stream_fetch_context(
+        self,
+        route_state: dict[str, Any],
+        *,
+        question: str,
+        response_results: list[Any],
+        sources: list[dict[str, Any]],
+        evidence_context: str,
+    ) -> Iterator[Any]:
+        """Yield web-fetch progress events and return enriched context metadata."""
+
         from ds_course_agent.rag.query_trace import trace_error, trace_step, trace_span
-        from ds_course_agent.tools._shared import _track_retrieval
 
-        context = route_state["context"]
-        question = context.original_query
-        chat_history = route_state["chat_history"]
-
-        trace_step("agent.branch", branch="web_search")
-
-        scope_response = self._web_search_scope_response(question)
-        if scope_response:
-            event = self._stream_progress_event(
-                route_state,
-                "web_search_scope",
-                "联网搜索限于教学相关资料",
-                tool="web_search_tool",
-                details={"query": question, "scope": "teaching"},
-            )
-            if event:
-                yield event
-            yield from agent._yield_text_chunks(scope_response)
-            return
-
-        event = self._stream_progress_event(
-            route_state,
-            "web_search_start",
-            "联网搜索中",
-            tool="web_search_tool",
-            details={"query": question},
-        )
-        if event:
-            yield event
-
-        try:
-            from ds_course_agent.tools.web_search import search_web
-
-            with trace_span("execute.web_search_tool"):
-                web_response = self._invoke_search_web(search_web, question)
-        except Exception as exc:
-            trace_error("execute.web_search_tool", exc)
-            event = self._stream_progress_event(
-                route_state,
-                "web_search_error",
-                "联网搜索暂时不可用",
-                tool="web_search_tool",
-                details={"query": question, "error": str(exc)[:160]},
-            )
-            if event:
-                yield event
-            yield from agent._yield_text_chunks(
-                "联网搜索暂时不可用。请稍后重试，或关闭“联网搜索”后继续使用课程资料问答。\n\n"
-                f"（错误信息：{str(exc)[:120]}）"
-            )
-            return
-
-        provider = str(getattr(web_response, "provider", "") or "").strip()
-        sources = self._response_sources(web_response)
-        response_error = getattr(web_response, "error", None)
-        response_results = self._response_results(web_response)
-        result_payloads = [
-            self._result_progress_payload(result, index)
-            for index, result in enumerate(response_results, start=1)
-        ]
-
-        if response_error and not response_results:
-            event = self._stream_progress_event(
-                route_state,
-                "web_search_error",
-                "联网搜索未获得可用结果",
-                tool="web_search_tool",
-                details={
-                    "query": question,
-                    "provider": provider,
-                    "found_count": 0,
-                    "error": str(response_error)[:160],
-                },
-            )
-            if event:
-                yield event
-            yield from agent._yield_text_chunks(
-                "联网搜索暂时不可用，未获得可用搜索结果。\n\n"
-                f"原因：{response_error}\n\n"
-                "你可以稍后重试，或关闭“联网搜索”后继续使用课程资料问答。"
-            )
-            return
-
-        if not response_results:
-            event = self._stream_progress_event(
-                route_state,
-                "web_search_results",
-                "没有搜索到可用网页",
-                tool="web_search_tool",
-                details={
-                    "query": question,
-                    "provider": provider,
-                    "found_count": 0,
-                    "results": [],
-                },
-            )
-            if event:
-                yield event
-            yield from agent._yield_text_chunks(
-                "我已尝试联网搜索，但没有搜索到可用结果。"
-                "你可以换一个更具体的关键词，或稍后再试。"
-            )
-            return
-
-        event = self._stream_progress_event(
-            route_state,
-            "web_search_results",
-            f"搜索到 {len(response_results)} 个网页",
-            tool="web_search_tool",
-            details={
-                "query": question,
-                "provider": provider,
-                "found_count": len(response_results),
-                "results": result_payloads,
-            },
-        )
-        if event:
-            yield event
-
-        evidence_context = self._response_evidence_context(web_response)
-        fetch_pages = []
-        fetch_context = ""
+        fetch_pages: list[Any] = []
         attempted_fetch_count = 0
         fetched_count = 0
 
         try:
-            import ds_course_agent.shared.config as config
-
-            if bool(getattr(config, "WEB_FETCH_ENABLED", False)):
+            if config_bool("WEB_FETCH_ENABLED", False):
                 from ds_course_agent.tools.web_fetch import (
                     compact_fetched_pages,
                     enrich_sources_with_fetch_metadata,
@@ -1031,7 +817,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
 
                                 page = WebFetchResult(
                                     url=str(target.get("url") or ""),
-                                    error=str(exc)[:240],
+                                    error=truncate_error(exc),
                                     metadata={
                                         "source_index": target.get("source_index"),
                                         "source_id": target.get("source_index"),
@@ -1060,7 +846,6 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
                                     "web_fetch_page_done",
                                     self._short_text(
                                         page_payload["title"] or page_payload["domain"] or page_payload["url"],
-                                        72,
                                     ),
                                     tool="web_fetch_tool",
                                     details=page_payload,
@@ -1176,11 +961,154 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
                 details={
                     "attempted_count": attempted_fetch_count,
                     "fetched_count": fetched_count,
-                    "error": str(exc)[:160],
+                    "error": truncate_error(exc),
                 },
             )
             if event:
                 yield event
+
+        return {
+            "sources": sources,
+            "evidence_context": evidence_context,
+            "attempted_fetch_count": attempted_fetch_count,
+            "fetched_count": fetched_count,
+            "fetch_pages": fetch_pages,
+        }
+
+    def stream_execute(self, agent: Any, route_state: dict[str, Any]) -> Iterator[Any]:
+        from ds_course_agent.rag.query_trace import trace_error, trace_step, trace_span
+        from ds_course_agent.tools._shared import _track_retrieval
+
+        context = route_state["context"]
+        question = context.original_query
+        chat_history = route_state["chat_history"]
+
+        trace_step("agent.branch", branch="web_search")
+
+        scope_response = self._web_search_scope_response(question)
+        if scope_response:
+            event = self._stream_progress_event(
+                route_state,
+                "web_search_scope",
+                "联网搜索限于教学相关资料",
+                tool="web_search_tool",
+                details={"query": question, "scope": "teaching"},
+            )
+            if event:
+                yield event
+            yield from agent._yield_text_chunks(scope_response)
+            return
+
+        event = self._stream_progress_event(
+            route_state,
+            "web_search_start",
+            "联网搜索中",
+            tool="web_search_tool",
+            details={"query": question},
+        )
+        if event:
+            yield event
+
+        try:
+            from ds_course_agent.tools.web_search import search_web
+
+            with trace_span("execute.web_search_tool"):
+                web_response = self._invoke_search_web(search_web, question)
+        except Exception as exc:
+            trace_error("execute.web_search_tool", exc)
+            event = self._stream_progress_event(
+                route_state,
+                "web_search_error",
+                "联网搜索暂时不可用",
+                tool="web_search_tool",
+                details={"query": question, "error": truncate_error(exc)},
+            )
+            if event:
+                yield event
+            yield from agent._yield_text_chunks(
+                "联网搜索暂时不可用。请稍后重试，或关闭“联网搜索”后继续使用课程资料问答。\n\n"
+                f"（错误信息：{truncate_error(exc)}）"
+            )
+            return
+
+        provider = str(getattr(web_response, "provider", "") or "").strip()
+        sources = self._response_sources(web_response)
+        response_error = getattr(web_response, "error", None)
+        response_results = self._response_results(web_response)
+        result_payloads = [
+            self._result_progress_payload(result, index)
+            for index, result in enumerate(response_results, start=1)
+        ]
+
+        if response_error and not response_results:
+            event = self._stream_progress_event(
+                route_state,
+                "web_search_error",
+                "联网搜索未获得可用结果",
+                tool="web_search_tool",
+                details={
+                    "query": question,
+                    "provider": provider,
+                    "found_count": 0,
+                    "error": truncate_error(response_error),
+                },
+            )
+            if event:
+                yield event
+            yield from agent._yield_text_chunks(
+                "联网搜索暂时不可用，未获得可用搜索结果。\n\n"
+                f"原因：{response_error}\n\n"
+                "你可以稍后重试，或关闭“联网搜索”后继续使用课程资料问答。"
+            )
+            return
+
+        if not response_results:
+            event = self._stream_progress_event(
+                route_state,
+                "web_search_results",
+                "没有搜索到可用网页",
+                tool="web_search_tool",
+                details={
+                    "query": question,
+                    "provider": provider,
+                    "found_count": 0,
+                    "results": [],
+                },
+            )
+            if event:
+                yield event
+            yield from agent._yield_text_chunks(
+                "我已尝试联网搜索，但没有搜索到可用结果。"
+                "你可以换一个更具体的关键词，或稍后再试。"
+            )
+            return
+
+        event = self._stream_progress_event(
+            route_state,
+            "web_search_results",
+            f"搜索到 {len(response_results)} 个网页",
+            tool="web_search_tool",
+            details={
+                "query": question,
+                "provider": provider,
+                "found_count": len(response_results),
+                "results": result_payloads,
+            },
+        )
+        if event:
+            yield event
+
+        fetch_result = yield from self._stream_fetch_context(
+            route_state,
+            question=question,
+            response_results=response_results,
+            sources=sources,
+            evidence_context=self._response_evidence_context(web_response),
+        )
+        sources = fetch_result["sources"]
+        evidence_context = fetch_result["evidence_context"]
+        attempted_fetch_count = fetch_result["attempted_fetch_count"]
+        fetched_count = fetch_result["fetched_count"]
 
         _track_retrieval(sources, used=True)
 

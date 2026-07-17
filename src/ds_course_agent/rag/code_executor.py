@@ -20,11 +20,13 @@ import threading
 import time
 import uuid
 from contextlib import suppress
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
-import ds_course_agent.shared.config as config
 from ds_course_agent.shared.config.schema import Settings as _ConfigSettings
+from ds_course_agent.shared.config_utils import config_value
 
 
 # Matches a natural-language question appended to the end of a code line, e.g.
@@ -47,15 +49,7 @@ _TRAILING_QUESTION_RE = re.compile(
 
 
 def _python_exec_setting(name: str) -> Any:
-    settings = getattr(config, "settings", None)
-    if settings is not None and hasattr(settings, name):
-        return getattr(settings, name)
-    if hasattr(config, name):
-        return getattr(config, name)
-    field = _ConfigSettings.model_fields.get(name)
-    if field is not None:
-        return field.default
-    raise AttributeError(name)
+    return config_value(name)
 
 
 def _normalize_python_exec_backend(value: Any) -> str:
@@ -97,6 +91,64 @@ class _SandboxConcurrencyLimiter:
                 semaphore = threading.Semaphore(limit)
                 cls._semaphores[limit] = semaphore
             return semaphore
+
+
+class SandboxStatus(str, Enum):
+    """Structured status for sandbox execution results.
+
+    ``PythonSandbox.execute`` still returns a dict for compatibility; this enum
+    is used for new internal result construction so callers do not have to infer
+    status solely from ad-hoc strings and boolean flags.
+    """
+
+    SUCCESS = "success"
+    ERROR = "error"
+    TIMEOUT = "timeout"
+    DISABLED = "disabled"
+    BUSY = "busy"
+    INTERNAL_ERROR = "internal_error"
+
+
+@dataclass(frozen=True)
+class SandboxResult:
+    """Internal representation of a Python sandbox result.
+
+    Convert with ``to_dict()`` at the API boundary to keep the historical
+    dict-like contract intact.
+    """
+
+    stdout: str
+    stderr: str
+    exit_code: int
+    truncated: bool
+    backend: str
+    status: SandboxStatus
+    timeout: bool = False
+    sandbox_disabled: bool = False
+    sandbox_busy: bool = False
+    unsafe_host_fallback: bool = False
+    docker_infra_error: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+            "exit_code": self.exit_code,
+            "truncated": self.truncated,
+            "backend": self.backend,
+            "status": self.status.value,
+        }
+        if self.timeout:
+            result["timeout"] = True
+        if self.sandbox_disabled:
+            result["sandbox_disabled"] = True
+        if self.sandbox_busy:
+            result["sandbox_busy"] = True
+        if self.unsafe_host_fallback:
+            result["unsafe_host_fallback"] = True
+        if self.docker_infra_error:
+            result["docker_infra_error"] = True
+        return result
 
 
 def _strip_trailing_question(text: str) -> str:
@@ -696,13 +748,15 @@ class PythonSandbox:
         backend: str,
         truncated: bool,
     ) -> dict[str, Any]:
-        return {
-            "stdout": stdout,
-            "stderr": stderr,
-            "exit_code": exit_code,
-            "truncated": truncated,
-            "backend": backend,
-        }
+        status = SandboxStatus.SUCCESS if exit_code == 0 else SandboxStatus.ERROR
+        return SandboxResult(
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=exit_code,
+            truncated=truncated,
+            backend=backend,
+            status=status,
+        ).to_dict()
 
     def _timeout_result(self, exc: subprocess.TimeoutExpired, *, backend: str) -> dict[str, Any]:
         stdout, stderr, truncated = self._truncate_output(
@@ -720,50 +774,54 @@ class PythonSandbox:
         truncated: bool,
     ) -> dict[str, Any]:
         stderr = stderr or f"执行超时（超过 {self.timeout_sec} 秒），程序已被终止。"
-        return {
-            "stdout": stdout,
-            "stderr": stderr,
-            "exit_code": -1,
-            "truncated": truncated,
-            "backend": backend,
-            "timeout": True,
-        }
+        return SandboxResult(
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=-1,
+            truncated=truncated,
+            backend=backend,
+            status=SandboxStatus.TIMEOUT,
+            timeout=True,
+        ).to_dict()
 
     def _internal_error_result(self, exc: Exception, *, backend: str) -> dict[str, Any]:
         message = f"沙箱内部错误: {exc}"
         stdout, stderr, truncated = self._truncate_output("", message)
-        return {
-            "stdout": stdout,
-            "stderr": stderr,
-            "exit_code": -1,
-            "truncated": truncated,
-            "backend": backend,
-        }
+        return SandboxResult(
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=-1,
+            truncated=truncated,
+            backend=backend,
+            status=SandboxStatus.INTERNAL_ERROR,
+        ).to_dict()
 
     def _disabled_result(self, message: str) -> dict[str, Any]:
         stdout, stderr, truncated = self._truncate_output("", message)
-        return {
-            "stdout": stdout,
-            "stderr": stderr,
-            "exit_code": -1,
-            "truncated": truncated,
-            "backend": self.backend,
-            "sandbox_disabled": True,
-        }
+        return SandboxResult(
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=-1,
+            truncated=truncated,
+            backend=self.backend,
+            status=SandboxStatus.DISABLED,
+            sandbox_disabled=True,
+        ).to_dict()
 
     def _busy_result(self) -> dict[str, Any]:
         stdout, stderr, truncated = self._truncate_output(
             "",
             "代码执行队列繁忙，请稍后再试。",
         )
-        return {
-            "stdout": stdout,
-            "stderr": stderr,
-            "exit_code": -1,
-            "truncated": truncated,
-            "backend": self.backend,
-            "sandbox_busy": True,
-        }
+        return SandboxResult(
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=-1,
+            truncated=truncated,
+            backend=self.backend,
+            status=SandboxStatus.BUSY,
+            sandbox_busy=True,
+        ).to_dict()
 
     def _to_text(self, value: str | bytes | None) -> str:
         if value is None:

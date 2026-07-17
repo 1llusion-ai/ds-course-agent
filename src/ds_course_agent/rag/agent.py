@@ -1,28 +1,22 @@
-"""
-Agent 服务模块
-实现单智能体 Agent Loop，集成 RAG Tool
-使用 LangGraph 构建 Agent
+"""Agent service for the course RAG assistant.
+
+Implements a single-agent loop with RAG tools and LangGraph-backed tool use.
 """
 
-# 修复SSL证书路径（必须在导入其他模块前设置）
 import logging
-import os
 import re
-import uuid
-_correct_cert_path = r'D:\Anaconda\envs\RAG\Library\ssl\cacert.pem'
-if os.path.exists(_correct_cert_path):
-    os.environ['SSL_CERT_FILE'] = _correct_cert_path
-    os.environ['REQUESTS_CA_BUNDLE'] = _correct_cert_path
-
 import time
-from typing import Optional, Iterator
+import uuid
+from typing import Iterator, Optional
 
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import create_agent
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.shared.error_response import build_error_response, truncate_error
 from ds_course_agent.shared.llm import get_chat_model
+from ds_course_agent.shared.messages import message_content_text, stream_chunk_text
 from ds_course_agent.rag.prompt import get_system_prompt
 from ds_course_agent.rag.query_pipeline.utils import (
     build_grounded_query_from_history,
@@ -41,15 +35,18 @@ from ds_course_agent.hooks.clarification import ClarificationDetectorHook
 from ds_course_agent.hooks.learning_event import LearningEventHook
 from ds_course_agent.hooks.retrieval_guard import RetrievalGuardHook
 from ds_course_agent.rag.route_handlers import default_route_handlers
+from ds_course_agent.rag.taxonomy import (
+    classify_question_type,
+    special_case_response,
+)
 
-# 延迟导入 skills 避免循环导入
 # Skills are discovered from the `skills/` directory and loaded on demand.
 
 logger = logging.getLogger(__name__)
 
 
 class AgentService(object):
-    """单智能体 Agent 服务"""
+    """Single-agent teaching assistant service."""
 
     def __init__(self):
         self.llm = get_chat_model()
@@ -61,14 +58,14 @@ class AgentService(object):
         self.hooks = HookManager([RetrievalGuardHook(), self.learning_event_hook])
         self.route_handlers = default_route_handlers()
 
-        # 延迟导入避免循环导入
+        # Load skill executors after the core registry is initialized.
         self.skill_loader = get_skill_loader()
         self.explanation_skill = self.skill_loader.load_executor("personalized-explanation")
         self.learning_path_skill = self.skill_loader.load_executor("learning-path")
         self.misconception_skill = self.skill_loader.load_executor("misconception-handling")
         self.code_review_skill = self.skill_loader.load_executor("code-review")
 
-        # 如果使用本地Ollama，检查连接
+        # Validate local Ollama connectivity when not using a remote LLM.
         if not config.USE_REMOTE_LLM:
             self._check_ollama_connection()
 
@@ -283,22 +280,7 @@ class AgentService(object):
     def _extract_message_content(self, message) -> str:
         """Extract text from a direct chat-model response/chunk."""
 
-        content = getattr(message, "content", message)
-        if isinstance(content, bytes):
-            return content.decode("utf-8", errors="ignore")
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            parts = []
-            for item in content:
-                if isinstance(item, str):
-                    parts.append(item)
-                elif isinstance(item, dict):
-                    text = item.get("text") or item.get("content")
-                    if text:
-                        parts.append(str(text))
-            return "".join(parts)
-        return "" if content is None else str(content)
+        return stream_chunk_text(message)
 
     def _invoke_direct_messages_with_retry(
         self,
@@ -412,7 +394,7 @@ class AgentService(object):
 
         return self._build_error_response(
             "处理请求时出错",
-            f"错误信息：{str(exc)[:100]}",
+            f"错误信息：{truncate_error(exc)}",
             is_retryable=True
         )
 
@@ -576,24 +558,7 @@ class AgentService(object):
                 yield text
 
     def _extract_stream_text(self, chunk) -> str:
-        content = getattr(chunk, "content", chunk)
-
-        if isinstance(content, str):
-            return content
-
-        if isinstance(content, list):
-            parts = []
-            for item in content:
-                if isinstance(item, str):
-                    parts.append(item)
-                    continue
-                if isinstance(item, dict):
-                    text = item.get("text") or item.get("content")
-                    if text:
-                        parts.append(text)
-            return "".join(parts)
-
-        return ""
+        return stream_chunk_text(chunk)
 
     def _yield_text_chunks(self, text: str, chunk_size: int = 24) -> Iterator[str]:
         if not text:
@@ -630,22 +595,16 @@ class AgentService(object):
             return default
 
     def _build_error_response(self, title: str, detail: str, is_retryable: bool = True) -> str:
-        """构建用户友好的错误提示"""
-        retry_hint = "\n\n💡 请稍后重试，或联系管理员。" if is_retryable else ""
-        return f"""⚠️ **{title}**
+        """Build a user-facing error response."""
 
-{detail}{retry_hint}"""
+        return build_error_response(title, detail, retryable=is_retryable)
 
     def _extract_response(self, result: dict) -> str:
-        """从 Agent 结果中提取响应文本"""
+        """Extract response text from an agent result."""
         messages = result.get("messages", [])
         for msg in reversed(messages):
             if isinstance(msg, AIMessage) and msg.content:
-                # 确保返回有效的 UTF-8 字符串
-                content = msg.content
-                if isinstance(content, bytes):
-                    content = content.decode('utf-8', errors='ignore')
-                return content
+                return message_content_text(msg, list_joiner="", dict_keys=("text", "content"))
         return ""
 
     def _format_chat_history(self, chat_history: list) -> list:
@@ -828,49 +787,7 @@ class AgentService(object):
         )
 
     def _handle_special_case(self, question: str) -> Optional[str]:
-        normalized = normalize_query_text(question)
-
-        greeting_patterns = [
-            "你好", "您好", "hi", "hello", "早上好", "晚上好",
-        ]
-        gratitude_patterns = [
-            "谢谢", "多谢", "感谢", "收到", "好的谢谢", "好嘞谢谢",
-        ]
-        off_topic_patterns = [
-            "天气", "娱乐新闻", "八卦", "明星", "股价", "体育比分",
-            "电影票房", "政治新闻",
-        ]
-        homework_patterns = [
-            "标准答案", "直接给答案", "直接把", "代写作业", "帮我写作业",
-            "直接写给我", "考试答案",
-        ]
-        out_of_scope_technical_patterns = [
-            "lora", "qlora", "rlhf", "prompttuning", "prompt tuning",
-            "adapter", "peft",
-        ]
-
-        if any(pattern == normalized or normalized.startswith(pattern) for pattern in greeting_patterns):
-            return "你好！我是《数据科学导论》课程助教，有课程相关的问题可以随时问我。"
-
-        if any(pattern in normalized for pattern in gratitude_patterns) and len(normalized) <= 12:
-            return "不客气，你如果还有《数据科学导论》课程相关的问题，可以继续问我。"
-
-        if any(pattern in normalized for pattern in homework_patterns):
-            return (
-                "抱歉，作为课程助教，我不能直接代写作业或给出标准答案。"
-                "但我可以帮你梳理思路、方法和步骤，和你一起把题目拆开。"
-            )
-
-        if any(pattern in normalized for pattern in off_topic_patterns):
-            return "抱歉，我主要负责《数据科学导论》课程相关内容，其他话题我就不展开了。"
-
-        if any(pattern in normalized for pattern in out_of_scope_technical_patterns):
-            return (
-                "抱歉，这个问题不在《数据科学导论》当前课程范围内。"
-                "如果你想，我可以继续帮你回答课程里的数据分析、机器学习和相关基础概念。"
-            )
-
-        return None
+        return special_case_response(question)
 
     def _build_schedule_tool_query(self, question: str) -> str:
         normalized = normalize_query_text(question)
@@ -1608,25 +1525,13 @@ class AgentService(object):
         }
 
     def _classify_question_type(self, question: str) -> str:
-        """问题类型分类"""
-        q = question.lower()
-        if any(kw in q for kw in ["代码", "实现", "python", "怎么写", "示例"]):
-            return "代码实现"
-        elif any(kw in q for kw in ["公式", "推导", "证明", "数学"]):
-            return "数学推导"
-        elif any(kw in q for kw in ["应用", "例子", "场景", "实际"]):
-            return "应用场景"
-        elif any(kw in q for kw in ["区别", "对比", "vs", "比较"]):
-            return "概念对比"
-        else:
-            return "概念理解"
+        """Classify the lightweight learning-event question type."""
+
+        return classify_question_type(question)
 
     def end_session(self, student_id: str, session_id: str) -> None:
-        """
-        会话结束处理
-        触发画像聚合
-        """
-        logger.info("会话结束，聚合画像: %s", student_id)
+        """Finalize a session and trigger profile aggregation."""
+        logger.info("Session ended; aggregating profile: %s", student_id)
         self._get_hooks().on_session_end(
             session_id,
             student_id=student_id,
@@ -1634,7 +1539,7 @@ class AgentService(object):
         )
 
     def get_student_profile(self, student_id: str):
-        """获取学生画像"""
+        """Return the student profile."""
         return get_memory_core().get_profile(student_id)
 
 
@@ -1642,18 +1547,8 @@ _agent_service: Optional[AgentService] = None
 
 
 def get_agent_service() -> AgentService:
-    """获取 Agent 服务单例"""
+    """Return the AgentService singleton."""
     global _agent_service
     if _agent_service is None:
         _agent_service = AgentService()
     return _agent_service
-
-
-if __name__ == "__main__":
-    service = get_agent_service()
-
-    print("测试 Agent 服务:")
-    print("=" * 50)
-
-    response = service.chat("什么是数据科学？")
-    print(f"回答: {response}")

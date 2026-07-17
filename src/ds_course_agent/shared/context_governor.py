@@ -8,18 +8,23 @@ marked ``SystemMessage`` summary while the most recent turn(s) stay verbatim.
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 import re
 import concurrent.futures
 import threading
+import time
 from dataclasses import dataclass
 from typing import Any, Iterable
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.shared.config_utils import config_bool, config_float, config_int
+from ds_course_agent.shared.messages import (
+    normalize_content_text,
+    raw_message_content,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,39 +52,7 @@ CONTEXT_SUMMARY_MARKER = "context_governor_summary"
 CONTEXT_SUMMARY_TITLE = "上下文摘要"
 _SEMANTIC_SUMMARY_LOCK = threading.Lock()
 _SEMANTIC_SUMMARY_IN_FLIGHT: concurrent.futures.Future[str] | None = None
-
-
-def normalize_content_text(content: Any) -> str:
-    """Convert LangChain message content into plain text for estimation."""
-    if content is None:
-        return ""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-            elif isinstance(item, dict):
-                value = item.get("text") or item.get("content") or item.get("value")
-                if value is not None:
-                    parts.append(str(value))
-            elif hasattr(item, "text"):
-                parts.append(str(item.text))
-            elif hasattr(item, "content"):
-                parts.append(str(item.content))
-            elif item is not None:
-                parts.append(str(item))
-        return "\n".join(parts)
-    if isinstance(content, dict):
-        value = content.get("text") or content.get("content") or content.get("value")
-        if value is not None:
-            return str(value)
-        try:
-            return json.dumps(content, ensure_ascii=False, sort_keys=True)
-        except TypeError:
-            return str(content)
-    return str(content)
+_SEMANTIC_SUMMARY_RETRY_AFTER = 0.0
 
 
 def estimate_text_tokens(text: Any) -> int:
@@ -117,9 +90,7 @@ def message_role(message: Any) -> str:
 
 
 def message_content(message: Any) -> Any:
-    if isinstance(message, dict):
-        return message.get("content", "")
-    return getattr(message, "content", message)
+    return raw_message_content(message)
 
 
 def estimate_message_tokens(message: Any) -> int:
@@ -400,7 +371,7 @@ def _start_daemon_summary_call(prompt: str) -> concurrent.futures.Future[str]:
 
 
 def _semantic_summarize_source(source: str, *, max_chars: int, timeout_seconds: float) -> str:
-    global _SEMANTIC_SUMMARY_IN_FLIGHT
+    global _SEMANTIC_SUMMARY_IN_FLIGHT, _SEMANTIC_SUMMARY_RETRY_AFTER
 
     source = str(source or "").strip()
     if not source:
@@ -415,24 +386,40 @@ def _semantic_summarize_source(source: str, *, max_chars: int, timeout_seconds: 
     timeout_seconds = max(0.1, float(timeout_seconds or 3.0))
 
     with _SEMANTIC_SUMMARY_LOCK:
-        if _SEMANTIC_SUMMARY_IN_FLIGHT is not None and not _SEMANTIC_SUMMARY_IN_FLIGHT.done():
-            raise TimeoutError("previous semantic context summary is still running")
+        if _SEMANTIC_SUMMARY_IN_FLIGHT is not None:
+            if _SEMANTIC_SUMMARY_IN_FLIGHT.done() or _SEMANTIC_SUMMARY_IN_FLIGHT.cancelled():
+                _SEMANTIC_SUMMARY_IN_FLIGHT = None
+                _SEMANTIC_SUMMARY_RETRY_AFTER = 0.0
+            elif _SEMANTIC_SUMMARY_RETRY_AFTER and time.monotonic() >= _SEMANTIC_SUMMARY_RETRY_AFTER:
+                # A timed-out daemon thread may still be stuck in provider I/O.
+                # Let a later request retry after a short cool-down instead of
+                # pinning semantic summaries off forever or spawning a new
+                # daemon on every compaction attempt.
+                _SEMANTIC_SUMMARY_IN_FLIGHT = None
+                _SEMANTIC_SUMMARY_RETRY_AFTER = 0.0
+            else:
+                raise TimeoutError("previous semantic context summary is still running")
         _SEMANTIC_SUMMARY_IN_FLIGHT = _start_daemon_summary_call(prompt)
+        _SEMANTIC_SUMMARY_RETRY_AFTER = 0.0
         future = _SEMANTIC_SUMMARY_IN_FLIGHT
 
     try:
         summary = future.result(timeout=timeout_seconds)
     except concurrent.futures.TimeoutError as exc:
-        # A running Python thread cannot be force-killed safely.  Clear the
-        # process-wide guard anyway: the summary model is configured with its
-        # own timeout, and keeping the guard pinned forever permanently disables
-        # semantic summaries after one slow call.
+        # A running Python thread cannot be force-killed safely.  Keep the
+        # process-wide guard briefly so repeated compactions do not create an
+        # unbounded number of stuck daemon threads, but set a retry-after so the
+        # feature can recover without a process restart.
         future.cancel()
+        with _SEMANTIC_SUMMARY_LOCK:
+            if _SEMANTIC_SUMMARY_IN_FLIGHT is future and not (future.done() or future.cancelled()):
+                _SEMANTIC_SUMMARY_RETRY_AFTER = time.monotonic() + max(timeout_seconds, 1.0)
         raise TimeoutError("semantic context summary timed out") from exc
     finally:
         with _SEMANTIC_SUMMARY_LOCK:
-            if _SEMANTIC_SUMMARY_IN_FLIGHT is future:
+            if _SEMANTIC_SUMMARY_IN_FLIGHT is future and (future.done() or future.cancelled()):
                 _SEMANTIC_SUMMARY_IN_FLIGHT = None
+                _SEMANTIC_SUMMARY_RETRY_AFTER = 0.0
 
     return _truncate_text(str(summary or "").strip(), max_chars)
 
@@ -440,14 +427,14 @@ def _semantic_summarize_source(source: str, *, max_chars: int, timeout_seconds: 
 def _summarize_messages_for_context(messages: Iterable[Any], *, max_chars: int) -> tuple[str, str]:
     deterministic_source = _summarize_messages(messages, max_chars=max(1000, max_chars * 4)).strip()
     deterministic = _truncate_text(deterministic_source, max_chars).strip()
-    if not bool(getattr(config, "CONTEXT_SEMANTIC_SUMMARY_ENABLED", False)):
+    if not config_bool("CONTEXT_SEMANTIC_SUMMARY_ENABLED", False):
         return deterministic, "deterministic"
 
     try:
         semantic = _semantic_summarize_source(
             deterministic_source,
             max_chars=max_chars,
-            timeout_seconds=float(getattr(config, "CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS", 3.0) or 3.0),
+            timeout_seconds=config_float("CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS", 3.0, minimum=0.1),
         )
         if semantic:
             _trace_action("semantic_summary", status="ok", summary_chars=len(semantic))
@@ -501,12 +488,12 @@ def compact_messages_to_budget(
     preserve_recent = (
         int(preserve_recent)
         if preserve_recent is not None
-        else int(getattr(config, "SHORT_MEMORY_RECENT_MESSAGES", 12) or 12)
+        else config_int("SHORT_MEMORY_RECENT_MESSAGES", 12, minimum=1)
     )
     preserve_recent = max(1, preserve_recent)
     summary_max_chars = max(
         80,
-        int(summary_max_chars if summary_max_chars is not None else getattr(config, "SHORT_MEMORY_SUMMARY_MAX_CHARS", 2000)),
+        int(summary_max_chars if summary_max_chars is not None else config_int("SHORT_MEMORY_SUMMARY_MAX_CHARS", 2000, minimum=1)),
     )
 
     leading: list[BaseMessage] = []

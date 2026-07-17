@@ -4,6 +4,8 @@ import subprocess
 from ds_course_agent.rag.code_executor import (
     _DockerPythonExecutor,
     PythonSandbox,
+    SandboxResult,
+    SandboxStatus,
     extract_python_code,
     extract_question,
     format_python_execution_answer,
@@ -17,10 +19,27 @@ def test_python_sandbox_executes_code_successfully():
 
     result = sandbox.execute("print(1 + 1)")
 
+    assert result.get("status") == SandboxStatus.SUCCESS.value
     assert result["exit_code"] == 0
     assert result["stdout"].strip() == "2"
     assert result["stderr"] == ""
     assert result["truncated"] is False
+
+
+def test_sandbox_result_preserves_dict_api_compatibility():
+    result = SandboxResult(
+        stdout="",
+        stderr="代码执行队列繁忙，请稍后再试。",
+        exit_code=-1,
+        truncated=False,
+        backend="docker",
+        status=SandboxStatus.BUSY,
+        sandbox_busy=True,
+    ).to_dict()
+
+    assert result.get("status") == "busy"
+    assert result.get("sandbox_busy") is True
+    assert result.get("stdout") == ""
 
 
 def test_python_sandbox_backend_uses_settings_normalization():

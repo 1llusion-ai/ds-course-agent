@@ -8,6 +8,7 @@ from typing import Any, Optional
 from langchain_core.messages import BaseMessage
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.shared.messages import message_content_text
 
 JUDGEMENT_CUES = ["是否", "要不要", "需不需要", "还需要", "还能不能", "可不可以", "有没有必要"]
 SUMMARY_MARKER = "short_memory_summary"
@@ -147,23 +148,14 @@ def message_role(message: Any) -> str:
 
 
 def message_content(message: Any) -> str:
-    """Extract text content from BaseMessage/dict/multimodal-list messages."""
-    content = getattr(message, "content", None) if isinstance(message, BaseMessage) else None
-    if isinstance(message, dict):
-        content = message.get("content", "")
-    if isinstance(content, str):
-        return re.sub(r"\s+", " ", content).strip()
-    if isinstance(content, list):
-        parts = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-            elif isinstance(item, dict):
-                text = item.get("text") or item.get("content")
-                if text:
-                    parts.append(str(text))
-        return re.sub(r"\s+", " ", " ".join(parts)).strip()
-    return re.sub(r"\s+", " ", str(content or "")).strip()
+    """Extract normalized text from BaseMessage/dict/multimodal messages."""
+
+    return message_content_text(
+        message,
+        list_joiner=" ",
+        normalize_whitespace=True,
+        dict_keys=("text", "content"),
+    )
 
 
 def collect_recent_context(

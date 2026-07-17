@@ -26,9 +26,9 @@ from ds_course_agent.shared.context_governor import (
     ContextBudget,
     estimate_text_tokens,
     message_role,
-    normalize_content_text,
     warn_if_large_text_payload,
 )
+from ds_course_agent.shared.messages import normalize_content_text
 from ds_course_agent.shared.paths import PROJECT_ROOT
 
 _SAFE_SLUG_RE = re.compile(r"[^A-Za-z0-9_.-]+")

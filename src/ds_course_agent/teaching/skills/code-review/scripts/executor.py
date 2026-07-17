@@ -21,7 +21,7 @@ from ds_course_agent.rag.code_executor import (  # noqa: E402
     extract_python_code,
     extract_question,
 )
-from ds_course_agent.shared.context_governor import normalize_content_text  # noqa: E402
+from ds_course_agent.shared.messages import normalize_content_text  # noqa: E402
 
 
 logger = logging.getLogger(__name__)
@@ -33,18 +33,11 @@ def _get_llm():
     return get_chat_model()
 
 
-def _stringify_llm_content(value) -> str:
-    """Normalize LangChain/OpenAI-style message content to plain text."""
-
-    return normalize_content_text(value)
-
-
 def _call_llm(prompt: str) -> str:
     llm = _get_llm()
     response = llm.invoke(prompt)
-    if hasattr(response, "content"):
-        return _stringify_llm_content(response.content)
-    return _stringify_llm_content(response)
+    content = getattr(response, "content", response)
+    return normalize_content_text(content)
 
 
 class CodeReviewSkill:
