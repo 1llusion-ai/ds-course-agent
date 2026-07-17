@@ -182,7 +182,7 @@ class TestQueryRouter:
         ]
 
     def test_plain_code_request_without_execution_is_not_forced_to_rag(self):
-        """普通写代码请求不再因 code_request 自动进入课程 RAG。"""
+        """普通写代码请求不再因 code_request 自动进入课程 RAG 或执行工具。"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
 
@@ -198,6 +198,7 @@ class TestQueryRouter:
         assert "code_request" in context.detected_intents
         assert "python_execution" not in context.detected_intents
         assert decision.route == RouteType.GENERIC_AGENT
+        assert decision.metadata["direct_llm_answer"] is True
 
     def test_code_explanation_with_payload_uses_autonomous_agent_not_forced_rag(self):
         """贴代码让助教解析时应由 agent 自主选择工具，不能直接 RAG。"""
@@ -233,8 +234,8 @@ class TestQueryRouter:
         assert decision.retrieval_policy == "optional"
         assert decision.metadata["autonomous_tool_choice"] is True
 
-    def test_python_course_demo_uses_autonomous_agent_not_forced_rag(self):
-        """“用 Python 演示课程概念”是模糊工具选择，不应直接强制 RAG。"""
+    def test_python_course_demo_uses_direct_answer_not_execution_tool(self):
+        """“用 Python 演示课程概念”应直接给示例，不应先调用执行工具。"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
         router = get_router()
 
@@ -258,6 +259,8 @@ class TestQueryRouter:
         assert "code_request" in context.detected_intents
         assert decision.route == RouteType.GENERIC_AGENT
         assert decision.retrieval_policy == "optional"
+        assert decision.metadata["direct_llm_answer"] is True
+        assert "autonomous_tool_choice" not in decision.metadata
 
     @pytest.mark.parametrize(
         "query",
@@ -537,7 +540,7 @@ class TestAgentRouteSharing:
         assert state["decision"].route == RouteType.CURRENT_DATETIME
 
     def test_code_autonomous_fast_path_skips_concept_map_and_profile(self, monkeypatch):
-        """代码解析/示例类 autonomous route 不应先支付 concept_map 成本。"""
+        """代码解析类 autonomous route 不应先支付 concept_map 成本。"""
         from ds_course_agent.rag.agent import AgentService
         from ds_course_agent.rag.query_pipeline import RouteType
 
@@ -574,6 +577,40 @@ class TestAgentRouteSharing:
         assert state["decision"].route == RouteType.GENERIC_AGENT
         assert state["decision"].retrieval_policy == "optional"
         assert state["decision"].metadata["autonomous_tool_choice"] is True
+        assert state["context"].metadata["grounded_tool_query"] == state["context"].normalized_query
+
+    def test_direct_code_example_fast_path_skips_concept_map_and_profile(self, monkeypatch):
+        """纯代码示例/演示请求直接回答，也不应先支付 concept_map 成本。"""
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.query_pipeline import RouteType
+
+        service = object.__new__(AgentService)
+        service.skill_loader = None
+
+        class FakeHistory:
+            messages = []
+
+        monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: FakeHistory())
+
+        def fail_get_memory_core():
+            raise AssertionError("profile should not load for direct code example fast path")
+
+        def fail_concept_map(question, top_k=3):
+            raise AssertionError("concept map should not run for direct code example fast path")
+
+        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", fail_get_memory_core)
+        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", fail_concept_map)
+        monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
+        monkeypatch.setattr(service, "_build_schedule_tool_query", lambda question: question)
+
+        state = service._prepare_query_route(
+            user_input="请用 Python 演示一次交叉验证",
+            session_id="session-1",
+            student_id="student-1",
+        )
+
+        assert state["decision"].route == RouteType.GENERIC_AGENT
+        assert state["decision"].metadata["direct_llm_answer"] is True
         assert state["context"].metadata["grounded_tool_query"] == state["context"].normalized_query
 
     def test_datetime_fast_path_skips_concept_map_and_profile(self, monkeypatch):

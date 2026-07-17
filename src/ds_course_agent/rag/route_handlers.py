@@ -1255,6 +1255,29 @@ class GenericAgentRouteHandler:
     def can_handle(self, agent: Any, route_state: dict[str, Any]) -> bool:
         return True
 
+    def _chat_callable_and_context(
+        self,
+        agent: Any,
+        route_state: dict[str, Any],
+        base_turn_context: str,
+    ):
+        can_direct_llm = getattr(agent, "_can_direct_llm_route", lambda _state: False)
+        direct_llm = bool(can_direct_llm(route_state))
+        if not direct_llm:
+            return agent.chat, base_turn_context, False
+
+        direct_chat = getattr(agent, "direct_chat", None)
+        if not callable(direct_chat):
+            return agent.chat, base_turn_context, False
+
+        build_direct_context = getattr(agent, "_build_direct_llm_turn_context", None)
+        turn_context = (
+            build_direct_context(route_state, base_turn_context)
+            if callable(build_direct_context)
+            else base_turn_context
+        )
+        return direct_chat, turn_context, True
+
     def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_pipeline import get_postprocessor
         from ds_course_agent.rag.query_trace import trace_step, trace_span
@@ -1264,13 +1287,14 @@ class GenericAgentRouteHandler:
         chat_history = route_state["chat_history"]
         execution_query = agent._route_execution_query(context, decision)
         turn_context = agent._build_turn_system_context(route_state)
+        chat_fn, turn_context, direct_llm = self._chat_callable_and_context(agent, route_state, turn_context)
 
         trace_step("agent.branch", branch="generic_agent")
         if stream:
-            with trace_span("execute.agent_chat_stream"):
+            with trace_span("execute.agent_chat_stream", direct_llm=direct_llm):
                 streamed_parts = [
                     chunk
-                    for chunk in agent.chat(
+                    for chunk in chat_fn(
                         execution_query,
                         chat_history,
                         stream=True,
@@ -1280,16 +1304,16 @@ class GenericAgentRouteHandler:
                 ]
             result = "".join(streamed_parts)
             if result == "":
-                with trace_span("execute.agent_chat"):
-                    result = agent.chat(
+                with trace_span("execute.agent_chat", direct_llm=direct_llm):
+                    result = chat_fn(
                         execution_query,
                         chat_history,
                         stream=False,
                         turn_context=turn_context,
                     )
         else:
-            with trace_span("execute.agent_chat"):
-                result = agent.chat(
+            with trace_span("execute.agent_chat", direct_llm=direct_llm):
+                result = chat_fn(
                     execution_query,
                     chat_history,
                     stream=False,
@@ -1325,11 +1349,12 @@ class GenericAgentRouteHandler:
             chat_history = route_state["chat_history"]
             execution_query = agent._route_execution_query(context, decision)
             turn_context = agent._build_turn_system_context(route_state)
+            chat_fn, turn_context, direct_llm = self._chat_callable_and_context(agent, route_state, turn_context)
 
             streamed_any = False
             streamed_parts: list[str] = []
-            with trace_span("execute.agent_chat_stream"):
-                for chunk in agent.chat(
+            with trace_span("execute.agent_chat_stream", direct_llm=direct_llm):
+                for chunk in chat_fn(
                     execution_query,
                     chat_history,
                     stream=True,

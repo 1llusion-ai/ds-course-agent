@@ -749,6 +749,78 @@ def test_direct_stream_route_runs_stream_end_hooks_and_retrieval_guard_trace():
     )
 
 
+def test_direct_llm_generic_route_bypasses_tool_agent_for_streaming():
+    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.rag.route_handlers import GenericAgentRouteHandler
+
+    state = _route_state(route=RouteType.GENERIC_AGENT, retrieval_policy="optional")
+    state["decision"].metadata["direct_llm_answer"] = True
+    captured = {}
+
+    def forbidden_chat(*_args, **_kwargs):
+        raise AssertionError("tool-calling agent should not run for direct LLM route")
+
+    def fake_direct_chat(user_input, chat_history=None, stream=False, turn_context=None):
+        assert stream is True
+        captured["turn_context"] = turn_context
+        yield "示例"
+        yield "代码"
+
+    service = AgentService.__new__(AgentService)
+    service.chat = forbidden_chat
+    service.direct_chat = fake_direct_chat
+    service.hooks = HookManager([])
+
+    chunks = list(GenericAgentRouteHandler().stream_execute(service, state))
+
+    assert chunks == ["示例", "代码"]
+    assert "Direct Answer Mode" in captured["turn_context"]
+
+
+def test_agent_stream_messages_accepts_langgraph_model_node():
+    from langchain_core.messages import AIMessageChunk
+
+    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
+
+    class FakeLangGraphAgent:
+        def stream(self, payload, stream_mode=None):
+            assert payload == {"messages": ["hello"]}
+            assert stream_mode == "messages"
+            yield AIMessageChunk(content="模"), {"langgraph_node": "model"}
+            yield AIMessageChunk(content="型"), {"langgraph_node": "model"}
+
+    service = AgentService.__new__(AgentService)
+    service.agent = FakeLangGraphAgent()
+
+    token = begin_query_trace({"entrypoint": "unit_test"})
+    chunks = list(service._stream_chat_messages(["hello"]))
+    trace = end_query_trace(token)
+
+    assert chunks == ["模", "型"]
+    summary = next(event for event in trace["events"] if event["stage"] == "agent.stream_messages")
+    assert summary["data"]["emitted"] == 2
+    assert summary["data"]["nodes"] == {"model": 2}
+
+
+def test_agent_stream_messages_filters_tool_node_content():
+    from langchain_core.messages import AIMessageChunk, ToolMessage
+
+    from ds_course_agent.rag.agent import AgentService
+
+    class FakeLangGraphAgent:
+        def stream(self, payload, stream_mode=None):
+            yield ToolMessage(content="工具原始结果不应直接流给用户", tool_call_id="call-1"), {
+                "langgraph_node": "tools",
+            }
+            yield AIMessageChunk(content="最终回答"), {"langgraph_node": "model"}
+
+    service = AgentService.__new__(AgentService)
+    service.agent = FakeLangGraphAgent()
+
+    assert list(service._stream_chat_messages(["hello"])) == ["最终回答"]
+
+
 def test_context_governor_compaction_failure_records_trace_error(monkeypatch):
     from langchain_core.messages import HumanMessage
 

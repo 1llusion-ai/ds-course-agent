@@ -97,6 +97,19 @@ _HYPERPARAMETER_DOMAIN_CUES = [
     "随机森林",
 ]
 
+_DIRECT_CODE_EXAMPLE_CUES = [
+    "演示",
+    "示例",
+    "样例",
+    "例子",
+    "代码",
+    "实现",
+    "怎么写",
+    "写一段",
+    "给我一段",
+    "用python",
+]
+
 
 def _has_hyperparameter_domain_cue(query: str) -> bool:
     return any(cue in query for cue in _HYPERPARAMETER_DOMAIN_CUES)
@@ -284,6 +297,18 @@ class QueryRouter:
         if "code_request" not in intents and not self._contains_code_payload(query):
             return None
 
+        if self._is_direct_code_example_request(context, query):
+            return RouteDecision(
+                route=RouteType.GENERIC_AGENT,
+                confidence=0.82,
+                reasons=["代码/示例/演示请求，直接生成示例，不调用执行工具"],
+                retrieval_policy="optional",
+                metadata={
+                    "direct_llm_answer": True,
+                    "direct_llm_reason": "code_example_without_execution",
+                },
+            )
+
         return RouteDecision(
             route=RouteType.GENERIC_AGENT,
             confidence=0.78,
@@ -299,6 +324,27 @@ class QueryRouter:
                 ],
             },
         )
+
+    def _is_direct_code_example_request(self, context: QueryContext, query: str) -> bool:
+        """Return whether a code request should be answered directly.
+
+        Requests like “请用 Python 演示一次交叉验证” ask for a code example, not
+        for execution.  Letting the tool-capable agent handle those turns can
+        make the model emit a hidden ``python_exec_tool`` call first, which
+        buffers streaming and can produce a misleading “代码逻辑正确” answer.
+        Explicit run/debug/review requests and pasted code remain outside this
+        direct path.
+        """
+
+        intents = set(context.detected_intents or [])
+        if "code_request" not in intents:
+            return False
+        if "python_execution" in intents or "code_review" in intents:
+            return False
+        if self._contains_code_payload(query):
+            return False
+        compact = "".join(query.split())
+        return any(cue in compact for cue in _DIRECT_CODE_EXAMPLE_CUES)
 
     def _contains_code_payload(self, query: str) -> bool:
         """Best-effort broad code-payload detector used only to avoid forced RAG."""

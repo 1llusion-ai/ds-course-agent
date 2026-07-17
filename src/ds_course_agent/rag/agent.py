@@ -7,6 +7,7 @@ import logging
 import re
 import time
 import uuid
+from collections.abc import Mapping
 from typing import Iterator, Optional
 
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
@@ -43,6 +44,11 @@ from ds_course_agent.rag.taxonomy import (
 # Skills are discovered from the `skills/` directory and loaded on demand.
 
 logger = logging.getLogger(__name__)
+
+_AGENT_STREAM_TEXT_NODES = {"agent", "model"}
+_AGENT_STREAM_TOOL_NODES = {"tool", "tools"}
+_AGENT_STREAM_NON_ASSISTANT_TYPES = {"human", "system", "tool"}
+_AGENT_STREAM_ASSISTANT_TYPES = {"ai", "aimessagechunk"}
 
 
 class AgentService(object):
@@ -546,16 +552,105 @@ class AgentService(object):
                         yield msg.content
 
     def _stream_chat_messages(self, messages: list) -> Iterator[str]:
-        for chunk, metadata in self.agent.stream(
-            {"messages": messages},
-            stream_mode="messages",
-        ):
-            if metadata.get("langgraph_node") != "agent":
-                continue
+        """Yield text deltas from LangGraph/LangChain agent message streams.
 
-            text = self._extract_stream_text(chunk)
-            if text:
-                yield text
+        LangChain 1.x ``create_agent(...).stream(..., stream_mode="messages")``
+        emits model tokens from the ``model`` node, while older graphs may use
+        ``agent``.  The previous implementation accepted only ``agent`` and
+        silently dropped all ``model`` chunks, which made SSE appear buffered
+        and forced a non-streaming fallback.
+
+        Keep the filtering conservative around tool outputs: tool node/message
+        contents are never sent to the user as deltas.  Assistant text chunks
+        from known model/agent nodes, and assistant-like chunks from providers
+        that omit node metadata, are allowed.
+        """
+
+        stats: dict[str, object] = {
+            "seen": 0,
+            "emitted": 0,
+            "skipped_empty": 0,
+            "skipped_tool": 0,
+            "skipped_non_assistant": 0,
+            "skipped_node": 0,
+            "nodes": {},
+        }
+
+        try:
+            for item in self.agent.stream(
+                {"messages": messages},
+                stream_mode="messages",
+            ):
+                chunk, metadata = self._unpack_agent_stream_item(item)
+                stats["seen"] = int(stats["seen"]) + 1
+                node = self._agent_stream_node(metadata)
+                if node:
+                    nodes = stats["nodes"]
+                    if isinstance(nodes, dict):
+                        nodes[node] = int(nodes.get(node, 0)) + 1
+
+                text, skip_reason = self._agent_stream_delta_text(chunk, metadata)
+                if text:
+                    stats["emitted"] = int(stats["emitted"]) + 1
+                    yield text
+                    continue
+
+                key = f"skipped_{skip_reason}"
+                if key in stats:
+                    stats[key] = int(stats[key]) + 1
+        finally:
+            self._trace_agent_stream_message_stats(stats)
+
+    def _unpack_agent_stream_item(self, item) -> tuple[object, Mapping[str, object]]:
+        """Normalize LangGraph stream items across minor API variations."""
+
+        if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], Mapping):
+            return item[0], item[1]
+        return item, {}
+
+    def _agent_stream_node(self, metadata: Mapping[str, object] | None) -> str:
+        if not metadata:
+            return ""
+        value = metadata.get("langgraph_node")
+        return str(value or "")
+
+    def _agent_stream_message_type(self, chunk) -> str:
+        message_type = getattr(chunk, "type", "")
+        if message_type:
+            return str(message_type).lower()
+        return type(chunk).__name__.lower()
+
+    def _agent_stream_delta_text(self, chunk, metadata: Mapping[str, object] | None) -> tuple[str, str]:
+        """Return ``(text, skip_reason)`` for one streamed message chunk."""
+
+        node = self._agent_stream_node(metadata)
+        message_type = self._agent_stream_message_type(chunk)
+
+        if node.lower() in _AGENT_STREAM_TOOL_NODES or message_type in {"tool", "toolmessage"}:
+            return "", "tool"
+
+        if message_type in _AGENT_STREAM_NON_ASSISTANT_TYPES:
+            return "", "non_assistant"
+
+        # If metadata explicitly points to a non-model/non-agent LangGraph node,
+        # only allow clearly assistant-shaped message chunks.  This avoids
+        # leaking arbitrary graph node payloads while still handling providers
+        # that use custom model node names but standard AIMessage chunks.
+        if node and node.lower() not in _AGENT_STREAM_TEXT_NODES and message_type not in _AGENT_STREAM_ASSISTANT_TYPES:
+            return "", "node"
+
+        text = self._extract_stream_text(chunk)
+        if not text:
+            return "", "empty"
+        return text, ""
+
+    def _trace_agent_stream_message_stats(self, stats: dict[str, object]) -> None:
+        try:
+            from ds_course_agent.rag.query_trace import trace_step
+
+            trace_step("agent.stream_messages", **stats)
+        except Exception:
+            logger.debug("Failed to emit agent stream message stats", exc_info=True)
 
     def _extract_stream_text(self, chunk) -> str:
         return stream_chunk_text(chunk)
@@ -828,6 +923,38 @@ class AgentService(object):
             return False
         return not self._svm_kernel_answer_needs_buffered_postprocess(route_state)
 
+    def _can_direct_llm_route(self, route_state: dict) -> bool:
+        """Whether a generic route should bypass the tool-calling agent.
+
+        This is intentionally narrower than ``_can_direct_stream_route``.  It is
+        set by the router only for turns that should be answered directly, such
+        as code-example/demo requests that do not ask to run or review code.
+        """
+
+        from ds_course_agent.rag.query_pipeline import RouteType
+
+        decision = route_state["decision"]
+        if decision.route != RouteType.GENERIC_AGENT:
+            return False
+        if not (decision.metadata or {}).get("direct_llm_answer"):
+            return False
+        if decision.required_tools:
+            return False
+        if decision.retrieval_policy == "required":
+            return False
+        return not self._svm_kernel_answer_needs_buffered_postprocess(route_state)
+
+    def _build_direct_llm_turn_context(self, route_state: dict, base_turn_context: str = "") -> str:
+        """Add direct-answer rules for generic routes that bypass tools."""
+
+        direct_rules = (
+            "# Direct Answer Mode\n"
+            "本轮问题被路由为直接回答：不要调用或假装调用工具，不要声称已经运行代码。\n"
+            "如果用户要求代码示例/演示，请给出可复制运行的完整 Python 示例，并用简短要点解释代码。\n"
+            "除非用户贴出了代码让你检查，否则不要使用“代码逻辑是正确的”这类代码审查口吻。"
+        )
+        return "\n\n".join(section for section in [base_turn_context, direct_rules] if section)
+
     def _svm_kernel_answer_needs_buffered_postprocess(self, route_state: dict) -> bool:
         """Detect the SVM/kernel judgment case where postprocessor may prepend content."""
         context = route_state["context"]
@@ -1082,11 +1209,13 @@ class AgentService(object):
         with trace_span("prepare.lightweight_router"):
             pre_decision = get_router().route(pre_context)
 
-        autonomous_tool_choice = bool((pre_decision.metadata or {}).get("autonomous_tool_choice"))
+        decision_metadata = pre_decision.metadata or {}
+        autonomous_tool_choice = bool(decision_metadata.get("autonomous_tool_choice"))
+        direct_llm_answer = bool(decision_metadata.get("direct_llm_answer"))
         if pre_decision.route in {RouteType.PYTHON_EXEC, RouteType.CODE_REVIEW} or (
             pre_decision.route == RouteType.GENERIC_AGENT
             and pre_decision.retrieval_policy != "required"
-            and autonomous_tool_choice
+            and (autonomous_tool_choice or direct_llm_answer)
         ):
             trace_step(
                 "query_pipeline.route",
