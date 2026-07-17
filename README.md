@@ -111,6 +111,7 @@ python main.py help
 python main.py build data/
 python main.py api --reload
 python -m pytest -q
+python scripts/ci_quality_gate.py --skip-full
 PYTHONPATH=src python -c "import ds_course_agent"
 python -m benchmarks.agent_benchmark --output var/artifacts/benchmarks/agent_benchmark_report.json
 cd web && npm run build
@@ -118,6 +119,12 @@ docker compose -f deploy/compose.yaml config
 ```
 
 ## Development Notes
+
+### Python execution sandbox
+
+Explicit code-run requests use a fail-closed Docker sandbox by default.  See
+[`docs/python_sandbox.md`](docs/python_sandbox.md) for deployment and optional
+real Docker integration tests.
 
 ### Backend/API
 

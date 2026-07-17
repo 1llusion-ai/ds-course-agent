@@ -257,6 +257,123 @@ def test_web_search_route_handler_compacts_evidence_and_tracks_sources(monkeypat
     assert trace.sources[0]["url"] == "https://example.com/overfitting"
 
 
+def test_web_search_route_rejects_obvious_non_teaching_queries_without_search(monkeypatch):
+    import ds_course_agent.shared.config as config
+    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    import ds_course_agent.tools.web_search as web_search_module
+
+    monkeypatch.setattr(config, "WEB_SEARCH_TEACHING_SCOPE_ENABLED", True)
+    monkeypatch.setattr(
+        web_search_module,
+        "search_web",
+        lambda question, **kwargs: (_ for _ in ()).throw(AssertionError("search_web should not be called")),
+    )
+
+    state = _route_state(route=RouteType.WEB_SEARCH)
+    state["context"].original_query = "今天北京天气怎么样？"
+    service = AgentService.__new__(AgentService)
+    service.chat = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("chat should not be called"))
+    service._build_turn_system_context = lambda route_state: ""
+
+    result = WebSearchRouteHandler().execute(service, state, stream=False)
+
+    assert "本次不进行通用联网搜索" in result
+    assert "学习" in result
+
+
+def test_web_search_route_rejects_general_fact_queries_without_search(monkeypatch):
+    import ds_course_agent.shared.config as config
+    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    import ds_course_agent.tools.web_search as web_search_module
+
+    monkeypatch.setattr(config, "WEB_SEARCH_TEACHING_SCOPE_ENABLED", True)
+    monkeypatch.setattr(
+        web_search_module,
+        "search_web",
+        lambda question, **kwargs: (_ for _ in ()).throw(AssertionError("search_web should not be called")),
+    )
+
+    service = AgentService.__new__(AgentService)
+    service.chat = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("chat should not be called"))
+    service._build_turn_system_context = lambda route_state: ""
+
+    state = _route_state(route=RouteType.WEB_SEARCH)
+    state["context"].original_query = "詹姆斯多大了？"
+    result = WebSearchRouteHandler().execute(service, state, stream=False)
+    assert "本次不进行通用联网搜索" in result
+    assert "体育数据科学项目" in result
+
+    state = _route_state(route=RouteType.WEB_SEARCH)
+    state["context"].original_query = "美国总统是谁？"
+    result = WebSearchRouteHandler().execute(service, state, stream=False)
+    assert "本次不进行通用联网搜索" in result
+    assert "历任总统年龄" in result
+
+
+def test_web_search_adaptive_plan_searches_broadly_but_reads_fewer_pages(monkeypatch):
+    import ds_course_agent.shared.config as config
+    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+
+    monkeypatch.setattr(config, "WEB_SEARCH_TOP_K", 0)
+    monkeypatch.setattr(config, "WEB_SEARCH_MIN_TOP_K", 8)
+    monkeypatch.setattr(config, "WEB_SEARCH_MAX_TOP_K", 16)
+    monkeypatch.setattr(config, "WEB_FETCH_ADAPTIVE_ENABLED", True)
+    monkeypatch.setattr(config, "WEB_FETCH_TOP_N", 4)
+    monkeypatch.setattr(config, "WEB_FETCH_MAX_ATTEMPTS", 8)
+    monkeypatch.setattr(config, "WEB_FETCH_MAX_WORKERS", 4)
+
+    handler = WebSearchRouteHandler()
+
+    assert handler._search_top_k("什么是过拟合？") == 8
+    assert handler._fetch_plan("什么是过拟合？")[:2] == (1, 4)
+    assert handler._search_top_k("GitHub 高星 EDU LLM Agent 项目有哪些？") == 16
+    assert handler._fetch_plan("GitHub 高星 EDU LLM Agent 项目有哪些？")[:2] == (2, 6)
+    assert handler._search_top_k("DAPO") == 16
+    assert handler._fetch_plan("DAPO")[:2] == (3, 8)
+
+
+def test_web_search_scope_allows_data_science_prediction_queries(monkeypatch):
+    import ds_course_agent.shared.config as config
+    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+
+    monkeypatch.setattr(config, "WEB_SEARCH_TEACHING_SCOPE_ENABLED", True)
+
+    handler = WebSearchRouteHandler()
+
+    assert handler._web_search_scope_response("如何用 LSTM 预测比特币价格") is None
+
+
+def test_web_fetch_top_n_zero_means_uncapped_not_disabled(monkeypatch):
+    import ds_course_agent.shared.config as config
+    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+
+    monkeypatch.setattr(config, "WEB_FETCH_TOP_N", 0)
+    monkeypatch.setattr(config, "WEB_FETCH_ADAPTIVE_ENABLED", True)
+    monkeypatch.setattr(config, "WEB_FETCH_MAX_ATTEMPTS", 10)
+
+    handler = WebSearchRouteHandler()
+
+    assert handler._fetch_plan("什么是过拟合？")[:2] == (1, 4)
+    assert handler._candidate_fetch_urls([
+        {"url": "https://example.com/a", "title": "A"},
+    ], "什么是过拟合？")
+
+
+def test_low_success_filter_keeps_explicit_video_and_scholarly_pdf_requests():
+    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+
+    handler = WebSearchRouteHandler()
+
+    assert handler._is_low_success_fetch_target(
+        "https://www.youtube.com/watch?v=abc",
+        "读一下这个 YouTube 教程里的 PCA",
+    ) is False
+    assert handler._is_low_success_fetch_target("https://arxiv.org/pdf/2401.00001.pdf") is False
+    assert handler._is_low_success_fetch_target("https://example.com/slides.pdf#page=3") is True
+
+
 def test_web_search_route_handler_streams_answer_chunks_directly(monkeypatch):
     import ds_course_agent.shared.config as config
     from ds_course_agent.rag.agent import AgentService
@@ -344,6 +461,71 @@ def test_web_search_route_handler_prefers_direct_chat_for_streaming(monkeypatch)
     assert chunks == ["token-1", "token-2"]
 
 
+def test_web_search_route_handler_stream_emits_detailed_progress_with_stream_id(monkeypatch):
+    import ds_course_agent.shared.config as config
+    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    import ds_course_agent.tools.web_fetch as web_fetch_module
+    import ds_course_agent.tools.web_search as web_search_module
+    from ds_course_agent.tools.web_fetch import WebFetchResult
+    from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
+
+    monkeypatch.setattr(config, "WEB_FETCH_ENABLED", True)
+    monkeypatch.setattr(config, "WEB_FETCH_TOP_N", 1)
+
+    response = WebSearchResponse(
+        query="什么是过拟合？",
+        provider="tavily",
+        results=[
+            WebSearchResult(
+                title="Overfitting overview",
+                url="https://example.com/overfitting",
+                snippet="Overfitting happens when a model fits noise.",
+                provider="tavily",
+            ),
+        ],
+        evidence_context="[1] 标题：Overfitting overview\nURL：https://example.com/overfitting\n摘要：...",
+    )
+    page = WebFetchResult(
+        url="https://example.com/overfitting",
+        final_url="https://example.com/overfitting",
+        title="Overfitting full page",
+        text="网页全文证据",
+        extractor="html",
+    )
+
+    monkeypatch.setattr(web_search_module, "search_web", lambda question: response)
+    monkeypatch.setattr(web_fetch_module, "fetch_web_page", lambda url: page)
+
+    def direct_chat(user_input, chat_history=None, stream=False, turn_context=None):
+        assert stream is True
+        yield "answer"
+
+    service = AgentService.__new__(AgentService)
+    service.chat = lambda *args, **kwargs: "should not be used"
+    service.direct_chat = direct_chat
+    service._build_turn_system_context = lambda route_state: ""
+    service.hooks = HookManager([])
+
+    state = _route_state(route=RouteType.WEB_SEARCH)
+    state["stream_id"] = "stream-1"
+
+    chunks = list(WebSearchRouteHandler().stream_execute(service, state))
+    progress_events = [item for item in chunks if isinstance(item, dict) and item.get("type") == "progress"]
+    text = "".join(item for item in chunks if isinstance(item, str))
+    phases = [item["phase"] for item in progress_events]
+
+    assert text == "answer"
+    assert "web_search_start" in phases
+    assert "web_search_results" in phases
+    assert "web_fetch_page_done" in phases
+    assert "web_answer_start" in phases
+    result_event = next(item for item in progress_events if item["phase"] == "web_search_results")
+    assert result_event["details"]["found_count"] == 1
+    fetch_event = next(item for item in progress_events if item["phase"] == "web_fetch_page_done")
+    assert fetch_event["details"]["domain"] == "example.com"
+
+
 
 def test_web_search_route_handler_adds_deep_fetch_context_and_metadata(monkeypatch):
     import ds_course_agent.shared.config as config
@@ -404,6 +586,68 @@ def test_web_search_route_handler_adds_deep_fetch_context_and_metadata(monkeypat
     assert trace.sources[0]["truncated"] is True
 
 
+def test_web_search_deep_fetch_keeps_original_source_number(monkeypatch):
+    import ds_course_agent.shared.config as config
+    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    import ds_course_agent.tools.web_fetch as web_fetch_module
+    import ds_course_agent.tools.web_search as web_search_module
+    from ds_course_agent.tools.web_fetch import WebFetchResult
+    from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
+
+    monkeypatch.setattr(config, "WEB_FETCH_ENABLED", True)
+
+    response = WebSearchResponse(
+        query="PPO 是什么？",
+        provider="tavily",
+        results=[
+            WebSearchResult(
+                title="First result",
+                url="https://first.example/a",
+                snippet="摘要 A",
+                provider="tavily",
+            ),
+            WebSearchResult(
+                title="Second result",
+                url="https://second.example/b",
+                snippet="摘要 B",
+                provider="tavily",
+            ),
+        ],
+        evidence_context=(
+            "[1] 标题：First result\nURL：https://first.example/a\n摘要：摘要 A\n"
+            "[2] 标题：Second result\nURL：https://second.example/b\n摘要：摘要 B"
+        ),
+    )
+    page = WebFetchResult(
+        url="https://second.example/b",
+        final_url="https://second.example/b",
+        title="Second full page",
+        text="第二个搜索结果的网页正文证据。",
+        extractor="html",
+    )
+
+    monkeypatch.setattr(web_search_module, "search_web", lambda question: response)
+    monkeypatch.setattr(web_fetch_module, "fetch_web_pages", lambda urls: [page])
+
+    captured = {}
+
+    def fake_chat(user_input, chat_history=None, stream=False, turn_context=None):
+        captured["turn_context"] = turn_context
+        return "answer [2]"
+
+    service = AgentService.__new__(AgentService)
+    service.chat = fake_chat
+    service._build_turn_system_context = lambda route_state: ""
+
+    result = WebSearchRouteHandler().execute(service, _route_state(route=RouteType.WEB_SEARCH), stream=False)
+
+    assert result == "answer [2]"
+    assert "[2] 网页：Second full page" in captured["turn_context"]
+    assert "[1] 网页：Second full page" not in captured["turn_context"]
+    assert "不要把所有句子都机械地标成 [1]" in captured["turn_context"]
+
+
 def test_execute_route_hook_failure_still_reaches_empty_result_fallback(monkeypatch):
     from ds_course_agent.rag.agent import AgentService
     import ds_course_agent.tools.course_rag as course_rag
@@ -433,6 +677,34 @@ def test_execute_route_hook_failure_still_reaches_empty_result_fallback(monkeypa
 
     assert "fallback course answer" in result
     assert "基础检索模式" in result
+
+
+def test_query_postprocessor_scope_guard_overrides_off_topic_generic_answer():
+    from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteType, get_postprocessor
+
+    context = QueryContext(
+        original_query="美国总统是谁？",
+        normalized_query="美国总统是谁",
+        session_id="session-hooks",
+        student_id="student-hooks",
+        chat_history=[],
+    )
+    decision = RouteDecision(
+        route=RouteType.GENERIC_AGENT,
+        confidence=0.5,
+        reasons=["unit-test generic fallback"],
+        retrieval_policy="optional",
+    )
+
+    final_response = get_postprocessor().process(
+        context,
+        decision,
+        "美国总统是某某。",
+        chat_history=[],
+    )
+
+    assert "美国总统是某某" not in final_response.content
+    assert "本次不进行通用联网搜索" in final_response.content
 
 
 def test_direct_stream_route_runs_stream_end_hooks_and_retrieval_guard_trace():

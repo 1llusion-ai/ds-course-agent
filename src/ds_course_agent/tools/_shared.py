@@ -75,15 +75,14 @@ def _merge_sources(existing: list[dict], incoming: list[dict]) -> list[dict]:
 
 
 def _warn_large_tool_result(tool_name: str, result: str, **metadata) -> None:
-    """Large tool result telemetry and artifact storage."""
+    """Apply registry-driven large tool result telemetry/artifact policy."""
     try:
-        from ds_course_agent.shared.tool_result_store import maybe_store_large_text_payload
+        from ds_course_agent.tools.registry import apply_tool_result_policy
 
-        maybe_store_large_text_payload(
+        apply_tool_result_policy(
+            tool_name,
             result,
             location=f"tool.{tool_name}.result",
-            payload_type="tool_result",
-            tool=tool_name,
             **metadata,
         )
     except Exception:

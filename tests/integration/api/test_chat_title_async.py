@@ -4,6 +4,7 @@ import asyncio
 from fastapi.testclient import TestClient
 
 from ds_course_agent.api.main import app
+from ds_course_agent.api.title_generation import DEFAULT_SESSION_TITLE, build_fallback_session_title
 
 
 def test_stream_does_not_block_on_first_title_generation(monkeypatch):
@@ -84,3 +85,38 @@ def test_post_send_does_not_block_on_first_title_generation(monkeypatch):
     assert response.status_code == 200
     assert response.json()["message"]["content"] == "hello"
     assert elapsed < 1.0
+
+
+def test_schedule_title_generation_sets_immediate_fallback(monkeypatch):
+    from ds_course_agent.api.state import _sessions
+    import ds_course_agent.api.routers.chat as chat_module
+
+    _sessions.clear()
+    chat_module._title_gen_cache.clear()
+    session_id = "title-immediate"
+    question = "菲律宾的现任总统是谁"
+    _sessions[session_id] = {
+        "title": DEFAULT_SESSION_TITLE,
+        "title_source": "default",
+        "student_id": "test",
+        "created_at": "2026-07-17T10:00:00",
+        "updated_at": "2026-07-17T10:00:00",
+        "message_count": 0,
+    }
+
+    created_coroutines = []
+
+    def fake_create_task(coro):
+        created_coroutines.append(coro)
+        coro.close()
+        return object()
+
+    monkeypatch.setattr(chat_module.asyncio, "create_task", fake_create_task)
+
+    chat_module._schedule_title_generation(session_id, question, is_first_message=True)
+
+    assert _sessions[session_id]["title"] == build_fallback_session_title(question)
+    assert _sessions[session_id]["title"] != DEFAULT_SESSION_TITLE
+    assert _sessions[session_id]["title_source"] == "heuristic"
+    assert _sessions[session_id]["title_generation_pending"] is True
+    assert created_coroutines

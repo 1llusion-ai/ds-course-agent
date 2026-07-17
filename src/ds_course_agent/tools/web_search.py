@@ -37,6 +37,7 @@ class WebSearchResult:
     def source_dict(self, index: int) -> dict[str, Any]:
         title = self.title.strip() or self.url.strip() or f"联网来源 {index}"
         return {
+            "source_id": index,
             "reference": f"[{index}] {title}",
             "title": title,
             "url": self.url.strip(),
@@ -99,7 +100,10 @@ def _truncate(text: str, max_chars: int) -> str:
 def _configured_top_k(top_k: int | None = None) -> int:
     value = top_k if top_k is not None else getattr(config, "WEB_SEARCH_TOP_K", 5)
     try:
-        return min(max(int(value), 1), 10)
+        parsed = int(value)
+        if parsed <= 0:
+            parsed = int(getattr(config, "WEB_SEARCH_MAX_TOP_K", 8))
+        return min(max(parsed, 1), 20)
     except (TypeError, ValueError):
         return 5
 

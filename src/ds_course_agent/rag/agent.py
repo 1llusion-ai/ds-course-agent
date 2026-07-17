@@ -1028,8 +1028,9 @@ class AgentService(object):
         这是 sync / stream 共享的唯一路由入口，避免两条路径行为漂移。
         """
         from ds_course_agent.shared.history import get_history
-        from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, get_preprocessor, get_rewriter, get_router, DetectedConcept
+        from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteType, get_preprocessor, get_rewriter, get_router, DetectedConcept
         from ds_course_agent.rag.query_trace import trace_step, trace_span
+        from ds_course_agent.rag.scope_guard import assess_query_scope
 
         student_id = student_id or session_id
         with trace_span("prepare.history_load"):
@@ -1044,11 +1045,28 @@ class AgentService(object):
             student_id=student_id,
         )
 
-        # When the user explicitly clicks the web-search switch, treat that as
-        # a turn-level mode choice rather than a keyword heuristic.  Do not let
-        # generic special-case/off-topic guards short-circuit the requested
-        # search path.
-        special_case_response = None if web_search else self._handle_special_case(user_input)
+        # Product-scope guard is stronger than the explicit web-search switch:
+        # the course assistant may search external resources for learning /
+        # data-science tasks, but should not become a general-purpose search
+        # engine for sports, celebrity, politics, weather, stocks, etc.
+        with trace_span("prepare.scope_guard"):
+            scope_decision = assess_query_scope(user_input, web_search_requested=web_search)
+        trace_step(
+            "scope_guard.result",
+            action=scope_decision.action,
+            category=scope_decision.category,
+            confidence=scope_decision.confidence,
+            reason=scope_decision.reason,
+        )
+
+        if scope_decision.allowed:
+            # When the user explicitly clicks the web-search switch, treat that
+            # as a turn-level mode choice rather than a keyword heuristic.  Do
+            # not let the older generic special-case/off-topic guard
+            # short-circuit the requested search path.
+            special_case_response = None if web_search else self._handle_special_case(user_input)
+        else:
+            special_case_response = scope_decision.response
 
         def lightweight_state(route, confidence, reasons, *, required_tools=None, retrieval_policy="disabled"):
             context = QueryContext(
@@ -1062,6 +1080,7 @@ class AgentService(object):
                     "schedule_tool_query": self._build_schedule_tool_query(user_input),
                     "fast_path": True,
                     "web_search_requested": bool(web_search),
+                    "scope_guard": scope_decision.to_dict(),
                 },
             )
             decision = RouteDecision(
@@ -1093,7 +1112,13 @@ class AgentService(object):
             self._get_hooks().after_route(state, decision)
             return state
 
-        from ds_course_agent.rag.query_pipeline import RouteType
+        if special_case_response:
+            return lightweight_state(
+                RouteType.GENERIC_AGENT,
+                1.0,
+                ["特殊问候/致谢/范围保护响应" if scope_decision.allowed else "课程助教范围保护"],
+                retrieval_policy="disabled",
+            )
 
         if web_search:
             return lightweight_state(
@@ -1104,14 +1129,7 @@ class AgentService(object):
                 retrieval_policy="required",
             )
 
-        # Fast path: system/special-case requests do not need profile, concept map, or rewrite.
-        if special_case_response:
-            return lightweight_state(
-                RouteType.GENERIC_AGENT,
-                1.0,
-                ["特殊问候/致谢/范围保护响应"],
-                retrieval_policy="disabled",
-            )
+        # Fast path: system requests do not need profile, concept map, or rewrite.
         if is_datetime_request(user_input):
             return lightweight_state(
                 RouteType.CURRENT_DATETIME,
@@ -1490,6 +1508,7 @@ class AgentService(object):
             if web_search
             else self._prepare_query_route(user_input, session_id, student_id)
         )
+        route_state["stream_id"] = stream_id
         decision = route_state["decision"]
         route = decision.route
         yield self._progress_event(
@@ -1531,9 +1550,34 @@ class AgentService(object):
 
         chunks = []
         for chunk in self._iter_route_response(route_state):
-            if chunk:
-                chunks.append(chunk)
-                yield {"type": "delta", "delta": chunk, "stream_id": stream_id, "resuming": False}
+            if not chunk:
+                continue
+
+            if isinstance(chunk, dict):
+                event_type = chunk.get("type")
+                if event_type == "progress":
+                    yield {
+                        **chunk,
+                        "stream_id": chunk.get("stream_id") or stream_id,
+                        "resuming": bool(chunk.get("resuming", False)),
+                    }
+                    continue
+                if event_type == "delta":
+                    delta = str(chunk.get("delta") or "")
+                    if delta:
+                        chunks.append(delta)
+                        yield {
+                            **chunk,
+                            "type": "delta",
+                            "delta": delta,
+                            "stream_id": chunk.get("stream_id") or stream_id,
+                            "resuming": bool(chunk.get("resuming", False)),
+                        }
+                    continue
+
+            text = str(chunk)
+            chunks.append(text)
+            yield {"type": "delta", "delta": text, "stream_id": stream_id, "resuming": False}
         final_result = "".join(chunks)
         if not final_result.strip():
             final_result = self._execute_route(route_state, stream=False)

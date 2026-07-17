@@ -998,6 +998,12 @@ class TestAgentStreamPostprocessRegressions:
             "_maybe_force_grounded_answer",
             lambda *args, **kwargs: None if kwargs.get("skip") else "RAG 覆盖",
         )
+        class FakeSandbox:
+            def execute(self, code):
+                assert code == "print(1 + 1)"
+                return {"stdout": "2\n", "stderr": "", "exit_code": 0, "truncated": False}
+
+        monkeypatch.setattr("ds_course_agent.rag.code_executor.PythonSandbox", lambda: FakeSandbox())
 
         result = service.chat_with_history(
             "请运行这段代码并告诉我输出：print(1 + 1)",

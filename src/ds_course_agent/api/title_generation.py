@@ -95,11 +95,39 @@ def _remove_leading_request_words(text: str) -> str:
     return text
 
 
+def _collapse_repeated_text(text: str) -> str:
+    """Collapse accidental repeated first-message text before title heuristics.
+
+    Users sometimes paste/send the same short query multiple times in one
+    message, e.g. ``菲律宾的现任总统是谁`` repeated three times.  Without this
+    normalization the deterministic fallback title is just a truncated raw
+    prefix.  Only collapse reasonably long repeated units to avoid changing
+    natural short reduplications.
+    """
+
+    value = str(text or "").strip()
+    length = len(value)
+    if length < 8:
+        return value
+
+    for unit_len in range(4, length // 2 + 1):
+        if length % unit_len != 0:
+            continue
+        repeat_count = length // unit_len
+        if repeat_count < 2:
+            continue
+        unit = value[:unit_len]
+        if unit * repeat_count == value:
+            return unit
+    return value
+
+
 def _compact_question_text(question: str) -> str:
     text = str(question or "").strip()
     text = re.sub(r"[\r\n]+", " ", text)
     text = _normalize_title_spacing(text)
     text = text.strip(_TRAILING_PUNCTUATION)
+    text = _collapse_repeated_text(text)
     text = _remove_leading_request_words(text)
     text = re.sub(r"^(请用)\s*", "", text, flags=re.IGNORECASE)
     text = re.sub(r"(一下|一个|一次)$", "", text).strip()
@@ -127,6 +155,19 @@ def _fallback_by_pattern(text: str) -> str | None:
 
     if re.search(r"(今天|今日).*(新闻|资讯|消息)", text):
         return "今日新闻"
+
+    match = re.search(r"(.+?)(?:的)?(?:现任|当前)?(总统|主席|首相|总理)(?:是谁|谁|叫什么|哪位)?$", text)
+    if match:
+        topic = match.group(1).strip(_TRAILING_PUNCTUATION)
+        office = match.group(2)
+        if topic:
+            return f"{topic}现任{office}"
+
+    match = re.search(r"(.+?)(?:多大了|几岁|年龄是多少|多少岁)$", text)
+    if match:
+        topic = match.group(1).strip(_TRAILING_PUNCTUATION)
+        if topic:
+            return join_topic_suffix(topic, "年龄")
 
     if re.search(r"Python.*交叉验证|交叉验证.*Python", text, flags=re.IGNORECASE):
         if re.search(r"(演示|代码|实现|示例)", text):

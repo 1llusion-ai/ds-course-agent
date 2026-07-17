@@ -24,7 +24,11 @@ class QueryPostprocessor:
         """把 Agent 执行得到的字符串回答标准化为 FinalResponse。"""
         content = str(result or "")
 
-        if decision.route == RouteType.GENERIC_AGENT:
+        scope_override = self._scope_guard_override(context.original_query, decision)
+        if scope_override:
+            content = scope_override
+
+        if decision.route == RouteType.GENERIC_AGENT and not scope_override:
             content = self.postprocess_generic_answer(
                 context.original_query,
                 content,
@@ -51,6 +55,20 @@ class QueryPostprocessor:
             metadata=metadata,
             used_retrieval=decision.retrieval_policy == "required",
         )
+
+    def _scope_guard_override(self, question: str, decision: RouteDecision) -> str:
+        """Final non-streaming safeguard for course-scope violations."""
+        if decision.route in {RouteType.COURSE_SCHEDULE, RouteType.CURRENT_DATETIME}:
+            return ""
+        try:
+            from ds_course_agent.rag.scope_guard import assess_query_scope
+
+            scope = assess_query_scope(question, web_search_requested=decision.route == RouteType.WEB_SEARCH)
+        except Exception:
+            return ""
+        if scope.allowed:
+            return ""
+        return scope.response
 
     def postprocess_generic_answer(
         self,

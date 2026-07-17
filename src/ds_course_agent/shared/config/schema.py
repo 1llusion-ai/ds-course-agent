@@ -88,6 +88,8 @@ class Settings(BaseSettings):
     CONTEXT_WINDOW_TOKENS: int = 8192
     CONTEXT_BUDGET_RATIO: float = 0.70
     CONTEXT_LARGE_MESSAGE_TOKENS: int = 2048
+    CONTEXT_SEMANTIC_SUMMARY_ENABLED: bool = False
+    CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS: float = 3.0
 
     # RAG prompt/context trimming.  This is separate from the history/tool
     # artifact compactor: it reduces the *current turn* retrieved context before
@@ -110,23 +112,52 @@ class Settings(BaseSettings):
     TOOL_RESULT_ARTIFACT_DIR: str = "var/artifacts/tool_results"
     TOOL_RESULT_INLINE_MAX_CHARS: int = 3000
 
+    # Product/domain scope guard.  Keeps the course assistant from acting as a
+    # general-purpose search/Q&A bot while still allowing data-science framing
+    # of real-world topics.
+    SCOPE_GUARD_ENABLED: bool = True
+
     # Explicit user-triggered web search.  Disabled by default so the assistant
     # never reaches external networks unless the deployment config and request
     # both opt in.
     WEB_SEARCH_ENABLED: bool = False
     WEB_SEARCH_PROVIDER: str = "tavily"
     WEB_SEARCH_API_KEY: str = ""
-    WEB_SEARCH_TOP_K: int = 5
+    WEB_SEARCH_TOP_K: int = 0
+    WEB_SEARCH_MIN_TOP_K: int = 8
+    WEB_SEARCH_MAX_TOP_K: int = 16
     WEB_SEARCH_TIMEOUT_SECONDS: float = 12.0
     WEB_SEARCH_CONTEXT_MAX_CHARS: int = 2500
     WEB_SEARCH_SNIPPET_MAX_CHARS: int = 300
+    WEB_SEARCH_TEACHING_SCOPE_ENABLED: bool = True
     WEB_FETCH_ENABLED: bool = False
-    WEB_FETCH_TOP_N: int = 2
-    WEB_FETCH_TIMEOUT_SECONDS: float = 15.0
+    WEB_FETCH_ADAPTIVE_ENABLED: bool = True
+    WEB_FETCH_TOP_N: int = 4
+    WEB_FETCH_MAX_ATTEMPTS: int = 10
+    WEB_FETCH_MAX_WORKERS: int = 4
+    WEB_FETCH_TOTAL_TIMEOUT_SECONDS: float = 0.0
+    WEB_FETCH_TIMEOUT_SECONDS: float = 6.0
     WEB_FETCH_MAX_BYTES: int = 1_000_000
-    WEB_FETCH_MAX_CHARS_PER_PAGE: int = 6000
-    WEB_FETCH_CONTEXT_MAX_CHARS: int = 4000
+    WEB_FETCH_MAX_CHARS_PER_PAGE: int = 3500
+    WEB_FETCH_CONTEXT_MAX_CHARS: int = 4500
     WEB_FETCH_USE_JINA_READER: bool = True
+
+    # Explicit Python execution sandbox.  Docker is the safe default; host
+    # subprocess execution is only for trusted local development/tests and must
+    # be opted into explicitly.
+    PYTHON_EXEC_ENABLED: bool = True
+    PYTHON_EXEC_BACKEND: str = "docker"
+    PYTHON_EXEC_ALLOW_HOST_FALLBACK: bool = False
+    PYTHON_EXEC_DOCKER_IMAGE: str = "python:3.11-slim"
+    PYTHON_EXEC_DOCKER_AVAILABILITY_TTL_SECONDS: float = Field(default=5.0, ge=0.0)
+    PYTHON_EXEC_TIMEOUT_SECONDS: int = 5
+    PYTHON_EXEC_MAX_CONCURRENT: int = Field(default=2, ge=1)
+    PYTHON_EXEC_BUSY_TIMEOUT_SECONDS: float = Field(default=0.0, ge=0.0)
+    PYTHON_EXEC_MAX_OUTPUT_CHARS: int = 4000
+    PYTHON_EXEC_MEMORY_MB: int = 256
+    PYTHON_EXEC_CPUS: float = 0.5
+    PYTHON_EXEC_TMPFS_MB: int = 64
+    PYTHON_EXEC_PIDS_LIMIT: int = 64
 
     CHUNK_SIZE: int = 1300
     CHUNK_OVERLAP: int = 300
@@ -150,6 +181,11 @@ class Settings(BaseSettings):
     @classmethod
     def _normalize_log_level(cls, value: str) -> str:
         return str(value or "INFO").upper()
+
+    @field_validator("PYTHON_EXEC_BACKEND")
+    @classmethod
+    def _normalize_python_exec_backend(cls, value: str) -> str:
+        return str(value or "docker").strip().lower()
 
     @field_validator(
         "CHROMA_PERSIST_DIR",

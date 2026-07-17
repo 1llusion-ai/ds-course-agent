@@ -12,6 +12,8 @@ import json
 import logging
 import math
 import re
+import concurrent.futures
+import threading
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -43,6 +45,8 @@ class ContextBudget:
 DEFAULT_CONTEXT_BUDGET = ContextBudget()
 CONTEXT_SUMMARY_MARKER = "context_governor_summary"
 CONTEXT_SUMMARY_TITLE = "上下文摘要"
+_SEMANTIC_SUMMARY_LOCK = threading.Lock()
+_SEMANTIC_SUMMARY_IN_FLIGHT: concurrent.futures.Future[str] | None = None
 
 
 def normalize_content_text(content: Any) -> str:
@@ -60,6 +64,10 @@ def normalize_content_text(content: Any) -> str:
                 value = item.get("text") or item.get("content") or item.get("value")
                 if value is not None:
                     parts.append(str(value))
+            elif hasattr(item, "text"):
+                parts.append(str(item.text))
+            elif hasattr(item, "content"):
+                parts.append(str(item.content))
             elif item is not None:
                 parts.append(str(item))
         return "\n".join(parts)
@@ -359,11 +367,109 @@ def _summarize_messages(messages: Iterable[Any], *, max_chars: int) -> str:
     )
 
 
+def _call_summary_model(prompt: str) -> str:
+    """Call the configured summary model. Kept separate for monkeypatch tests."""
+
+    from ds_course_agent.shared.llm import get_summary_model
+
+    response = get_summary_model().invoke(prompt)
+    content = getattr(response, "content", response)
+    return normalize_content_text(content)
+
+
+def _start_daemon_summary_call(prompt: str) -> concurrent.futures.Future[str]:
+    """Run the summary model in one daemon thread and return its Future."""
+
+    future: concurrent.futures.Future[str] = concurrent.futures.Future()
+
+    def _runner() -> None:
+        if not future.set_running_or_notify_cancel():
+            return
+        try:
+            future.set_result(_call_summary_model(prompt))
+        except BaseException as exc:  # pragma: no cover - defensive bridge to Future
+            future.set_exception(exc)
+
+    thread = threading.Thread(
+        target=_runner,
+        name="context-semantic-summary",
+        daemon=True,
+    )
+    thread.start()
+    return future
+
+
+def _semantic_summarize_source(source: str, *, max_chars: int, timeout_seconds: float) -> str:
+    global _SEMANTIC_SUMMARY_IN_FLIGHT
+
+    source = str(source or "").strip()
+    if not source:
+        return ""
+
+    prompt = (
+        "请把以下早期对话/工具上下文压缩成中文要点摘要，用于继续辅导学生。"
+        "只保留对后续回答有帮助的事实、学生问题、薄弱点和已给出的结论；"
+        f"控制在 {max_chars} 个字符以内。\n\n"
+        f"{source}"
+    )
+    timeout_seconds = max(0.1, float(timeout_seconds or 3.0))
+
+    with _SEMANTIC_SUMMARY_LOCK:
+        if _SEMANTIC_SUMMARY_IN_FLIGHT is not None and not _SEMANTIC_SUMMARY_IN_FLIGHT.done():
+            raise TimeoutError("previous semantic context summary is still running")
+        _SEMANTIC_SUMMARY_IN_FLIGHT = _start_daemon_summary_call(prompt)
+        future = _SEMANTIC_SUMMARY_IN_FLIGHT
+
+    try:
+        summary = future.result(timeout=timeout_seconds)
+    except concurrent.futures.TimeoutError as exc:
+        # A running Python thread cannot be force-killed safely.  Clear the
+        # process-wide guard anyway: the summary model is configured with its
+        # own timeout, and keeping the guard pinned forever permanently disables
+        # semantic summaries after one slow call.
+        future.cancel()
+        raise TimeoutError("semantic context summary timed out") from exc
+    finally:
+        with _SEMANTIC_SUMMARY_LOCK:
+            if _SEMANTIC_SUMMARY_IN_FLIGHT is future:
+                _SEMANTIC_SUMMARY_IN_FLIGHT = None
+
+    return _truncate_text(str(summary or "").strip(), max_chars)
+
+
+def _summarize_messages_for_context(messages: Iterable[Any], *, max_chars: int) -> tuple[str, str]:
+    deterministic_source = _summarize_messages(messages, max_chars=max(1000, max_chars * 4)).strip()
+    deterministic = _truncate_text(deterministic_source, max_chars).strip()
+    if not bool(getattr(config, "CONTEXT_SEMANTIC_SUMMARY_ENABLED", False)):
+        return deterministic, "deterministic"
+
+    try:
+        semantic = _semantic_summarize_source(
+            deterministic_source,
+            max_chars=max_chars,
+            timeout_seconds=float(getattr(config, "CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS", 3.0) or 3.0),
+        )
+        if semantic:
+            _trace_action("semantic_summary", status="ok", summary_chars=len(semantic))
+            return semantic, "semantic"
+    except Exception as exc:
+        try:
+            from ds_course_agent.rag.query_trace import trace_error
+
+            trace_error("context_governor.semantic_summary_failed", exc)
+        except Exception:
+            pass
+        logger.warning("Semantic context summary failed; falling back to deterministic summary.", exc_info=True)
+
+    return deterministic, "deterministic_fallback"
+
+
 def _build_context_summary_message(messages: Iterable[Any], *, max_chars: int) -> SystemMessage:
-    body = _summarize_messages(messages, max_chars=max_chars).strip() or "早期上下文已压缩。"
+    body, mode = _summarize_messages_for_context(messages, max_chars=max_chars)
+    body = body.strip() or "早期上下文已压缩。"
     return SystemMessage(
         content=f"{CONTEXT_SUMMARY_TITLE}：\n{body}",
-        additional_kwargs={CONTEXT_SUMMARY_MARKER: True},
+        additional_kwargs={CONTEXT_SUMMARY_MARKER: True, "summary_mode": mode},
     )
 
 

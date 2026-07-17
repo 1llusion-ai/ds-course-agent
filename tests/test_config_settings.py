@@ -14,6 +14,15 @@ from ds_course_agent.shared.config import (
     RAG_RETRIEVAL_CACHE_SIZE,
     RAG_RETRIEVAL_CACHE_TTL_SECONDS,
     RAG_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS,
+    PYTHON_EXEC_ALLOW_HOST_FALLBACK,
+    PYTHON_EXEC_BACKEND,
+    PYTHON_EXEC_BUSY_TIMEOUT_SECONDS,
+    PYTHON_EXEC_DOCKER_AVAILABILITY_TTL_SECONDS,
+    PYTHON_EXEC_DOCKER_IMAGE,
+    PYTHON_EXEC_ENABLED,
+    PYTHON_EXEC_MAX_CONCURRENT,
+    CONTEXT_SEMANTIC_SUMMARY_ENABLED,
+    CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS,
     rag_answer_cache_enabled,
     rag_answer_cache_size,
     rag_answer_cache_ttl_seconds,
@@ -26,6 +35,15 @@ from ds_course_agent.shared.config import (
     rag_retrieval_cache_size,
     rag_retrieval_cache_ttl_seconds,
     rag_retrieval_embedding_timeout_seconds,
+    python_exec_allow_host_fallback,
+    python_exec_backend,
+    python_exec_busy_timeout_seconds,
+    python_exec_docker_availability_ttl_seconds,
+    python_exec_docker_image,
+    python_exec_enabled,
+    python_exec_max_concurrent,
+    context_semantic_summary_enabled,
+    context_semantic_summary_timeout_seconds,
     settings,
 )
 from ds_course_agent.shared.config.schema import Settings
@@ -100,3 +118,51 @@ def test_rag_context_trim_settings_are_exported():
     assert rag_retrieval_cache_enabled == settings.RAG_RETRIEVAL_CACHE_ENABLED
     assert rag_retrieval_cache_ttl_seconds == settings.RAG_RETRIEVAL_CACHE_TTL_SECONDS
     assert rag_retrieval_cache_size == settings.RAG_RETRIEVAL_CACHE_SIZE
+
+
+def test_python_exec_sandbox_settings_are_exported():
+    cfg = Settings(
+        PYTHON_EXEC_ENABLED=False,
+        PYTHON_EXEC_BACKEND="LOCAL",
+        PYTHON_EXEC_ALLOW_HOST_FALLBACK=True,
+        PYTHON_EXEC_DOCKER_IMAGE="python:test",
+        PYTHON_EXEC_DOCKER_AVAILABILITY_TTL_SECONDS=0.5,
+        PYTHON_EXEC_MAX_CONCURRENT=3,
+        PYTHON_EXEC_BUSY_TIMEOUT_SECONDS=0.25,
+    )
+
+    assert cfg.PYTHON_EXEC_ENABLED is False
+    assert cfg.PYTHON_EXEC_BACKEND == "local"
+    assert cfg.PYTHON_EXEC_ALLOW_HOST_FALLBACK is True
+    assert cfg.PYTHON_EXEC_DOCKER_IMAGE == "python:test"
+    assert cfg.PYTHON_EXEC_DOCKER_AVAILABILITY_TTL_SECONDS == 0.5
+    assert cfg.PYTHON_EXEC_MAX_CONCURRENT == 3
+    assert cfg.PYTHON_EXEC_BUSY_TIMEOUT_SECONDS == 0.25
+    assert PYTHON_EXEC_ENABLED == settings.PYTHON_EXEC_ENABLED
+    assert PYTHON_EXEC_BACKEND == settings.PYTHON_EXEC_BACKEND
+    assert PYTHON_EXEC_ALLOW_HOST_FALLBACK == settings.PYTHON_EXEC_ALLOW_HOST_FALLBACK
+    assert PYTHON_EXEC_DOCKER_IMAGE == settings.PYTHON_EXEC_DOCKER_IMAGE
+    assert PYTHON_EXEC_DOCKER_AVAILABILITY_TTL_SECONDS == settings.PYTHON_EXEC_DOCKER_AVAILABILITY_TTL_SECONDS
+    assert PYTHON_EXEC_MAX_CONCURRENT == settings.PYTHON_EXEC_MAX_CONCURRENT
+    assert PYTHON_EXEC_BUSY_TIMEOUT_SECONDS == settings.PYTHON_EXEC_BUSY_TIMEOUT_SECONDS
+    assert python_exec_enabled == settings.PYTHON_EXEC_ENABLED
+    assert python_exec_backend == settings.PYTHON_EXEC_BACKEND
+    assert python_exec_allow_host_fallback == settings.PYTHON_EXEC_ALLOW_HOST_FALLBACK
+    assert python_exec_docker_image == settings.PYTHON_EXEC_DOCKER_IMAGE
+    assert python_exec_docker_availability_ttl_seconds == settings.PYTHON_EXEC_DOCKER_AVAILABILITY_TTL_SECONDS
+    assert python_exec_max_concurrent == settings.PYTHON_EXEC_MAX_CONCURRENT
+    assert python_exec_busy_timeout_seconds == settings.PYTHON_EXEC_BUSY_TIMEOUT_SECONDS
+
+
+def test_context_semantic_summary_settings_are_exported():
+    cfg = Settings(
+        CONTEXT_SEMANTIC_SUMMARY_ENABLED=True,
+        CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS=1.5,
+    )
+
+    assert cfg.CONTEXT_SEMANTIC_SUMMARY_ENABLED is True
+    assert cfg.CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS == 1.5
+    assert CONTEXT_SEMANTIC_SUMMARY_ENABLED == settings.CONTEXT_SEMANTIC_SUMMARY_ENABLED
+    assert CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS == settings.CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS
+    assert context_semantic_summary_enabled == settings.CONTEXT_SEMANTIC_SUMMARY_ENABLED
+    assert context_semantic_summary_timeout_seconds == settings.CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS

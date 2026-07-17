@@ -109,8 +109,10 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
     })
     token = begin_retrieval_trace()
     final_content = ""
+    accumulated_content = ""
     stream_id = None
     final_route = None
+    stream_error: str | None = None
 
     try:
         with trace_span("core_bridge.get_agent_service"):
@@ -126,27 +128,26 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
             for event in service.stream_chat_with_history(**kwargs):
                 event_type = event.get("type")
                 if event_type == "delta":
+                    accumulated_content += str(event.get("delta") or "")
                     yield event
                 elif event_type == "progress":
                     yield event
                 elif event_type == "done":
-                    final_content = event.get("content", "")
+                    final_content = event.get("content", "") or accumulated_content
                     stream_id = event.get("stream_id")
                     final_route = event.get("route")
     except Exception as e:
         logger.error("流式Agent调用出错: %s", e, exc_info=True)
         trace_error("core_bridge.stream", e)
-        final_content = (
-            f'关于"{message}"的问题，我需要查阅课程资料后才能回答。\n\n'
-            f'（流式调用出错：{str(e)[:100]}）'
-        )
+        stream_error = f"流式调用出错：{str(e)[:100]}"
+        final_content = accumulated_content
     finally:
         trace = end_retrieval_trace(token)
 
-    q_trace = end_query_trace(q_token, status="error" if not final_content or "调用出错" in final_content else "ok")
+    q_trace = end_query_trace(q_token, status="error" if stream_error or not final_content else "ok")
     logger.info("QueryTrace: %s", q_trace)
 
-    yield {
+    final_event = {
         "type": "final",
         "content": final_content,
         "used_retrieval": trace.used_retrieval,
@@ -155,3 +156,11 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
         "stream_id": stream_id,
         "route": final_route,
     }
+    if stream_error:
+        final_event["error"] = stream_error
+        if not final_content:
+            final_event["content"] = (
+                f'关于"{message}"的问题，我需要查阅课程资料后才能回答。\n\n'
+                f'（{stream_error}）'
+            )
+    yield final_event

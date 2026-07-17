@@ -2,6 +2,7 @@ import ds_course_agent.tools.web_fetch as web_fetch_module
 from ds_course_agent.tools.web_fetch import (
     WebFetchResult,
     compact_fetched_pages,
+    fetch_web_pages,
     fetch_web_page,
     validate_url_target,
 )
@@ -78,6 +79,41 @@ def test_fetch_web_page_falls_back_to_html_extraction(monkeypatch):
     assert "导航" not in result.text
 
 
+def test_fetch_web_pages_attempts_later_urls_until_success(monkeypatch):
+    calls = []
+
+    def fake_fetch(url, max_chars=None):
+        calls.append((url, max_chars))
+        if url.endswith("/blocked"):
+            return WebFetchResult(url=url, error="403 Forbidden")
+        return WebFetchResult(url=url, final_url=url, title="OK", text="正文", extractor="html")
+
+    monkeypatch.setattr(web_fetch_module, "fetch_web_page", fake_fetch)
+
+    results = fetch_web_pages(
+        [
+            "https://example.com/blocked",
+            "https://example.com/ok",
+            "https://example.com/unused",
+        ],
+        top_n=1,
+        max_attempts=3,
+        max_workers=1,
+        max_chars_per_page=123,
+    )
+
+    assert [page.url for page in results] == [
+        "https://example.com/blocked",
+        "https://example.com/ok",
+    ]
+    assert results[0].ok is False
+    assert results[1].ok is True
+    assert calls == [
+        ("https://example.com/blocked", 123),
+        ("https://example.com/ok", 123),
+    ]
+
+
 def test_compact_fetched_pages_uses_untrusted_banner_and_limits_context():
     pages = [
         WebFetchResult(
@@ -96,3 +132,21 @@ def test_compact_fetched_pages_uses_untrusted_banner_and_limits_context():
     assert "[1] 网页：A" in context
     assert "https://example.com/a" in context
     assert len(context) <= 600
+
+
+def test_compact_fetched_pages_preserves_search_source_index():
+    pages = [
+        WebFetchResult(
+            url="https://example.com/c",
+            final_url="https://example.com/c",
+            title="C",
+            text="第三个搜索结果的正文",
+            extractor="html",
+            metadata={"source_index": 3},
+        )
+    ]
+
+    context = compact_fetched_pages("查询", pages, context_max_chars=600)
+
+    assert "[3] 网页：C" in context
+    assert "[1] 网页：C" not in context

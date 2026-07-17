@@ -75,6 +75,7 @@ def test_search_web_tavily_normalizes_sources_and_evidence(monkeypatch):
     assert "摘要 A" in response.evidence_context
     assert response.sources == [
         {
+            "source_id": 1,
             "reference": "[1] Result A",
             "title": "Result A",
             "url": "https://example.com/a",

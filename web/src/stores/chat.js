@@ -35,8 +35,30 @@ function normalizeProgressEvent(progress = {}) {
     tool: progress.tool || '',
     stream_id: progress.stream_id || '',
     resuming: Boolean(progress.resuming),
+    details: progress.details || null,
     timestamp: progress.timestamp || new Date().toISOString()
   }
+}
+
+function sourcesFromProgressDetails(details = {}) {
+  const results = Array.isArray(details?.results) ? details.results : []
+  return results
+    .map((item, index) => {
+      const sourceId = Number(item.source_id || item.sourceId || item.index || index + 1)
+      const safeSourceId = Number.isFinite(sourceId) && sourceId > 0 ? sourceId : index + 1
+      return {
+        source_id: safeSourceId,
+        reference: item.title ? `[${safeSourceId}] ${item.title}` : `联网来源 ${safeSourceId}`,
+        title: item.title || item.domain || item.url || `网页 ${safeSourceId}`,
+        snippet: item.snippet || item.summary || item.description || '',
+        domain: item.domain || '',
+        url: item.url || '',
+        provider: details.provider || item.provider || '',
+        published_at: item.published_at || null,
+        source: 'web'
+      }
+    })
+    .filter(item => item.url)
 }
 
 function latestRouteFromProgress(events = []) {
@@ -181,9 +203,11 @@ export const useChatStore = defineStore('chat', () => {
       const progressEvents = Array.isArray(message.progressEvents)
         ? [...message.progressEvents, nextProgress]
         : [nextProgress]
+      const progressSources = sourcesFromProgressDetails(nextProgress.details)
 
       return {
         ...message,
+        sources: message.sources || (progressSources.length ? progressSources : undefined),
         progress: nextProgress,
         progressEvents,
         route: message.route || nextProgress.route || undefined,
@@ -318,6 +342,7 @@ export const useChatStore = defineStore('chat', () => {
             tool: payload.tool,
             stream_id: payload.stream_id,
             resuming: Boolean(payload.resuming),
+            details: payload.details || null,
             timestamp: payload.timestamp
           })
           options.onProgress?.()

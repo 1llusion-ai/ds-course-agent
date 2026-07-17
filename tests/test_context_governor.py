@@ -125,6 +125,7 @@ def test_compact_messages_to_budget_summarizes_old_context_and_preserves_recent(
     assert compacted[0] is messages[0]
     assert isinstance(compacted[1], SystemMessage)
     assert compacted[1].additional_kwargs[CONTEXT_SUMMARY_MARKER] is True
+    assert compacted[1].additional_kwargs["summary_mode"] == "deterministic"
     assert "旧问题" in compacted[1].content
     assert compacted[-1] is messages[-1]
     assert len(compacted) < len(messages)
@@ -146,6 +147,180 @@ def test_compact_messages_to_budget_returns_original_when_under_budget():
     )
 
     assert compacted == messages
+
+
+def test_context_compaction_default_does_not_call_summary_llm(monkeypatch):
+    import ds_course_agent.shared.config as config
+
+    monkeypatch.setattr(config, "CONTEXT_SEMANTIC_SUMMARY_ENABLED", False)
+    monkeypatch.setattr(
+        "ds_course_agent.shared.context_governor._call_summary_model",
+        lambda prompt: (_ for _ in ()).throw(AssertionError("LLM should not be called")),
+    )
+    messages = [
+        HumanMessage(content="旧问题：" + "PCA" * 80),
+        AIMessage(content="旧回答：" + "降维" * 80),
+        HumanMessage(content="当前问题"),
+    ]
+
+    compacted = compact_messages_to_budget(
+        messages,
+        location="unit.pre_llm",
+        budget=ContextBudget(context_window_tokens=50, budget_ratio=0.5),
+        preserve_recent=1,
+        summary_max_chars=120,
+    )
+
+    assert compacted[0].additional_kwargs["summary_mode"] == "deterministic"
+
+
+def test_context_compaction_can_use_semantic_summary(monkeypatch):
+    import ds_course_agent.shared.config as config
+
+    monkeypatch.setattr(config, "CONTEXT_SEMANTIC_SUMMARY_ENABLED", True)
+    monkeypatch.setattr(config, "CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS", 1.0)
+    monkeypatch.setattr(
+        "ds_course_agent.shared.context_governor._call_summary_model",
+        lambda prompt: "语义摘要：学生在问 PCA 和降维。",
+    )
+    messages = [
+        HumanMessage(content="旧问题：" + "PCA" * 80),
+        AIMessage(content="旧回答：" + "降维" * 80),
+        HumanMessage(content="当前问题"),
+    ]
+
+    compacted = compact_messages_to_budget(
+        messages,
+        location="unit.pre_llm",
+        budget=ContextBudget(context_window_tokens=50, budget_ratio=0.5),
+        preserve_recent=1,
+        summary_max_chars=120,
+    )
+
+    assert compacted[0].additional_kwargs["summary_mode"] == "semantic"
+    assert "语义摘要" in compacted[0].content
+
+
+def test_context_compaction_semantic_summary_failure_falls_back(monkeypatch):
+    import ds_course_agent.shared.config as config
+
+    monkeypatch.setattr(config, "CONTEXT_SEMANTIC_SUMMARY_ENABLED", True)
+    monkeypatch.setattr(config, "CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS", 1.0)
+
+    def fail_summary(prompt):
+        raise RuntimeError("summary model down")
+
+    monkeypatch.setattr("ds_course_agent.shared.context_governor._call_summary_model", fail_summary)
+    messages = [
+        HumanMessage(content="旧问题：" + "PCA" * 80),
+        AIMessage(content="旧回答：" + "降维" * 80),
+        HumanMessage(content="当前问题"),
+    ]
+
+    compacted = compact_messages_to_budget(
+        messages,
+        location="unit.pre_llm",
+        budget=ContextBudget(context_window_tokens=50, budget_ratio=0.5),
+        preserve_recent=1,
+        summary_max_chars=120,
+    )
+
+    assert compacted[0].additional_kwargs["summary_mode"] == "deterministic_fallback"
+    assert "旧问题" in compacted[0].content
+
+
+def test_context_compaction_semantic_summary_reuses_deterministic_source(monkeypatch):
+    import ds_course_agent.shared.config as config
+    import ds_course_agent.shared.context_governor as governor
+
+    calls = {"summarize": 0}
+
+    def fake_summarize(messages, *, max_chars):
+        calls["summarize"] += 1
+        return "确定性摘要：" + "旧上下文" * 20
+
+    monkeypatch.setattr(config, "CONTEXT_SEMANTIC_SUMMARY_ENABLED", True)
+    monkeypatch.setattr(config, "CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS", 1.0)
+    monkeypatch.setattr(governor, "_summarize_messages", fake_summarize)
+    monkeypatch.setattr(governor, "_call_summary_model", lambda prompt: "语义摘要")
+    with governor._SEMANTIC_SUMMARY_LOCK:
+        governor._SEMANTIC_SUMMARY_IN_FLIGHT = None
+
+    messages = [
+        HumanMessage(content="旧问题：" + "PCA" * 80),
+        AIMessage(content="旧回答：" + "降维" * 80),
+        HumanMessage(content="当前问题"),
+    ]
+
+    compacted = compact_messages_to_budget(
+        messages,
+        location="unit.pre_llm",
+        budget=ContextBudget(context_window_tokens=50, budget_ratio=0.5),
+        preserve_recent=1,
+        summary_max_chars=120,
+    )
+
+    assert compacted[0].additional_kwargs["summary_mode"] == "semantic"
+    assert calls["summarize"] == 1
+
+
+def test_context_compaction_semantic_timeout_does_not_spawn_unbounded_threads(monkeypatch):
+    import concurrent.futures
+    import ds_course_agent.shared.config as config
+    import ds_course_agent.shared.context_governor as governor
+
+    calls = {"start": 0}
+
+    class RunningForeverFuture(concurrent.futures.Future):
+        def result(self, timeout=None):
+            raise concurrent.futures.TimeoutError()
+
+        def cancel(self):
+            return False
+
+        def done(self):
+            return False
+
+        def cancelled(self):
+            return False
+
+    def pending_summary_call(prompt):
+        calls["start"] += 1
+        return RunningForeverFuture()
+
+    monkeypatch.setattr(config, "CONTEXT_SEMANTIC_SUMMARY_ENABLED", True)
+    monkeypatch.setattr(config, "CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(governor, "_start_daemon_summary_call", pending_summary_call)
+    with governor._SEMANTIC_SUMMARY_LOCK:
+        governor._SEMANTIC_SUMMARY_IN_FLIGHT = None
+
+    messages = [
+        HumanMessage(content="旧问题：" + "PCA" * 80),
+        AIMessage(content="旧回答：" + "降维" * 80),
+        HumanMessage(content="当前问题"),
+    ]
+
+    first = compact_messages_to_budget(
+        messages,
+        location="unit.pre_llm",
+        budget=ContextBudget(context_window_tokens=50, budget_ratio=0.5),
+        preserve_recent=1,
+        summary_max_chars=120,
+    )
+    second = compact_messages_to_budget(
+        messages,
+        location="unit.pre_llm",
+        budget=ContextBudget(context_window_tokens=50, budget_ratio=0.5),
+        preserve_recent=1,
+        summary_max_chars=120,
+    )
+
+    assert first[0].additional_kwargs["summary_mode"] == "deterministic_fallback"
+    assert second[0].additional_kwargs["summary_mode"] == "deterministic_fallback"
+    assert calls["start"] == 1
+
+    with governor._SEMANTIC_SUMMARY_LOCK:
+        governor._SEMANTIC_SUMMARY_IN_FLIGHT = None
 
 
 def test_summarize_message_turns_shares_history_turn_pairing(tmp_path):

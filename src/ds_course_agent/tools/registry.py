@@ -16,10 +16,12 @@ class ToolSpec:
     captured separately via ``cost_class`` so retrieval+LLM tools can remain
     read-only while still being observable as expensive.
 
+    ``exclusive`` marks tools that must never be grouped into safe parallel
+    batches even if they are otherwise read-only.
+
     ``result_policy`` is a registry contract for normalization/offload decisions.
-    Phase 2 persists and compacts large tool results through
-    ``shared.tool_result_store`` and history compaction; generic LangGraph tool
-    return interception is intentionally not implemented yet.
+    Use ``apply_tool_result_policy`` at tool-return boundaries to persist/trace
+    large results for tools marked ``offload_candidate`` or ``offload``.
     """
 
     name: str
@@ -31,6 +33,7 @@ class ToolSpec:
     progress_label: str = "正在使用工具..."
     expose_to_agent: bool = True
     result_policy: str = "inline"
+    exclusive: bool = False
     description: str = ""
 
     def __post_init__(self) -> None:
@@ -50,7 +53,7 @@ class ToolSpec:
     def can_run_in_parallel(self) -> bool:
         """Whether the framework may run this tool concurrently with other safe tools."""
 
-        return self.read_only and not self.side_effect and self.concurrency_safe
+        return self.read_only and not self.side_effect and self.concurrency_safe and not self.exclusive
 
     def to_metadata(self) -> dict[str, Any]:
         """JSON-serializable metadata for traces/UI without exposing callables."""
@@ -65,6 +68,7 @@ class ToolSpec:
             "progress_label": self.progress_label,
             "expose_to_agent": self.expose_to_agent,
             "result_policy": self.result_policy,
+            "exclusive": self.exclusive,
             "description": self.description,
         }
 
@@ -120,6 +124,75 @@ class ToolRegistry:
     def progress_label_for(self, name: str, default: str = "正在使用工具...") -> str:
         spec = self.maybe_get(name)
         return spec.progress_label if spec else default
+
+    def can_run_in_parallel(self, name: str) -> bool:
+        """Return whether a named tool is safe to batch with other read-only tools.
+
+        Unknown tools are treated conservatively as not parallelizable.
+        """
+
+        spec = self.maybe_get(name)
+        return bool(spec and spec.can_run_in_parallel)
+
+    def plan_parallel_groups(self, names: Iterable[str]) -> list[list[str]]:
+        """Build conservative execution groups from tool metadata.
+
+        Consecutive read-only/concurrency-safe/non-exclusive tools are grouped
+        together. Unknown, side-effecting, or exclusive tools become their own
+        serial groups. The input order is preserved.
+        """
+
+        groups: list[list[str]] = []
+        current_parallel: list[str] = []
+
+        def flush_parallel() -> None:
+            if current_parallel:
+                groups.append(list(current_parallel))
+                current_parallel.clear()
+
+        for name in names:
+            if self.can_run_in_parallel(name):
+                current_parallel.append(name)
+                continue
+            flush_parallel()
+            groups.append([name])
+
+        flush_parallel()
+        return groups
+
+    def apply_result_policy(
+        self,
+        name: str,
+        result: Any,
+        *,
+        payload_type: str = "tool_result",
+        location: str | None = None,
+        **metadata: Any,
+    ) -> dict[str, Any] | None:
+        """Apply the named tool's result normalization/offload policy.
+
+        ``inline`` and unknown tools are no-ops. ``offload_candidate`` and
+        ``offload`` delegate to ``shared.tool_result_store``. Telemetry failures
+        must not break tool execution, so exceptions are swallowed.
+        """
+
+        spec = self.maybe_get(name)
+        if spec is None or spec.result_policy == "inline":
+            return None
+
+        try:
+            from ds_course_agent.shared.tool_result_store import maybe_store_large_text_payload
+
+            return maybe_store_large_text_payload(
+                result,
+                location=location or f"tool.{name}.result",
+                payload_type=payload_type,
+                tool=name,
+                result_policy=spec.result_policy,
+                **metadata,
+            )
+        except Exception:
+            return None
 
 
 def build_default_tool_registry() -> ToolRegistry:
@@ -251,10 +324,32 @@ def get_rag_tools() -> list[Any]:
     return get_rag_tool_registry().as_langchain_tools(exposed_only=True)
 
 
+def apply_tool_result_policy(
+    name: str,
+    result: Any,
+    *,
+    registry: ToolRegistry | None = None,
+    payload_type: str = "tool_result",
+    location: str | None = None,
+    **metadata: Any,
+) -> dict[str, Any] | None:
+    """Apply result policy using the default or supplied registry."""
+
+    active_registry = registry or get_rag_tool_registry()
+    return active_registry.apply_result_policy(
+        name,
+        result,
+        payload_type=payload_type,
+        location=location,
+        **metadata,
+    )
+
+
 __all__ = [
     "ToolRegistry",
     "ToolSpec",
     "build_default_tool_registry",
+    "apply_tool_result_policy",
     "get_rag_tool_registry",
     "get_rag_tool_spec",
     "get_rag_tool_metadata",

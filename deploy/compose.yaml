@@ -11,8 +11,16 @@ services:
       - ../var/chroma_db:/app/var/chroma_db
       - ../var/chat_history:/app/var/chat_history
       - ../data:/app/data
+      # Optional: required only when PYTHON_EXEC_BACKEND=docker and the API
+      # container should launch sibling sandbox containers. See docs/python_sandbox.md.
+      # - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - PYTHONUNBUFFERED=1
+      # Default compose deployment is fail-closed: code execution is disabled
+      # unless an operator explicitly enables the Docker sandbox and mounts a
+      # Docker daemon socket above.
+      - PYTHON_EXEC_ENABLED=false
+      - PYTHON_EXEC_BACKEND=docker
     networks:
       - rag-network
     healthcheck:

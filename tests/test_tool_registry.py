@@ -4,7 +4,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from ds_course_agent.tools.registry import ToolRegistry, ToolSpec, build_default_tool_registry
+from ds_course_agent.tools.registry import (
+    ToolRegistry,
+    ToolSpec,
+    apply_tool_result_policy,
+    build_default_tool_registry,
+)
 from ds_course_agent.tools.registry import get_rag_tool_metadata, get_rag_tool_spec, get_rag_tools
 
 
@@ -82,6 +87,7 @@ def test_tool_metadata_helpers_are_json_serializable_and_hide_callables():
     assert set(metadata_by_name) == set(EXPECTED_REGISTRY_NAMES)
     assert metadata_by_name["course_rag_tool"]["result_policy"] == "offload_candidate"
     assert metadata_by_name["course_rag_tool"]["cost_class"] == "llm_retrieval"
+    assert metadata_by_name["course_rag_tool"]["exclusive"] is False
     assert "tool" not in metadata_by_name["course_rag_tool"]
 
     exposed = get_rag_tool_metadata(exposed_only=True)
@@ -132,6 +138,128 @@ def test_registry_validates_duplicate_and_mismatched_specs():
             side_effect=True,
             concurrency_safe=True,
         )
+
+
+def test_registry_plans_safe_parallel_groups_conservatively():
+    registry = build_default_tool_registry()
+
+    assert registry.can_run_in_parallel("course_schedule_tool") is True
+    assert registry.can_run_in_parallel("python_exec_tool") is False
+    assert registry.can_run_in_parallel("unknown_tool") is False
+
+    groups = registry.plan_parallel_groups(
+        [
+            "course_schedule_tool",
+            "current_datetime_tool",
+            "python_exec_tool",
+            "check_knowledge_base_status",
+            "unknown_tool",
+            "course_rag_tool",
+        ]
+    )
+
+    assert groups == [
+        ["course_schedule_tool", "current_datetime_tool"],
+        ["python_exec_tool"],
+        ["check_knowledge_base_status"],
+        ["unknown_tool"],
+        ["course_rag_tool"],
+    ]
+
+
+def test_exclusive_tool_is_not_parallelizable():
+    registry = ToolRegistry(
+        [
+            ToolSpec(
+                name="exclusive_read_tool",
+                tool=SimpleNamespace(name="exclusive_read_tool"),
+                read_only=True,
+                side_effect=False,
+                concurrency_safe=True,
+                exclusive=True,
+            )
+        ]
+    )
+
+    assert registry.get("exclusive_read_tool").can_run_in_parallel is False
+    assert registry.metadata()[0]["exclusive"] is True
+    assert registry.plan_parallel_groups(["exclusive_read_tool"]) == [["exclusive_read_tool"]]
+
+
+def test_apply_result_policy_respects_inline_and_offload(monkeypatch):
+    calls = []
+
+    def fake_store(result, **kwargs):
+        calls.append((result, kwargs))
+        return {"artifact": {"uri": "artifact://unit"}}
+
+    monkeypatch.setattr(
+        "ds_course_agent.shared.tool_result_store.maybe_store_large_text_payload",
+        fake_store,
+    )
+    registry = ToolRegistry(
+        [
+            ToolSpec(
+                name="inline_tool",
+                tool=SimpleNamespace(name="inline_tool"),
+                read_only=True,
+                side_effect=False,
+                concurrency_safe=True,
+                result_policy="inline",
+            ),
+            ToolSpec(
+                name="offload_tool",
+                tool=SimpleNamespace(name="offload_tool"),
+                read_only=True,
+                side_effect=False,
+                concurrency_safe=True,
+                result_policy="offload_candidate",
+            ),
+        ]
+    )
+
+    assert registry.apply_result_policy("inline_tool", "small") is None
+    assert calls == []
+
+    result = registry.apply_result_policy("offload_tool", "large", status="ok")
+
+    assert result == {"artifact": {"uri": "artifact://unit"}}
+    assert calls == [
+        (
+            "large",
+            {
+                "location": "tool.offload_tool.result",
+                "payload_type": "tool_result",
+                "tool": "offload_tool",
+                "result_policy": "offload_candidate",
+                "status": "ok",
+            },
+        )
+    ]
+
+
+def test_apply_tool_result_policy_uses_supplied_registry(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        "ds_course_agent.shared.tool_result_store.maybe_store_large_text_payload",
+        lambda result, **kwargs: calls.append((result, kwargs)) or {"ok": True},
+    )
+    registry = ToolRegistry(
+        [
+            ToolSpec(
+                name="offload_tool",
+                tool=SimpleNamespace(name="offload_tool"),
+                read_only=True,
+                side_effect=False,
+                concurrency_safe=True,
+                result_policy="offload",
+            )
+        ]
+    )
+
+    assert apply_tool_result_policy("offload_tool", "payload", registry=registry) == {"ok": True}
+    assert calls[0][1]["result_policy"] == "offload"
 
 
 def test_agent_progress_label_uses_registry_when_available():

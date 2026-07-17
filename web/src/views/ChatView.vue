@@ -63,6 +63,7 @@
               v-for="(message, index) in chatStore.messages"
               :key="`${message.timestamp || index}-${index}`"
               :message="message"
+              @open-sources="openSourcesPanel"
             />
           </div>
         </div>
@@ -77,6 +78,48 @@
         </div>
       </div>
     </div>
+
+    <aside v-if="sourcesPanelOpen" class="sources-panel" aria-label="搜索来源">
+      <div class="sources-panel__header">
+        <div>
+          <div class="sources-panel__kicker">WEB SOURCES</div>
+          <h2>{{ sourcesPanelTitle }}</h2>
+        </div>
+        <button type="button" class="sources-panel__close" aria-label="关闭来源面板" @click="closeSourcesPanel">
+          ×
+        </button>
+      </div>
+
+      <div class="sources-panel__list">
+        <a
+          v-for="source in sourcesPanelSources"
+          :key="source.key"
+          class="sources-panel__card"
+          :href="source.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          :title="source.title"
+        >
+          <span class="sources-panel__favicon-wrap">
+            <img
+              v-if="source.favicon"
+              class="sources-panel__favicon"
+              :src="source.favicon"
+              :alt="source.domain || source.label"
+              @error="$event.target.style.display = 'none'"
+            />
+          </span>
+          <span class="sources-panel__body">
+            <span class="sources-panel__title">{{ source.label }}</span>
+            <span class="sources-panel__domain">{{ source.domain || source.url }}</span>
+            <span v-if="source.snippet" class="sources-panel__snippet">{{ source.snippet }}</span>
+            <span v-if="source.provider || source.published_at" class="sources-panel__meta">
+              {{ [source.provider, source.published_at].filter(Boolean).join(' · ') }}
+            </span>
+          </span>
+        </a>
+      </div>
+    </aside>
   </div>
 </template>
 
@@ -91,6 +134,7 @@ import ChatSidebar from '../components/ChatSidebar.vue'
 import { useChatStore } from '../stores/chat'
 import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
+import { domainFromUrl, faviconUrl } from '../utils/url'
 
 const route = useRoute()
 const router = useRouter()
@@ -102,6 +146,9 @@ const profileStore = useProfileStore()
 const sidebarCollapsed = ref(readSidebarCollapsedPreference())
 const theme = ref(readThemePreference())
 const webSearchEnabled = ref(readWebSearchPreference())
+const sourcesPanelOpen = ref(false)
+const sourcesPanelTitle = ref('搜索来源')
+const sourcesPanelSources = ref([])
 
 const headerTitle = computed(() => sessionStore.currentSession?.title || '新对话')
 const isDarkTheme = computed(() => theme.value === 'dark')
@@ -212,7 +259,11 @@ async function handleSend(message, sendOptions = {}) {
   if (shouldRefreshTitle) {
     try {
       await sessionStore.fetchSessions()
-      if (targetSessionId) {
+      const stillOnTargetSession = (
+        targetSessionId &&
+        (route.params.sessionId === targetSessionId || sessionStore.currentSessionId === targetSessionId)
+      )
+      if (stillOnTargetSession) {
         sessionStore.setCurrentSession(targetSessionId)
       }
     } catch (error) {
@@ -277,6 +328,37 @@ function toggleSidebar() {
       sidebarCollapsed.value ? 'true' : 'false'
     )
   }
+}
+
+function normalizePanelSource(source, index) {
+  const url = source?.url || ''
+  const domain = source?.domain || domainFromUrl(url)
+
+  return {
+    key: source?.key || `${url || source?.label || 'source'}-${index}`,
+    index: source?.index || index + 1,
+    label: source?.label || source?.title || domain || url || `网页 ${index + 1}`,
+    title: source?.title || source?.label || domain || url || `网页 ${index + 1}`,
+    url,
+    domain,
+    favicon: source?.favicon || faviconUrl(url, domain),
+    snippet: source?.snippet || '',
+    provider: source?.provider || '',
+    published_at: source?.published_at || ''
+  }
+}
+
+function openSourcesPanel(payload = {}) {
+  const sources = Array.isArray(payload.sources) ? payload.sources : []
+  sourcesPanelSources.value = sources
+    .map(normalizePanelSource)
+    .filter(source => source.url)
+  sourcesPanelTitle.value = payload.title || `搜索来源 · ${sourcesPanelSources.value.length} 个网页`
+  sourcesPanelOpen.value = sourcesPanelSources.value.length > 0
+}
+
+function closeSourcesPanel() {
+  sourcesPanelOpen.value = false
 }
 
 function scrollToBottom() {
@@ -489,6 +571,150 @@ onMounted(async () => {
   background: linear-gradient(180deg, transparent, rgba(248, 250, 252, 0.86) 42%);
 }
 
+.sources-panel {
+  width: min(390px, 34vw);
+  min-width: 320px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.86);
+  border-left: 1px solid rgba(214, 211, 209, 0.74);
+  box-shadow: -18px 0 42px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.sources-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.sources-panel__kicker {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.sources-panel__header h2 {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 17px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.sources-panel__close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  flex: 0 0 auto;
+  color: #64748b;
+  background: rgba(248, 250, 252, 0.8);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  transition: color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.sources-panel__close:hover {
+  color: #0f172a;
+  background: #fff;
+  transform: translateY(-1px);
+}
+
+.sources-panel__list {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.sources-panel__card {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  color: #1f2937;
+  text-decoration: none;
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(203, 213, 225, 0.78);
+  border-radius: 16px;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.sources-panel__card:hover {
+  background: #fff;
+  border-color: rgba(37, 99, 235, 0.32);
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.10);
+  transform: translateY(-1px);
+}
+
+.sources-panel__favicon-wrap {
+  display: block;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+}
+
+.sources-panel__favicon {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(203, 213, 225, 0.78);
+  border-radius: 999px;
+  background: #fff;
+  object-fit: contain;
+}
+
+.sources-panel__body {
+  min-width: 0;
+}
+
+.sources-panel__title {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.sources-panel__domain {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sources-panel__snippet {
+  display: -webkit-box;
+  margin-top: 7px;
+  overflow: hidden;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.sources-panel__meta {
+  display: block;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 
 
 
@@ -519,6 +745,14 @@ onMounted(async () => {
 
   .input-area {
     padding: 12px 14px 14px;
+  }
+
+  .sources-panel {
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 30;
+    width: min(92vw, 390px);
+    min-width: 0;
   }
 }
 

@@ -52,6 +52,8 @@ _SETTING_NAMES = [
     "CONTEXT_WINDOW_TOKENS",
     "CONTEXT_BUDGET_RATIO",
     "CONTEXT_LARGE_MESSAGE_TOKENS",
+    "CONTEXT_SEMANTIC_SUMMARY_ENABLED",
+    "CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS",
     "RAG_CONTEXT_TRIM_ENABLED",
     "RAG_CONTEXT_MAX_CHARS",
     "RAG_CONTEXT_DOC_MAX_CHARS",
@@ -67,20 +69,41 @@ _SETTING_NAMES = [
     "TOOL_RESULT_ARTIFACTS_ENABLED",
     "TOOL_RESULT_ARTIFACT_DIR",
     "TOOL_RESULT_INLINE_MAX_CHARS",
+    "SCOPE_GUARD_ENABLED",
     "WEB_SEARCH_ENABLED",
     "WEB_SEARCH_PROVIDER",
     "WEB_SEARCH_API_KEY",
     "WEB_SEARCH_TOP_K",
+    "WEB_SEARCH_MIN_TOP_K",
+    "WEB_SEARCH_MAX_TOP_K",
     "WEB_SEARCH_TIMEOUT_SECONDS",
     "WEB_SEARCH_CONTEXT_MAX_CHARS",
     "WEB_SEARCH_SNIPPET_MAX_CHARS",
+    "WEB_SEARCH_TEACHING_SCOPE_ENABLED",
     "WEB_FETCH_ENABLED",
+    "WEB_FETCH_ADAPTIVE_ENABLED",
     "WEB_FETCH_TOP_N",
+    "WEB_FETCH_MAX_ATTEMPTS",
+    "WEB_FETCH_MAX_WORKERS",
+    "WEB_FETCH_TOTAL_TIMEOUT_SECONDS",
     "WEB_FETCH_TIMEOUT_SECONDS",
     "WEB_FETCH_MAX_BYTES",
     "WEB_FETCH_MAX_CHARS_PER_PAGE",
     "WEB_FETCH_CONTEXT_MAX_CHARS",
     "WEB_FETCH_USE_JINA_READER",
+    "PYTHON_EXEC_ENABLED",
+    "PYTHON_EXEC_BACKEND",
+    "PYTHON_EXEC_ALLOW_HOST_FALLBACK",
+    "PYTHON_EXEC_DOCKER_IMAGE",
+    "PYTHON_EXEC_DOCKER_AVAILABILITY_TTL_SECONDS",
+    "PYTHON_EXEC_TIMEOUT_SECONDS",
+    "PYTHON_EXEC_MAX_CONCURRENT",
+    "PYTHON_EXEC_BUSY_TIMEOUT_SECONDS",
+    "PYTHON_EXEC_MAX_OUTPUT_CHARS",
+    "PYTHON_EXEC_MEMORY_MB",
+    "PYTHON_EXEC_CPUS",
+    "PYTHON_EXEC_TMPFS_MB",
+    "PYTHON_EXEC_PIDS_LIMIT",
     "CHUNK_SIZE",
     "CHUNK_OVERLAP",
     "MAX_SPLIT_CHAR_NUMBER",
@@ -143,6 +166,8 @@ embedding_circuit_breaker_seconds = EMBEDDING_CIRCUIT_BREAKER_SECONDS
 context_window_tokens = CONTEXT_WINDOW_TOKENS
 context_budget_ratio = CONTEXT_BUDGET_RATIO
 context_large_message_tokens = CONTEXT_LARGE_MESSAGE_TOKENS
+context_semantic_summary_enabled = CONTEXT_SEMANTIC_SUMMARY_ENABLED
+context_semantic_summary_timeout_seconds = CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS
 rag_context_trim_enabled = RAG_CONTEXT_TRIM_ENABLED
 rag_context_max_chars = RAG_CONTEXT_MAX_CHARS
 rag_context_doc_max_chars = RAG_CONTEXT_DOC_MAX_CHARS
@@ -158,20 +183,41 @@ rag_retrieval_cache_size = RAG_RETRIEVAL_CACHE_SIZE
 tool_result_artifacts_enabled = TOOL_RESULT_ARTIFACTS_ENABLED
 tool_result_artifact_dir = TOOL_RESULT_ARTIFACT_DIR
 tool_result_inline_max_chars = TOOL_RESULT_INLINE_MAX_CHARS
+scope_guard_enabled = SCOPE_GUARD_ENABLED
 web_search_enabled = WEB_SEARCH_ENABLED
 web_search_provider = WEB_SEARCH_PROVIDER
 web_search_api_key = WEB_SEARCH_API_KEY
 web_search_top_k = WEB_SEARCH_TOP_K
+web_search_min_top_k = WEB_SEARCH_MIN_TOP_K
+web_search_max_top_k = WEB_SEARCH_MAX_TOP_K
 web_search_timeout_seconds = WEB_SEARCH_TIMEOUT_SECONDS
 web_search_context_max_chars = WEB_SEARCH_CONTEXT_MAX_CHARS
 web_search_snippet_max_chars = WEB_SEARCH_SNIPPET_MAX_CHARS
+web_search_teaching_scope_enabled = WEB_SEARCH_TEACHING_SCOPE_ENABLED
 web_fetch_enabled = WEB_FETCH_ENABLED
+web_fetch_adaptive_enabled = WEB_FETCH_ADAPTIVE_ENABLED
 web_fetch_top_n = WEB_FETCH_TOP_N
+web_fetch_max_attempts = WEB_FETCH_MAX_ATTEMPTS
+web_fetch_max_workers = WEB_FETCH_MAX_WORKERS
+web_fetch_total_timeout_seconds = WEB_FETCH_TOTAL_TIMEOUT_SECONDS
 web_fetch_timeout_seconds = WEB_FETCH_TIMEOUT_SECONDS
 web_fetch_max_bytes = WEB_FETCH_MAX_BYTES
 web_fetch_max_chars_per_page = WEB_FETCH_MAX_CHARS_PER_PAGE
 web_fetch_context_max_chars = WEB_FETCH_CONTEXT_MAX_CHARS
 web_fetch_use_jina_reader = WEB_FETCH_USE_JINA_READER
+python_exec_enabled = PYTHON_EXEC_ENABLED
+python_exec_backend = PYTHON_EXEC_BACKEND
+python_exec_allow_host_fallback = PYTHON_EXEC_ALLOW_HOST_FALLBACK
+python_exec_docker_image = PYTHON_EXEC_DOCKER_IMAGE
+python_exec_docker_availability_ttl_seconds = PYTHON_EXEC_DOCKER_AVAILABILITY_TTL_SECONDS
+python_exec_timeout_seconds = PYTHON_EXEC_TIMEOUT_SECONDS
+python_exec_max_concurrent = PYTHON_EXEC_MAX_CONCURRENT
+python_exec_busy_timeout_seconds = PYTHON_EXEC_BUSY_TIMEOUT_SECONDS
+python_exec_max_output_chars = PYTHON_EXEC_MAX_OUTPUT_CHARS
+python_exec_memory_mb = PYTHON_EXEC_MEMORY_MB
+python_exec_cpus = PYTHON_EXEC_CPUS
+python_exec_tmpfs_mb = PYTHON_EXEC_TMPFS_MB
+python_exec_pids_limit = PYTHON_EXEC_PIDS_LIMIT
 
 __all__ = [
     "Settings",
@@ -216,6 +262,8 @@ __all__ = [
     "context_window_tokens",
     "context_budget_ratio",
     "context_large_message_tokens",
+    "context_semantic_summary_enabled",
+    "context_semantic_summary_timeout_seconds",
     "rag_context_trim_enabled",
     "rag_context_max_chars",
     "rag_context_doc_max_chars",
@@ -231,6 +279,7 @@ __all__ = [
     "tool_result_artifacts_enabled",
     "tool_result_artifact_dir",
     "tool_result_inline_max_chars",
+    "scope_guard_enabled",
     "web_search_enabled",
     "web_search_provider",
     "web_search_api_key",
@@ -238,12 +287,30 @@ __all__ = [
     "web_search_timeout_seconds",
     "web_search_context_max_chars",
     "web_search_snippet_max_chars",
+    "web_search_teaching_scope_enabled",
     "web_fetch_enabled",
+    "web_fetch_adaptive_enabled",
     "web_fetch_top_n",
+    "web_fetch_max_attempts",
+    "web_fetch_max_workers",
+    "web_fetch_total_timeout_seconds",
     "web_fetch_timeout_seconds",
     "web_fetch_max_bytes",
     "web_fetch_max_chars_per_page",
     "web_fetch_context_max_chars",
     "web_fetch_use_jina_reader",
+    "python_exec_enabled",
+    "python_exec_backend",
+    "python_exec_allow_host_fallback",
+    "python_exec_docker_image",
+    "python_exec_docker_availability_ttl_seconds",
+    "python_exec_timeout_seconds",
+    "python_exec_max_concurrent",
+    "python_exec_busy_timeout_seconds",
+    "python_exec_max_output_chars",
+    "python_exec_memory_mb",
+    "python_exec_cpus",
+    "python_exec_tmpfs_mb",
+    "python_exec_pids_limit",
     *_SETTING_NAMES,
 ]

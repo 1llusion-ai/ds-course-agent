@@ -33,3 +33,12 @@ def test_fallback_title_is_topic_like_not_raw_slice():
     assert build_fallback_session_title("帮我区分过拟合和欠拟合") == "过拟合与欠拟合区分"
     assert build_fallback_session_title("给我推荐一个学习机器学习的路径") == "机器学习路径推荐"
     assert build_fallback_session_title("机器学习有哪些方法？") == "机器学习方法"
+
+
+def test_fallback_title_collapses_repeated_general_fact_query():
+    repeated = "菲律宾的现任总统是谁" * 3
+
+    assert build_fallback_session_title(repeated) == "菲律宾现任总统"
+    assert build_fallback_session_title("菲律宾的现任总统是谁") == "菲律宾现任总统"
+    assert build_fallback_session_title("美国总统是谁") == "美国现任总统"
+    assert build_fallback_session_title("詹姆斯多大了？") == "詹姆斯年龄"

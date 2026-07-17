@@ -13,26 +13,30 @@
         { 'is-loading': message.isLoading, 'is-error': message.isError }
       ]"
     >
-      <div v-if="message.role === 'user'" class="message-content user-content">
-        {{ message.content }}
-      </div>
-
-      <template v-else-if="message.isLoading && !message.content">
-        <div class="message-content loading-content" aria-live="polite">
-          <span class="loading-dot"></span>
-          <span class="loading-dot"></span>
-          <span class="loading-dot"></span>
-          <span class="loading-label">{{ currentProgressMessage || '正在思考并组织答案…' }}</span>
+      <template v-if="message.role === 'user'">
+        <div class="message-content user-content">
+          {{ message.content }}
         </div>
       </template>
 
       <template v-else>
-        <div
-          class="message-content markdown-body"
-          :class="{ 'is-streaming': message.isLoading }"
-          v-html="renderedContent"
-          @click="handleMarkdownClick"
-        ></div>
+        <template v-if="message.isLoading && !message.content">
+          <div class="message-content loading-content" aria-live="polite">
+            <span class="loading-dot"></span>
+            <span class="loading-dot"></span>
+            <span class="loading-dot"></span>
+            <span class="loading-label">{{ currentProgressMessage || '正在思考并组织答案…' }}</span>
+          </div>
+        </template>
+
+        <template v-else>
+          <div
+            class="message-content markdown-body"
+            :class="{ 'is-streaming': message.isLoading }"
+            v-html="renderedContent"
+            @click="handleMarkdownClick"
+          ></div>
+        </template>
       </template>
 
       <details v-if="showProgressTimeline" class="progress-disclosure">
@@ -68,11 +72,31 @@
       </details>
 
       <div v-if="sourceChips.length" class="source-panel">
-        <div class="source-panel__label">来源</div>
-        <div class="source-chips">
+        <button
+          v-if="webSourceCards.length"
+          type="button"
+          class="web-source-block"
+          @click="openWebSources"
+        >
+          <span class="web-source-block__favicons" aria-hidden="true">
+            <img
+              v-for="source in webSourceFavicons"
+              :key="source.key"
+              class="web-source-block__favicon"
+              :src="source.favicon"
+              :alt="source.domain || source.label"
+              @error="$event.target.style.display = 'none'"
+            />
+          </span>
+          <span class="web-source-block__body">
+            <span class="web-source-block__title">{{ webSourceCards.length }} 个网页</span>
+          </span>
+          <span class="web-source-block__arrow">›</span>
+        </button>
+        <div v-if="courseSourceChips.length" class="source-chips">
           <component
             :is="source.url ? 'a' : 'span'"
-            v-for="source in sourceChips"
+            v-for="source in courseSourceChips"
             :key="source.key"
             class="source-chip"
             :href="source.url || undefined"
@@ -107,10 +131,11 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import 'katex/dist/katex.min.css'
 
 import { isJavascriptUrl, renderMarkdownWithEnhancements } from '../utils/markdown'
+import { domainFromUrl, faviconUrl } from '../utils/url'
 
 const props = defineProps({
   message: {
@@ -118,6 +143,8 @@ const props = defineProps({
     required: true
   }
 })
+
+const emit = defineEmits(['open-sources'])
 
 const messageCopyState = ref('idle')
 let messageCopyTimer = null
@@ -147,6 +174,16 @@ const ROUTE_LABELS = {
   skill: '学习策略',
   tool: '工具调用',
   web_search: '联网搜索'
+}
+
+const PROGRESS_PHASE_LABELS = {
+  web_search: '联网搜索',
+  web_search_start: '联网搜索',
+  web_search_results: '搜索结果',
+  web_fetch_start: '浏览网页',
+  web_fetch_page_done: '已浏览',
+  web_fetch_done: '浏览完成',
+  web_answer_start: '生成回答'
 }
 
 function extractRouteValue(route) {
@@ -179,6 +216,17 @@ function safeExternalUrl(value) {
 function sourceText(source, index) {
   if (typeof source === 'string') return source
   const metadata = source?.metadata || {}
+  if (source?.source === 'web' || source?.url || source?.href || source?.link) {
+    return (
+      source?.title ||
+      source?.name ||
+      source?.label ||
+      metadata.title ||
+      metadata.source ||
+      source?.reference ||
+      `网页 ${index + 1}`
+    )
+  }
   return (
     source?.reference ||
     source?.title ||
@@ -213,8 +261,91 @@ function sourceUrl(source) {
   return safeExternalUrl(source.url || source.href || source.link || source.metadata?.url || source.metadata?.href)
 }
 
+function sourceIdFromSource(source, fallbackIndex) {
+  if (!source || typeof source === 'string') return fallbackIndex + 1
+  const metadata = source.metadata || {}
+  const candidates = [
+    source.source_id,
+    source.sourceId,
+    source.index,
+    metadata.source_id,
+    metadata.sourceId
+  ]
+  for (const candidate of candidates) {
+    const value = Number(candidate)
+    if (Number.isFinite(value) && value > 0) return value
+  }
+  const reference = String(source.reference || metadata.reference || '')
+  const match = reference.match(/^\s*\[(\d{1,3})\]/)
+  if (match) {
+    const value = Number(match[1])
+    if (Number.isFinite(value) && value > 0) return value
+  }
+  return fallbackIndex + 1
+}
+
+function linkCitationReferences(html, citationMap) {
+  if (!html || !citationMap?.size || typeof window === 'undefined' || typeof DOMParser === 'undefined') {
+    return html
+  }
+
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(`<div data-citation-root>${html}</div>`, 'text/html')
+  const root = doc.body.firstElementChild
+  if (!root) return html
+
+  const excludedSelector = 'a, code, pre, kbd, samp, script, style, button'
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const nodes = []
+  while (walker.nextNode()) {
+    const node = walker.currentNode
+    if (!node.nodeValue || !/\[\d{1,3}\]/.test(node.nodeValue)) continue
+    if (node.parentElement?.closest(excludedSelector)) continue
+    nodes.push(node)
+  }
+
+  nodes.forEach(node => {
+    const text = node.nodeValue || ''
+    const fragment = doc.createDocumentFragment()
+    let lastIndex = 0
+    let replaced = false
+
+    text.replace(/\[(\d{1,3})\]/g, (match, rawNumber, offset) => {
+      const source = citationMap.get(Number(rawNumber))
+      if (!source?.url) return match
+
+      if (offset > lastIndex) {
+        fragment.appendChild(doc.createTextNode(text.slice(lastIndex, offset)))
+      }
+
+      const anchor = doc.createElement('a')
+      anchor.href = source.url
+      anchor.target = '_blank'
+      anchor.rel = 'noopener noreferrer'
+      anchor.className = 'citation-link'
+      anchor.textContent = match
+      anchor.title = source.title || source.domain || source.url
+      fragment.appendChild(anchor)
+
+      lastIndex = offset + match.length
+      replaced = true
+      return match
+    })
+
+    if (!replaced) return
+    if (lastIndex < text.length) {
+      fragment.appendChild(doc.createTextNode(text.slice(lastIndex)))
+    }
+    node.parentNode?.replaceChild(fragment, node)
+  })
+
+  return root.innerHTML
+}
+
 function formatProgressPhase(phase) {
   if (!phase) return ''
+  const key = String(phase).toLowerCase().replace(/[\s-]+/g, '_')
+  if (PROGRESS_PHASE_LABELS[key]) return PROGRESS_PHASE_LABELS[key]
   const text = String(phase).replace(/[_-]+/g, ' ')
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
@@ -225,8 +356,6 @@ function formatProgressTime(value) {
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
-
-const renderedContent = computed(() => renderMarkdownWithEnhancements(props.message.content || ''))
 
 const progressItems = computed(() => {
   const eventArray = Array.isArray(props.message.progressEvents)
@@ -292,13 +421,16 @@ const sourceChips = computed(() => {
       const detail = sourceDetail(source)
       const key = `${label}-${url || detail || index}`
 
-      return {
-        key,
-        label,
-        detail,
-        icon: sourceIcon(source),
+	    return {
+	        key,
+	        sourceId: sourceIdFromSource(source, index),
+	        label,
+	        detail,
+	        icon: sourceIcon(source),
         url,
-        title: detail ? `${label} · ${detail}` : label
+        title: detail ? `${label} · ${detail}` : label,
+        raw: source,
+        isWeb: Boolean(source && typeof source !== 'string' && (source.source === 'web' || url))
       }
     })
     .filter(source => {
@@ -306,8 +438,94 @@ const sourceChips = computed(() => {
       seen.add(source.key)
       return true
     })
-    .slice(0, 8)
 })
+
+const webSourceCards = computed(() => (
+  sourceChips.value
+    .filter(source => source.isWeb && source.url)
+	    .map((source, index) => {
+	      const raw = source.raw && typeof source.raw === 'object' ? source.raw : {}
+	      const domain = domainFromUrl(source.url)
+
+	      return {
+	        ...source,
+	        index: index + 1,
+	        sourceId: source.sourceId || sourceIdFromSource(raw, index),
+	        domain,
+	        snippet: raw.snippet || raw.summary || raw.description || '',
+        provider: raw.provider || '',
+        published_at: raw.published_at || raw.publishedAt || '',
+        fetched: raw.fetched,
+        final_url: raw.final_url || '',
+        favicon: faviconUrl(source.url, domain)
+      }
+    })
+))
+
+const courseSourceChips = computed(() => sourceChips.value.filter(source => !source.isWeb))
+
+const webSourceFavicons = computed(() => webSourceCards.value.filter(source => source.favicon).slice(0, 3))
+
+const citationSourceMap = computed(() => {
+  const items = new Map()
+  webSourceCards.value.forEach((source, index) => {
+    const id = Number(source.sourceId || sourceIdFromSource(source.raw, index))
+    const url = safeExternalUrl(source.final_url || source.url)
+    if (Number.isFinite(id) && id > 0 && url && !items.has(id)) {
+      items.set(id, {
+        url,
+        title: source.label,
+        domain: source.domain
+      })
+    }
+  })
+  return items
+})
+
+const renderedContent = ref('')
+let renderFrameId = null
+
+function renderMessageContent() {
+  const html = renderMarkdownWithEnhancements(props.message.content || '')
+  if (props.message.isLoading) {
+    return html
+  }
+  return linkCitationReferences(html, citationSourceMap.value)
+}
+
+function flushRenderedContent() {
+  renderFrameId = null
+  renderedContent.value = renderMessageContent()
+}
+
+function scheduleRenderedContentUpdate() {
+  if (renderFrameId !== null && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+    window.cancelAnimationFrame(renderFrameId)
+    renderFrameId = null
+  }
+
+  const canRaf = typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function'
+  if (!props.message.isLoading || !canRaf) {
+    flushRenderedContent()
+    return
+  }
+
+  renderFrameId = window.requestAnimationFrame(flushRenderedContent)
+}
+
+watch(
+  () => [props.message.content || '', Boolean(props.message.isLoading), citationSourceMap.value],
+  scheduleRenderedContentUpdate,
+  { immediate: true, flush: 'post' }
+)
+
+function openWebSources() {
+  if (!webSourceCards.value.length) return
+  emit('open-sources', {
+    title: `搜索来源 · ${webSourceCards.value.length} 个网页`,
+    sources: webSourceCards.value
+  })
+}
 
 async function copyText(text) {
   if (navigator.clipboard?.writeText) {
@@ -392,6 +610,9 @@ async function copyAssistantMessage() {
 onBeforeUnmount(() => {
   if (messageCopyTimer) {
     window.clearTimeout(messageCopyTimer)
+  }
+  if (renderFrameId !== null && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+    window.cancelAnimationFrame(renderFrameId)
   }
 })
 </script>
@@ -766,6 +987,26 @@ onBeforeUnmount(() => {
   border-bottom-color: rgba(15, 118, 110, 0.35);
 }
 
+.markdown-body :deep(.citation-link) {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 1px;
+  padding: 0 4px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.07);
+  color: #1d4ed8;
+  font-size: 0.86em;
+  font-weight: 800;
+  line-height: 1.35;
+  vertical-align: 0.05em;
+}
+
+.markdown-body :deep(.citation-link:hover) {
+  background: rgba(15, 118, 110, 0.1);
+  color: #0f766e;
+}
+
 .markdown-body :deep(code) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   background: rgba(37, 99, 235, 0.08);
@@ -976,24 +1217,84 @@ onBeforeUnmount(() => {
 
 .source-panel {
   display: grid;
-  gap: 7px;
-  margin-top: 12px;
-  padding-top: 11px;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 9px;
   border-top: 1px solid rgba(148, 163, 184, 0.18);
-}
-
-.source-panel__label {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .source-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+}
+
+.web-source-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: min(100%, 210px);
+  min-height: 34px;
+  padding: 6px 8px;
+  color: #1f2937;
+  text-align: left;
+  background: rgba(248, 250, 252, 0.96);
+  border: 1px solid rgba(203, 213, 225, 0.86);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.web-source-block:hover {
+  background: rgba(239, 246, 255, 0.92);
+  border-color: rgba(37, 99, 235, 0.28);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.07);
+  transform: translateY(-1px);
+}
+
+.web-source-block__favicons {
+  display: flex;
+  align-items: center;
+  min-width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+
+.web-source-block__favicon {
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(248, 250, 252, 0.98);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.10);
+  object-fit: contain;
+}
+
+.web-source-block__favicon + .web-source-block__favicon {
+  margin-left: -7px;
+}
+
+.web-source-block__body {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.web-source-block__title {
+  display: block;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.web-source-block__arrow {
+  color: #64748b;
+  font-size: 16px;
+  font-weight: 800;
 }
 
 .source-chip {

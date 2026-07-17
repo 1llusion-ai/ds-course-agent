@@ -320,3 +320,45 @@ PYTHONPATH=src python benchmarks/latency_harness.py --limit 20 \
 # retriever.vector p50 0 ms, p95 2001.1 ms, max 2002 ms
 # previous P4-A baseline: retrieve p50 217 ms, p95 3316 ms, max 5107 ms
 ```
+
+## P4-C Python execution sandbox fail-closed
+
+Implemented after code-review/run-intent separation to secure the remaining
+explicit `PYTHON_EXEC` route.
+
+Changes:
+- `PythonSandbox` now defaults to Docker-backed execution instead of host
+  subprocess execution.
+- Added `PYTHON_EXEC_*` settings:
+  - `PYTHON_EXEC_ENABLED`
+  - `PYTHON_EXEC_BACKEND`
+  - `PYTHON_EXEC_ALLOW_HOST_FALLBACK`
+  - `PYTHON_EXEC_DOCKER_IMAGE`
+  - timeout/output/memory/CPU/tmpfs/pids limits
+- Default policy is fail-closed:
+  - `PYTHON_EXEC_BACKEND=docker`
+  - `PYTHON_EXEC_ALLOW_HOST_FALLBACK=false`
+  - if Docker is unavailable, code is not executed and the user gets a clear
+    "safe sandbox unavailable" message.
+- Host subprocess execution remains available only through explicit
+  `backend="local"` / trusted local config, mainly for tests and development.
+- Docker execution is hardened with `--network=none`, `--read-only`,
+  non-root UID/GID, read-only `/workspace`, tmpfs `/tmp`, memory/CPU/pids limits,
+  `--cap-drop=ALL`, `no-new-privileges`, and `--pull=never` so deployment must
+  pre-pull/provide the configured sandbox image instead of pulling during a
+  user request.
+
+Validation:
+
+```bash
+PYTHONPATH=src python -m pytest \
+  tests/test_code_review_skill.py \
+  tests/test_code_executor.py \
+  tests/test_config_settings.py \
+  tests/test_query_pipeline.py \
+  tests/test_tool_registry.py -q
+# 103 passed
+
+PYTHONPATH=src python -m pytest -q
+# 378 passed, 6 skipped, 1 warning
+```

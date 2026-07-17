@@ -26,6 +26,7 @@ def fresh_client(monkeypatch):
             "message": "正在分析问题类型...",
             "stream_id": "s1",
             "tool": "course_rag_tool",
+            "details": {"found_count": 2},
         }
         yield {
             "type": "progress",
@@ -66,6 +67,7 @@ def test_stream_endpoint_returns_real_sse(fresh_client):
     assert response.status_code == 200
     assert '"type": "progress"' in response.text
     assert '"tool": "course_rag_tool"' in response.text
+    assert '"found_count": 2' in response.text
     assert '"type": "delta"' in response.text
     assert '"type": "final"' in response.text
     assert "你好" in response.text
@@ -80,4 +82,29 @@ def test_stream_endpoint_returns_real_sse(fresh_client):
     assert messages[-1]["content"] == "你好"
     assert messages[-1]["sources"] == [{"reference": "《第1章 数据科学简介》第1页"}]
     assert messages[-1]["progress_events"][0]["phase"] == "routing"
+    assert messages[-1]["progress_events"][0]["details"]["found_count"] == 2
     assert messages[-1]["progress_events"][1]["route"] == "generic_agent"
+
+
+def test_progress_details_are_compacted_for_history():
+    from ds_course_agent.api.routers.chat import _compact_progress_details_for_history
+
+    details = {
+        "found_count": 10,
+        "results": [
+            {
+                "title": "标题" * 400,
+                "url": f"https://example.com/{index}",
+                "snippet": "摘要" * 400,
+            }
+            for index in range(10)
+        ],
+    }
+
+    compacted = _compact_progress_details_for_history(details)
+
+    assert compacted["found_count"] == 10
+    assert len(compacted["results"]) == 6
+    assert compacted["results"][-1]["_truncated_items"] == 5
+    assert len(compacted["results"][0]["title"]) <= 500
+    assert len(compacted["results"][0]["snippet"]) <= 500

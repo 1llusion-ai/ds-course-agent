@@ -15,6 +15,7 @@ import json
 import os
 import re
 import socket
+import time
 from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any
@@ -22,6 +23,8 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from langchain_core.tools import tool
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.tools._shared import _warn_large_tool_result
@@ -70,6 +73,52 @@ class WebFetchError(RuntimeError):
     """Raised for unsafe URLs or fetch/extraction failures."""
 
 
+class _SSRFPeerCheckMixin:
+    """Reject private/internal peers after TCP connect but before HTTP bytes."""
+
+    def _new_conn(self):
+        sock = super()._new_conn()
+        try:
+            peer_host = sock.getpeername()[0]
+            peer_addr = ipaddress.ip_address(peer_host)
+        except Exception:
+            sock.close()
+            raise
+
+        if _is_blocked_addr(peer_addr):
+            sock.close()
+            raise OSError(f"blocked private/internal peer address: {_normalize_ip(peer_addr)}")
+        return sock
+
+
+class _SSRFCheckedHTTPConnection(_SSRFPeerCheckMixin, HTTPConnection):
+    """HTTP connection with post-connect SSRF peer validation."""
+
+
+class _SSRFCheckedHTTPSConnection(_SSRFPeerCheckMixin, HTTPSConnection):
+    """HTTPS connection with post-connect SSRF peer validation."""
+
+
+class _SSRFCheckedHTTPConnectionPool(HTTPConnectionPool):
+    ConnectionCls = _SSRFCheckedHTTPConnection
+
+
+class _SSRFCheckedHTTPSConnectionPool(HTTPSConnectionPool):
+    ConnectionCls = _SSRFCheckedHTTPSConnection
+
+
+class _SSRFCheckedHTTPAdapter(requests.adapters.HTTPAdapter):
+    """Requests adapter that installs checked urllib3 connection classes."""
+
+    def init_poolmanager(self, *args, **kwargs):  # type: ignore[override]
+        super().init_poolmanager(*args, **kwargs)
+        # urllib3 stores module-level pool class mappings by reference; copy
+        # before mutating so this adapter does not affect unrelated sessions.
+        self.poolmanager.pool_classes_by_scheme = dict(self.poolmanager.pool_classes_by_scheme)
+        self.poolmanager.pool_classes_by_scheme["http"] = _SSRFCheckedHTTPConnectionPool
+        self.poolmanager.pool_classes_by_scheme["https"] = _SSRFCheckedHTTPSConnectionPool
+
+
 # ---------------------------------------------------------------------------
 # Config helpers
 
@@ -98,7 +147,11 @@ def _as_float(name: str, default: float, *, minimum: float = 0.1) -> float:
 
 
 def _timeout() -> float:
-    return _as_float("WEB_FETCH_TIMEOUT_SECONDS", 15.0, minimum=1.0)
+    return _as_float("WEB_FETCH_TIMEOUT_SECONDS", 6.0, minimum=1.0)
+
+
+def _total_timeout() -> float:
+    return _as_float("WEB_FETCH_TOTAL_TIMEOUT_SECONDS", max(_timeout(), 10.0), minimum=1.0)
 
 
 def _max_bytes() -> int:
@@ -106,15 +159,18 @@ def _max_bytes() -> int:
 
 
 def _max_chars_per_page() -> int:
-    return _as_int("WEB_FETCH_MAX_CHARS_PER_PAGE", 6000, minimum=80)
+    return _as_int("WEB_FETCH_MAX_CHARS_PER_PAGE", 3500, minimum=80)
 
 
 def _context_max_chars() -> int:
-    return _as_int("WEB_FETCH_CONTEXT_MAX_CHARS", 4000, minimum=1000)
+    return _as_int("WEB_FETCH_CONTEXT_MAX_CHARS", 4500, minimum=1000)
 
 
 def _fetch_top_n() -> int:
-    return _as_int("WEB_FETCH_TOP_N", 2, minimum=0, maximum=5)
+    configured = _as_int("WEB_FETCH_TOP_N", 4, minimum=0, maximum=8)
+    # WEB_FETCH_ENABLED disables fetching; TOP_N=0 means "no explicit cap" for
+    # compatibility with common ops conventions, not "fetch nothing".
+    return 8 if configured <= 0 else configured
 
 
 # ---------------------------------------------------------------------------
@@ -248,10 +304,17 @@ def _extract_response_text(response: requests.Response) -> tuple[str, str, str]:
     raise WebFetchError(f"unsupported content-type: {ctype or 'unknown'}")
 
 
-def _read_limited_response(response: requests.Response, max_bytes: int) -> bytes:
+def _read_limited_response(
+    response: requests.Response,
+    max_bytes: int,
+    *,
+    deadline: float | None = None,
+) -> bytes:
     chunks: list[bytes] = []
     total = 0
     for chunk in response.iter_content(chunk_size=8192):
+        if deadline is not None and time.monotonic() > deadline:
+            raise WebFetchError("response read exceeded total timeout")
         if not chunk:
             continue
         total += len(chunk)
@@ -267,35 +330,51 @@ def _read_limited_response(response: requests.Response, max_bytes: int) -> bytes
 def _request_with_safe_redirects(url: str) -> requests.Response:
     current = str(url or "").strip()
     session = requests.Session()
+    adapter = _SSRFCheckedHTTPAdapter(pool_connections=1, pool_maxsize=1, max_retries=0)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
     headers = {"User-Agent": _DEFAULT_USER_AGENT, "Accept": "text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.5"}
+    deadline = time.monotonic() + _total_timeout()
 
-    for _attempt in range(_MAX_REDIRECTS + 1):
-        ok, reason = validate_url_target(current)
-        if not ok:
-            raise WebFetchError(f"URL validation failed: {reason}")
-        response = session.get(
-            current,
-            headers=headers,
-            timeout=_timeout(),
-            allow_redirects=False,
-            stream=True,
-        )
-        if response.is_redirect or response.is_permanent_redirect:
-            location = response.headers.get("location")
-            response.close()
-            if not location:
-                raise WebFetchError("redirect without Location header")
-            current = urljoin(current, location)
-            continue
+    try:
+        for _attempt in range(_MAX_REDIRECTS + 1):
+            if time.monotonic() > deadline:
+                raise WebFetchError("request exceeded total timeout")
+            ok, reason = validate_url_target(current)
+            if not ok:
+                raise WebFetchError(f"URL validation failed: {reason}")
+            response = session.get(
+                current,
+                headers=headers,
+                timeout=_timeout(),
+                allow_redirects=False,
+                stream=True,
+            )
+            try:
+                if response.is_redirect or response.is_permanent_redirect:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise WebFetchError("redirect without Location header")
+                    current = urljoin(current, location)
+                    continue
 
-        raw = _read_limited_response(response, _max_bytes() + 1)
-        response._content = raw[:_max_bytes()]  # noqa: SLF001 - requests stores content here.
-        response._content_consumed = True  # noqa: SLF001
-        if len(raw) > _max_bytes():
-            response.headers["x-ds-truncated-bytes"] = "true"
-        return response
+                raw = _read_limited_response(response, _max_bytes() + 1, deadline=deadline)
+                response._content = raw[:_max_bytes()]  # noqa: SLF001 - requests stores content here.
+                response._content_consumed = True  # noqa: SLF001
+                if len(raw) > _max_bytes():
+                    response.headers["x-ds-truncated-bytes"] = "true"
+                response.close()
+                return response
+            except Exception:
+                response.close()
+                raise
+            finally:
+                if response.is_redirect or response.is_permanent_redirect:
+                    response.close()
 
-    raise WebFetchError(f"too many redirects (>{_MAX_REDIRECTS})")
+        raise WebFetchError(f"too many redirects (>{_MAX_REDIRECTS})")
+    finally:
+        session.close()
 
 
 # ---------------------------------------------------------------------------
@@ -385,11 +464,39 @@ def fetch_web_page(url: str, *, max_chars: int | None = None) -> WebFetchResult:
         return WebFetchResult(url=url, error=str(exc)[:240])
 
 
-def fetch_web_pages(urls: list[str], *, top_n: int | None = None, max_chars_per_page: int | None = None) -> list[WebFetchResult]:
-    """Fetch up to ``top_n`` unique URLs, preserving input order."""
+def fetch_web_pages(
+    urls: list[str],
+    *,
+    top_n: int | None = None,
+    max_chars_per_page: int | None = None,
+    max_attempts: int | None = None,
+    max_workers: int | None = None,
+    total_timeout_seconds: float | None = None,
+) -> list[WebFetchResult]:
+    """Fetch readable text from search-result URLs.
 
-    top_n = _fetch_top_n() if top_n is None else max(0, min(int(top_n), 5))
-    if top_n <= 0:
+    ``top_n`` is the desired number of successful page reads.  When
+    ``max_attempts`` is larger than ``top_n``, keep trying later candidate URLs
+    until enough pages succeed or the attempt/time budget is exhausted.  This is
+    intentionally more robust than reading only the first N search hits because
+    many high-ranked pages are login-walled, anti-bot protected, or JS-rendered.
+
+    For backward compatibility, callers that do not pass ``max_attempts`` /
+    ``max_workers`` / ``total_timeout_seconds`` keep the old behavior: fetch at
+    most ``top_n`` URLs sequentially, preserving input order.
+    """
+
+    target_successes = _fetch_top_n() if top_n is None else max(0, min(int(top_n), 8))
+    if target_successes <= 0:
+        return []
+
+    legacy_mode = max_attempts is None and max_workers is None and total_timeout_seconds is None
+    if max_attempts is None:
+        attempt_limit = target_successes
+    else:
+        attempt_limit = max(target_successes, int(max_attempts))
+    attempt_limit = max(0, min(attempt_limit, 16))
+    if attempt_limit <= 0:
         return []
 
     seen: set[str] = set()
@@ -400,10 +507,100 @@ def fetch_web_pages(urls: list[str], *, top_n: int | None = None, max_chars_per_
             continue
         seen.add(url)
         selected.append(url)
-        if len(selected) >= top_n:
+        if len(selected) >= attempt_limit:
             break
 
-    return [fetch_web_page(url, max_chars=max_chars_per_page) for url in selected]
+    if not selected:
+        return []
+
+    if legacy_mode:
+        return [fetch_web_page(url, max_chars=max_chars_per_page) for url in selected[:target_successes]]
+
+    try:
+        worker_count = int(max_workers) if max_workers is not None else min(4, len(selected))
+    except (TypeError, ValueError):
+        worker_count = min(4, len(selected))
+    worker_count = max(1, min(worker_count, 8, len(selected)))
+
+    try:
+        total_timeout = float(total_timeout_seconds) if total_timeout_seconds is not None else 0.0
+    except (TypeError, ValueError):
+        total_timeout = 0.0
+
+    if worker_count <= 1:
+        import time
+
+        deadline = time.monotonic() + total_timeout if total_timeout > 0 else None
+        pages: list[WebFetchResult] = []
+        success_count = 0
+        for url in selected:
+            if deadline is not None and time.monotonic() >= deadline:
+                break
+            page = fetch_web_page(url, max_chars=max_chars_per_page)
+            pages.append(page)
+            if page.ok:
+                success_count += 1
+                if success_count >= target_successes:
+                    break
+        return pages
+
+    import time
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+
+    deadline = time.monotonic() + total_timeout if total_timeout > 0 else None
+    executor = ThreadPoolExecutor(max_workers=worker_count)
+    futures: dict[Any, tuple[int, str]] = {}
+    pages_by_index: dict[int, WebFetchResult] = {}
+    next_index = 0
+    success_count = 0
+
+    def _remaining_budget() -> float | None:
+        if deadline is None:
+            return None
+        return max(0.0, deadline - time.monotonic())
+
+    def _submit_more() -> None:
+        nonlocal next_index
+        while (
+            next_index < len(selected)
+            and len(futures) < worker_count
+            and success_count < target_successes
+        ):
+            url = selected[next_index]
+            future = executor.submit(fetch_web_page, url, max_chars=max_chars_per_page)
+            futures[future] = (next_index, url)
+            next_index += 1
+
+    try:
+        _submit_more()
+        while futures and success_count < target_successes:
+            remaining = _remaining_budget()
+            if remaining is not None and remaining <= 0:
+                break
+            done, _pending = wait(
+                set(futures),
+                timeout=remaining,
+                return_when=FIRST_COMPLETED,
+            )
+            if not done:
+                break
+
+            for future in done:
+                index, url = futures.pop(future)
+                try:
+                    page = future.result()
+                except Exception as exc:  # pragma: no cover - fetch_web_page normally captures failures
+                    page = WebFetchResult(url=url, error=str(exc)[:240])
+                pages_by_index[index] = page
+                if page.ok:
+                    success_count += 1
+            _submit_more()
+    finally:
+        for future in futures:
+            future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
+
+    return [pages_by_index[index] for index in sorted(pages_by_index)]
 
 
 def compact_fetched_pages(
@@ -427,11 +624,20 @@ def compact_fetched_pages(
     lines = [header]
     current_len = len(header)
 
-    for index, page in enumerate(ok_pages, start=1):
+    for fallback_index, page in enumerate(ok_pages, start=1):
+        source_index = fallback_index
+        metadata = page.metadata if isinstance(page.metadata, dict) else {}
+        try:
+            raw_source_index = metadata.get("source_index") or metadata.get("source_id")
+            parsed_source_index = int(raw_source_index)
+            if parsed_source_index > 0:
+                source_index = parsed_source_index
+        except (TypeError, ValueError):
+            source_index = fallback_index
         title = page.title.strip() or page.final_url or page.url
         text, _truncated = _truncate(page.text, _max_chars_per_page())
         card = (
-            f"\n[{index}] 网页：{title}\n"
+            f"\n[{source_index}] 网页：{title}\n"
             f"URL：{page.final_url or page.url}\n"
             f"抽取器：{page.extractor or 'unknown'}"
             f"{'（已截断）' if page.truncated else ''}\n"

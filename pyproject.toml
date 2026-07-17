@@ -22,6 +22,9 @@ pythonpath = [
   ".",
 ]
 addopts = "--import-mode=importlib"
+markers = [
+  "docker: tests that require a usable Docker daemon and sandbox image",
+]
 cache_dir = "pytest_cache"
 testpaths = [
   "tests",
