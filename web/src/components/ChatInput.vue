@@ -101,7 +101,7 @@ function handleEnterKey(event) {
 <style scoped>
 .chat-input-wrapper {
   width: 100%;
-  max-width: 980px;
+  max-width: var(--chat-thread-width, 820px);
   margin: 0 auto;
 }
 
@@ -118,7 +118,7 @@ function handleEnterKey(event) {
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.92));
   border: 1px solid rgba(148, 163, 184, 0.26);
   border-radius: 22px;
-  padding: 12px 14px 12px 18px;
+  padding: 14px 14px 14px 18px;
   box-shadow:
     0 20px 50px rgba(15, 23, 42, 0.10),
     0 1px 0 rgba(255, 255, 255, 0.88) inset;
@@ -129,7 +129,7 @@ function handleEnterKey(event) {
 .chat-input-wrapper--hero .input-container {
   border-color: rgba(15, 23, 42, 0.07);
   border-radius: 28px;
-  padding: 18px 18px 14px 22px;
+  padding: 20px 18px 16px 22px;
   box-shadow:
     0 24px 70px rgba(15, 23, 42, 0.10),
     0 1px 0 rgba(255, 255, 255, 0.92) inset;
@@ -149,10 +149,10 @@ function handleEnterKey(event) {
   border: none;
   outline: none;
   resize: none;
-  font-size: 15px;
-  line-height: 1.65;
+  font-size: 16px;
+  line-height: 1.68;
   color: #44403c;
-  min-height: 28px;
+  min-height: 34px;
   max-height: 150px;
   font-family: inherit;
   padding: 4px 0;
@@ -160,8 +160,8 @@ function handleEnterKey(event) {
 }
 
 .chat-input-wrapper--hero .input-field {
-  min-height: 58px;
-  font-size: 16px;
+  min-height: 66px;
+  font-size: 17px;
 }
 
 .input-field::placeholder {

@@ -659,8 +659,8 @@ onBeforeUnmount(() => {
 
 .ai-bubble {
   position: relative;
-  width: min(100%, 820px);
-  max-width: min(100%, 820px);
+  width: min(100%, var(--chat-thread-width, 820px));
+  max-width: min(100%, var(--chat-thread-width, 820px));
   padding: 2px 0 0;
   color: #1c1917;
   background: transparent;
@@ -683,6 +683,7 @@ onBeforeUnmount(() => {
 }
 
 .message-content {
+  font-size: 15.5px;
   line-height: 1.72;
   white-space: pre-wrap;
   word-break: break-word;
@@ -892,7 +893,7 @@ onBeforeUnmount(() => {
 .markdown-body {
   white-space: normal;
   color: #1f2937;
-  font-size: 14px;
+  font-size: 15.5px;
 }
 
 .markdown-body.is-streaming::after {
@@ -941,21 +942,21 @@ onBeforeUnmount(() => {
 }
 
 .markdown-body :deep(h1) {
-  font-size: 20px;
+  font-size: 22px;
 }
 
 .markdown-body :deep(h2) {
   padding-bottom: 5px;
   border-bottom: 1px solid rgba(226, 232, 240, 0.95);
-  font-size: 17px;
+  font-size: 19px;
 }
 
 .markdown-body :deep(h3) {
-  font-size: 15px;
+  font-size: 17px;
 }
 
 .markdown-body :deep(h4) {
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .markdown-body :deep(p) {

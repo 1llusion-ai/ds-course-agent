@@ -569,6 +569,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .chat-layout {
+  --chat-thread-width: 820px;
+
   display: flex;
   width: 100%;
   height: 100vh;
@@ -735,7 +737,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  width: min(100%, 820px);
+  width: min(100%, var(--chat-thread-width));
   margin: 0 auto;
 }
 
