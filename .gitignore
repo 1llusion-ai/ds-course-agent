@@ -5,10 +5,11 @@
 
 # Local agent / editor metadata
 .claude/
-CLAUDE.md
 .vscode/
 .idea/
 .agents/
+# NOTE: CLAUDE.md and AGENTS.md are intentionally TRACKED (shared engineering
+# constitution). Do not re-add CLAUDE.md here.
 
 # Python cache and test artifacts
 __pycache__/

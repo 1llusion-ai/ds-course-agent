@@ -16,6 +16,45 @@ authors = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.ruff]
+# 统一 Python 风格的可执行锚（见 AGENTS.md §2）。风格以本配置为准，不靠背文档。
+# line-length=120：现有代码仅极少数行超此值，避免门槛第一天全红而被忽略。
+line-length = 120
+target-version = "py310"
+src = ["src", "tests", "scripts", "benchmarks"]
+extend-exclude = ["var", "web", "data", "docs", "**/__pycache__"]
+
+[tool.ruff.lint]
+# 保守起步、贴合现状：pyflakes(F)、pycodestyle(E/W)、isort(I)、pyupgrade(UP)、
+# flake8-bugbear(B)、comprehensions(C4)。收紧规则应作为独立 PR 逐步进行，
+# 不要一次性打开全部规则导致海量 noise。
+select = ["E", "W", "F", "I", "UP", "B", "C4"]
+ignore = [
+  "E501",  # 行长由 formatter 负责；少数超长行按需单独处理，不阻塞门槛。
+  "B008",  # FastAPI/Depends 惯用在默认值里调用，属框架惯例。
+]
+
+[tool.ruff.lint.isort]
+# import 三段式：标准库 / 第三方 / 本地。与既有约定一致。
+known-first-party = ["ds_course_agent", "benchmarks", "scripts"]
+
+[tool.ruff.lint.per-file-ignores]
+# config 包用 Pydantic settings 动态导出模块级常量(globals 注入)，ruff 静态分析
+# 看不到定义，F821 为误报，非缺陷；运行时常量均存在(测试全绿佐证)。
+"src/ds_course_agent/shared/config/__init__.py" = ["F821"]
+# 维护脚本按惯例先做 sys.path 前置再 import，E402 属故意行为；
+# PROJECT_ROOT 在 sys.path 引导段前后各定义一次是良性重复(F811)。
+"scripts/**" = ["E402", "F811"]
+# 包 __init__ 用 `from config import *` 做公共 API re-export，是故意的聚合导出。
+"src/ds_course_agent/shared/__init__.py" = ["F403"]
+# 这些文件必须在 import 前先执行 load_dotenv() 或 sys.path 前置，E402 属故意加载顺序。
+"src/ds_course_agent/api/routers/chat.py" = ["E402"]
+"src/ds_course_agent/api/main.py" = ["E402"]
+"src/ds_course_agent/api/core_bridge.py" = ["E402"]
+"src/ds_course_agent/rag/hybrid_retriever.py" = ["E402"]
+"src/ds_course_agent/teaching/skills/**/scripts/*.py" = ["E402"]
+"tests/**" = ["F401", "B011", "E402"]
+
 [tool.pytest.ini_options]
 pythonpath = [
   "src",
