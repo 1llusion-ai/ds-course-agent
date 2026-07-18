@@ -70,22 +70,40 @@
           </span>
           <span class="web-source-block__arrow">›</span>
         </button>
-        <div v-if="courseSourceChips.length" class="source-chips">
-          <component
-            :is="source.url ? 'a' : 'span'"
-            v-for="source in courseSourceChips"
-            :key="source.key"
-            class="source-chip"
-            :href="source.url || undefined"
-            target="_blank"
-            rel="noopener noreferrer"
-            :title="source.title"
-          >
-            <span class="source-chip__icon">{{ source.icon }}</span>
-            <span class="source-chip__text">{{ source.label }}</span>
-            <span v-if="source.detail" class="source-chip__detail">{{ source.detail }}</span>
-          </component>
-        </div>
+        <details v-if="courseSourceChips.length" class="course-source-disclosure">
+          <summary class="course-source-summary">
+            <span class="course-source-summary__icons" aria-hidden="true">
+              <span
+                v-for="source in courseSourcePreview"
+                :key="source.key"
+                class="course-source-summary__icon"
+              >
+                {{ source.icon }}
+              </span>
+            </span>
+            <span class="course-source-summary__body">
+              <span class="course-source-summary__title">{{ courseSourceChips.length }} 个课程来源</span>
+            </span>
+            <span class="course-source-summary__arrow">›</span>
+          </summary>
+
+          <div class="source-chips source-chips--compact">
+            <component
+              :is="source.url ? 'a' : 'span'"
+              v-for="source in courseSourceChips"
+              :key="source.key"
+              class="source-chip"
+              :href="source.url || undefined"
+              target="_blank"
+              rel="noopener noreferrer"
+              :title="source.title"
+            >
+              <span class="source-chip__icon">{{ source.icon }}</span>
+              <span class="source-chip__text">{{ source.label }}</span>
+              <span v-if="source.detail" class="source-chip__detail">{{ source.detail }}</span>
+            </component>
+          </div>
+        </details>
       </div>
 
       <div v-if="message.role !== 'user' && message.content && !message.isLoading" class="assistant-actions">
@@ -417,6 +435,8 @@ const webSourceCards = computed(() => (
 const courseSourceChips = computed(() => sourceChips.value.filter(source => !source.isWeb))
 
 const webSourceFavicons = computed(() => webSourceCards.value.filter(source => source.favicon).slice(0, 3))
+
+const courseSourcePreview = computed(() => courseSourceChips.value.slice(0, 3))
 
 const citationSourceMap = computed(() => {
   const items = new Map()
@@ -1015,15 +1035,20 @@ onBeforeUnmount(() => {
 .source-panel {
   display: grid;
   gap: 6px;
-  margin-top: 10px;
-  padding-top: 9px;
-  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  align-items: start;
+  margin-top: 8px;
 }
 
 .source-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+}
+
+.source-chips--compact {
+  max-width: min(100%, 560px);
+  margin-top: 6px;
+  gap: 5px;
 }
 
 .web-source-block {
@@ -1043,6 +1068,39 @@ onBeforeUnmount(() => {
   transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
 }
 
+.course-source-disclosure {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.course-source-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: min(100%, 210px);
+  min-height: 34px;
+  padding: 6px 8px;
+  color: #1f2937;
+  list-style: none;
+  background: rgba(248, 250, 252, 0.90);
+  border: 1px solid rgba(203, 213, 225, 0.72);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.course-source-summary::-webkit-details-marker {
+  display: none;
+}
+
+.course-source-summary:hover {
+  background: rgba(239, 246, 255, 0.80);
+  border-color: rgba(37, 99, 235, 0.22);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.05);
+  transform: translateY(-1px);
+}
+
 .web-source-block:hover {
   background: rgba(239, 246, 255, 0.92);
   border-color: rgba(37, 99, 235, 0.28);
@@ -1051,6 +1109,14 @@ onBeforeUnmount(() => {
 }
 
 .web-source-block__favicons {
+  display: flex;
+  align-items: center;
+  min-width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+
+.course-source-summary__icons {
   display: flex;
   align-items: center;
   min-width: 22px;
@@ -1067,6 +1133,25 @@ onBeforeUnmount(() => {
   background: #fff;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.10);
   overflow: hidden;
+}
+
+.course-source-summary__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(248, 250, 252, 0.98);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.course-source-summary__icon + .course-source-summary__icon {
+  margin-left: -7px;
 }
 
 .web-source-block__favicon-fallback {
@@ -1096,6 +1181,11 @@ onBeforeUnmount(() => {
   flex: 0 1 auto;
 }
 
+.course-source-summary__body {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
 .web-source-block__title {
   display: block;
   overflow: hidden;
@@ -1107,10 +1197,32 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+.course-source-summary__title {
+  display: block;
+  overflow: hidden;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .web-source-block__arrow {
   color: #64748b;
   font-size: 16px;
   font-weight: 800;
+}
+
+.course-source-summary__arrow {
+  color: #64748b;
+  font-size: 16px;
+  font-weight: 800;
+  transition: transform 0.16s ease;
+}
+
+.course-source-disclosure[open] .course-source-summary__arrow {
+  transform: rotate(90deg);
 }
 
 .source-chip {
@@ -1126,6 +1238,16 @@ onBeforeUnmount(() => {
   background: rgba(248, 250, 252, 0.95);
   border: 1px solid rgba(203, 213, 225, 0.82);
   border-radius: 999px;
+}
+
+.source-chips--compact .source-chip {
+  max-width: min(100%, 280px);
+  padding: 3px 7px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 650;
+  background: rgba(248, 250, 252, 0.64);
+  border-color: rgba(203, 213, 225, 0.58);
 }
 
 .source-chip[href]:hover {

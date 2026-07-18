@@ -386,6 +386,8 @@ html.theme-dark .assistant-action-button--error {
 }
 
 html.theme-dark .source-chip,
+html.theme-dark .web-source-block,
+html.theme-dark .course-source-summary,
 html.theme-dark .markdown-body pre:not(.code-block__pre),
 html.theme-dark .markdown-body .katex-display,
 html.theme-dark .markdown-body blockquote,
@@ -396,12 +398,30 @@ html.theme-dark .markdown-body tr:nth-child(even) td {
   border-color: var(--dark-border) !important;
 }
 
+html.theme-dark .web-source-block__title,
+html.theme-dark .course-source-summary__title {
+  color: var(--dark-text) !important;
+}
+
+html.theme-dark .web-source-block__arrow,
+html.theme-dark .course-source-summary__arrow {
+  color: var(--dark-text-muted) !important;
+}
+
+html.theme-dark .web-source-block__favicon,
+html.theme-dark .course-source-summary__icon {
+  background: var(--dark-panel) !important;
+  border-color: var(--dark-bg-subtle) !important;
+}
+
 html.theme-dark .source-panel,
 html.theme-dark .markdown-body h2 {
   border-color: var(--dark-border-soft) !important;
 }
 
-html.theme-dark .source-chip:hover {
+html.theme-dark .source-chip:hover,
+html.theme-dark .web-source-block:hover,
+html.theme-dark .course-source-summary:hover {
   background: var(--dark-hover) !important;
   border-color: #4a4a4a !important;
 }
