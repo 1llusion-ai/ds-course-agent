@@ -157,6 +157,15 @@ def test_format_documents_keeps_full_content_when_trim_disabled(monkeypatch):
     assert "片段因上下文预算省略" not in formatted_context
 
 
+def test_rag_answer_prompt_is_teaching_oriented_not_compact():
+    assert "教学型回答" in rag_module._RAG_ANSWER_SYSTEM_PROMPT
+    assert "简单例子或类比" in rag_module._RAG_ANSWER_SYSTEM_PROMPT
+    assert "常见误区或学习建议" in rag_module._RAG_ANSWER_SYSTEM_PROMPT
+    assert "请基于参考材料认真讲解" in rag_module._RAG_ANSWER_USER_PROMPT
+    assert "请简洁回答" not in rag_module._RAG_ANSWER_USER_PROMPT
+    assert "3-6句" not in rag_module._RAG_ANSWER_SYSTEM_PROMPT
+
+
 def test_answer_with_context_applies_final_context_budget_protection(monkeypatch):
     _set_trim_config(monkeypatch, enabled=True, max_chars=150, doc_max_chars=25)
 
@@ -186,7 +195,7 @@ def test_answer_with_context_applies_final_context_budget_protection(monkeypatch
     assert "page_note" in passed_context
     assert "[片段已按总上下文预算裁剪" in passed_context or "[片段因上下文预算省略]" in passed_context
     assert any(
-        event["stage"] == "rag.answer.prompt_compact"
+        event["stage"] == "rag.answer.prompt"
         and event["data"]["mode"] == "sync"
         and event["data"]["context_chars"] == len(passed_context)
         and event["data"]["max_tokens"] == expected_max_tokens
@@ -223,7 +232,7 @@ def test_stream_answer_with_context_applies_final_context_budget_protection(monk
     assert "page_note" in passed_context
     assert "[片段已按总上下文预算裁剪" in passed_context or "[片段因上下文预算省略]" in passed_context
     assert any(
-        event["stage"] == "rag.answer.prompt_compact"
+        event["stage"] == "rag.answer.prompt"
         and event["data"]["mode"] == "stream"
         and event["data"]["context_chars"] == len(passed_context)
         and event["data"]["max_tokens"] == expected_max_tokens

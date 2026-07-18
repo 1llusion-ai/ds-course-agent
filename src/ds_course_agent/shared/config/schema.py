@@ -101,10 +101,10 @@ class Settings(BaseSettings):
     # artifact compactor: it reduces the *current turn* retrieved context before
     # it is sent to the answer LLM.
     RAG_CONTEXT_TRIM_ENABLED: bool = True
-    RAG_CONTEXT_MAX_CHARS: int = 3200
-    RAG_CONTEXT_DOC_MAX_CHARS: int = 1000
-    RAG_ANSWER_MAX_TOKENS: int = 384
-    RAG_ANSWER_TIMEOUT_SECONDS: float = 10.0
+    RAG_CONTEXT_MAX_CHARS: int = 4500
+    RAG_CONTEXT_DOC_MAX_CHARS: int = 1500
+    RAG_ANSWER_MAX_TOKENS: int = 768
+    RAG_ANSWER_TIMEOUT_SECONDS: float = 30.0
     RAG_ANSWER_CACHE_ENABLED: bool = True
     RAG_ANSWER_CACHE_TTL_SECONDS: float = 900.0
     RAG_ANSWER_CACHE_SIZE: int = 128

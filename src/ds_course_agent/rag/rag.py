@@ -26,6 +26,14 @@ from ds_course_agent.shared.vector_store import VectorStoreService
 
 logger = logging.getLogger(__name__)
 
+_RAG_ANSWER_SYSTEM_PROMPT = (
+    "你是数据科学课程助教。只能依据参考材料回答；材料不足时请明确说明。"
+    "请给出教学型回答，而不是摘要式短答。默认结构：先用一句话给直接结论，"
+    "再解释核心定义/机制，补充一个简单例子或类比，最后指出常见误区或学习建议。"
+    "回答应聚焦当前问题，避免无关背景，不要编造教材外信息。参考材料：\n{context}"
+)
+_RAG_ANSWER_USER_PROMPT = "请基于参考材料认真讲解用户提问：\n{input}"
+
 
 def _warn_large_rag_payload(payload: str, *, location: str, payload_type: str, **metadata) -> None:
     """Large RAG context/answer payload telemetry and artifact storage."""
@@ -77,11 +85,11 @@ def _rag_context_trim_enabled() -> bool:
 
 
 def _rag_context_max_chars() -> int:
-    return max(1, int(getattr(config, "RAG_CONTEXT_MAX_CHARS", 3200) or 3200))
+    return max(1, int(getattr(config, "RAG_CONTEXT_MAX_CHARS", 4500) or 4500))
 
 
 def _rag_context_doc_max_chars() -> int:
-    return max(1, int(getattr(config, "RAG_CONTEXT_DOC_MAX_CHARS", 1000) or 1000))
+    return max(1, int(getattr(config, "RAG_CONTEXT_DOC_MAX_CHARS", 1500) or 1500))
 
 
 def _rag_retrieval_embedding_timeout_seconds() -> float:
@@ -159,8 +167,8 @@ def _retrieval_cache_key(
             f"collection={getattr(config, 'collection_name', getattr(config, 'COLLECTION_NAME', ''))}",
             f"persist={getattr(config, 'CHROMA_PERSIST_DIR', '')}",
             f"trim={bool(getattr(config, 'RAG_CONTEXT_TRIM_ENABLED', True))}",
-            f"max_chars={int(getattr(config, 'RAG_CONTEXT_MAX_CHARS', 3200) or 3200)}",
-            f"doc_chars={int(getattr(config, 'RAG_CONTEXT_DOC_MAX_CHARS', 1000) or 1000)}",
+            f"max_chars={int(getattr(config, 'RAG_CONTEXT_MAX_CHARS', 4500) or 4500)}",
+            f"doc_chars={int(getattr(config, 'RAG_CONTEXT_DOC_MAX_CHARS', 1500) or 1500)}",
             f"rerank={bool(getattr(config, 'ENABLE_RERANK', False))}",
             f"rerank_top_k={int(getattr(config, 'RERANK_TOP_K', 20) or 20)}",
         ]
@@ -311,15 +319,10 @@ class RAGService:
 
         self.prompt_template = ChatPromptTemplate.from_messages(
             [
-                (
-                    "system",
-                    "你是数据科学课程助教。只能依据参考材料回答；材料不足时请明确说明。"
-                    "默认用3-6句或最多4个要点，先给结论，再给必要解释。"
-                    "不要展开无关背景，不要编造教材外信息。参考材料：\n{context}",
-                ),
+                ("system", _RAG_ANSWER_SYSTEM_PROMPT),
                 ("system", "用户的对话历史如下：\n"),
                 MessagesPlaceholder("history"),
-                ("user", "请简洁回答用户提问：\n{input}"),
+                ("user", _RAG_ANSWER_USER_PROMPT),
             ]
         )
         self.chat_model = get_rag_text_model()
@@ -610,11 +613,11 @@ class RAGService:
         if config.CHAT_SYSTEM_SUFFIX:
             prompt = f"{prompt}\n\n{config.CHAT_SYSTEM_SUFFIX}"
         _trace_rag_answer_event(
-            "rag.answer.prompt_compact",
+            "rag.answer.prompt",
             mode="stream",
             prompt_chars=len(prompt),
             context_chars=len(context or ""),
-            max_tokens=int(getattr(config, "RAG_ANSWER_MAX_TOKENS", 384) or 384),
+            max_tokens=int(getattr(config, "RAG_ANSWER_MAX_TOKENS", 768) or 768),
         )
         _warn_large_rag_payload(
             prompt,
@@ -648,11 +651,11 @@ class RAGService:
         if config.CHAT_SYSTEM_SUFFIX:
             prompt = f"{prompt}\n\n{config.CHAT_SYSTEM_SUFFIX}"
         _trace_rag_answer_event(
-            "rag.answer.prompt_compact",
+            "rag.answer.prompt",
             mode="sync",
             prompt_chars=len(prompt),
             context_chars=len(context or ""),
-            max_tokens=int(getattr(config, "RAG_ANSWER_MAX_TOKENS", 384) or 384),
+            max_tokens=int(getattr(config, "RAG_ANSWER_MAX_TOKENS", 768) or 768),
         )
         _warn_large_rag_payload(
             prompt,

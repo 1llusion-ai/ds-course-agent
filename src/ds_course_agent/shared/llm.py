@@ -51,8 +51,8 @@ def get_chat_model():
 
 def get_rag_text_model():
     """Return the model used by the RAG chain while preserving local text-mode behavior."""
-    max_tokens = max(64, int(getattr(config, "RAG_ANSWER_MAX_TOKENS", 384) or 384))
-    timeout = max(1.0, float(getattr(config, "RAG_ANSWER_TIMEOUT_SECONDS", 10.0) or 10.0))
+    max_tokens = max(64, int(getattr(config, "RAG_ANSWER_MAX_TOKENS", 768) or 768))
+    timeout = max(1.0, float(getattr(config, "RAG_ANSWER_TIMEOUT_SECONDS", 30.0) or 30.0))
 
     if config.USE_REMOTE_LLM:
         from langchain_openai import ChatOpenAI

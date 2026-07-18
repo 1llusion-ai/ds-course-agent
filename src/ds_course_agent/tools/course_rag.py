@@ -295,7 +295,7 @@ def _answer_cache_size() -> int:
 
 
 def _rag_answer_timeout_seconds() -> float:
-    return max(0.0, float(getattr(config, "RAG_ANSWER_TIMEOUT_SECONDS", 10.0) or 0.0))
+    return max(0.0, float(getattr(config, "RAG_ANSWER_TIMEOUT_SECONDS", 30.0) or 0.0))
 
 
 def _normalize_answer_cache_question(question: str) -> str:
