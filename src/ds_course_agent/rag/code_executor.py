@@ -599,6 +599,7 @@ class PythonSandbox:
             max_output_chars if max_output_chars is not None else _python_exec_setting("PYTHON_EXEC_MAX_OUTPUT_CHARS")
         )
         self.enabled = bool(enabled if enabled is not None else _python_exec_setting("PYTHON_EXEC_ENABLED"))
+        self._backend_explicit = backend is not None
         raw_backend = backend if backend is not None else _python_exec_setting("PYTHON_EXEC_BACKEND")
         self.backend = _normalize_python_exec_backend(raw_backend)
         self.allow_host_fallback = bool(
@@ -641,7 +642,7 @@ class PythonSandbox:
 
         _safe_trace_step("python_sandbox.execute.start", **self._trace_metadata())
 
-        if not self.enabled or self.backend in {"disabled", "off", "none"}:
+        if (not self.enabled and not self._backend_explicit) or self.backend in {"disabled", "off", "none"}:
             result = self._disabled_result("安全 Python 代码执行未启用。")
             return self._finish_result(result, special_stage="python_sandbox.execute.disabled")
 
