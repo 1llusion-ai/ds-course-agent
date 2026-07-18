@@ -835,12 +835,12 @@ onBeforeUnmount(() => {
 
 .markdown-body :deep(.code-block) {
   margin: 14px 0;
+  position: relative;
   overflow: hidden;
-  border: 1px solid rgba(203, 213, 225, 0.9);
-  border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 10px;
+  background: #f8fafc;
+  box-shadow: none;
 }
 
 .markdown-body :deep(.code-block__header) {
@@ -848,24 +848,27 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 10px 8px 12px;
-  border-bottom: 1px solid rgba(203, 213, 225, 0.82);
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.95));
+  padding: 9px 70px 0 13px;
+  border-bottom: 0;
+  background: transparent;
 }
 
 .markdown-body :deep(.code-block__footer) {
   display: flex;
   justify-content: flex-end;
-  padding: 8px 10px;
-  border-top: 1px solid rgba(203, 213, 225, 0.82);
-  background: rgba(248, 250, 252, 0.96);
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  padding: 0;
+  border-top: 0;
+  background: transparent;
 }
 
 .markdown-body :deep(.code-block__lang) {
-  color: #475569;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
@@ -873,24 +876,23 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 28px;
-  padding: 5px 10px;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
+  min-height: 24px;
+  padding: 3px 7px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 650;
   line-height: 1;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(203, 213, 225, 0.88);
-  border-radius: 8px;
-  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
 }
 
 .markdown-body :deep(.code-copy:hover) {
   color: #0f172a;
-  background: rgba(239, 246, 255, 0.96);
-  border-color: rgba(147, 197, 253, 0.78);
-  transform: translateY(-1px);
+  background: rgba(226, 232, 240, 0.72);
+  border-color: transparent;
 }
 
 .markdown-body :deep(.code-copy--success) {
@@ -907,12 +909,10 @@ onBeforeUnmount(() => {
 
 .markdown-body :deep(.code-block__pre) {
   margin: 0;
-  padding: 14px 16px;
+  padding: 10px 14px 14px;
   overflow-x: auto;
   color: #0f172a;
-  background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+  background: transparent;
   border-radius: 0;
 }
 

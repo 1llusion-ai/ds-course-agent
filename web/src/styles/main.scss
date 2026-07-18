@@ -433,56 +433,53 @@ html.theme-dark .markdown-body code {
 }
 
 html.theme-dark .markdown-body .code-block {
-  color: #1f2937 !important;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)) !important;
-  border-color: rgba(203, 213, 225, 0.9) !important;
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08) !important;
+  color: var(--dark-text) !important;
+  background: #2b2b2b !important;
+  border-color: #3f3f3f !important;
+  box-shadow: none !important;
 }
 
 html.theme-dark .markdown-body .code-block__header {
-  border-bottom-color: rgba(203, 213, 225, 0.82) !important;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.95)) !important;
+  border-bottom-color: transparent !important;
+  background: transparent !important;
 }
 
 html.theme-dark .markdown-body .code-block__footer {
-  border-top-color: rgba(203, 213, 225, 0.82) !important;
-  background: rgba(248, 250, 252, 0.96) !important;
+  border-top-color: transparent !important;
+  background: transparent !important;
 }
 
 html.theme-dark .markdown-body .code-block__lang {
-  color: #475569 !important;
+  color: var(--dark-text-faint) !important;
 }
 
 html.theme-dark .markdown-body .code-copy {
-  color: #475569 !important;
-  background: rgba(255, 255, 255, 0.92) !important;
-  border-color: rgba(203, 213, 225, 0.88) !important;
+  color: var(--dark-text-muted) !important;
+  background: transparent !important;
+  border-color: transparent !important;
 }
 
 html.theme-dark .markdown-body .code-copy:hover {
-  color: #0f172a !important;
-  background: rgba(239, 246, 255, 0.96) !important;
-  border-color: rgba(147, 197, 253, 0.78) !important;
+  color: var(--dark-text) !important;
+  background: #3a3a3a !important;
+  border-color: transparent !important;
 }
 
 html.theme-dark .markdown-body .code-copy--success {
-  color: #166534 !important;
-  background: rgba(220, 252, 231, 0.82) !important;
-  border-color: rgba(74, 222, 128, 0.34) !important;
+  color: #86efac !important;
+  background: rgba(22, 163, 74, 0.18) !important;
+  border-color: transparent !important;
 }
 
 html.theme-dark .markdown-body .code-copy--error {
-  color: #b91c1c !important;
-  background: rgba(254, 226, 226, 0.84) !important;
-  border-color: rgba(248, 113, 113, 0.34) !important;
+  color: #fca5a5 !important;
+  background: rgba(220, 38, 38, 0.18) !important;
+  border-color: transparent !important;
 }
 
 html.theme-dark .markdown-body .code-block__pre {
-  color: #0f172a !important;
-  background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)) !important;
+  color: #e5e7eb !important;
+  background: transparent !important;
 }
 
 html.theme-dark .markdown-body .code-block__pre code {
@@ -497,20 +494,20 @@ html.theme-dark .markdown-body .token-comment {
 }
 
 html.theme-dark .markdown-body .token-string {
-  color: #0f766e !important;
+  color: #5eead4 !important;
 }
 
 html.theme-dark .markdown-body .token-keyword {
-  color: #2563eb !important;
+  color: #93c5fd !important;
   font-weight: 800;
 }
 
 html.theme-dark .markdown-body .token-function {
-  color: #b45309 !important;
+  color: #fbbf24 !important;
 }
 
 html.theme-dark .markdown-body .token-number {
-  color: #dc2626 !important;
+  color: #fca5a5 !important;
 }
 
 html.theme-dark .markdown-body td,
