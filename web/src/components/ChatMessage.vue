@@ -39,37 +39,6 @@
         </template>
       </template>
 
-      <details v-if="showProgressTimeline" class="progress-disclosure">
-        <summary class="progress-summary">
-          <span class="progress-summary__left">
-            <span class="progress-summary__chevron">›</span>
-            <span>{{ message.isLoading ? currentProgressMessage || '正在处理...' : '查看执行过程' }}</span>
-          </span>
-          <span class="progress-summary__meta">{{ progressSummary }}</span>
-        </summary>
-
-        <div class="progress-timeline" aria-live="polite">
-          <div
-            v-for="(item, index) in progressItems"
-            :key="item.key"
-            class="progress-step"
-            :class="{
-              'progress-step--active': message.isLoading && index === progressItems.length - 1,
-              'progress-step--done': !message.isLoading || index < progressItems.length - 1
-            }"
-          >
-            <span class="progress-step__marker"></span>
-            <div class="progress-step__body">
-              <div class="progress-step__title">{{ item.message }}</div>
-              <div v-if="item.phase || item.route || item.time" class="progress-step__meta">
-                <span v-if="item.phase">{{ item.phase }}</span>
-                <span v-if="item.route">{{ item.route }}</span>
-                <span v-if="item.time">{{ item.time }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </details>
 
       <div v-if="sourceChips.length" class="source-panel">
         <button
@@ -358,12 +327,6 @@ function formatProgressPhase(phase) {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
-function formatProgressTime(value) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
 
 const progressItems = computed(() => {
   const eventArray = Array.isArray(props.message.progressEvents)
@@ -388,10 +351,7 @@ const progressItems = computed(() => {
 
     return {
       key: `${index}-${message}-${phase}-${route}`,
-      message,
-      phase,
-      route,
-      time: formatProgressTime(value.timestamp || value.time || value.created_at)
+      message
     }
   })
 })
@@ -401,22 +361,6 @@ const currentProgressMessage = computed(() => {
   return items.length ? items[items.length - 1].message : ''
 })
 
-const progressSummary = computed(() => {
-  const count = progressItems.value.length
-  return count ? `${count} 步` : ''
-})
-
-const hasExplicitProgressEvents = computed(() => (
-  Array.isArray(props.message.progressEvents) && props.message.progressEvents.length > 0
-) || (
-  Array.isArray(props.message.progress_events) && props.message.progress_events.length > 0
-))
-
-const showProgressTimeline = computed(() => (
-  props.message.role !== 'user' &&
-  progressItems.value.length > 0 &&
-  (props.message.isLoading || hasExplicitProgressEvents.value)
-))
 
 const sourceChips = computed(() => {
   const rawSources = normalizeSourceList(props.message.sources || props.message.metadata?.sources)
@@ -723,151 +667,6 @@ onBeforeUnmount(() => {
   font-weight: 650;
 }
 
-.progress-disclosure {
-  margin-top: 12px;
-}
-
-.progress-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 34px;
-  padding: 7px 10px;
-  color: #475569;
-  list-style: none;
-  background: rgba(248, 250, 252, 0.74);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background 0.16s ease, border-color 0.16s ease;
-}
-
-.progress-summary::-webkit-details-marker {
-  display: none;
-}
-
-.progress-summary:hover {
-  background: rgba(239, 246, 255, 0.82);
-  border-color: rgba(37, 99, 235, 0.18);
-}
-
-.progress-summary__left {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.progress-summary__left span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.progress-summary__chevron {
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  color: #2563eb;
-  background: rgba(37, 99, 235, 0.08);
-  border-radius: 999px;
-  transition: transform 0.16s ease;
-}
-
-.progress-disclosure[open] .progress-summary__chevron {
-  transform: rotate(90deg);
-}
-
-.progress-summary__meta {
-  flex-shrink: 0;
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 750;
-}
-
-.progress-timeline {
-  display: grid;
-  gap: 0;
-  margin-top: 8px;
-  padding: 10px 12px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 14px;
-  background: rgba(248, 250, 252, 0.72);
-}
-
-.progress-step {
-  position: relative;
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  gap: 9px;
-  padding: 0 0 10px;
-  color: #64748b;
-}
-
-.progress-step:last-child {
-  padding-bottom: 0;
-}
-
-.progress-step:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  top: 16px;
-  bottom: -1px;
-  left: 7px;
-  width: 2px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.25);
-}
-
-.progress-step__marker {
-  width: 12px;
-  height: 12px;
-  margin-top: 4px;
-  border-radius: 999px;
-  border: 2px solid rgba(148, 163, 184, 0.55);
-  background: #fff;
-  z-index: 1;
-}
-
-.progress-step--done .progress-step__marker {
-  border-color: #14b8a6;
-  background: #14b8a6;
-  box-shadow: inset 0 0 0 2px #fff;
-}
-
-.progress-step--active .progress-step__marker {
-  border-color: #2563eb;
-  background: #2563eb;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
-  animation: pulse 1.2s infinite ease-in-out;
-}
-
-.progress-step__title {
-  color: #334155;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.progress-step__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 3px;
-  font-size: 11px;
-  color: #64748b;
-}
-
-.progress-step__meta span {
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(226, 232, 240, 0.8);
-}
-
 @keyframes bubble-bounce {
   0%, 80%, 100% {
     transform: scale(0);
@@ -875,18 +674,6 @@ onBeforeUnmount(() => {
 
   40% {
     transform: scale(1);
-  }
-}
-
-@keyframes pulse {
-  0%, 100% {
-    transform: scale(0.92);
-    opacity: 0.58;
-  }
-
-  50% {
-    transform: scale(1.08);
-    opacity: 1;
   }
 }
 

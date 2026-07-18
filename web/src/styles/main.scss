@@ -107,10 +107,7 @@ html.theme-dark .session-meta,
 html.theme-dark .session-group__title,
 html.theme-dark .utility-entry__meta,
 html.theme-dark .source-panel__label,
-html.theme-dark .source-chip__detail,
-html.theme-dark .progress-summary__meta,
-html.theme-dark .progress-step,
-html.theme-dark .progress-step__meta {
+html.theme-dark .source-chip__detail {
   color: var(--dark-text-muted) !important;
 }
 
@@ -321,8 +318,7 @@ html.theme-dark .markdown-body h1,
 html.theme-dark .markdown-body h2,
 html.theme-dark .markdown-body h3,
 html.theme-dark .markdown-body h4,
-html.theme-dark .markdown-body strong,
-html.theme-dark .progress-step__title {
+html.theme-dark .markdown-body strong {
   color: var(--dark-text) !important;
 }
 
@@ -390,8 +386,6 @@ html.theme-dark .assistant-action-button--error {
 }
 
 html.theme-dark .source-chip,
-html.theme-dark .progress-summary,
-html.theme-dark .progress-timeline,
 html.theme-dark .markdown-body pre:not(.code-block__pre),
 html.theme-dark .markdown-body .katex-display,
 html.theme-dark .markdown-body blockquote,
@@ -407,8 +401,7 @@ html.theme-dark .markdown-body h2 {
   border-color: var(--dark-border-soft) !important;
 }
 
-html.theme-dark .source-chip:hover,
-html.theme-dark .progress-summary:hover {
+html.theme-dark .source-chip:hover {
   background: var(--dark-hover) !important;
   border-color: #4a4a4a !important;
 }
