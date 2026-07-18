@@ -7,10 +7,10 @@
 --no-cache:  禁用缓存
 --workers:   并行处理PDF的进程数（默认4）
 """
+
 import os
 import sys
 from pathlib import Path
-import sys
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
@@ -23,28 +23,31 @@ ensure_src_path()
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 
-import json
 import argparse
-import pickle
 import hashlib
-from datetime import datetime
-from dataclasses import dataclass, asdict
-from pathlib import Path
+import json
+import pickle
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from pathlib import Path
 
 # 优先使用 GPU 进行 Marker 解析
 os.environ.setdefault("TORCH_DEVICE", "cuda")
 
-from ds_course_agent.kb.parser import parse_pdf_file, PDFParseResult, save_parse_trace
-from ds_course_agent.kb.cleaner import clean_document, CleanedDocument
-from ds_course_agent.kb.chunker import CourseChunkerV2, ChunkingResultV2
-from ds_course_agent.kb.store import CourseKnowledgeBase, IngestResult
-from ds_course_agent.kb.toc_parser import get_toc_parser
 import re
+
+from ds_course_agent.kb.chunker import ChunkingResultV2, CourseChunkerV2
+from ds_course_agent.kb.cleaner import CleanedDocument, clean_document
+from ds_course_agent.kb.parser import PDFParseResult, parse_pdf_file
+from ds_course_agent.kb.store import CourseKnowledgeBase
+from ds_course_agent.kb.toc_parser import get_toc_parser
+
 
 @dataclass
 class BuildReport:
     """构建报告"""
+
     source_file: str
     parser_mode: str
     generated_at: str
@@ -54,11 +57,13 @@ class BuildReport:
     ingest_result: dict
     quality_metrics: dict
 
+
 def _file_hash(pdf_path: str) -> str:
     """基于文件路径、修改时间、大小生成缓存键"""
     stat = os.stat(pdf_path)
     key = f"{os.path.abspath(pdf_path)}|{stat.st_mtime}|{stat.st_size}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
+
 
 def _cache_path(pdf_path: str, stage: str, max_pages: int) -> Path:
     """生成缓存文件路径"""
@@ -66,6 +71,7 @@ def _cache_path(pdf_path: str, stage: str, max_pages: int) -> Path:
     h = _file_hash(pdf_path)
     name = f"{Path(pdf_path).stem}_{h}_mp{max_pages}_{stage}.pkl"
     return base / name
+
 
 def _load_cache(cache_file: Path):
     """加载缓存对象"""
@@ -77,11 +83,13 @@ def _load_cache(cache_file: Path):
     except Exception:
         return None
 
+
 def _save_cache(cache_file: Path, obj):
     """保存缓存对象"""
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     with open(cache_file, "wb") as f:
         pickle.dump(obj, f)
+
 
 def _compute_page_offset(pdf_path: str) -> int:
     """
@@ -92,7 +100,7 @@ def _compute_page_offset(pdf_path: str) -> int:
     """
     filename = os.path.basename(pdf_path)
     # 尝试从文件名提取章编号
-    match = re.search(r'第\s*(\d+)\s*章', filename)
+    match = re.search(r"第\s*(\d+)\s*章", filename)
     if match:
         chapter_num = int(match.group(1))
         toc = get_toc_parser()
@@ -114,6 +122,7 @@ def _compute_page_offset(pdf_path: str) -> int:
     # 即教材页码 = PDF页码 - 8。保持这里显式，避免把 PDF 物理页误当教材页。
     return -8
 
+
 def _parse_with_cache(pdf_path: str, max_pages: int, use_cache: bool) -> PDFParseResult:
     """带缓存的PDF解析"""
     cache_file = _cache_path(pdf_path, "parse", max_pages)
@@ -127,6 +136,7 @@ def _parse_with_cache(pdf_path: str, max_pages: int, use_cache: bool) -> PDFPars
         _save_cache(cache_file, result)
         print(f"  [Cache] 保存解析缓存: {cache_file.name}")
     return result
+
 
 def _clean_with_cache(pages, file_name: str, pdf_path: str, max_pages: int, use_cache: bool) -> CleanedDocument:
     """带缓存的文本清洗"""
@@ -142,12 +152,8 @@ def _clean_with_cache(pages, file_name: str, pdf_path: str, max_pages: int, use_
         print(f"  [Cache] 保存清洗缓存: {cache_file.name}")
     return result
 
-def build_knowledge_base(
-    pdf_path: str,
-    max_pages: int = 0,
-    ingest: bool = True,
-    use_cache: bool = True
-) -> BuildReport:
+
+def build_knowledge_base(pdf_path: str, max_pages: int = 0, ingest: bool = True, use_cache: bool = True) -> BuildReport:
     """
     构建课程知识库
 
@@ -172,27 +178,25 @@ def build_knowledge_base(
     print("\n[1/4] 解析 PDF...")
     parse_result = _parse_with_cache(pdf_path, max_pages, use_cache)
 
-    print(f"\n[2/4] 清洗文本...")
+    print("\n[2/4] 清洗文本...")
     pages = [(p.page_num, p.text) for p in parse_result.pages if p.text]
     cleaned = _clean_with_cache(pages, parse_result.file_name, pdf_path, max_pages, use_cache)
 
-    print(f"\n[3/4] 分块...")
+    print("\n[3/4] 分块...")
     chunk_pages = [(p.page_num, p.cleaned_text) for p in cleaned.pages]
     page_offset = _compute_page_offset(pdf_path)
     print(f"  page_offset: {page_offset}")
     chunker = CourseChunkerV2()
-    chunk_result = chunker.chunk_document(
-        chunk_pages,
-        parse_result.file_name,
-        page_offset=page_offset
-    )
+    chunk_result = chunker.chunk_document(chunk_pages, parse_result.file_name, page_offset=page_offset)
 
     ingest_result = None
     if ingest:
-        print(f"\n[4/4] 入库...")
+        print("\n[4/4] 入库...")
         kb = CourseKnowledgeBase()
         ingest_result = kb.ingest_chunking_result(chunk_result, source_file=parse_result.file_name)
-        print(f"  成功: {ingest_result.success_count}, 跳过: {ingest_result.skip_count}, 错误: {ingest_result.error_count}")
+        print(
+            f"  成功: {ingest_result.success_count}, 跳过: {ingest_result.skip_count}, 错误: {ingest_result.error_count}"
+        )
 
     quality_metrics = calculate_quality_metrics(parse_result, cleaned, chunk_result)
 
@@ -203,26 +207,26 @@ def build_knowledge_base(
         parse_result={
             "total_pages": parse_result.total_pages,
             "marker_pages": parse_result.marker_pages,
-            "success_rate": parse_result.success_rate
+            "success_rate": parse_result.success_rate,
         },
         clean_result={
             "pages_count": len(cleaned.pages),
             "total_chars_removed": cleaned.total_chars_removed,
-            "titles_found": len(cleaned.titles_found)
+            "titles_found": len(cleaned.titles_found),
         },
         chunk_result={
             "total_chunks": chunk_result.total_chunks,
             "struct_chunks": chunk_result.struct_chunks,
             "semantic_chunks": chunk_result.semantic_chunks,
             "shadow_chunks": chunk_result.shadow_chunks,
-            "avg_chunk_size": chunk_result.avg_chunk_size
+            "avg_chunk_size": chunk_result.avg_chunk_size,
         },
         ingest_result={
             "success_count": ingest_result.success_count if ingest_result else 0,
             "skip_count": ingest_result.skip_count if ingest_result else 0,
-            "error_count": ingest_result.error_count if ingest_result else 0
+            "error_count": ingest_result.error_count if ingest_result else 0,
         },
-        quality_metrics=quality_metrics
+        quality_metrics=quality_metrics,
     )
 
     report_path = "var/artifacts/build_report.json"
@@ -244,6 +248,7 @@ def build_knowledge_base(
     # 预计算知识点映射 embedding
     try:
         from ds_course_agent.rag.knowledge_mapper import precompute_knowledge_graph_embeddings
+
         graph_path = Path(PROJECT_ROOT) / "data" / "knowledge_graph.json"
         cache_path = Path(PROJECT_ROOT) / "data" / "knowledge_graph_embeddings.json"
         precompute_knowledge_graph_embeddings(
@@ -255,10 +260,9 @@ def build_knowledge_base(
 
     return report
 
+
 def calculate_quality_metrics(
-    parse_result: PDFParseResult,
-    cleaned: CleanedDocument,
-    chunk_result: ChunkingResultV2
+    parse_result: PDFParseResult, cleaned: CleanedDocument, chunk_result: ChunkingResultV2
 ) -> dict:
     """计算质量指标"""
     metrics = {
@@ -266,7 +270,7 @@ def calculate_quality_metrics(
         "empty_chunks": 0,
         "section_pollution_rate": 0.0,
         "page_coverage": 0.0,
-        "overall_score": 0.0
+        "overall_score": 0.0,
     }
 
     expected_sections = ["1.1", "1.2", "2.1", "2.2"]
@@ -288,7 +292,7 @@ def calculate_quality_metrics(
             section_text = chunk.metadata.section
             if len(section_text) > 50:
                 polluted_count += 1
-            elif any(c in section_text for c in ['。', '！', '？']):
+            elif any(c in section_text for c in ["。", "！", "？"]):
                 polluted_count += 1
 
     total_with_section = sum(1 for c in chunk_result.chunks if c.metadata.section)
@@ -302,14 +306,15 @@ def calculate_quality_metrics(
         metrics["page_coverage"] = len(pages_in_chunks) / parse_result.total_pages
 
     overall = (
-        title_recall * 40 +
-        (1 - metrics["section_pollution_rate"]) * 30 +
-        metrics["page_coverage"] * 20 +
-        (10 if empty_count == 0 else 0)
+        title_recall * 40
+        + (1 - metrics["section_pollution_rate"]) * 30
+        + metrics["page_coverage"] * 20
+        + (10 if empty_count == 0 else 0)
     )
     metrics["overall_score"] = overall
 
     return metrics
+
 
 def _build_one_pdf(args: tuple) -> BuildReport:
     """多进程包装器：构建单个PDF"""
@@ -320,19 +325,15 @@ def _build_one_pdf(args: tuple) -> BuildReport:
         print(f"[ERROR] 处理 {pdf_path} 失败: {e}")
         raise
 
+
 def main():
     parser = argparse.ArgumentParser(description="课程知识库构建")
     parser.add_argument("pdf_path", help="PDF 文件或目录路径")
-    parser.add_argument("--max-pages", type=int, default=0,
-                        help="最大解析页数 (0: 全部)")
-    parser.add_argument("--no-ingest", action="store_true",
-                        help="跳过入库步骤")
-    parser.add_argument("--no-cache", action="store_true",
-                        help="禁用解析/清洗缓存")
-    parser.add_argument("--workers", type=int, default=2,
-                        help="并行处理PDF的进程数 (默认2，防止GPU显存不足)")
-    parser.add_argument("--clear-db", action="store_true",
-                        help="入库前先清空整个知识库")
+    parser.add_argument("--max-pages", type=int, default=0, help="最大解析页数 (0: 全部)")
+    parser.add_argument("--no-ingest", action="store_true", help="跳过入库步骤")
+    parser.add_argument("--no-cache", action="store_true", help="禁用解析/清洗缓存")
+    parser.add_argument("--workers", type=int, default=2, help="并行处理PDF的进程数 (默认2，防止GPU显存不足)")
+    parser.add_argument("--clear-db", action="store_true", help="入库前先清空整个知识库")
 
     args = parser.parse_args()
 
@@ -354,10 +355,7 @@ def main():
             sys.exit(1)
 
         print(f"发现 {len(pdf_files)} 个 PDF 文件，使用 {args.workers} 个进程并行处理...\n")
-        tasks = [
-            (str(pdf_file), args.max_pages, not args.no_ingest, use_cache)
-            for pdf_file in pdf_files
-        ]
+        tasks = [(str(pdf_file), args.max_pages, not args.no_ingest, use_cache) for pdf_file in pdf_files]
 
         reports = []
         with ProcessPoolExecutor(max_workers=args.workers) as executor:
@@ -374,11 +372,9 @@ def main():
         print(f"\n批量构建完成: {len(reports)}/{len(pdf_files)} 成功")
     else:
         build_knowledge_base(
-            pdf_path=args.pdf_path,
-            max_pages=args.max_pages,
-            ingest=not args.no_ingest,
-            use_cache=use_cache
+            pdf_path=args.pdf_path, max_pages=args.max_pages, ingest=not args.no_ingest, use_cache=use_cache
         )
+
 
 if __name__ == "__main__":
     main()

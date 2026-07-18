@@ -11,10 +11,10 @@ from __future__ import annotations
 import json
 import re
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterator, List
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.api.title_generation import (
@@ -25,8 +25,8 @@ from ds_course_agent.api.title_generation import (
 
 STATE_FILE = Path(config.CHAT_HISTORY_DIR) / "backend_state.json"
 
-_sessions: Dict[str, dict] = {}
-_chat_history: Dict[str, List[dict]] = {}
+_sessions: dict[str, dict] = {}
+_chat_history: dict[str, list[dict]] = {}
 _deleted_session_ids: set[str] = set()
 _state_lock = threading.RLock()
 _save_lock = threading.Lock()
@@ -101,7 +101,7 @@ def _delete_legacy_session_file(session_id: str) -> bool:
         return False
 
 
-def _load_legacy_chat_file(path: Path) -> List[dict] | None:
+def _load_legacy_chat_file(path: Path) -> list[dict] | None:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
@@ -120,7 +120,7 @@ def _load_legacy_chat_file(path: Path) -> List[dict] | None:
     return messages or None
 
 
-def _derive_session_metadata(session_id: str, messages: List[dict], fallback_ts: datetime) -> dict:
+def _derive_session_metadata(session_id: str, messages: list[dict], fallback_ts: datetime) -> dict:
     user_messages = [
         message.get("content", "").strip()
         for message in messages

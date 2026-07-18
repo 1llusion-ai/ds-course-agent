@@ -11,18 +11,18 @@ This module keeps the current project simple:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import importlib.util
-from pathlib import Path
 import re
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, Optional
+from typing import Any
 
 import yaml
 
 from ds_course_agent.shared.paths import PROJECT_ROOT
-
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
 
@@ -65,7 +65,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
         return {}, text
 
     raw = match.group(1)
-    body = text[match.end():]
+    body = text[match.end() :]
     data = yaml.safe_load(raw) or {}
     if not isinstance(data, dict):
         return {}, body
@@ -177,8 +177,8 @@ class SkillRegistry:
 
     def __init__(
         self,
-        base_dir: Optional[Path] = None,
-        user_dir: Optional[Path] = None,
+        base_dir: Path | None = None,
+        user_dir: Path | None = None,
     ) -> None:
         root = PROJECT_ROOT
         self.base_dir = Path(base_dir or (root / "src" / "ds_course_agent" / "teaching" / "skills"))
@@ -216,11 +216,7 @@ class SkillRegistry:
         for key in keys:
             self._skills.pop(key, None)
 
-        stale_cache = [
-            cache_key
-            for cache_key in self._module_cache
-            if cache_key[0] not in self._skills
-        ]
+        stale_cache = [cache_key for cache_key in self._module_cache if cache_key[0] not in self._skills]
         for cache_key in stale_cache:
             self._module_cache.pop(cache_key, None)
 
@@ -313,11 +309,7 @@ class SkillRegistry:
         summary-only / lazy-loading behavior if the skill catalog grows.
         """
 
-        skills = [
-            skill
-            for skill in self.list_skills(user_invocable_only=False)
-            if skill.context == "inline"
-        ]
+        skills = [skill for skill in self.list_skills(user_invocable_only=False) if skill.context == "inline"]
         if not skills:
             return ""
 
@@ -381,17 +373,13 @@ class SkillRegistry:
 
             if skill.description:
                 desc_terms = [
-                    term
-                    for term in re.split(r"[,，、/\s]+", _normalize_text(skill.description))
-                    if len(term) >= 2
+                    term for term in re.split(r"[,，、/\s]+", _normalize_text(skill.description)) if len(term) >= 2
                 ]
                 score += min(sum(1 for term in desc_terms[:8] if term in normalized_question), 2)
 
             if skill.when_to_use:
                 usage_terms = [
-                    term
-                    for term in re.split(r"[,，、/\s]+", _normalize_text(skill.when_to_use))
-                    if len(term) >= 2
+                    term for term in re.split(r"[,，、/\s]+", _normalize_text(skill.when_to_use)) if len(term) >= 2
                 ]
                 score += min(sum(1 for term in usage_terms[:8] if term in normalized_question), 2)
 
@@ -410,7 +398,7 @@ class SkillRegistry:
 
     def load_full_text(self, name: str, args: str = "") -> str:
         skill = self.get_skill(name)
-        return f"<skill name=\"{skill.name}\">\n{skill.get_prompt(args)}\n</skill>"
+        return f'<skill name="{skill.name}">\n{skill.get_prompt(args)}\n</skill>'
 
     def load_module(self, name: str, script_relative_path: str | None = None) -> ModuleType:
         skill = self.get_skill(name)

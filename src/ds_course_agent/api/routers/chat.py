@@ -1,6 +1,6 @@
-from ..core_bridge import PROJECT_ROOT
 from dotenv import load_dotenv
-from pathlib import Path
+
+from ..core_bridge import PROJECT_ROOT
 
 env_path = PROJECT_ROOT / ".env"
 if env_path.exists():
@@ -10,18 +10,19 @@ import asyncio
 import json
 import logging
 import threading
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
-from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 
-from ..core_bridge import chat_with_history, stream_chat_with_history
 from ..auth.deps import get_current_student_id
+from ..core_bridge import chat_with_history, stream_chat_with_history
 from ..schemas.chat import ChatHistoryResponse, ChatMessage, ChatRequest, ChatResponse, ChatStreamRequest
-from ..state import DEFAULT_SESSION_TITLE, _chat_history, _save as _save_state, _sessions, state_lock
+from ..state import DEFAULT_SESSION_TITLE, _chat_history, _sessions, state_lock
+from ..state import _save as _save_state
 from ..title_generation import (
     SESSION_TITLE_MAX_CHARS,
     _clean_generated_title,
@@ -74,8 +75,7 @@ def _compact_progress_detail_value(value, *, depth: int = 0):
         return str(value)[:_PROGRESS_DETAIL_STRING_LIMIT]
     if isinstance(value, list):
         compacted = [
-            _compact_progress_detail_value(item, depth=depth + 1)
-            for item in value[:_PROGRESS_DETAIL_LIST_LIMIT]
+            _compact_progress_detail_value(item, depth=depth + 1) for item in value[:_PROGRESS_DETAIL_LIST_LIMIT]
         ]
         if len(value) > _PROGRESS_DETAIL_LIST_LIMIT:
             compacted.append({"_truncated_items": len(value) - _PROGRESS_DETAIL_LIST_LIMIT})
@@ -126,14 +126,19 @@ async def _generate_session_title_with_source(question: str) -> tuple[str, str]:
 
     try:
         from ds_course_agent.shared.llm import get_chat_model
+
         llm = get_chat_model()
         response = await run_in_threadpool(llm.invoke, prompt)
         raw_title = _extract_response_text(response)
         cleaned_title = _clean_generated_title(raw_title)
         title = _finalize_title(question, cleaned_title)
-        source = "heuristic" if not cleaned_title or looks_like_unprocessed_question_title(question, cleaned_title) else "llm"
+        source = (
+            "heuristic"
+            if not cleaned_title or looks_like_unprocessed_question_title(question, cleaned_title)
+            else "llm"
+        )
         return title, source
-    except Exception as exc:
+    except Exception:
         logger.warning("会话标题 LLM 生成失败，已使用规则标题降级。", exc_info=True)
         return build_fallback_session_title(question), "heuristic"
 
@@ -458,7 +463,9 @@ async def send_message(
                 },
             ) from exc
 
-        assistant_content = assistant_result.get("content", "") if isinstance(assistant_result, dict) else str(assistant_result)
+        assistant_content = (
+            assistant_result.get("content", "") if isinstance(assistant_result, dict) else str(assistant_result)
+        )
         assistant_sources = assistant_result.get("sources") if isinstance(assistant_result, dict) else None
         query_trace = assistant_result.get("query_trace") if isinstance(assistant_result, dict) else None
         assistant_route = None
@@ -478,7 +485,10 @@ async def send_message(
                 "route": assistant_route,
                 "used_retrieval": assistant_result.get("used_retrieval"),
                 "web_search": bool(data.web_search),
-            } if isinstance(assistant_result, dict) and (assistant_route or assistant_result.get("used_retrieval") is not None) else None,
+            }
+            if isinstance(assistant_result, dict)
+            and (assistant_route or assistant_result.get("used_retrieval") is not None)
+            else None,
         )
         with _history_lock(data.session_id):
             _append_message(data.session_id, assistant_msg, save=False)
@@ -675,11 +685,7 @@ async def send_message_stream(
 
                 if event_type == "final":
                     final_sent = True
-                    final_content = (
-                        event.get("content", "")
-                        or _snapshot_worker_delta_text()
-                        or "".join(delta_parts)
-                    )
+                    final_content = event.get("content", "") or _snapshot_worker_delta_text() or "".join(delta_parts)
                     metadata = {
                         "route": event.get("route"),
                         "used_retrieval": event.get("used_retrieval"),
@@ -714,11 +720,7 @@ async def send_message_stream(
 
                 if event_type == "error":
                     error_message = event.get("message") or event.get("error") or "发送失败"
-                    preserved_content = (
-                        event.get("content")
-                        or _snapshot_worker_delta_text()
-                        or "".join(delta_parts)
-                    )
+                    preserved_content = event.get("content") or _snapshot_worker_delta_text() or "".join(delta_parts)
                     metadata = {
                         "web_search": bool(web_search),
                         "stream_error": error_message,

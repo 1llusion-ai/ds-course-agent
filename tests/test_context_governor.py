@@ -15,11 +15,7 @@ from ds_course_agent.shared.context_governor import (
 
 
 def _warning_events(trace):
-    return [
-        event
-        for event in trace["events"]
-        if event["stage"] == "context_governor.warning"
-    ]
+    return [event for event in trace["events"] if event["stage"] == "context_governor.warning"]
 
 
 def test_estimate_text_tokens_uses_chinese_and_english_heuristic():
@@ -131,8 +127,7 @@ def test_compact_messages_to_budget_summarizes_old_context_and_preserves_recent(
     assert len(compacted) < len(messages)
     assert estimate_messages_tokens(compacted) < estimate_messages_tokens(messages)
     assert any(
-        event["stage"] == "context_governor.compact"
-        and event["data"]["kind"] == "summary_compaction"
+        event["stage"] == "context_governor.compact" and event["data"]["kind"] == "summary_compaction"
         for event in trace["events"]
     )
 
@@ -266,6 +261,7 @@ def test_context_compaction_semantic_summary_reuses_deterministic_source(monkeyp
 
 def test_context_compaction_semantic_timeout_does_not_spawn_unbounded_threads(monkeypatch):
     import concurrent.futures
+
     import ds_course_agent.shared.config as config
     import ds_course_agent.shared.context_governor as governor
 

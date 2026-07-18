@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -10,9 +10,11 @@ from ..schemas.session import SessionCreate, SessionList, SessionResponse, Sessi
 from ..state import (
     DEFAULT_SESSION_TITLE,
     _sessions,
-    _save as _save_state,
     purge_session,
     state_lock,
+)
+from ..state import (
+    _save as _save_state,
 )
 
 router = APIRouter()

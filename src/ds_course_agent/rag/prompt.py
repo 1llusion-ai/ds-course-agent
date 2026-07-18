@@ -1,11 +1,8 @@
 """Unified system prompt helpers for the teaching agent."""
 
-from pathlib import Path
-
 import ds_course_agent.shared.config as config
-from ds_course_agent.shared.paths import PROJECT_ROOT
 from ds_course_agent.rag.skill_system import get_skill_registry
-
+from ds_course_agent.shared.paths import PROJECT_ROOT
 
 _PROMPT_DIR = PROJECT_ROOT / "docs" / "prompts"
 _SYSTEM_PROMPT_PATH = _PROMPT_DIR / "system_prompt.txt"

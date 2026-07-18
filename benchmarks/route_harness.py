@@ -8,11 +8,11 @@ while the wrong route is chosen, so route correctness must be measured directly.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
 import json
-from pathlib import Path
 import sys
-from typing import Any, Optional
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
@@ -30,7 +30,9 @@ def _now_iso() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
-def load_route_cases(path: Path | str = DEFAULT_CASE_PATH, limit: Optional[int] = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def load_route_cases(
+    path: Path | str = DEFAULT_CASE_PATH, limit: int | None = None
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     metadata = {key: value for key, value in payload.items() if key != "cases"}
     cases = payload.get("cases") or []
@@ -88,7 +90,16 @@ def evaluate_case(service: Any, case: dict[str, Any], *, student_id: str) -> dic
     }
 
 
-def build_route_report(*, metadata: dict[str, Any], case_path: Path | str, output_path: Path | str, student_id: str, started_at: str, finished_at: str, results: list[dict[str, Any]]) -> dict[str, Any]:
+def build_route_report(
+    *,
+    metadata: dict[str, Any],
+    case_path: Path | str,
+    output_path: Path | str,
+    student_id: str,
+    started_at: str,
+    finished_at: str,
+    results: list[dict[str, Any]],
+) -> dict[str, Any]:
     total = len(results)
     passed = sum(1 for item in results if item.get("passed"))
     unexpected_rag = sum(
@@ -119,7 +130,13 @@ def build_route_report(*, metadata: dict[str, Any], case_path: Path | str, outpu
     }
 
 
-def run_route_harness(*, case_path: Path | str = DEFAULT_CASE_PATH, output_path: Path | str = DEFAULT_REPORT_PATH, limit: Optional[int] = None, student_id: str = DEFAULT_STUDENT_ID) -> dict[str, Any]:
+def run_route_harness(
+    *,
+    case_path: Path | str = DEFAULT_CASE_PATH,
+    output_path: Path | str = DEFAULT_REPORT_PATH,
+    limit: int | None = None,
+    student_id: str = DEFAULT_STUDENT_ID,
+) -> dict[str, Any]:
     started_at = _now_iso()
     metadata, cases = load_route_cases(case_path, limit=limit)
 

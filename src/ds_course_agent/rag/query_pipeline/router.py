@@ -3,9 +3,10 @@ Query Router
 
 负责根据 QueryContext 决定路由策略
 """
+
 import logging
 import re
-from typing import Optional
+
 from .models import QueryContext, RouteDecision, RouteType
 from .preprocessor import (
     _assignment_counts_as_code,
@@ -57,16 +58,12 @@ _AMBIGUOUS_HYPERPARAMETER_NAMES = [
 ]
 
 _UNAMBIGUOUS_HYPERPARAMETER_ASSIGNMENT_RE = re.compile(
-    r"(?<![A-Za-z0-9_])(?:"
-    + "|".join(re.escape(name) for name in _UNAMBIGUOUS_HYPERPARAMETER_NAMES)
-    + r")\s*=",
+    r"(?<![A-Za-z0-9_])(?:" + "|".join(re.escape(name) for name in _UNAMBIGUOUS_HYPERPARAMETER_NAMES) + r")\s*=",
     flags=re.IGNORECASE,
 )
 
 _AMBIGUOUS_HYPERPARAMETER_ASSIGNMENT_RE = re.compile(
-    r"(?<![A-Za-z0-9_])(?:"
-    + "|".join(re.escape(name) for name in _AMBIGUOUS_HYPERPARAMETER_NAMES)
-    + r")\s*=",
+    r"(?<![A-Za-z0-9_])(?:" + "|".join(re.escape(name) for name in _AMBIGUOUS_HYPERPARAMETER_NAMES) + r")\s*=",
     flags=re.IGNORECASE,
 )
 
@@ -118,10 +115,7 @@ def _has_hyperparameter_domain_cue(query: str) -> bool:
 def _has_hyperparameter_assignment(query: str) -> bool:
     if _UNAMBIGUOUS_HYPERPARAMETER_ASSIGNMENT_RE.search(query):
         return True
-    return bool(
-        _AMBIGUOUS_HYPERPARAMETER_ASSIGNMENT_RE.search(query)
-        and _has_hyperparameter_domain_cue(query)
-    )
+    return bool(_AMBIGUOUS_HYPERPARAMETER_ASSIGNMENT_RE.search(query) and _has_hyperparameter_domain_cue(query))
 
 
 class QueryRouter:
@@ -281,7 +275,7 @@ class QueryRouter:
             retrieval_policy="optional",
         )
 
-    def _route_autonomous_tool_choice(self, context: QueryContext) -> Optional[RouteDecision]:
+    def _route_autonomous_tool_choice(self, context: QueryContext) -> RouteDecision | None:
         """Return generic-agent routing for ambiguous code/example requests.
 
         The goal is not to enumerate every possible query by rules.  Instead we
@@ -350,12 +344,9 @@ class QueryRouter:
         """Best-effort broad code-payload detector used only to avoid forced RAG."""
 
         compact = "".join(query.split())
-        return bool(
-            _has_strong_python_signal(query)
-            or _assignment_counts_as_code(query, compact)
-        )
+        return bool(_has_strong_python_signal(query) or _assignment_counts_as_code(query, compact))
 
-    def _route_rewritten_followup(self, context: QueryContext) -> Optional[RouteDecision]:
+    def _route_rewritten_followup(self, context: QueryContext) -> RouteDecision | None:
         rewrite = context.metadata.get("rewrite") if context.metadata else None
         if not isinstance(rewrite, dict):
             return None
@@ -463,8 +454,13 @@ class QueryRouter:
 
         # 反复不懂信号
         clarification_keywords = [
-            "不太懂", "不理解", "不明白", "没懂",
-            "还是不懂", "还是不理解", "为什么不是",
+            "不太懂",
+            "不理解",
+            "不明白",
+            "没懂",
+            "还是不懂",
+            "还是不理解",
+            "为什么不是",
         ]
 
         has_clarification = any(kw in query for kw in clarification_keywords)
@@ -482,12 +478,7 @@ class QueryRouter:
         # 只有反复澄清、判断题或明确错误前提才进入 misconception skill；
         # 普通 “为什么/是什么/应该是什么值” 仍应走 grounded RAG。
         return bool(
-            in_candidates
-            and (
-                has_clarification
-                or has_judgment
-                or self._has_explicit_misconception_signal(context)
-            )
+            in_candidates and (has_clarification or has_judgment or self._has_explicit_misconception_signal(context))
         )
 
     def _get_misconception_reasons(self, context: QueryContext) -> list:
@@ -549,9 +540,8 @@ class QueryRouter:
             return False
 
         if not context.detected_concepts:
-            return (
-                self._is_personalization_request(context.normalized_query)
-                and self._has_personalization_context(context)
+            return self._is_personalization_request(context.normalized_query) and self._has_personalization_context(
+                context
             )
 
         primary_score = context.detected_concepts[0].confidence
@@ -632,9 +622,7 @@ class QueryRouter:
         query = self._normalize(context.normalized_query)
         is_hyperparameter_concept = self._is_hyperparameter_concept_question(query)
         assignment_concept_without_course_signal = (
-            _has_assignment_signal(query)
-            and _has_concept_question_cue(query)
-            and not is_hyperparameter_concept
+            _has_assignment_signal(query) and _has_concept_question_cue(query) and not is_hyperparameter_concept
         )
 
         course_related_intents = [
@@ -652,12 +640,32 @@ class QueryRouter:
             return True
 
         course_keywords = [
-            "数据科学", "数据分析", "机器学习", "深度学习",
-            "统计", "概率", "模型", "算法", "特征", "训练",
-            "测试集", "验证集", "回归", "分类", "聚类",
-            "决策树", "随机森林", "svm", "支持向量机",
-            "梯度下降", "过拟合", "欠拟合", "正则化",
-            "交叉验证", "贝叶斯", "神经网络",
+            "数据科学",
+            "数据分析",
+            "机器学习",
+            "深度学习",
+            "统计",
+            "概率",
+            "模型",
+            "算法",
+            "特征",
+            "训练",
+            "测试集",
+            "验证集",
+            "回归",
+            "分类",
+            "聚类",
+            "决策树",
+            "随机森林",
+            "svm",
+            "支持向量机",
+            "梯度下降",
+            "过拟合",
+            "欠拟合",
+            "正则化",
+            "交叉验证",
+            "贝叶斯",
+            "神经网络",
         ]
         return any(keyword in query for keyword in course_keywords)
 
@@ -671,16 +679,13 @@ class QueryRouter:
         if not _has_concept_question_cue(query):
             return False
 
-        if any(
-            cue in query
-            for cue in ["超参数", "调参", "学习率", "正则化系数", "惩罚系数"]
-        ):
+        if any(cue in query for cue in ["超参数", "调参", "学习率", "正则化系数", "惩罚系数"]):
             return True
 
         return _has_hyperparameter_assignment(query)
 
 
-_router: Optional[QueryRouter] = None
+_router: QueryRouter | None = None
 
 
 def get_router() -> QueryRouter:

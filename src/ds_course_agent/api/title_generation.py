@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 
-
 DEFAULT_SESSION_TITLE = "新会话"
 SESSION_TITLE_MAX_CHARS = 18
 LEGACY_SESSION_TITLE_MAX_CHARS = 10
@@ -331,7 +330,7 @@ def _clean_generated_title(raw: str) -> str:
         new_title = re.sub(r"^\s*\d+[.、]\s*", "", new_title)
         for prefix in ["会话标题：", "会话标题:", "标题：", "标题:", "标题", "主题：", "主题:"]:
             if new_title.startswith(prefix):
-                new_title = new_title[len(prefix):].strip()
+                new_title = new_title[len(prefix) :].strip()
                 break
         if new_title == title:
             break

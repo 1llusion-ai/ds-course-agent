@@ -210,10 +210,10 @@ def test_buffered_stream_handler_uses_selected_handler_without_second_dispatch()
 
 def test_web_search_route_handler_compacts_evidence_and_tracks_sources(monkeypatch):
     import ds_course_agent.shared.config as config
+    import ds_course_agent.tools.web_search as web_search_module
     from ds_course_agent.rag.agent import AgentService
     from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
     from ds_course_agent.tools._shared import begin_retrieval_trace, end_retrieval_trace
-    import ds_course_agent.tools.web_search as web_search_module
     from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
 
     monkeypatch.setattr(config, "WEB_FETCH_ENABLED", False)
@@ -259,9 +259,9 @@ def test_web_search_route_handler_compacts_evidence_and_tracks_sources(monkeypat
 
 def test_web_search_route_rejects_obvious_non_teaching_queries_without_search(monkeypatch):
     import ds_course_agent.shared.config as config
+    import ds_course_agent.tools.web_search as web_search_module
     from ds_course_agent.rag.agent import AgentService
     from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
-    import ds_course_agent.tools.web_search as web_search_module
 
     monkeypatch.setattr(config, "WEB_SEARCH_TEACHING_SCOPE_ENABLED", True)
     monkeypatch.setattr(
@@ -284,9 +284,9 @@ def test_web_search_route_rejects_obvious_non_teaching_queries_without_search(mo
 
 def test_web_search_route_rejects_general_fact_queries_without_search(monkeypatch):
     import ds_course_agent.shared.config as config
+    import ds_course_agent.tools.web_search as web_search_module
     from ds_course_agent.rag.agent import AgentService
     from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
-    import ds_course_agent.tools.web_search as web_search_module
 
     monkeypatch.setattr(config, "WEB_SEARCH_TEACHING_SCOPE_ENABLED", True)
     monkeypatch.setattr(
@@ -356,9 +356,12 @@ def test_web_fetch_top_n_zero_means_uncapped_not_disabled(monkeypatch):
     handler = WebSearchRouteHandler()
 
     assert handler._fetch_plan("什么是过拟合？")[:2] == (1, 4)
-    assert handler._candidate_fetch_urls([
-        {"url": "https://example.com/a", "title": "A"},
-    ], "什么是过拟合？")
+    assert handler._candidate_fetch_urls(
+        [
+            {"url": "https://example.com/a", "title": "A"},
+        ],
+        "什么是过拟合？",
+    )
 
 
 def test_low_success_filter_keeps_explicit_video_and_scholarly_pdf_requests():
@@ -366,19 +369,22 @@ def test_low_success_filter_keeps_explicit_video_and_scholarly_pdf_requests():
 
     handler = WebSearchRouteHandler()
 
-    assert handler._is_low_success_fetch_target(
-        "https://www.youtube.com/watch?v=abc",
-        "读一下这个 YouTube 教程里的 PCA",
-    ) is False
+    assert (
+        handler._is_low_success_fetch_target(
+            "https://www.youtube.com/watch?v=abc",
+            "读一下这个 YouTube 教程里的 PCA",
+        )
+        is False
+    )
     assert handler._is_low_success_fetch_target("https://arxiv.org/pdf/2401.00001.pdf") is False
     assert handler._is_low_success_fetch_target("https://example.com/slides.pdf#page=3") is True
 
 
 def test_web_search_route_handler_streams_answer_chunks_directly(monkeypatch):
     import ds_course_agent.shared.config as config
+    import ds_course_agent.tools.web_search as web_search_module
     from ds_course_agent.rag.agent import AgentService
     from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
-    import ds_course_agent.tools.web_search as web_search_module
     from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
 
     monkeypatch.setattr(config, "WEB_FETCH_ENABLED", False)
@@ -417,12 +423,11 @@ def test_web_search_route_handler_streams_answer_chunks_directly(monkeypatch):
     assert "Overfitting overview" in observed["turn_context"]
 
 
-
 def test_web_search_route_handler_prefers_direct_chat_for_streaming(monkeypatch):
     import ds_course_agent.shared.config as config
+    import ds_course_agent.tools.web_search as web_search_module
     from ds_course_agent.rag.agent import AgentService
     from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
-    import ds_course_agent.tools.web_search as web_search_module
     from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
 
     monkeypatch.setattr(config, "WEB_FETCH_ENABLED", False)
@@ -463,10 +468,10 @@ def test_web_search_route_handler_prefers_direct_chat_for_streaming(monkeypatch)
 
 def test_web_search_route_handler_stream_emits_detailed_progress_with_stream_id(monkeypatch):
     import ds_course_agent.shared.config as config
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
     import ds_course_agent.tools.web_fetch as web_fetch_module
     import ds_course_agent.tools.web_search as web_search_module
+    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
     from ds_course_agent.tools.web_fetch import WebFetchResult
     from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
 
@@ -526,14 +531,13 @@ def test_web_search_route_handler_stream_emits_detailed_progress_with_stream_id(
     assert fetch_event["details"]["domain"] == "example.com"
 
 
-
 def test_web_search_route_handler_adds_deep_fetch_context_and_metadata(monkeypatch):
     import ds_course_agent.shared.config as config
+    import ds_course_agent.tools.web_fetch as web_fetch_module
+    import ds_course_agent.tools.web_search as web_search_module
     from ds_course_agent.rag.agent import AgentService
     from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
     from ds_course_agent.tools._shared import begin_retrieval_trace, end_retrieval_trace
-    import ds_course_agent.tools.web_fetch as web_fetch_module
-    import ds_course_agent.tools.web_search as web_search_module
     from ds_course_agent.tools.web_fetch import WebFetchResult
     from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
 
@@ -588,10 +592,10 @@ def test_web_search_route_handler_adds_deep_fetch_context_and_metadata(monkeypat
 
 def test_web_search_deep_fetch_keeps_original_source_number(monkeypatch):
     import ds_course_agent.shared.config as config
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
     import ds_course_agent.tools.web_fetch as web_fetch_module
     import ds_course_agent.tools.web_search as web_search_module
+    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
     from ds_course_agent.tools.web_fetch import WebFetchResult
     from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
 
@@ -649,8 +653,8 @@ def test_web_search_deep_fetch_keeps_original_source_number(monkeypatch):
 
 
 def test_execute_route_hook_failure_still_reaches_empty_result_fallback(monkeypatch):
-    from ds_course_agent.rag.agent import AgentService
     import ds_course_agent.tools.course_rag as course_rag
+    from ds_course_agent.rag.agent import AgentService
 
     class EmptyHandler:
         def can_handle(self, agent, route_state):
@@ -810,9 +814,12 @@ def test_agent_stream_messages_filters_tool_node_content():
 
     class FakeLangGraphAgent:
         def stream(self, payload, stream_mode=None):
-            yield ToolMessage(content="工具原始结果不应直接流给用户", tool_call_id="call-1"), {
-                "langgraph_node": "tools",
-            }
+            yield (
+                ToolMessage(content="工具原始结果不应直接流给用户", tool_call_id="call-1"),
+                {
+                    "langgraph_node": "tools",
+                },
+            )
             yield AIMessageChunk(content="最终回答"), {"langgraph_node": "model"}
 
     service = AgentService.__new__(AgentService)
@@ -948,8 +955,7 @@ def test_agent_chat_compacts_over_budget_messages_before_llm(monkeypatch):
     assert isinstance(messages[0], SystemMessage)
     assert "Student Profile Context" in messages[0].content
     assert any(
-        isinstance(message, SystemMessage)
-        and message.additional_kwargs.get(CONTEXT_SUMMARY_MARKER)
+        isinstance(message, SystemMessage) and message.additional_kwargs.get(CONTEXT_SUMMARY_MARKER)
         for message in messages
     )
     assert messages[-1].content == "当前问题：K-means 的步骤是什么？"

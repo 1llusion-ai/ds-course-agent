@@ -25,7 +25,7 @@ from langchain_core.tools import tool
 from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
-import ds_course_agent.shared.config as config
+import ds_course_agent.shared.config as config  # noqa: F401  # module-level seam: tests monkeypatch web_fetch.config.*
 from ds_course_agent.shared.config_utils import config_bool, config_float, config_int
 from ds_course_agent.shared.error_response import truncate_error
 from ds_course_agent.tools._shared import (
@@ -199,7 +199,9 @@ def resolve_url_target(url: str) -> tuple[bool, str, tuple[str, ...]]:
 
     if not addrs:
         try:
-            infos = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+            infos = socket.getaddrinfo(
+                parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM
+            )
         except OSError as exc:
             return False, f"DNS resolution failed: {exc}", ()
         for info in infos:
@@ -304,7 +306,10 @@ def _request_with_safe_redirects(url: str) -> requests.Response:
     adapter = _SSRFCheckedHTTPAdapter(pool_connections=1, pool_maxsize=1, max_retries=0)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
-    headers = {"User-Agent": _DEFAULT_USER_AGENT, "Accept": "text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.5"}
+    headers = {
+        "User-Agent": _DEFAULT_USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.5",
+    }
     deadline = time.monotonic() + _total_timeout()
 
     try:
@@ -330,7 +335,7 @@ def _request_with_safe_redirects(url: str) -> requests.Response:
                     continue
 
                 raw = _read_limited_response(response, _max_bytes() + 1, deadline=deadline)
-                response._content = raw[:_max_bytes()]  # noqa: SLF001 - requests stores content here.
+                response._content = raw[: _max_bytes()]  # noqa: SLF001 - requests stores content here.
                 response._content_consumed = True  # noqa: SLF001
                 if len(raw) > _max_bytes():
                     response.headers["x-ds-truncated-bytes"] = "true"
@@ -396,7 +401,7 @@ def fetch_web_page(url: str, *, max_chars: int | None = None) -> WebFetchResult:
     degrade to search snippets when a page is blocked or unextractable.
     """
 
-    from ds_course_agent.rag.query_trace import trace_error, trace_step, trace_span
+    from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
 
     url = str(url or "").strip().strip("`\"'")
     max_chars = max_chars or _max_chars_per_page()
@@ -532,11 +537,7 @@ def fetch_web_pages(
 
     def _submit_more() -> None:
         nonlocal next_index
-        while (
-            next_index < len(selected)
-            and len(futures) < worker_count
-            and success_count < target_successes
-        ):
+        while next_index < len(selected) and len(futures) < worker_count and success_count < target_successes:
             url = selected[next_index]
             future = executor.submit(fetch_web_page, url, max_chars=max_chars_per_page)
             futures[future] = (next_index, url)
@@ -625,7 +626,9 @@ def compact_fetched_pages(
     return "".join(lines).strip()
 
 
-def enrich_sources_with_fetch_metadata(sources: list[dict[str, Any]], pages: list[WebFetchResult]) -> list[dict[str, Any]]:
+def enrich_sources_with_fetch_metadata(
+    sources: list[dict[str, Any]], pages: list[WebFetchResult]
+) -> list[dict[str, Any]]:
     """Add fetch status metadata to web source dictionaries."""
 
     by_url: dict[str, WebFetchResult] = {}
@@ -640,13 +643,15 @@ def enrich_sources_with_fetch_metadata(sources: list[dict[str, Any]], pages: lis
         item = dict(source)
         page = by_url.get(str(source.get("url") or ""))
         if page is not None:
-            item.update({
-                "fetched": page.ok,
-                "fetch_error": page.error,
-                "final_url": page.final_url or None,
-                "extractor": page.extractor or None,
-                "truncated": page.truncated,
-            })
+            item.update(
+                {
+                    "fetched": page.ok,
+                    "fetch_error": page.error,
+                    "final_url": page.final_url or None,
+                    "extractor": page.extractor or None,
+                    "truncated": page.truncated,
+                }
+            )
         enriched.append(item)
     return enriched
 

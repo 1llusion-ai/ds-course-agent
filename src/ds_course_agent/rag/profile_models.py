@@ -6,8 +6,9 @@
 2. 活跃薄弱点：当前仍需要巩固的概念。
 3. 已克服薄弱点：历史上出现过、后来被确认理解的概念。
 """
-from typing import List, Dict, Optional, Any
-from dataclasses import dataclass, field, asdict
+
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -18,12 +19,12 @@ class ConceptFocus:
     display_name: str
     chapter: str
     mention_count: int = 0
-    evidence: List[str] = field(default_factory=list)
-    first_mentioned_at: Optional[float] = None
-    last_mentioned_at: Optional[float] = None
-    last_question_type: Optional[str] = None
+    evidence: list[str] = field(default_factory=list)
+    first_mentioned_at: float | None = None
+    last_mentioned_at: float | None = None
+    last_question_type: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -33,16 +34,16 @@ class WeakSpotCandidate:
 
     concept_id: str
     display_name: str
-    parent_concept: Optional[str] = None
-    signals: List[Dict[str, Any]] = field(default_factory=list)
+    parent_concept: str | None = None
+    signals: list[dict[str, Any]] = field(default_factory=list)
     confidence: float = 0.0
     clarification_count: int = 0
-    first_detected_at: Optional[float] = None
-    last_triggered_at: Optional[float] = None
-    resolved_at: Optional[float] = None
-    resolution_note: Optional[str] = None
+    first_detected_at: float | None = None
+    last_triggered_at: float | None = None
+    resolved_at: float | None = None
+    resolution_note: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -50,10 +51,10 @@ class WeakSpotCandidate:
 class ProgressInfo:
     """学习进度信息。"""
 
-    current_chapter: Optional[str] = None
-    covered_chapters: List[str] = field(default_factory=list)
+    current_chapter: str | None = None
+    covered_chapters: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -62,12 +63,12 @@ class StudentProfile:
     """学生画像。"""
 
     student_id: str
-    recent_concepts: Dict[str, ConceptFocus] = field(default_factory=dict)
+    recent_concepts: dict[str, ConceptFocus] = field(default_factory=dict)
     progress: ProgressInfo = field(default_factory=ProgressInfo)
-    pending_weak_spots: List[WeakSpotCandidate] = field(default_factory=list)
-    weak_spot_candidates: List[WeakSpotCandidate] = field(default_factory=list)
-    resolved_weak_spots: List[WeakSpotCandidate] = field(default_factory=list)
-    stats: Dict[str, Any] = field(
+    pending_weak_spots: list[WeakSpotCandidate] = field(default_factory=list)
+    weak_spot_candidates: list[WeakSpotCandidate] = field(default_factory=list)
+    resolved_weak_spots: list[WeakSpotCandidate] = field(default_factory=list)
+    stats: dict[str, Any] = field(
         default_factory=lambda: {
             "total_questions": 0,
             "total_concepts": 0,
@@ -78,34 +79,31 @@ class StudentProfile:
         }
     )
 
-    def get_pending_weak_spot(self, concept_id: str) -> Optional[WeakSpotCandidate]:
+    def get_pending_weak_spot(self, concept_id: str) -> WeakSpotCandidate | None:
         for spot in self.pending_weak_spots:
             if spot.concept_id == concept_id:
                 return spot
         return None
 
-    def get_weak_spot(self, concept_id: str) -> Optional[WeakSpotCandidate]:
+    def get_weak_spot(self, concept_id: str) -> WeakSpotCandidate | None:
         for spot in self.weak_spot_candidates:
             if spot.concept_id == concept_id:
                 return spot
         return None
 
-    def get_resolved_weak_spot(self, concept_id: str) -> Optional[WeakSpotCandidate]:
+    def get_resolved_weak_spot(self, concept_id: str) -> WeakSpotCandidate | None:
         for spot in self.resolved_weak_spots:
             if spot.concept_id == concept_id:
                 return spot
         return None
 
-    def get_concept_focus(self, concept_id: str) -> Optional[ConceptFocus]:
+    def get_concept_focus(self, concept_id: str) -> ConceptFocus | None:
         return self.recent_concepts.get(concept_id)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "student_id": self.student_id,
-            "recent_concepts": {
-                concept_id: focus.to_dict()
-                for concept_id, focus in self.recent_concepts.items()
-            },
+            "recent_concepts": {concept_id: focus.to_dict() for concept_id, focus in self.recent_concepts.items()},
             "progress": self.progress.to_dict(),
             "pending_weak_spots": [spot.to_dict() for spot in self.pending_weak_spots],
             "weak_spot_candidates": [spot.to_dict() for spot in self.weak_spot_candidates],
@@ -114,7 +112,7 @@ class StudentProfile:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "StudentProfile":
+    def from_dict(cls, data: dict[str, Any]) -> "StudentProfile":
         profile = cls(student_id=data["student_id"])
 
         for cid, cdata in data.get("recent_concepts", {}).items():

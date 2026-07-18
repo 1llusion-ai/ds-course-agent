@@ -11,20 +11,21 @@ Metadata 扩展：
 - source_pages: 源页码列表
 - parser_source: 解析器来源
 """
+
+import hashlib
+import json
 import os
 import re
-import json
-import hashlib
 import zlib
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
-from dataclasses import dataclass
 
 
 @dataclass
 class IngestResult:
     """入库结果"""
+
     source_file: str
     total_chunks: int
     success_count: int
@@ -41,10 +42,11 @@ class IngestResult:
 @dataclass
 class KBStatus:
     """知识库状态"""
+
     collection_name: str
     course_name: str
     document_count: int
-    last_updated: Optional[str]
+    last_updated: str | None
     sources: list[str]
 
 
@@ -60,21 +62,21 @@ def sanitize_collection_name(name: str, fallback_prefix: str = "course") -> str:
     if not name:
         return f"{fallback_prefix}_default"
 
-    sanitized = re.sub(r'[^a-zA-Z0-9._-]', '_', name)
-    sanitized = sanitized.strip('._-')
+    sanitized = re.sub(r"[^a-zA-Z0-9._-]", "_", name)
+    sanitized = sanitized.strip("._-")
 
     if len(sanitized) < 3:
-        hash_suffix = hashlib.md5(name.encode('utf-8')).hexdigest()[:8]
+        hash_suffix = hashlib.md5(name.encode("utf-8")).hexdigest()[:8]
         sanitized = f"{fallback_prefix}_{hash_suffix}"
 
     if len(sanitized) > 512:
         sanitized = sanitized[:512]
-        sanitized = sanitized.rstrip('._-')
+        sanitized = sanitized.rstrip("._-")
 
     if not sanitized[0].isalnum():
-        sanitized = 'c' + sanitized[1:]
+        sanitized = "c" + sanitized[1:]
     if not sanitized[-1].isalnum():
-        sanitized = sanitized[:-1] + '0'
+        sanitized = sanitized[:-1] + "0"
 
     if len(sanitized) < 3:
         sanitized = f"{fallback_prefix}_default"
@@ -85,9 +87,10 @@ def sanitize_collection_name(name: str, fallback_prefix: str = "course") -> str:
 class CourseKnowledgeBase:
     """课程知识库管理"""
 
-    def __init__(self, course_name: Optional[str] = None):
-        import ds_course_agent.shared.config as config
+    def __init__(self, course_name: str | None = None):
         from langchain_chroma import Chroma
+
+        import ds_course_agent.shared.config as config
         from ds_course_agent.shared.embeddings import create_embedding_model
 
         self._chroma_cls = Chroma
@@ -121,7 +124,7 @@ class CourseKnowledgeBase:
         """加载已处理的分块哈希"""
         if self.hash_file.exists():
             try:
-                with open(self.hash_file, 'r', encoding='utf-8') as f:
+                with open(self.hash_file, encoding="utf-8") as f:
                     return json.load(f)
             except Exception:
                 return {}
@@ -129,18 +132,18 @@ class CourseKnowledgeBase:
 
     def _save_hashes(self):
         """保存哈希记录"""
-        with open(self.hash_file, 'w', encoding='utf-8') as f:
+        with open(self.hash_file, "w", encoding="utf-8") as f:
             json.dump(self.hashes, f, ensure_ascii=False, indent=2)
 
     def _compute_chunk_hash(self, chunk) -> str:
         """计算分块哈希"""
         # 兼容 V1 和 V2 结构
-        if hasattr(chunk.metadata, 'source_file'):
+        if hasattr(chunk.metadata, "source_file"):
             source = chunk.metadata.source_file  # V2
         else:
             source = chunk.metadata.source  # V1
         content = f"{chunk.content}:{source}:{chunk.metadata.chunk_type}"
-        return hashlib.md5(content.encode('utf-8')).hexdigest()
+        return hashlib.md5(content.encode("utf-8")).hexdigest()
 
     def _build_metadata(self, chunk) -> dict:
         """
@@ -150,12 +153,12 @@ class CourseKnowledgeBase:
         metadata = chunk.metadata
 
         # 检测 V1 还是 V2 结构
-        is_v2 = hasattr(metadata, 'chapter_number')  # V2 特有属性
+        is_v2 = hasattr(metadata, "chapter_number")  # V2 特有属性
 
         if is_v2:
             # V2 结构 (course_chunker_v2)
             source_pages = list(metadata.source_pages or [])
-            book_pages = list(metadata.book_pages or []) if hasattr(metadata, 'book_pages') else []
+            book_pages = list(metadata.book_pages or []) if hasattr(metadata, "book_pages") else []
             source_pages_json = json.dumps(source_pages, ensure_ascii=False) if source_pages else "[]"
             book_pages_json = json.dumps(book_pages, ensure_ascii=False) if book_pages else "[]"
             source_start = source_pages[0] if source_pages else 0
@@ -166,7 +169,7 @@ class CourseKnowledgeBase:
                 "course": self.course_name,
                 "source": metadata.source_file,
                 "chunk_type": metadata.chunk_type,
-                "heading_path": '',
+                "heading_path": "",
                 "chapter": metadata.chapter,
                 "chapter_no": metadata.chapter_number,
                 "section": metadata.section,
@@ -177,7 +180,7 @@ class CourseKnowledgeBase:
                 "source_page_start": source_start,
                 "source_page_end": source_end,
                 "source_pages": source_pages_json,
-                "parser_source": 'marker_v2',
+                "parser_source": "marker_v2",
                 "chunk_id": f"{metadata.source_file}_{zlib.crc32(chunk.content.encode('utf-8')) & 0xFFFFFFFF:08x}",
                 "char_count": len(chunk.content),
                 "position": 0,
@@ -199,23 +202,23 @@ class CourseKnowledgeBase:
             return result
         else:
             # V1 结构 (旧版 course_chunker)
-            source_pages_json = json.dumps(metadata.source_pages) if hasattr(metadata, 'source_pages') else "[]"
+            source_pages_json = json.dumps(metadata.source_pages) if hasattr(metadata, "source_pages") else "[]"
             return {
                 "course": self.course_name,
                 "source": metadata.source,
-                "chunk_type": getattr(metadata, 'chunk_type', 'struct'),
-                "heading_path": getattr(metadata, 'heading_path', ''),
+                "chunk_type": getattr(metadata, "chunk_type", "struct"),
+                "heading_path": getattr(metadata, "heading_path", ""),
                 "chapter": metadata.chapter,
                 "chapter_no": metadata.chapter_no,
                 "section": metadata.section,
                 "section_no": metadata.section_no,
-                "subsection": getattr(metadata, 'subsection', ''),
-                "subsection_no": getattr(metadata, 'subsection_no', ''),
-                "page": metadata.page if hasattr(metadata, 'page') else metadata.page_start,
-                "page_start": getattr(metadata, 'page_start', metadata.page if hasattr(metadata, 'page') else 0),
-                "page_end": getattr(metadata, 'page_end', metadata.page if hasattr(metadata, 'page') else 0),
+                "subsection": getattr(metadata, "subsection", ""),
+                "subsection_no": getattr(metadata, "subsection_no", ""),
+                "page": metadata.page if hasattr(metadata, "page") else metadata.page_start,
+                "page_start": getattr(metadata, "page_start", metadata.page if hasattr(metadata, "page") else 0),
+                "page_end": getattr(metadata, "page_end", metadata.page if hasattr(metadata, "page") else 0),
                 "source_pages": source_pages_json,
-                "parser_source": getattr(metadata, 'parser_source', 'hybrid'),
+                "parser_source": getattr(metadata, "parser_source", "hybrid"),
                 "chunk_id": metadata.chunk_id,
                 "char_count": metadata.char_count,
                 "position": metadata.position,
@@ -227,7 +230,7 @@ class CourseKnowledgeBase:
         chunks: list,
         source_file: str,
         batch_size: int = 30,
-        skip_non_semantic: bool = True  # 默认跳过非语义块
+        skip_non_semantic: bool = True,  # 默认跳过非语义块
     ) -> IngestResult:
         """批量入库分块"""
         success_count = 0
@@ -249,8 +252,8 @@ class CourseKnowledgeBase:
 
             # 过滤非语义块（struct/shadow）
             if skip_non_semantic:
-                chunk_type = getattr(chunk.metadata, 'chunk_type', 'semantic')
-                if chunk_type in ('struct', 'shadow'):
+                chunk_type = getattr(chunk.metadata, "chunk_type", "semantic")
+                if chunk_type in ("struct", "shadow"):
                     filtered_count += 1
                     continue
 
@@ -264,11 +267,7 @@ class CourseKnowledgeBase:
 
             if len(batch_texts) >= batch_size:
                 try:
-                    self.vector_store.add_texts(
-                        batch_texts,
-                        metadatas=batch_metadatas,
-                        ids=batch_ids
-                    )
+                    self.vector_store.add_texts(batch_texts, metadatas=batch_metadatas, ids=batch_ids)
                     success_count += len(batch_texts)
                     print(f"    入库进度: {success_count}/{len(chunks)} (过滤非语义块: {filtered_count})")
                 except Exception as e:
@@ -283,11 +282,7 @@ class CourseKnowledgeBase:
 
         if batch_texts:
             try:
-                self.vector_store.add_texts(
-                    batch_texts,
-                    metadatas=batch_metadatas,
-                    ids=batch_ids
-                )
+                self.vector_store.add_texts(batch_texts, metadatas=batch_metadatas, ids=batch_ids)
                 success_count += len(batch_texts)
             except Exception as e:
                 error_count += len(batch_texts)
@@ -304,28 +299,22 @@ class CourseKnowledgeBase:
             skip_count=skip_count,
             error_count=error_count,
             filtered_count=filtered_count,
-            errors=errors
+            errors=errors,
         )
 
     def ingest_chunking_result(self, result, source_file: str = None) -> IngestResult:
         """入库分块结果"""
         # 兼容 V1 和 V2
-        if hasattr(result, 'source_file'):
+        if hasattr(result, "source_file"):
             source = result.source_file
         else:
             source = source_file or "unknown"
             # 从第一个 chunk 获取文件名
-            if result.chunks and hasattr(result.chunks[0].metadata, 'source_file'):
+            if result.chunks and hasattr(result.chunks[0].metadata, "source_file"):
                 source = result.chunks[0].metadata.source_file
         return self.ingest_chunks(result.chunks, source)
 
-    def search(
-        self,
-        query: str,
-        k: int = 3,
-        filter_course: bool = True,
-        filter_chunk_type: str = None
-    ) -> list[dict]:
+    def search(self, query: str, k: int = 3, filter_course: bool = True, filter_chunk_type: str = None) -> list[dict]:
         """检索相关文档"""
         where_filter = None
         if filter_course:
@@ -333,56 +322,21 @@ class CourseKnowledgeBase:
 
         if filter_chunk_type:
             if where_filter:
-                where_filter = {"$and": [
-                    {"course": self.course_name},
-                    {"chunk_type": filter_chunk_type}
-                ]}
+                where_filter = {"$and": [{"course": self.course_name}, {"chunk_type": filter_chunk_type}]}
             else:
                 where_filter = {"chunk_type": filter_chunk_type}
 
-        results = self.vector_store.similarity_search_with_score(
-            query,
-            k=k,
-            filter=where_filter
-        )
+        results = self.vector_store.similarity_search_with_score(query, k=k, filter=where_filter)
 
-        return [
-            {
-                "content": doc.page_content,
-                "score": score,
-                "metadata": doc.metadata
-            }
-            for doc, score in results
-        ]
+        return [{"content": doc.page_content, "score": score, "metadata": doc.metadata} for doc, score in results]
 
-    def search_by_chapter(
-        self,
-        query: str,
-        chapter_no: int,
-        k: int = 3
-    ) -> list[dict]:
+    def search_by_chapter(self, query: str, chapter_no: int, k: int = 3) -> list[dict]:
         """按章节检索"""
-        where_filter = {
-            "$and": [
-                {"course": self.course_name},
-                {"chapter_no": chapter_no}
-            ]
-        }
+        where_filter = {"$and": [{"course": self.course_name}, {"chapter_no": chapter_no}]}
 
-        results = self.vector_store.similarity_search_with_score(
-            query,
-            k=k,
-            filter=where_filter
-        )
+        results = self.vector_store.similarity_search_with_score(query, k=k, filter=where_filter)
 
-        return [
-            {
-                "content": doc.page_content,
-                "score": score,
-                "metadata": doc.metadata
-            }
-            for doc, score in results
-        ]
+        return [{"content": doc.page_content, "score": score, "metadata": doc.metadata} for doc, score in results]
 
     def get_status(self) -> KBStatus:
         """获取知识库状态"""
@@ -395,15 +349,15 @@ class CourseKnowledgeBase:
                 course_name=self.course_name,
                 document_count=count,
                 last_updated=datetime.now().isoformat(),
-                sources=list(sources)
+                sources=list(sources),
             )
-        except Exception as e:
+        except Exception:
             return KBStatus(
                 collection_name=self.collection_name,
                 course_name=self.course_name,
                 document_count=0,
                 last_updated=None,
-                sources=[]
+                sources=[],
             )
 
     def clear(self):
@@ -422,7 +376,7 @@ class CourseKnowledgeBase:
 if __name__ == "__main__":
     kb = CourseKnowledgeBase()
     status = kb.get_status()
-    print(f"知识库状态:")
+    print("知识库状态:")
     print(f"  Collection: {status.collection_name}")
     print(f"  课程: {status.course_name}")
     print(f"  文档数: {status.document_count}")

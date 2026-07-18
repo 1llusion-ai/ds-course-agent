@@ -4,13 +4,12 @@
 
 日志级别可通过环境变量 LOG_LEVEL 控制（DEBUG / INFO / WARNING / ERROR），默认 INFO。
 """
+
 import logging
 import os
 import sys
-from pathlib import Path
 
 from ds_course_agent.shared.paths import PROJECT_ROOT
-
 
 _initialized = False
 
@@ -46,9 +45,7 @@ def setup_logging(level: str | None = None) -> None:
     log_dir = PROJECT_ROOT / "logs"
     try:
         log_dir.mkdir(exist_ok=True)
-        file_handler = logging.FileHandler(
-            log_dir / "app.log", encoding="utf-8", delay=True
-        )
+        file_handler = logging.FileHandler(log_dir / "app.log", encoding="utf-8", delay=True)
         file_handler.setFormatter(formatter)
         handlers.append(file_handler)
     except OSError:

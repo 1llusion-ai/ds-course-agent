@@ -5,9 +5,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
-
 from pathlib import Path
-import sys
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
@@ -16,16 +14,19 @@ from scripts._path import PROJECT_ROOT, ensure_src_path
 
 ensure_src_path()
 
+
 def build_kb(args: list[str]) -> None:
     from scripts.build_kb import main as build_main
 
     sys.argv = ["build_kb", *args]
     build_main()
 
+
 def run_eval() -> None:
     from benchmarks.retrieval import compare_methods
 
     compare_methods(top_k=5)
+
 
 def run_tests() -> None:
     subprocess.run(
@@ -34,10 +35,12 @@ def run_tests() -> None:
         check=True,
     )
 
+
 def run_api(args: list[str]) -> None:
     from scripts.run_api import main as run_api_main
 
     run_api_main(args)
+
 
 def print_help() -> None:
     print(
@@ -56,6 +59,7 @@ Commands:
     help            Show this help message
 """
     )
+
 
 def main(argv: list[str] | None = None) -> None:
     args = list(argv if argv is not None else sys.argv[1:])
@@ -85,6 +89,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Unknown command: {command}")
     print_help()
     raise SystemExit(1)
+
 
 if __name__ == "__main__":
     main()

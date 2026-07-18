@@ -2,59 +2,102 @@
 半自动检索评测样本生成器
 基于 knowledge_graph.json 和 ChromaDB 内容自动标注 ground-truth chunk_id
 """
+
 import json
-from pathlib import Path
+from dataclasses import asdict, dataclass, field
+
 import chromadb
-from typing import List, Dict
-from dataclasses import dataclass, asdict, field
 
 import ds_course_agent.shared.config as config
 from benchmarks.qa_dataset import load_review_overrides, normalize_qa_pair
+
 
 @dataclass
 class RetrievalQAPair:
     id: str
     query: str
     category: str  # semantic | term | code_abbr
-    ground_truth_ids: List[str]
+    ground_truth_ids: list[str]
     concept_id: str
     concept_name: str
     annotation_rule: str
-    acceptable_ids: List[str] = field(default_factory=list)
-    relevance_scores: Dict[str, float] = field(default_factory=dict)
+    acceptable_ids: list[str] = field(default_factory=list)
+    relevance_scores: dict[str, float] = field(default_factory=dict)
     enabled: bool = True
     review_status: str = "auto_generated"
     review_notes: str = ""
 
+
 CATEGORY_MAPPING = {
     "semantic": [
-        "data_science_definition", "data_thinking", "overfitting", "data_visualization",
-        "supervised_learning", "unsupervised_learning", "data_insight", "digital_economy",
-        "ensemble_learning", "classification_problem", "clustering", "dimensionality_reduction",
-        "natural_language_processing", "deep_learning_tasks", "eda", "text_mining",
-        "question_answering", "regularization", "model_evaluation", "neural_network"
+        "data_science_definition",
+        "data_thinking",
+        "overfitting",
+        "data_visualization",
+        "supervised_learning",
+        "unsupervised_learning",
+        "data_insight",
+        "digital_economy",
+        "ensemble_learning",
+        "classification_problem",
+        "clustering",
+        "dimensionality_reduction",
+        "natural_language_processing",
+        "deep_learning_tasks",
+        "eda",
+        "text_mining",
+        "question_answering",
+        "regularization",
+        "model_evaluation",
+        "neural_network",
     ],
     "term": [
-        "dikw_pyramid", "technology_hype_cycle", "big_data_4v", "digitization",
-        "data_fusion", "feature_discovery", "intelligent_manufacturing", "technology_forecasting",
-        "data_businessization", "data_collection", "data_cleaning", "missing_values",
-        "groupby_aggregation", "data_merge", "descriptive_statistics", "structured_data",
-        "probability", "kaggle", "linear_regression", "competition_workflow"
+        "dikw_pyramid",
+        "technology_hype_cycle",
+        "big_data_4v",
+        "digitization",
+        "data_fusion",
+        "feature_discovery",
+        "intelligent_manufacturing",
+        "technology_forecasting",
+        "data_businessization",
+        "data_collection",
+        "data_cleaning",
+        "missing_values",
+        "groupby_aggregation",
+        "data_merge",
+        "descriptive_statistics",
+        "structured_data",
+        "probability",
+        "kaggle",
+        "linear_regression",
+        "competition_workflow",
     ],
     "code_abbr": [
-        "python_language", "pandas", "dataframe", "series", "loc_iloc",
-        "svm", "pca", "knn", "lstm", "scikit_learn"
-    ]
+        "python_language",
+        "pandas",
+        "dataframe",
+        "series",
+        "loc_iloc",
+        "svm",
+        "pca",
+        "knn",
+        "lstm",
+        "scikit_learn",
+    ],
 }
 
-def load_knowledge_graph(path: str = "data/knowledge_graph.json") -> Dict:
-    with open(path, "r", encoding="utf-8") as f:
+
+def load_knowledge_graph(path: str = "data/knowledge_graph.json") -> dict:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
+
 
 def get_client():
     return chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
 
-def find_relevant_chunks(query_keywords: List[str], top_k: int = 3) -> List[str]:
+
+def find_relevant_chunks(query_keywords: list[str], top_k: int = 3) -> list[str]:
     """
     基于关键词在 ChromaDB 中查找相关 semantic chunks。
     策略：获取 collection 中所有文档，过滤包含关键词的 semantic chunks。
@@ -63,6 +106,7 @@ def find_relevant_chunks(query_keywords: List[str], top_k: int = 3) -> List[str]
     collection = client.get_collection(config.collection_name)
     # 为避免加载全部文档导致内存问题，先用向量检索召回候选池
     from langchain_openai import OpenAIEmbeddings
+
     embedding = OpenAIEmbeddings(
         model=config.MODEL_EMBEDDING,
         api_key=config.API_KEY,
@@ -72,11 +116,7 @@ def find_relevant_chunks(query_keywords: List[str], top_k: int = 3) -> List[str]
     )
     query_text = " ".join(query_keywords)
     q_emb = embedding.embed_query(query_text)
-    results = collection.query(
-        query_embeddings=[q_emb],
-        n_results=30,
-        include=["documents", "metadatas"]
-    )
+    results = collection.query(query_embeddings=[q_emb], n_results=30, include=["documents", "metadatas"])
 
     matched = []
     fallback = []
@@ -106,7 +146,8 @@ def find_relevant_chunks(query_keywords: List[str], top_k: int = 3) -> List[str]
 
     return unique[:top_k]
 
-def generate_qa_pairs() -> List[RetrievalQAPair]:
+
+def generate_qa_pairs() -> list[RetrievalQAPair]:
     kg = load_knowledge_graph()
     concepts = {c["canonical_id"]: c for c in kg["concepts"]}
     pairs = []
@@ -128,21 +169,24 @@ def generate_qa_pairs() -> List[RetrievalQAPair]:
             keywords = [display] + aliases[:2]
             gt_ids = find_relevant_chunks(keywords, top_k=3)
 
-            pairs.append(RetrievalQAPair(
-                id=f"{idx:03d}",
-                query=query,
-                category=category,
-                ground_truth_ids=gt_ids,
-                concept_id=cid,
-                concept_name=display,
-                annotation_rule=f"keywords_in_content: {keywords}",
-                acceptable_ids=gt_ids.copy(),
-                relevance_scores={chunk_id: 1.0 for chunk_id in gt_ids},
-            ))
+            pairs.append(
+                RetrievalQAPair(
+                    id=f"{idx:03d}",
+                    query=query,
+                    category=category,
+                    ground_truth_ids=gt_ids,
+                    concept_id=cid,
+                    concept_name=display,
+                    annotation_rule=f"keywords_in_content: {keywords}",
+                    acceptable_ids=gt_ids.copy(),
+                    relevance_scores=dict.fromkeys(gt_ids, 1.0),
+                )
+            )
             idx += 1
     return pairs
 
-def save_json(pairs: List[RetrievalQAPair], path: str = "benchmarks/data/retrieval_qa_pairs.json"):
+
+def save_json(pairs: list[RetrievalQAPair], path: str = "benchmarks/data/retrieval_qa_pairs.json"):
     review_overrides = load_review_overrides()
     data = []
     for pair in pairs:
@@ -156,6 +200,7 @@ def save_json(pairs: List[RetrievalQAPair], path: str = "benchmarks/data/retriev
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"schema_version": 2, "qa_pairs": data}, f, ensure_ascii=False, indent=2)
     print(f"Saved {len(pairs)} QA pairs to {path}")
+
 
 if __name__ == "__main__":
     import argparse

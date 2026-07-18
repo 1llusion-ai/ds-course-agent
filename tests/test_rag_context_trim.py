@@ -88,8 +88,7 @@ def test_retrieve_trims_each_document_and_total_budget_preserves_metadata(monkey
         for marker in ("[片段已裁剪", "[片段已按总上下文预算裁剪", "[片段因上下文预算省略]")
     )
     assert any(
-        event["stage"] == "rag.context_trim"
-        and event["data"]["location"] == "rag.format_documents"
+        event["stage"] == "rag.context_trim" and event["data"]["location"] == "rag.format_documents"
         for event in trace["events"]
     )
 

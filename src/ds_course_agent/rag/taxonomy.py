@@ -11,7 +11,6 @@ from dataclasses import dataclass
 
 from ds_course_agent.rag.query_pipeline.utils import normalize_query_text
 
-
 GREETING_TERMS = ("你好", "您好", "hello", "hi", "早上好", "晚上好")
 THANKS_TERMS = ("谢谢", "多谢", "感谢", "收到", "好的谢谢", "好嘞谢谢")
 
@@ -36,21 +35,57 @@ OUT_OF_SCOPE_TECH_TERMS = (
 )
 
 WEB_PROJECT_OR_LIST_TERMS = (
-    "github", "开源", "项目", "repo", "repository", "stars", "star",
-    "高星", "列表", "推荐", "有哪些", "盘点", "排行", "工具", "论文",
-    "paper", "arxiv",
+    "github",
+    "开源",
+    "项目",
+    "repo",
+    "repository",
+    "stars",
+    "star",
+    "高星",
+    "列表",
+    "推荐",
+    "有哪些",
+    "盘点",
+    "排行",
+    "工具",
+    "论文",
+    "paper",
+    "arxiv",
 )
 
 WEB_CURRENT_TERMS = (
-    "最新", "最近", "today", "2025", "2026", "版本", "发布", "更新",
-    "新闻", "政策", "current", "latest", "recent",
+    "最新",
+    "最近",
+    "today",
+    "2025",
+    "2026",
+    "版本",
+    "发布",
+    "更新",
+    "新闻",
+    "政策",
+    "current",
+    "latest",
+    "recent",
 )
 
 WEB_COMPARE_TERMS = ("对比", "比较", "区别", "vs", "versus", "优缺点", "选型")
 
 WEB_HIGH_STAKES_TERMS = (
-    "医疗", "诊断", "法律", "合同", "诉讼", "投资", "股票", "基金", "金融建议",
-    "medical", "legal", "investment", "finance",
+    "医疗",
+    "诊断",
+    "法律",
+    "合同",
+    "诉讼",
+    "投资",
+    "股票",
+    "基金",
+    "金融建议",
+    "medical",
+    "legal",
+    "investment",
+    "finance",
 )
 
 LOW_SUCCESS_FETCH_DOMAINS = (
@@ -149,15 +184,12 @@ def web_query_traits(question: str) -> WebQueryTraits:
     compact = "".join(raw.split())
     lowered = raw.lower()
     ascii_alnum = "".join(ch for ch in compact if ch.isascii() and ch.isalnum())
-    is_short_acronym = bool(
-        ascii_alnum
-        and ascii_alnum.upper() == ascii_alnum
-        and 2 <= len(ascii_alnum) <= 8
-    )
+    is_short_acronym = bool(ascii_alnum and ascii_alnum.upper() == ascii_alnum and 2 <= len(ascii_alnum) <= 8)
     return WebQueryTraits(
         short_acronym=is_short_acronym,
         very_short=len(compact) <= 12,
-        project_or_list=contains_any(lowered, WEB_PROJECT_OR_LIST_TERMS) or contains_any(raw, WEB_PROJECT_OR_LIST_TERMS),
+        project_or_list=contains_any(lowered, WEB_PROJECT_OR_LIST_TERMS)
+        or contains_any(raw, WEB_PROJECT_OR_LIST_TERMS),
         current=contains_any(lowered, WEB_CURRENT_TERMS) or contains_any(raw, WEB_CURRENT_TERMS),
         compare=contains_any(lowered, WEB_COMPARE_TERMS) or contains_any(raw, WEB_COMPARE_TERMS),
         high_stakes=contains_any(lowered, WEB_HIGH_STAKES_TERMS) or contains_any(raw, WEB_HIGH_STAKES_TERMS),

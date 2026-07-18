@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 
 from ds_course_agent.api.main import app
 
-
 client = TestClient(app)
 
 

@@ -1,19 +1,20 @@
 import json
 import math
-import pytest
 from pathlib import Path
 
-from benchmarks.qa_dataset import (
-    find_missing_annotated_chunk_ids,
-    load_review_overrides,
-    load_retrieval_qa_dataset,
-    normalize_qa_pair,
-)
+import pytest
+
 from benchmarks.metrics.retrieval import (
-    calculate_recall_at_k,
-    calculate_precision_at_k,
     calculate_mrr,
     calculate_ndcg_at_k,
+    calculate_precision_at_k,
+    calculate_recall_at_k,
+)
+from benchmarks.qa_dataset import (
+    find_missing_annotated_chunk_ids,
+    load_retrieval_qa_dataset,
+    load_review_overrides,
+    normalize_qa_pair,
 )
 
 
@@ -47,40 +48,43 @@ class TestRetrievalMetrics:
         retrieved = ["a", "b", "c"]
         relevance = {"a": 2.0, "b": 1.0}
         ndcg = calculate_ndcg_at_k(retrieved, relevance, k=3)
-        expected = (
-            (2 ** 2.0 - 1) / math.log2(2) +
-            (2 ** 1.0 - 1) / math.log2(3)
-        ) / (
-            (2 ** 2.0 - 1) / math.log2(2) +
-            (2 ** 1.0 - 1) / math.log2(3)
+        expected = ((2**2.0 - 1) / math.log2(2) + (2**1.0 - 1) / math.log2(3)) / (
+            (2**2.0 - 1) / math.log2(2) + (2**1.0 - 1) / math.log2(3)
         )
         assert ndcg == pytest.approx(expected)
 
     def test_normalize_qa_pair_populates_new_fields(self):
-        normalized = normalize_qa_pair({
-            "id": "demo",
-            "query": "demo",
-            "category": "term",
-            "ground_truth_ids": ["a", "b"],
-        })
+        normalized = normalize_qa_pair(
+            {
+                "id": "demo",
+                "query": "demo",
+                "category": "term",
+                "ground_truth_ids": ["a", "b"],
+            }
+        )
         assert normalized["acceptable_ids"] == ["a", "b"]
         assert normalized["relevance_scores"] == {"a": 1.0, "b": 1.0}
         assert normalized["enabled"] is True
 
     def test_load_review_overrides_strips_stale_gt_fields(self, tmp_path):
         review_path = tmp_path / "reviews.json"
-        review_path.write_text(json.dumps({
-            "samples": {
-                "001": {
-                    "ground_truth_ids": ["stale-id"],
-                    "acceptable_ids": ["stale-id"],
-                    "relevance_scores": {"stale-id": 3.0},
-                    "review_status": "reviewed_manually",
-                    "review_notes": "keep this",
-                    "enabled": False,
+        review_path.write_text(
+            json.dumps(
+                {
+                    "samples": {
+                        "001": {
+                            "ground_truth_ids": ["stale-id"],
+                            "acceptable_ids": ["stale-id"],
+                            "relevance_scores": {"stale-id": 3.0},
+                            "review_status": "reviewed_manually",
+                            "review_notes": "keep this",
+                            "enabled": False,
+                        }
+                    }
                 }
-            }
-        }), encoding="utf-8")
+            ),
+            encoding="utf-8",
+        )
 
         overrides = load_review_overrides(review_path)
 
@@ -93,25 +97,30 @@ class TestRetrievalMetrics:
         }
 
     def test_find_missing_annotated_chunk_ids_reports_missing_union(self):
-        issues = find_missing_annotated_chunk_ids([
+        issues = find_missing_annotated_chunk_ids(
+            [
+                {
+                    "id": "demo",
+                    "query": "demo query",
+                    "category": "term",
+                    "ground_truth_ids": ["gt-a"],
+                    "acceptable_ids": ["ok-a", "missing-a"],
+                    "relevance_scores": {"ok-a": 1.0, "missing-b": 0.5},
+                    "review_status": "reviewed_manually",
+                }
+            ],
+            {"gt-a", "ok-a"},
+        )
+
+        assert issues == [
             {
                 "id": "demo",
                 "query": "demo query",
                 "category": "term",
-                "ground_truth_ids": ["gt-a"],
-                "acceptable_ids": ["ok-a", "missing-a"],
-                "relevance_scores": {"ok-a": 1.0, "missing-b": 0.5},
                 "review_status": "reviewed_manually",
+                "missing_chunk_ids": ["missing-a", "missing-b"],
             }
-        ], {"gt-a", "ok-a"})
-
-        assert issues == [{
-            "id": "demo",
-            "query": "demo query",
-            "category": "term",
-            "review_status": "reviewed_manually",
-            "missing_chunk_ids": ["missing-a", "missing-b"],
-        }]
+        ]
 
 
 class TestBenchmarkData:
@@ -120,7 +129,7 @@ class TestBenchmarkData:
         assert path.exists(), "QA pairs JSON must exist"
 
     def test_qa_pairs_format(self):
-        with open("benchmarks/data/retrieval_qa_pairs.json", "r", encoding="utf-8") as f:
+        with open("benchmarks/data/retrieval_qa_pairs.json", encoding="utf-8") as f:
             data = json.load(f)
         pairs = data.get("qa_pairs", [])
         assert len(pairs) > 0
@@ -136,7 +145,7 @@ class TestBenchmarkData:
             assert isinstance(p["relevance_scores"], dict)
 
     def test_category_distribution(self):
-        with open("benchmarks/data/retrieval_qa_pairs.json", "r", encoding="utf-8") as f:
+        with open("benchmarks/data/retrieval_qa_pairs.json", encoding="utf-8") as f:
             data = json.load(f)["qa_pairs"]
         counts = {}
         for p in data:
@@ -156,28 +165,40 @@ class TestBenchmarkData:
         qa_path = tmp_path / "qa.json"
         review_path = tmp_path / "reviews.json"
 
-        qa_path.write_text(json.dumps({
-            "schema_version": 2,
-            "qa_pairs": [{
-                "id": "001",
-                "query": "demo",
-                "category": "term",
-                "ground_truth_ids": ["new-gt"],
-                "acceptable_ids": ["new-gt", "new-acc"],
-                "relevance_scores": {"new-gt": 2.0, "new-acc": 1.0},
-            }],
-        }), encoding="utf-8")
-        review_path.write_text(json.dumps({
-            "samples": {
-                "001": {
-                    "ground_truth_ids": ["stale-gt"],
-                    "acceptable_ids": ["stale-acc"],
-                    "relevance_scores": {"stale-acc": 3.0},
-                    "review_status": "reviewed_manually",
-                    "review_notes": "metadata only",
+        qa_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "qa_pairs": [
+                        {
+                            "id": "001",
+                            "query": "demo",
+                            "category": "term",
+                            "ground_truth_ids": ["new-gt"],
+                            "acceptable_ids": ["new-gt", "new-acc"],
+                            "relevance_scores": {"new-gt": 2.0, "new-acc": 1.0},
+                        }
+                    ],
                 }
-            }
-        }), encoding="utf-8")
+            ),
+            encoding="utf-8",
+        )
+        review_path.write_text(
+            json.dumps(
+                {
+                    "samples": {
+                        "001": {
+                            "ground_truth_ids": ["stale-gt"],
+                            "acceptable_ids": ["stale-acc"],
+                            "relevance_scores": {"stale-acc": 3.0},
+                            "review_status": "reviewed_manually",
+                            "review_notes": "metadata only",
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
 
         dataset = load_retrieval_qa_dataset(path=qa_path, review_path=review_path)
         pair = dataset["qa_pairs"][0]
@@ -193,6 +214,7 @@ class TestBenchmarkData:
 class TestBenchmarkIntegration:
     def test_benchmark_runs_without_error(self):
         from benchmarks.retrieval_benchmark import run_benchmark
+
         report = run_benchmark(top_k=3, output_path="benchmarks/reports/test_benchmark_report.json")
         assert "vector" in report
         assert "hybrid" in report

@@ -11,8 +11,8 @@ from __future__ import annotations
 import os
 import re
 import selectors
-import signal
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -27,7 +27,6 @@ from typing import Any
 
 from ds_course_agent.shared.config.schema import Settings as _ConfigSettings
 from ds_course_agent.shared.config_utils import config_value
-
 
 # Matches a natural-language question appended to the end of a code line, e.g.
 # `print("hi")    这个代码正确吗` -> the trailing `    这个代码正确吗` part.
@@ -187,11 +186,7 @@ def extract_python_code(text: str) -> str:
 
     lines = source.splitlines()
     code_start = next(
-        (
-            index
-            for index, line in enumerate(lines)
-            if _looks_like_python_line(line)
-        ),
+        (index for index, line in enumerate(lines) if _looks_like_python_line(line)),
         None,
     )
     if code_start is not None:
@@ -344,7 +339,7 @@ class _LocalPythonExecutor:
 
     backend = "local"
 
-    def execute(self, sandbox: "PythonSandbox", code: str) -> dict[str, Any]:
+    def execute(self, sandbox: PythonSandbox, code: str) -> dict[str, Any]:
         script_path: str | None = None
         process: subprocess.Popen[bytes] | None = None
         try:
@@ -440,7 +435,7 @@ class _DockerPythonExecutor:
         except Exception:
             return False
 
-    def execute(self, sandbox: "PythonSandbox", code: str) -> dict[str, Any]:
+    def execute(self, sandbox: PythonSandbox, code: str) -> dict[str, Any]:
         container_name = f"ds-course-python-{uuid.uuid4().hex[:12]}"
         with tempfile.TemporaryDirectory(prefix="ds_course_py_") as temp_dir:
             script_path = Path(temp_dir) / "student_code.py"
@@ -480,7 +475,9 @@ class _DockerPythonExecutor:
                 if timed_out:
                     self._terminate_docker_cli(process)
                     self._force_remove_container(container_name, timeout=max(2.0, float(sandbox.timeout_sec)))
-                    return sandbox._timeout_result_from_output(stdout, stderr, backend=self.backend, truncated=truncated)
+                    return sandbox._timeout_result_from_output(
+                        stdout, stderr, backend=self.backend, truncated=truncated
+                    )
 
                 exit_code = process.returncode if process.returncode is not None else -1
                 result = sandbox._completed_result_from_output(
@@ -504,7 +501,7 @@ class _DockerPythonExecutor:
                 result["docker_infra_error"] = True
                 return result
 
-    def _build_command(self, sandbox: "PythonSandbox", temp_dir: str, container_name: str) -> list[str]:
+    def _build_command(self, sandbox: PythonSandbox, temp_dir: str, container_name: str) -> list[str]:
         return [
             "docker",
             "run",
@@ -596,7 +593,9 @@ class PythonSandbox:
         max_concurrent: int | None = None,
         busy_timeout_sec: float | None = None,
     ) -> None:
-        self.timeout_sec = int(timeout_sec if timeout_sec is not None else _python_exec_setting("PYTHON_EXEC_TIMEOUT_SECONDS"))
+        self.timeout_sec = int(
+            timeout_sec if timeout_sec is not None else _python_exec_setting("PYTHON_EXEC_TIMEOUT_SECONDS")
+        )
         self.max_output_chars = int(
             max_output_chars if max_output_chars is not None else _python_exec_setting("PYTHON_EXEC_MAX_OUTPUT_CHARS")
         )
@@ -609,17 +608,17 @@ class PythonSandbox:
             else _python_exec_setting("PYTHON_EXEC_ALLOW_HOST_FALLBACK")
         )
         self.docker_image = str(docker_image or _python_exec_setting("PYTHON_EXEC_DOCKER_IMAGE"))
-        self.memory_mb = max(16, int(memory_mb if memory_mb is not None else _python_exec_setting("PYTHON_EXEC_MEMORY_MB")))
+        self.memory_mb = max(
+            16, int(memory_mb if memory_mb is not None else _python_exec_setting("PYTHON_EXEC_MEMORY_MB"))
+        )
         self.cpus = max(0.05, float(cpus if cpus is not None else _python_exec_setting("PYTHON_EXEC_CPUS")))
         self.tmpfs_mb = max(4, int(tmpfs_mb if tmpfs_mb is not None else _python_exec_setting("PYTHON_EXEC_TMPFS_MB")))
-        self.pids_limit = max(8, int(pids_limit if pids_limit is not None else _python_exec_setting("PYTHON_EXEC_PIDS_LIMIT")))
+        self.pids_limit = max(
+            8, int(pids_limit if pids_limit is not None else _python_exec_setting("PYTHON_EXEC_PIDS_LIMIT"))
+        )
         self.max_concurrent = max(
             1,
-            int(
-                max_concurrent
-                if max_concurrent is not None
-                else _python_exec_setting("PYTHON_EXEC_MAX_CONCURRENT")
-            ),
+            int(max_concurrent if max_concurrent is not None else _python_exec_setting("PYTHON_EXEC_MAX_CONCURRENT")),
         )
         self.busy_timeout_sec = max(
             0.0,

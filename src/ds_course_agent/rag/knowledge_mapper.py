@@ -3,20 +3,20 @@
 将自然语言问题映射到标准知识点（canonical_id）
 采用三层匹配策略：精确匹配 -> 规则匹配 -> Embedding兜底
 """
+
 import json
 import logging
 import os
 import re
-from functools import lru_cache
-from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from pathlib import Path
 
-import ds_course_agent.shared.config as config
-from ds_course_agent.shared.paths import PROJECT_ROOT
-from ds_course_agent.shared.embeddings import create_embedding_model, embed_query_cached
-
 import numpy as np
+
+import ds_course_agent.shared.config as config
+from ds_course_agent.shared.embeddings import create_embedding_model, embed_query_cached
+from ds_course_agent.shared.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ def _trace_concept_map(stage: str, **data) -> None:
 @dataclass
 class MatchedConcept:
     """匹配结果"""
+
     concept_id: str
     display_name: str
     chapter: str
@@ -43,16 +44,16 @@ class MatchedConcept:
 class KnowledgeGraph:
     """知识图谱加载与查询"""
 
-    def __init__(self, graph_path: Optional[str] = None):
+    def __init__(self, graph_path: str | None = None):
         if graph_path is None:
             graph_path = PROJECT_ROOT / "data" / "knowledge_graph.json"
 
-        with open(graph_path, "r", encoding="utf-8") as f:
+        with open(graph_path, encoding="utf-8") as f:
             data = json.load(f)
 
-        self.concepts: Dict[str, Dict] = {}
-        self.alias_to_concept: Dict[str, str] = {}  # alias -> canonical_id
-        self.embeddings: Dict[str, np.ndarray] = {}  # canonical_id -> embedding vector
+        self.concepts: dict[str, dict] = {}
+        self.alias_to_concept: dict[str, str] = {}  # alias -> canonical_id
+        self.embeddings: dict[str, np.ndarray] = {}  # canonical_id -> embedding vector
 
         for concept in data["concepts"]:
             cid = concept["canonical_id"]
@@ -71,34 +72,34 @@ class KnowledgeGraph:
 
     def _normalize_text(self, text: str) -> str:
         """文本归一化：去标点、小写、统一空格"""
-        text = re.sub(r'[^\w\s]', '', text.lower())
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(r"[^\w\s]", "", text.lower())
+        text = re.sub(r"\s+", " ", text).strip()
         return text
 
-    def _build_regex_rules(self) -> List[Tuple[re.Pattern, str]]:
+    def _build_regex_rules(self) -> list[tuple[re.Pattern, str]]:
         """
         构建正则规则
         """
         rules = []
 
         # SVM 相关
-        rules.append((re.compile(r'svm.*核|支持向量机.*核|svm.*kernel', re.I), "svm_kernel"))
-        rules.append((re.compile(r'核函数.*svm|核技巧.*svm', re.I), "svm_kernel"))
+        rules.append((re.compile(r"svm.*核|支持向量机.*核|svm.*kernel", re.I), "svm_kernel"))
+        rules.append((re.compile(r"核函数.*svm|核技巧.*svm", re.I), "svm_kernel"))
 
         # 过拟合相关
-        rules.append((re.compile(r'过拟合.*怎么|overfitting.*|泛化.*差', re.I), "overfitting"))
+        rules.append((re.compile(r"过拟合.*怎么|overfitting.*|泛化.*差", re.I), "overfitting"))
 
         # 交叉验证相关
-        rules.append((re.compile(r'交叉验证.*怎么|k折|k-fold.*怎么', re.I), "cross_validation"))
+        rules.append((re.compile(r"交叉验证.*怎么|k折|k-fold.*怎么", re.I), "cross_validation"))
 
         # 梯度下降相关
-        rules.append((re.compile(r'梯度下降.*怎么|学习率.*怎么|sgd.*怎么', re.I), "gradient_descent"))
+        rules.append((re.compile(r"梯度下降.*怎么|学习率.*怎么|sgd.*怎么", re.I), "gradient_descent"))
 
         # 决策树相关
-        rules.append((re.compile(r'决策树.*剪枝|信息熵.*怎么|信息增益.*', re.I), "decision_tree"))
+        rules.append((re.compile(r"决策树.*剪枝|信息熵.*怎么|信息增益.*", re.I), "decision_tree"))
 
         # 正则化相关
-        rules.append((re.compile(r'正则化.*怎么|l1正则|l2正则|岭回归.*lasso', re.I), "regularization"))
+        rules.append((re.compile(r"正则化.*怎么|l1正则|l2正则|岭回归.*lasso", re.I), "regularization"))
 
         return rules
 
@@ -112,7 +113,7 @@ class KnowledgeGraph:
 
         if cache_path.exists():
             try:
-                with open(cache_path, "r", encoding="utf-8") as f:
+                with open(cache_path, encoding="utf-8") as f:
                     cache_data = json.load(f)
                 for cid, vec in cache_data.items():
                     self.embeddings[cid] = np.array(vec)
@@ -146,11 +147,11 @@ class KnowledgeGraph:
         except Exception as e:
             logger.warning("Embedding model not available: %s", e)
 
-    def get_concept(self, concept_id: str) -> Optional[Dict]:
+    def get_concept(self, concept_id: str) -> dict | None:
         """获取概念详情"""
         return self.concepts.get(concept_id)
 
-    def get_embedding(self, concept_id: str) -> Optional[np.ndarray]:
+    def get_embedding(self, concept_id: str) -> np.ndarray | None:
         """获取概念预计算embedding"""
         return self.embeddings.get(concept_id)
 
@@ -175,21 +176,21 @@ def precompute_knowledge_graph_embeddings(
     out_path = Path(embedding_cache_path)
     if not force and out_path.exists():
         try:
-            with open(out_path, "r", encoding="utf-8") as f:
+            with open(out_path, encoding="utf-8") as f:
                 existing = json.load(f)
             logger.info("Cache already exists with %d entries. Use --force to rebuild.", len(existing))
             return len(existing)
         except Exception:
             pass
 
-    with open(graph_path, "r", encoding="utf-8") as f:
+    with open(graph_path, encoding="utf-8") as f:
         data = json.load(f)
 
     concepts = {c["canonical_id"]: c for c in data["concepts"]}
 
     embedding_model = create_embedding_model()
 
-    embeddings: Dict[str, List[float]] = {}
+    embeddings: dict[str, list[float]] = {}
     for cid, concept in concepts.items():
         text = concept["display_name"] + " " + " ".join(concept["aliases"][:3])
         try:
@@ -205,7 +206,7 @@ def precompute_knowledge_graph_embeddings(
                 out_path,
             )
             try:
-                with open(out_path, "r", encoding="utf-8") as f:
+                with open(out_path, encoding="utf-8") as f:
                     existing = json.load(f)
                 return len(existing) if isinstance(existing, dict) else 0
             except Exception:
@@ -226,7 +227,7 @@ def precompute_knowledge_graph_embeddings(
 class KnowledgeMapper:
     """知识点映射器"""
 
-    def __init__(self, graph: Optional[KnowledgeGraph] = None):
+    def __init__(self, graph: KnowledgeGraph | None = None):
         self.graph = graph or KnowledgeGraph()
         self._embedding_model = None
 
@@ -234,10 +235,7 @@ class KnowledgeMapper:
         """延迟加载 embedding 模型"""
         if self._embedding_model is None:
             self._embedding_model = create_embedding_model(
-                timeout_seconds=float(
-                    getattr(config, "CONCEPT_MAP_QUERY_EMBEDDING_TIMEOUT_SECONDS", 0.5)
-                    or 0.5
-                )
+                timeout_seconds=float(getattr(config, "CONCEPT_MAP_QUERY_EMBEDDING_TIMEOUT_SECONDS", 0.5) or 0.5)
             )
         return self._embedding_model
 
@@ -274,8 +272,7 @@ class KnowledgeMapper:
 
         return 0.0
 
-    def map_question(self, question: str, top_k: int = 3,
-                     embedding_threshold: float = 0.82) -> List[MatchedConcept]:
+    def map_question(self, question: str, top_k: int = 3, embedding_threshold: float = 0.82) -> list[MatchedConcept]:
         """
         三层匹配策略：
         1. 别名精确匹配（含归一化）
@@ -300,13 +297,15 @@ class KnowledgeMapper:
         if normalized in self.graph.alias_to_concept:
             cid = self.graph.alias_to_concept[normalized]
             concept = self.graph.get_concept(cid)
-            matches.append(MatchedConcept(
-                concept_id=cid,
-                display_name=concept["display_name"],
-                chapter=concept["chapter"],
-                method="exact_alias",
-                score=1.0
-            ))
+            matches.append(
+                MatchedConcept(
+                    concept_id=cid,
+                    display_name=concept["display_name"],
+                    chapter=concept["chapter"],
+                    method="exact_alias",
+                    score=1.0,
+                )
+            )
             matched_ids.add(cid)
 
         # 子串匹配（用于长问题中提取概念）
@@ -316,13 +315,15 @@ class KnowledgeMapper:
             score = self._score_substring_match(alias, normalized)
             if score >= 0.55:
                 concept = self.graph.get_concept(cid)
-                matches.append(MatchedConcept(
-                    concept_id=cid,
-                    display_name=concept["display_name"],
-                    chapter=concept["chapter"],
-                    method="exact_alias",
-                    score=score
-                ))
+                matches.append(
+                    MatchedConcept(
+                        concept_id=cid,
+                        display_name=concept["display_name"],
+                        chapter=concept["chapter"],
+                        method="exact_alias",
+                        score=score,
+                    )
+                )
                 matched_ids.add(cid)
 
         # ===== Layer 2: 正则规则匹配 =====
@@ -331,13 +332,15 @@ class KnowledgeMapper:
                 continue
             if pattern.search(question):
                 concept = self.graph.get_concept(cid)
-                matches.append(MatchedConcept(
-                    concept_id=cid,
-                    display_name=concept["display_name"],
-                    chapter=concept["chapter"],
-                    method="regex_rule",
-                    score=0.95
-                ))
+                matches.append(
+                    MatchedConcept(
+                        concept_id=cid,
+                        display_name=concept["display_name"],
+                        chapter=concept["chapter"],
+                        method="regex_rule",
+                        score=0.95,
+                    )
+                )
                 matched_ids.add(cid)
 
         # ===== Layer 3: Embedding语义匹配（兜底）=====
@@ -351,10 +354,7 @@ class KnowledgeMapper:
         should_skip_embedding = (
             embedding_mode in {"disabled", "off", "none"}
             or not self.graph.embeddings
-            or (
-                skip_if_rule_match
-                and len(matches) >= min_rule_matches
-            )
+            or (skip_if_rule_match and len(matches) >= min_rule_matches)
             or len(matches) >= top_k
         )
 
@@ -385,10 +385,7 @@ class KnowledgeMapper:
                     rule_match_count=len(matches),
                     top_k=top_k,
                     mode=embedding_mode,
-                    timeout_seconds=float(
-                        getattr(config, "CONCEPT_MAP_QUERY_EMBEDDING_TIMEOUT_SECONDS", 0.5)
-                        or 0.5
-                    ),
+                    timeout_seconds=float(getattr(config, "CONCEPT_MAP_QUERY_EMBEDDING_TIMEOUT_SECONDS", 0.5) or 0.5),
                     offline_embedding_count=len(self.graph.embeddings),
                 )
                 query_vec = self._embed_text(question)
@@ -400,17 +397,19 @@ class KnowledgeMapper:
                     sim = self._cosine_similarity(query_vec, concept_vec)
                     if sim > embedding_threshold:
                         concept = self.graph.get_concept(cid)
-                        embedding_matches.append(MatchedConcept(
-                            concept_id=cid,
-                            display_name=concept["display_name"],
-                            chapter=concept["chapter"],
-                            method="embedding",
-                            score=round(sim, 3)
-                        ))
+                        embedding_matches.append(
+                            MatchedConcept(
+                                concept_id=cid,
+                                display_name=concept["display_name"],
+                                chapter=concept["chapter"],
+                                method="embedding",
+                                score=round(sim, 3),
+                            )
+                        )
 
                 # 按相似度排序，补充到 matches
                 embedding_matches.sort(key=lambda x: x.score, reverse=True)
-                added_matches = embedding_matches[:top_k - len(matches)]
+                added_matches = embedding_matches[: top_k - len(matches)]
                 matches.extend(added_matches)
                 _trace_concept_map(
                     "concept_map.embedding_used",
@@ -436,7 +435,7 @@ class KnowledgeMapper:
         matches.sort(key=lambda x: x.score, reverse=True)
         return matches[:top_k]
 
-    def get_related_concepts(self, concept_id: str) -> List[str]:
+    def get_related_concepts(self, concept_id: str) -> list[str]:
         """获取相关概念列表"""
         concept = self.graph.get_concept(concept_id)
         if concept:
@@ -445,7 +444,7 @@ class KnowledgeMapper:
 
 
 # 全局单例
-_knowledge_mapper: Optional[KnowledgeMapper] = None
+_knowledge_mapper: KnowledgeMapper | None = None
 
 
 def get_knowledge_mapper() -> KnowledgeMapper:
@@ -456,7 +455,7 @@ def get_knowledge_mapper() -> KnowledgeMapper:
     return _knowledge_mapper
 
 
-def _clone_matched_concepts(matches: Tuple[MatchedConcept, ...]) -> List[MatchedConcept]:
+def _clone_matched_concepts(matches: tuple[MatchedConcept, ...]) -> list[MatchedConcept]:
     """Return fresh dataclass instances so cache contents cannot be mutated."""
     return [replace(match) for match in matches]
 
@@ -466,7 +465,7 @@ def _map_question_to_concepts_cached(
     mapper_identity: int,
     question: str,
     top_k: int,
-) -> Tuple[MatchedConcept, ...]:
+) -> tuple[MatchedConcept, ...]:
     # ``mapper_identity`` is part of the key so tests/runtime resets of the
     # global mapper do not reuse stale results from a previous graph instance.
     _ = mapper_identity
@@ -484,7 +483,7 @@ def map_question_cache_info():
     return _map_question_to_concepts_cached.cache_info()
 
 
-def map_question_to_concepts(question: str, top_k: int = 3) -> List[MatchedConcept]:
+def map_question_to_concepts(question: str, top_k: int = 3) -> list[MatchedConcept]:
     """
     便捷函数：将问题映射到知识点
 
@@ -513,7 +512,7 @@ if __name__ == "__main__":
         "核技巧是什么？",
         "kernel trick的原理",
         "过拟合怎么处理？",
-        "梯度下降的学习率怎么调？"
+        "梯度下降的学习率怎么调？",
     ]
 
     for q in test_questions:

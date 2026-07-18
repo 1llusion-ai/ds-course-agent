@@ -4,7 +4,8 @@ Query Postprocessor
 将路由执行结果标准化为 FinalResponse，并承载迁移中的回答级后处理逻辑。
 当前阶段保持最小闭环：将 Agent 执行得到的字符串标准化为 FinalResponse。
 """
-from typing import Any, Optional
+
+from typing import Any
 
 from .models import FinalResponse, QueryContext, RouteDecision, RouteType
 from .utils import collect_recent_context, is_judgement_question, normalize_query_text
@@ -19,7 +20,7 @@ class QueryPostprocessor:
         decision: RouteDecision,
         result: str,
         *,
-        chat_history: Optional[list[Any]] = None,
+        chat_history: list[Any] | None = None,
     ) -> FinalResponse:
         """把 Agent 执行得到的字符串回答标准化为 FinalResponse。"""
         content = str(result or "")
@@ -74,7 +75,7 @@ class QueryPostprocessor:
         self,
         question: str,
         answer: str,
-        chat_history: Optional[list[Any]] = None,
+        chat_history: list[Any] | None = None,
     ) -> str:
         """保持旧 AgentService._postprocess_generic_answer 的隐式合约。"""
         if not answer:
@@ -87,8 +88,7 @@ class QueryPostprocessor:
             or "线性核" in normalized
             or "kernel" in normalized
             or (
-                "它" in question
-                and any(token in recent_context for token in ["核函数", "支持向量机", "svm", "kernel"])
+                "它" in question and any(token in recent_context for token in ["核函数", "支持向量机", "svm", "kernel"])
             )
         )
         if (
@@ -108,14 +108,14 @@ class QueryPostprocessor:
     def _normalize_question_text(self, question: str) -> str:
         return normalize_query_text(question)
 
-    def _collect_recent_context(self, chat_history: Optional[list[Any]], limit: int = 4) -> str:
+    def _collect_recent_context(self, chat_history: list[Any] | None, limit: int = 4) -> str:
         return collect_recent_context(chat_history, limit=limit, include_roles=False)
 
     def _is_judgement_question(self, question: str) -> bool:
         return is_judgement_question(question)
 
 
-_postprocessor: Optional[QueryPostprocessor] = None
+_postprocessor: QueryPostprocessor | None = None
 
 
 def get_postprocessor() -> QueryPostprocessor:

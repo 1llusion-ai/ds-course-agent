@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -22,7 +22,7 @@ class QueryTraceState:
     errors: list[dict[str, Any]] = field(default_factory=list)
 
 
-_query_trace_ctx: ContextVar[Optional[QueryTraceState]] = ContextVar(
+_query_trace_ctx: ContextVar[QueryTraceState | None] = ContextVar(
     "query_trace",
     default=None,
 )
@@ -36,7 +36,7 @@ def _elapsed_ms(state: QueryTraceState) -> int:
     return int((time.perf_counter() - state.start_perf) * 1000)
 
 
-def begin_query_trace(meta: Optional[dict[str, Any]] = None):
+def begin_query_trace(meta: dict[str, Any] | None = None):
     existing = _query_trace_ctx.get()
     if existing is not None:
         return None

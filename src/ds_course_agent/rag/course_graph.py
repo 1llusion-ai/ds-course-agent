@@ -7,12 +7,12 @@ LangChain's ``LLMGraphTransformer`` or a prompt-only fallback.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import json
 import re
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Literal
-
+from typing import Any, Literal
 
 NodeType = Literal[
     "Concept",
@@ -148,7 +148,7 @@ class CourseGraph:
         path.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
 
     @classmethod
-    def load(cls, path: str | Path) -> "CourseGraph":
+    def load(cls, path: str | Path) -> CourseGraph:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         return cls(
             course_name=payload.get("course_name", ""),
@@ -185,7 +185,9 @@ def _dedupe_by_key(items: Iterable[Any], key_fn) -> list[Any]:
     return result
 
 
-def merge_course_graphs(course_name: str, graphs: Iterable[CourseGraph], metadata: dict[str, Any] | None = None) -> CourseGraph:
+def merge_course_graphs(
+    course_name: str, graphs: Iterable[CourseGraph], metadata: dict[str, Any] | None = None
+) -> CourseGraph:
     nodes: list[CourseGraphNode] = []
     edges: list[CourseGraphEdge] = []
     tags: list[ChunkConceptTag] = []
@@ -201,7 +203,9 @@ def merge_course_graphs(course_name: str, graphs: Iterable[CourseGraph], metadat
         course_name=course_name,
         nodes=_dedupe_by_key(nodes, lambda item: item.id),
         edges=_dedupe_by_key(edges, lambda item: (item.source, item.target, item.type)),
-        chunk_tags=_dedupe_by_key(tags, lambda item: (item.chunk_id, tuple(sorted(item.concept_ids)), item.pedagogical_type)),
+        chunk_tags=_dedupe_by_key(
+            tags, lambda item: (item.chunk_id, tuple(sorted(item.concept_ids)), item.pedagogical_type)
+        ),
         misconceptions=_dedupe_by_key(misconceptions, lambda item: item.id),
         metadata=metadata or {},
     )

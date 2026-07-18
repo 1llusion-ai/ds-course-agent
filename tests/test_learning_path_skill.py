@@ -33,9 +33,11 @@ def test_learning_path_skill_builds_targeted_plan():
     module = SkillRegistry().load_module("learning-path")
     profile = _build_profile()
 
-    with patch.object(module, "get_memory_core") as mock_get_memory_core, \
-        patch.object(module, "map_question_to_concepts") as mock_map_question, \
-        patch.object(module, "get_knowledge_mapper") as mock_get_mapper:
+    with (
+        patch.object(module, "get_memory_core") as mock_get_memory_core,
+        patch.object(module, "map_question_to_concepts") as mock_map_question,
+        patch.object(module, "get_knowledge_mapper") as mock_get_mapper,
+    ):
         mock_memory = MagicMock()
         mock_memory.get_profile.return_value = profile
         mock_get_memory_core.return_value = mock_memory
@@ -67,9 +69,11 @@ def test_learning_path_skill_uses_profile_when_no_concept_match():
     module = SkillRegistry().load_module("learning-path")
     profile = _build_profile()
 
-    with patch.object(module, "get_memory_core") as mock_get_memory_core, \
-        patch.object(module, "map_question_to_concepts", return_value=[]), \
-        patch.object(module, "get_knowledge_mapper") as mock_get_mapper:
+    with (
+        patch.object(module, "get_memory_core") as mock_get_memory_core,
+        patch.object(module, "map_question_to_concepts", return_value=[]),
+        patch.object(module, "get_knowledge_mapper") as mock_get_mapper,
+    ):
         mock_memory = MagicMock()
         mock_memory.get_profile.return_value = profile
         mock_get_memory_core.return_value = mock_memory

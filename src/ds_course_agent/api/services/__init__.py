@@ -8,7 +8,6 @@ from ds_course_agent.api.core_bridge import (
     stream_chat_with_history,
 )
 
-
 __all__ = [
     "PROJECT_ROOT",
     "chat_with_history",

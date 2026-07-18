@@ -29,7 +29,7 @@ def test_code_review_skill_returns_llm_diagnosis_with_corrected_code():
 
     with patch.object(module, "_call_llm", return_value=fake_review) as mocked_llm:
         result = module.execute(
-            'import random\nprint(random.randint(1, 100))    这个代码正确吗',
+            "import random\nprint(random.randint(1, 100))    这个代码正确吗",
             "stu1",
             "sess1",
         )

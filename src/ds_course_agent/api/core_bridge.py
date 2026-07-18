@@ -1,8 +1,10 @@
 """
 桥接 ds_course_agent.rag 模块与 FastAPI
 """
+
 import logging
 import os
+
 try:
     import certifi
 except ImportError:  # pragma: no cover - requests usually installs certifi
@@ -21,10 +23,12 @@ def _configure_ssl_cert_path() -> None:
     os.environ.setdefault("SSL_CERT_FILE", cert_path)
     os.environ.setdefault("REQUESTS_CA_BUNDLE", cert_path)
 
+
 # 修复SSL证书路径（必须在导入其他模块前设置）
 _configure_ssl_cert_path()
 
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -43,6 +47,7 @@ def get_memory_core():
     global _memory_core
     if _memory_core is None:
         from ds_course_agent.rag.memory_core import get_memory_core as _get_core
+
         _memory_core = _get_core()
     return _memory_core
 
@@ -51,19 +56,22 @@ def get_agent_service():
     global _agent_service
     if _agent_service is None:
         from ds_course_agent.rag.agent import get_agent_service as _get_service
+
         _agent_service = _get_service()
     return _agent_service
 
 
 def chat_with_history(message: str, session_id: str, student_id: str, web_search: bool = False) -> dict:
-    from ds_course_agent.tools.course_rag import begin_retrieval_trace, end_retrieval_trace
     from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
+    from ds_course_agent.tools.course_rag import begin_retrieval_trace, end_retrieval_trace
 
-    q_token = begin_query_trace(meta={
-        "session_id": session_id,
-        "student_id": student_id,
-        "web_search": bool(web_search),
-    })
+    q_token = begin_query_trace(
+        meta={
+            "session_id": session_id,
+            "student_id": student_id,
+            "web_search": bool(web_search),
+        }
+    )
     token = begin_retrieval_trace()
 
     try:
@@ -100,14 +108,16 @@ def chat_with_history(message: str, session_id: str, student_id: str, web_search
 
 
 def stream_chat_with_history(message: str, session_id: str, student_id: str, web_search: bool = False):
-    from ds_course_agent.tools.course_rag import begin_retrieval_trace, end_retrieval_trace
     from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
+    from ds_course_agent.tools.course_rag import begin_retrieval_trace, end_retrieval_trace
 
-    q_token = begin_query_trace(meta={
-        "session_id": session_id,
-        "student_id": student_id,
-        "web_search": bool(web_search),
-    })
+    q_token = begin_query_trace(
+        meta={
+            "session_id": session_id,
+            "student_id": student_id,
+            "web_search": bool(web_search),
+        }
+    )
     token = begin_retrieval_trace()
     final_content = ""
     accumulated_content = ""
@@ -160,8 +170,5 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
     if stream_error:
         final_event["error"] = stream_error
         if not final_content:
-            final_event["content"] = (
-                f'关于"{message}"的问题，我需要查阅课程资料后才能回答。\n\n'
-                f'（{stream_error}）'
-            )
+            final_event["content"] = f'关于"{message}"的问题，我需要查阅课程资料后才能回答。\n\n（{stream_error}）'
     yield final_event

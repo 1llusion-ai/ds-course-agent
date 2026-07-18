@@ -8,6 +8,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = PROJECT_ROOT / "src"
 
+
 def ensure_src_path() -> None:
     src = str(SRC_DIR)
     if src not in sys.path:

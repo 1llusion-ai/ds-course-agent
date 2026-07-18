@@ -3,26 +3,26 @@ RAG 服务模块
 提供检索和问答能力，支持被 Tool 和 Agent 调用
 支持纯向量检索和BM25混合检索
 """
+
 import hashlib
 import logging
 import threading
 import time
 from collections import OrderedDict
-from typing import Optional
 from dataclasses import dataclass
 
-from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough, RunnableWithMessageHistory
+from langchain_openai import OpenAIEmbeddings
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.rag.hybrid_retriever import HybridRetriever
 from ds_course_agent.shared.embeddings import embed_query_cached, embedding_model_kwargs
+from ds_course_agent.shared.history import get_history
 from ds_course_agent.shared.llm import get_rag_text_model
 from ds_course_agent.shared.vector_store import VectorStoreService
-from ds_course_agent.shared.history import get_history
-from ds_course_agent.rag.hybrid_retriever import HybridRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +107,7 @@ def _truncate_text(value: str, max_chars: int) -> tuple[str, bool]:
 @dataclass
 class RetrievalResult:
     """检索结果"""
+
     documents: list[Document]
     formatted_context: str
     has_results: bool
@@ -115,6 +116,7 @@ class RetrievalResult:
 @dataclass
 class AnswerResult:
     """回答结果"""
+
     answer: str
     sources: list[dict]
     has_context: bool
@@ -144,7 +146,7 @@ def _retrieval_cache_key(
     question: str,
     *,
     top_k: int,
-    similarity_threshold: Optional[float],
+    similarity_threshold: float | None,
     use_hybrid: bool,
 ) -> str:
     threshold_key = "none" if similarity_threshold is None else f"{float(similarity_threshold):.6g}"
@@ -188,9 +190,9 @@ def _get_cached_retrieval_result(
     question: str,
     *,
     top_k: int,
-    similarity_threshold: Optional[float],
+    similarity_threshold: float | None,
     use_hybrid: bool,
-) -> Optional[RetrievalResult]:
+) -> RetrievalResult | None:
     maxsize = _rag_retrieval_cache_size()
     ttl = _rag_retrieval_cache_ttl_seconds()
     if not _rag_retrieval_cache_enabled() or maxsize <= 0 or ttl <= 0:
@@ -239,7 +241,7 @@ def _store_cached_retrieval_result(
     result: RetrievalResult,
     *,
     top_k: int,
-    similarity_threshold: Optional[float],
+    similarity_threshold: float | None,
     use_hybrid: bool,
 ) -> None:
     maxsize = _rag_retrieval_cache_size()
@@ -273,10 +275,10 @@ def clear_rag_retrieval_cache() -> None:
         _RETRIEVAL_CACHE.clear()
 
 
-class RAGService(object):
+class RAGService:
     """RAG 服务类，提供检索和问答能力"""
 
-    def __init__(self, use_hybrid: bool = True, use_rerank: Optional[bool] = None):
+    def __init__(self, use_hybrid: bool = True, use_rerank: bool | None = None):
         """
         初始化RAG服务
 
@@ -297,10 +299,7 @@ class RAGService(object):
             logger.info("使用BM25混合检索")
             if self.use_rerank:
                 logger.info("启用重排序")
-            self.hybrid_retriever = HybridRetriever(
-                k=config.similarity_top_k,
-                use_rerank=self.use_rerank
-            )
+            self.hybrid_retriever = HybridRetriever(k=config.similarity_top_k, use_rerank=self.use_rerank)
             self.use_rerank = self.hybrid_retriever.use_rerank
             if use_rerank and not self.use_rerank:
                 logger.warning("Rerank 不可用，已回退为纯 Hybrid")
@@ -352,8 +351,12 @@ class RAGService(object):
         chain = (
             {
                 "input": RunnablePassthrough(),
-                "context": RunnableLambda(lambda x: x["input"]) | retriever | format_documents
-            } | RunnableLambda(build_prompt_inputs) | self.prompt_template | self.chat_model | StrOutputParser()
+                "context": RunnableLambda(lambda x: x["input"]) | retriever | format_documents,
+            }
+            | RunnableLambda(build_prompt_inputs)
+            | self.prompt_template
+            | self.chat_model
+            | StrOutputParser()
         )
 
         conversation_chain = RunnableWithMessageHistory(
@@ -368,8 +371,8 @@ class RAGService(object):
     def retrieve(
         self,
         question: str,
-        top_k: Optional[int] = None,
-        similarity_threshold: Optional[float] = 1.0,
+        top_k: int | None = None,
+        similarity_threshold: float | None = 1.0,
     ) -> RetrievalResult:
         """
         检索相关文档
@@ -416,29 +419,25 @@ class RAGService(object):
 
             # 直接查询ChromaDB获取文档和距离
             import chromadb
+
             client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
             collection = client.get_collection(config.collection_name)
 
             results = collection.query(
                 query_embeddings=[query_embedding],
                 n_results=max(k * 3, 10),  # 获取更多结果用于过滤
-                include=["documents", "metadatas", "distances"]
+                include=["documents", "metadatas", "distances"],
             )
 
             # 过滤并构建文档列表
             documents = []
-            if results['documents'] and results['documents'][0]:
+            if results["documents"] and results["documents"][0]:
                 for doc_text, metadata, distance in zip(
-                    results['documents'][0],
-                    results['metadatas'][0],
-                    results['distances'][0]
+                    results["documents"][0], results["metadatas"][0], results["distances"][0]
                 ):
                     # 只保留相似度高于阈值的文档（距离小于阈值）
                     if similarity_threshold is None or distance <= similarity_threshold:
-                        documents.append(Document(
-                            page_content=doc_text,
-                            metadata=metadata
-                        ))
+                        documents.append(Document(page_content=doc_text, metadata=metadata))
                     if len(documents) >= k:
                         break
 
@@ -452,9 +451,7 @@ class RAGService(object):
         )
 
         result = RetrievalResult(
-            documents=documents,
-            formatted_context=formatted_context,
-            has_results=len(documents) > 0
+            documents=documents, formatted_context=formatted_context, has_results=len(documents) > 0
         )
         _store_cached_retrieval_result(
             question,
@@ -472,12 +469,12 @@ class RAGService(object):
         metadata = dict(getattr(doc, "metadata", {}) or {})
         # 优先使用已存储的 book_page，否则动态计算；避免把 chunk 内相对页码
         # 误展示给 LLM / UI。
-        abs_page = metadata.get('book_page') or metadata.get('book_page_start') or _get_absolute_page(doc)
+        abs_page = metadata.get("book_page") or metadata.get("book_page_start") or _get_absolute_page(doc)
         if abs_page:
-            metadata['page'] = int(abs_page)
-            metadata['page_note'] = f"教材第{int(abs_page)}页"
-        elif 'page' in metadata:
-            del metadata['page']
+            metadata["page"] = int(abs_page)
+            metadata["page_note"] = f"教材第{int(abs_page)}页"
+        elif "page" in metadata:
+            del metadata["page"]
         return metadata
 
     def _format_one_document(
@@ -591,7 +588,7 @@ class RAGService(object):
         prefix = "文档片段："
         if block.startswith(prefix) and delimiter in block:
             content_part, metadata_part = block.split(delimiter, 1)
-            content = content_part[len(prefix):]
+            content = content_part[len(prefix) :]
             suffix = f"{delimiter}{metadata_part}\n\n"
             marker = f"\n[片段已按总上下文预算裁剪：原始 {len(content)} 字]"
             available_for_content = remaining_chars - len(prefix) - len(suffix) - len(marker)
@@ -609,11 +606,7 @@ class RAGService(object):
     def stream_answer_with_context(self, question: str, context: str):
         """Stream an answer grounded in the retrieved context."""
         context = self._trim_context_text_for_prompt(context, location="rag.stream_answer.context")
-        prompt = self.prompt_template.format(
-            context=context,
-            history=[],
-            input=question
-        )
+        prompt = self.prompt_template.format(context=context, history=[], input=question)
         if config.CHAT_SYSTEM_SUFFIX:
             prompt = f"{prompt}\n\n{config.CHAT_SYSTEM_SUFFIX}"
         _trace_rag_answer_event(
@@ -635,12 +628,7 @@ class RAGService(object):
             if isinstance(content, str) and content:
                 yield content
 
-    def answer_with_context(
-        self,
-        question: str,
-        context: str,
-        stream: bool = False
-    ) -> AnswerResult:
+    def answer_with_context(self, question: str, context: str, stream: bool = False) -> AnswerResult:
         """
         基于上下文回答问题
 
@@ -656,11 +644,7 @@ class RAGService(object):
         if stream:
             return self.stream_answer_with_context(question, context)
 
-        prompt = self.prompt_template.format(
-            context=context,
-            history=[],
-            input=question
-        )
+        prompt = self.prompt_template.format(context=context, history=[], input=question)
         if config.CHAT_SYSTEM_SUFFIX:
             prompt = f"{prompt}\n\n{config.CHAT_SYSTEM_SUFFIX}"
         _trace_rag_answer_event(
@@ -680,7 +664,7 @@ class RAGService(object):
         answer_msg = self.chat_model.invoke(prompt)
 
         # 提取纯字符串内容
-        answer_content = answer_msg.content if hasattr(answer_msg, 'content') else str(answer_msg)
+        answer_content = answer_msg.content if hasattr(answer_msg, "content") else str(answer_msg)
         _warn_large_rag_payload(
             answer_content,
             location="rag.answer.result",
@@ -688,11 +672,7 @@ class RAGService(object):
             has_context=context != "无相关资料",
         )
 
-        return AnswerResult(
-            answer=answer_content,
-            sources=[],
-            has_context=context != "无相关资料"
-        )
+        return AnswerResult(answer=answer_content, sources=[], has_context=context != "无相关资料")
 
     def _format_documents(self, docs: list[Document]) -> str:
         """格式化文档列表为上下文字符串"""

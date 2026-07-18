@@ -7,17 +7,18 @@ import logging
 import re
 import time
 import uuid
-from collections.abc import Mapping
-from typing import Iterator, Optional
+from collections.abc import Iterator, Mapping
 
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import create_agent
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 import ds_course_agent.shared.config as config
-from ds_course_agent.shared.error_response import build_error_response, truncate_error
-from ds_course_agent.shared.llm import get_chat_model
-from ds_course_agent.shared.messages import message_content_text, stream_chunk_text
+from ds_course_agent.hooks.base import HookManager
+from ds_course_agent.hooks.clarification import ClarificationDetectorHook
+from ds_course_agent.hooks.learning_event import LearningEventHook
+from ds_course_agent.hooks.retrieval_guard import RetrievalGuardHook
+from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
+from ds_course_agent.rag.memory_core import get_memory_core, record_event
 from ds_course_agent.rag.prompt import get_system_prompt
 from ds_course_agent.rag.query_pipeline.utils import (
     build_grounded_query_from_history,
@@ -27,19 +28,16 @@ from ds_course_agent.rag.query_pipeline.utils import (
     is_schedule_request,
     normalize_query_text,
 )
-from ds_course_agent.rag.skill_system import get_skill_loader
-from ds_course_agent.tools.registry import get_rag_tool_registry
-from ds_course_agent.rag.memory_core import get_memory_core, record_event
-from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
-from ds_course_agent.hooks.base import HookManager
-from ds_course_agent.hooks.clarification import ClarificationDetectorHook
-from ds_course_agent.hooks.learning_event import LearningEventHook
-from ds_course_agent.hooks.retrieval_guard import RetrievalGuardHook
 from ds_course_agent.rag.route_handlers import default_route_handlers
+from ds_course_agent.rag.skill_system import get_skill_loader
 from ds_course_agent.rag.taxonomy import (
     classify_question_type,
     special_case_response,
 )
+from ds_course_agent.shared.error_response import build_error_response, truncate_error
+from ds_course_agent.shared.llm import get_chat_model
+from ds_course_agent.shared.messages import message_content_text, stream_chunk_text
+from ds_course_agent.tools.registry import get_rag_tool_registry
 
 # Skills are discovered from the `skills/` directory and loaded on demand.
 
@@ -51,7 +49,7 @@ _AGENT_STREAM_NON_ASSISTANT_TYPES = {"human", "system", "tool"}
 _AGENT_STREAM_ASSISTANT_TYPES = {"ai", "aimessagechunk"}
 
 
-class AgentService(object):
+class AgentService:
     """Single-agent teaching assistant service."""
 
     def __init__(self):
@@ -232,7 +230,7 @@ class AgentService(object):
         except Exception:
             logger.debug("Failed to emit agent retry trace", exc_info=True)
 
-    def _invoke_basic_rag_fallback(self, user_input: str) -> Optional[str]:
+    def _invoke_basic_rag_fallback(self, user_input: str) -> str | None:
         """Degrade a failed LLM request to the basic course RAG tool."""
         try:
             from ds_course_agent.tools.course_rag import course_rag_tool
@@ -262,11 +260,7 @@ class AgentService(object):
                     if attempt < max_retries:
                         self._sleep_before_retry(attempt, reason="empty_response")
                         continue
-                    return self._build_error_response(
-                        "生成回复失败",
-                        "AI未能生成有效回复，请重试。",
-                        is_retryable=True
-                    )
+                    return self._build_error_response("生成回复失败", "AI未能生成有效回复，请重试。", is_retryable=True)
 
                 return response
 
@@ -360,7 +354,7 @@ class AgentService(object):
         attempt: int,
         max_retries: int,
         fallback_input: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Return an error/degraded response, or None when caller should retry."""
         error_category = self._classify_llm_error(exc)
 
@@ -368,17 +362,13 @@ class AgentService(object):
             if attempt < max_retries:
                 self._sleep_before_retry(attempt, reason=error_category)
                 return None
-            return self._build_error_response(
-                "服务暂时不可用",
-                "AI服务连接超时，请检查网络后重试。",
-                is_retryable=True
-            )
+            return self._build_error_response("服务暂时不可用", "AI服务连接超时，请检查网络后重试。", is_retryable=True)
 
         if error_category == "permanent":
             return self._build_error_response(
                 "AI服务配置异常",
                 "AI服务认证、额度或计费状态异常，请联系管理员检查 API Key 和账户状态。",
-                is_retryable=False
+                is_retryable=False,
             )
 
         if error_category == "degradable":
@@ -386,23 +376,15 @@ class AgentService(object):
             if fallback:
                 return fallback
             return self._build_error_response(
-                "请求格式不兼容",
-                "AI服务拒绝了本次请求，且基础检索降级未能生成可用回答。",
-                is_retryable=True
+                "请求格式不兼容", "AI服务拒绝了本次请求，且基础检索降级未能生成可用回答。", is_retryable=True
             )
 
         if error_category == "ollama":
             return self._build_error_response(
-                "本地模型服务异常",
-                f"请检查Ollama是否运行，或模型'{config.MODEL_CHAT}'是否已加载。",
-                is_retryable=True
+                "本地模型服务异常", f"请检查Ollama是否运行，或模型'{config.MODEL_CHAT}'是否已加载。", is_retryable=True
             )
 
-        return self._build_error_response(
-            "处理请求时出错",
-            f"错误信息：{truncate_error(exc)}",
-            is_retryable=True
-        )
+        return self._build_error_response("处理请求时出错", f"错误信息：{truncate_error(exc)}", is_retryable=True)
 
     def _stream_chat_with_retry(self, messages: list, *, fallback_input: str) -> Iterator[str]:
         """Stream once, then retry retryable pre-delta failures via blocking invoke.
@@ -437,10 +419,7 @@ class AgentService(object):
 
         for attempt in range(max_retries):
             try:
-                response = requests.get(
-                    f"{config.BASE_URL_CHAT}/api/tags",
-                    timeout=timeout
-                )
+                response = requests.get(f"{config.BASE_URL_CHAT}/api/tags", timeout=timeout)
                 if response.status_code == 200:
                     models = response.json().get("models", [])
                     model_names = [m.get("name", "") for m in models]
@@ -448,16 +427,14 @@ class AgentService(object):
                         return True
                     else:
                         raise RuntimeError(
-                            f"Ollama 模型 '{config.MODEL_CHAT}' 未找到。"
-                            f"请先运行: ollama pull {config.MODEL_CHAT}"
+                            f"Ollama 模型 '{config.MODEL_CHAT}' 未找到。请先运行: ollama pull {config.MODEL_CHAT}"
                         )
             except requests.exceptions.ConnectionError:
                 if attempt < max_retries - 1:
                     time.sleep(2)
                     continue
                 raise RuntimeError(
-                    f"无法连接到 Ollama 服务 ({config.BASE_URL_CHAT})。"
-                    f"请确保 Ollama 已安装并正在运行 (ollama serve)"
+                    f"无法连接到 Ollama 服务 ({config.BASE_URL_CHAT})。请确保 Ollama 已安装并正在运行 (ollama serve)"
                 )
             except Exception as e:
                 if attempt < max_retries - 1:
@@ -479,9 +456,9 @@ class AgentService(object):
     def chat(
         self,
         user_input: str,
-        chat_history: Optional[list] = None,
+        chat_history: list | None = None,
         stream: bool = False,
-        turn_context: Optional[str] = None,
+        turn_context: str | None = None,
     ):
         """
         与 Agent 进行对话
@@ -517,9 +494,9 @@ class AgentService(object):
     def direct_chat(
         self,
         user_input: str,
-        chat_history: Optional[list] = None,
+        chat_history: list | None = None,
         stream: bool = False,
-        turn_context: Optional[str] = None,
+        turn_context: str | None = None,
     ):
         """Chat directly with the base LLM, bypassing the tool-calling agent."""
 
@@ -660,7 +637,7 @@ class AgentService(object):
             return
 
         for index in range(0, len(text), chunk_size):
-            yield text[index:index + chunk_size]
+            yield text[index : index + chunk_size]
 
     def _progress_event(
         self,
@@ -723,10 +700,12 @@ class AgentService(object):
                 elif role == "assistant":
                     formatted.append(AIMessage(content=content))
                 elif role == "system":
-                    formatted.append(SystemMessage(
-                        content=content,
-                        additional_kwargs=msg.get("additional_kwargs", {}),
-                    ))
+                    formatted.append(
+                        SystemMessage(
+                            content=content,
+                            additional_kwargs=msg.get("additional_kwargs", {}),
+                        )
+                    )
 
         return formatted
 
@@ -752,7 +731,7 @@ class AgentService(object):
         self,
         student_id: str,
         session_id: str,
-        concept_id: Optional[str] = None,
+        concept_id: str | None = None,
     ):
         return self._get_learning_event_hook().get_recent_session_concept_event(
             student_id,
@@ -776,7 +755,7 @@ class AgentService(object):
         session_id: str,
         student_id: str,
         matched_concepts: list,
-        special_case_response: Optional[str] = None,
+        special_case_response: str | None = None,
     ) -> None:
         self._get_learning_event_hook().record_learning_events(
             question=question,
@@ -860,16 +839,10 @@ class AgentService(object):
         active_weak = list(getattr(profile, "weak_spot_candidates", []) or [])
         pending_weak = list(getattr(profile, "pending_weak_spots", []) or [])
         if active_weak:
-            labels = [
-                getattr(item, "display_name", "") or getattr(item, "concept_id", "")
-                for item in active_weak[:5]
-            ]
+            labels = [getattr(item, "display_name", "") or getattr(item, "concept_id", "") for item in active_weak[:5]]
             lines.append("当前薄弱点：" + "、".join(filter(None, labels)))
         if pending_weak:
-            labels = [
-                getattr(item, "display_name", "") or getattr(item, "concept_id", "")
-                for item in pending_weak[:5]
-            ]
+            labels = [getattr(item, "display_name", "") or getattr(item, "concept_id", "") for item in pending_weak[:5]]
             lines.append("待观察薄弱点：" + "、".join(filter(None, labels)))
 
         if not lines:
@@ -881,7 +854,7 @@ class AgentService(object):
             + "\n".join(f"- {line}" for line in lines if line)
         )
 
-    def _handle_special_case(self, question: str) -> Optional[str]:
+    def _handle_special_case(self, question: str) -> str | None:
         return special_case_response(question)
 
     def _build_schedule_tool_query(self, question: str) -> str:
@@ -960,14 +933,15 @@ class AgentService(object):
         context = route_state["context"]
         question = context.original_query
         normalized = normalize_query_text(question)
-        recent_context = normalize_query_text(collect_recent_context(route_state.get("chat_history"), include_roles=False))
+        recent_context = normalize_query_text(
+            collect_recent_context(route_state.get("chat_history"), include_roles=False)
+        )
         refers_to_kernel = (
             "核函数" in normalized
             or "线性核" in normalized
             or "kernel" in normalized
             or (
-                "它" in question
-                and any(token in recent_context for token in ["核函数", "支持向量机", "svm", "kernel"])
+                "它" in question and any(token in recent_context for token in ["核函数", "支持向量机", "svm", "kernel"])
             )
         )
         return bool(is_judgement_question(question) and "线性可分" in normalized and refers_to_kernel)
@@ -975,13 +949,13 @@ class AgentService(object):
     def _maybe_force_grounded_answer(
         self,
         question: str,
-        chat_history: Optional[list] = None,
+        chat_history: list | None = None,
         skip: bool = False,
-    ) -> Optional[str]:
+    ) -> str | None:
         if skip:
             return None
 
-        from ds_course_agent.rag.query_trace import trace_step, trace_error
+        from ds_course_agent.rag.query_trace import trace_error, trace_step
         from ds_course_agent.tools._shared import get_retrieval_trace
         from ds_course_agent.tools.course_rag import course_rag_tool
 
@@ -998,12 +972,7 @@ class AgentService(object):
             trace_error("agent.force_grounded", e)
             return None
 
-    def _postprocess_generic_answer(
-        self,
-        question: str,
-        answer: str,
-        chat_history: Optional[list] = None
-    ) -> str:
+    def _postprocess_generic_answer(self, question: str, answer: str, chat_history: list | None = None) -> str:
         from ds_course_agent.rag.query_pipeline import get_postprocessor
 
         return get_postprocessor().postprocess_generic_answer(
@@ -1012,7 +981,7 @@ class AgentService(object):
             chat_history=chat_history,
         )
 
-    def _retrieval_guard_skip_reason(self, route_state: dict, result: Optional[str] = None) -> Optional[str]:
+    def _retrieval_guard_skip_reason(self, route_state: dict, result: str | None = None) -> str | None:
         """Return a reason to skip forced grounding, or None when guard may run.
 
         Forced grounding is an expensive safety net.  It should only run for
@@ -1071,10 +1040,18 @@ class AgentService(object):
 
         这是 sync / stream 共享的唯一路由入口，避免两条路径行为漂移。
         """
-        from ds_course_agent.shared.history import get_history
-        from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteType, get_preprocessor, get_rewriter, get_router, DetectedConcept
-        from ds_course_agent.rag.query_trace import trace_step, trace_span
+        from ds_course_agent.rag.query_pipeline import (
+            DetectedConcept,
+            QueryContext,
+            RouteDecision,
+            RouteType,
+            get_preprocessor,
+            get_rewriter,
+            get_router,
+        )
+        from ds_course_agent.rag.query_trace import trace_span, trace_step
         from ds_course_agent.rag.scope_guard import assess_query_scope
+        from ds_course_agent.shared.history import get_history
 
         student_id = student_id or session_id
         with trace_span("prepare.history_load"):
@@ -1431,6 +1408,7 @@ class AgentService(object):
     def _iter_grounded_rag_response(self, route_state: dict) -> Iterator[str]:
         """Stream the common grounded-RAG route directly from the RAG model call."""
         from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
+        from ds_course_agent.tools._shared import _track_retrieval
         from ds_course_agent.tools.course_rag import (
             build_extractive_rag_fallback,
             build_no_results_message,
@@ -1438,7 +1416,6 @@ class AgentService(object):
             get_rag_service,
             trace_answer_degraded,
         )
-        from ds_course_agent.tools._shared import _track_retrieval
 
         question = self._route_execution_query(route_state["context"], route_state["decision"])
 
@@ -1501,7 +1478,7 @@ class AgentService(object):
 
         现在 sync / stream 共用 _prepare_query_route() 的 QueryContext + RouteDecision。
         """
-        from langchain_core.messages import HumanMessage, AIMessage
+        from langchain_core.messages import AIMessage, HumanMessage
 
         if stream:
             if web_search:
@@ -1525,9 +1502,11 @@ class AgentService(object):
         route_state["history"].add_messages([HumanMessage(content=user_input)])
         result = self._execute_route(route_state, stream=False)
 
-        route_state["history"].add_messages([
-            AIMessage(content=result if isinstance(result, str) else "系统错误"),
-        ])
+        route_state["history"].add_messages(
+            [
+                AIMessage(content=result if isinstance(result, str) else "系统错误"),
+            ]
+        )
 
         return result
 
@@ -1539,7 +1518,8 @@ class AgentService(object):
         web_search: bool = False,
     ):
         """流式聊天，复用 sync 路由准备和执行核心。"""
-        from langchain_core.messages import HumanMessage, AIMessage
+        from langchain_core.messages import AIMessage, HumanMessage
+
         from ds_course_agent.rag.query_pipeline import RouteType
 
         stream_id = uuid.uuid4().hex
@@ -1637,9 +1617,11 @@ class AgentService(object):
             route=route.value,
             resuming=False,
         )
-        route_state["history"].add_messages([
-            AIMessage(content=final_result if isinstance(final_result, str) else "系统错误"),
-        ])
+        route_state["history"].add_messages(
+            [
+                AIMessage(content=final_result if isinstance(final_result, str) else "系统错误"),
+            ]
+        )
 
         yield {
             "type": "done",
@@ -1672,7 +1654,7 @@ class AgentService(object):
         return get_memory_core().get_profile(student_id)
 
 
-_agent_service: Optional[AgentService] = None
+_agent_service: AgentService | None = None
 
 
 def get_agent_service() -> AgentService:

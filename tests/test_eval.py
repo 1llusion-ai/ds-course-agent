@@ -2,8 +2,10 @@
 评测脚本测试
 验证评测模块基本功能
 """
+
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 class TestEvalSamples:
@@ -39,7 +41,7 @@ class TestEvalSamples:
 
     def test_get_samples_by_category(self):
         """测试按类别获取样本"""
-        from benchmarks.samples import get_samples_by_category, get_eval_samples
+        from benchmarks.samples import get_eval_samples, get_samples_by_category
 
         all_samples = get_eval_samples()
         categories = set(s.category for s in all_samples)
@@ -202,7 +204,8 @@ class TestRunEvaluation:
         report = run_evaluation(output_file)
 
         import json
-        with open(output_file, "r", encoding="utf-8") as f:
+
+        with open(output_file, encoding="utf-8") as f:
             saved_report = json.load(f)
 
         assert saved_report["total_samples"] == 1

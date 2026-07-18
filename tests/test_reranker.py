@@ -1,7 +1,9 @@
 """
 重排序模块测试
 """
+
 from unittest.mock import MagicMock, patch
+
 from langchain_core.documents import Document
 
 try:
@@ -9,14 +11,15 @@ try:
 except ModuleNotFoundError:
     pytest = None
 
-from ds_course_agent.rag.reranker import CrossEncoderReranker, get_reranker
-from ds_course_agent.rag.hybrid_retriever import HybridRetriever
 import ds_course_agent.shared.config as config
+from ds_course_agent.rag.hybrid_retriever import HybridRetriever
+from ds_course_agent.rag.reranker import CrossEncoderReranker, get_reranker
 from ds_course_agent.shared import embeddings
 
 
 class MockCrossEncoder:
     """Mock CrossEncoder for testing"""
+
     def __init__(self, *args, **kwargs):
         pass
 
@@ -39,6 +42,7 @@ def _mock_load_model(self):
 
 def _mock_load_model_fail(self):
     self._model = None
+
 
 def test_cross_encoder_rerank_changes_order():
     """测试重排序能改变文档顺序"""
@@ -109,12 +113,9 @@ def test_hybrid_retriever_rerank_toggle(mock_embed, mock_client):
     mock_collection = MagicMock()
     mock_collection.get.return_value = {
         "documents": ["doc1 text", "doc2 text", "doc3 text"],
-        "metadatas": [{"chunk_id": "c1"}, {"chunk_id": "c2"}, {"chunk_id": "c3"}]
+        "metadatas": [{"chunk_id": "c1"}, {"chunk_id": "c2"}, {"chunk_id": "c3"}],
     }
-    mock_collection.query.return_value = {
-        "documents": [["doc1 text", "doc2 text"]],
-        "distances": [[0.1, 0.2]]
-    }
+    mock_collection.query.return_value = {"documents": [["doc1 text", "doc2 text"]], "distances": [[0.1, 0.2]]}
     mock_client.return_value.get_collection.return_value = mock_collection
 
     # mock embed_query
@@ -143,12 +144,9 @@ def test_hybrid_retriever_disables_unavailable_rerank(mock_embed, mock_client):
     mock_collection = MagicMock()
     mock_collection.get.return_value = {
         "documents": ["doc1 text", "doc2 text"],
-        "metadatas": [{"chunk_id": "c1"}, {"chunk_id": "c2"}]
+        "metadatas": [{"chunk_id": "c1"}, {"chunk_id": "c2"}],
     }
-    mock_collection.query.return_value = {
-        "documents": [["doc1 text", "doc2 text"]],
-        "distances": [[0.1, 0.2]]
-    }
+    mock_collection.query.return_value = {"documents": [["doc1 text", "doc2 text"]], "distances": [[0.1, 0.2]]}
     mock_client.return_value.get_collection.return_value = mock_collection
 
     mock_embed_instance = MagicMock()

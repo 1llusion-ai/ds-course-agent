@@ -9,9 +9,10 @@ from ds_course_agent.tools.registry import (
     ToolSpec,
     apply_tool_result_policy,
     build_default_tool_registry,
+    get_rag_tool_metadata,
+    get_rag_tool_spec,
+    get_rag_tools,
 )
-from ds_course_agent.tools.registry import get_rag_tool_metadata, get_rag_tool_spec, get_rag_tools
-
 
 EXPECTED_REGISTRY_NAMES = [
     "course_rag_tool",
@@ -100,15 +101,17 @@ def test_tool_metadata_helpers_are_json_serializable_and_hide_callables():
 
 def test_registry_validates_duplicate_and_mismatched_specs():
     fake_tool = SimpleNamespace(name="demo_tool")
-    registry = ToolRegistry([
-        ToolSpec(
-            name="demo_tool",
-            tool=fake_tool,
-            read_only=True,
-            side_effect=False,
-            concurrency_safe=True,
-        )
-    ])
+    registry = ToolRegistry(
+        [
+            ToolSpec(
+                name="demo_tool",
+                tool=fake_tool,
+                read_only=True,
+                side_effect=False,
+                concurrency_safe=True,
+            )
+        ]
+    )
 
     with pytest.raises(ValueError, match="Duplicate tool"):
         registry.register(

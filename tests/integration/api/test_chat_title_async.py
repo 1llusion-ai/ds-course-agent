@@ -1,5 +1,5 @@
-import time
 import asyncio
+import time
 
 from fastapi.testclient import TestClient
 
@@ -8,8 +8,8 @@ from ds_course_agent.api.title_generation import DEFAULT_SESSION_TITLE, build_fa
 
 
 def test_stream_does_not_block_on_first_title_generation(monkeypatch):
-    from ds_course_agent.api.state import _chat_history, _sessions
     import ds_course_agent.api.routers.chat as chat_module
+    from ds_course_agent.api.state import _chat_history, _sessions
 
     _sessions.clear()
     _chat_history.clear()
@@ -50,8 +50,8 @@ def test_stream_does_not_block_on_first_title_generation(monkeypatch):
 
 
 def test_post_send_does_not_block_on_first_title_generation(monkeypatch):
-    from ds_course_agent.api.state import _chat_history, _sessions
     import ds_course_agent.api.routers.chat as chat_module
+    from ds_course_agent.api.state import _chat_history, _sessions
 
     _sessions.clear()
     _chat_history.clear()
@@ -90,8 +90,8 @@ def test_post_send_does_not_block_on_first_title_generation(monkeypatch):
 
 
 def test_schedule_title_generation_sets_immediate_fallback(monkeypatch):
-    from ds_course_agent.api.state import _sessions
     import ds_course_agent.api.routers.chat as chat_module
+    from ds_course_agent.api.state import _sessions
 
     _sessions.clear()
     chat_module._title_gen_cache.clear()

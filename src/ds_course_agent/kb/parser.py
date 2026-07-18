@@ -7,33 +7,34 @@
 - 支持页码范围选择
 - 输出 Markdown 格式，保留结构信息
 """
+
+import json
 import os
 import re
-import json
-import time
-import tempfile
-import subprocess
 import shutil
-from dataclasses import dataclass, asdict
-from typing import Optional
-from pathlib import Path
+import subprocess
+import tempfile
+import time
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from html.parser import HTMLParser
+from pathlib import Path
 
 
 class HTMLTextExtractor(HTMLParser):
     """从 HTML 中提取纯文本"""
+
     def __init__(self):
         super().__init__()
         self.texts = []
         self.skip = False
 
     def handle_starttag(self, tag, attrs):
-        if tag in {'script', 'style'}:
+        if tag in {"script", "style"}:
             self.skip = True
 
     def handle_endtag(self, tag):
-        if tag in {'script', 'style'}:
+        if tag in {"script", "style"}:
             self.skip = False
 
     def handle_data(self, data):
@@ -41,26 +42,28 @@ class HTMLTextExtractor(HTMLParser):
             self.texts.append(data)
 
     def get_text(self):
-        text = ''.join(self.texts)
+        text = "".join(self.texts)
         # Clean up whitespace
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(r"\s+", " ", text).strip()
         return text
 
 
 @dataclass
 class PageResult:
     """单页解析结果"""
+
     page_num: int
     text: str
     parser: str = "marker"
     char_count: int = 0
     original_char_count: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass
 class PDFParseResult:
     """PDF 解析结果"""
+
     file_name: str
     total_pages: int
     pages: list[PageResult]
@@ -73,6 +76,7 @@ class PDFParseResult:
 @dataclass
 class ParseTrace:
     """解析追踪记录"""
+
     file_name: str
     total_pages: int
     parser_mode: str
@@ -83,6 +87,7 @@ class ParseTrace:
 def _get_marker_executable() -> str:
     """获取当前 Python 环境对应的 marker_single 可执行文件路径"""
     import sys
+
     python_dir = os.path.dirname(sys.executable)
     # Windows: Scripts/marker_single.exe; Unix: bin/marker_single
     candidates = [
@@ -102,22 +107,14 @@ MARKER_EXE = _get_marker_executable()
 def check_marker_available() -> bool:
     """检查 Marker 是否可用"""
     try:
-        result = subprocess.run(
-            [MARKER_EXE, "--help"],
-            capture_output=True,
-            timeout=10
-        )
+        result = subprocess.run([MARKER_EXE, "--help"], capture_output=True, timeout=10)
         return result.returncode == 0
     except Exception:
         return False
 
 
 def parse_with_datalab(
-    pdf_path: str,
-    api_key: str | None = None,
-    max_pages: int = 0,
-    page_start: int = 1,
-    mode: str = "balanced"
+    pdf_path: str, api_key: str | None = None, max_pages: int = 0, page_start: int = 1, mode: str = "balanced"
 ) -> tuple[bool, str, dict]:
     """
     使用 Datalab 云端 API 解析 PDF（Marker 云端版）
@@ -136,6 +133,7 @@ def parse_with_datalab(
     if api_key is None:
         try:
             import ds_course_agent.shared.config as config
+
             api_key = config.DATALAB_API_KEY
         except Exception:
             api_key = os.getenv("DATALAB_API_KEY", "")
@@ -167,7 +165,7 @@ def parse_with_datalab(
 
     try:
         # 1. 提交文件
-        print(f"  [Datalab] 上传并提交解析请求 (JSON 格式)...")
+        print("  [Datalab] 上传并提交解析请求 (JSON 格式)...")
         with open(pdf_path, "rb") as f:
             response = requests.post(
                 submit_url,
@@ -185,7 +183,7 @@ def parse_with_datalab(
             return False, f"Datalab submit failed: {submit_data}", {}
 
         check_url = submit_data["request_check_url"]
-        print(f"  [Datalab] 请求已提交，轮询结果...")
+        print("  [Datalab] 请求已提交，轮询结果...")
 
         # 2. 轮询等待结果
         poll_interval = 3
@@ -234,10 +232,7 @@ def parse_with_datalab(
 
 
 def parse_with_marker(
-    pdf_path: str,
-    output_dir: str = None,
-    max_pages: int = 0,
-    page_start: int = 1
+    pdf_path: str, output_dir: str = None, max_pages: int = 0, page_start: int = 1
 ) -> tuple[bool, str, dict]:
     """
     使用 Marker 解析 PDF
@@ -260,12 +255,7 @@ def parse_with_marker(
         cmd.extend(["--page_range", f"{page_start_idx}-{page_end_idx}"])
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=600
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
 
         if result.returncode != 0:
             return False, f"Marker failed: {result.stderr}", {}
@@ -275,7 +265,7 @@ def parse_with_marker(
         json_files = []
         for root, dirs, files in os.walk(output_dir):
             for f in files:
-                if f.endswith('.json') and not f.endswith('_meta.json'):
+                if f.endswith(".json") and not f.endswith("_meta.json"):
                     json_files.append(os.path.join(root, f))
 
         if not json_files:
@@ -284,7 +274,7 @@ def parse_with_marker(
         # Use the first (and usually only) JSON file found
         json_path = json_files[0]
 
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             data = json.load(f)
 
         return True, json.dumps(data, ensure_ascii=False), data
@@ -297,6 +287,7 @@ def parse_with_marker(
 
 def _extract_page_text(page_data: dict) -> str:
     """从 Marker/Datalab JSON 的 Page 节点中提取纯文本"""
+
     def extract_text_from_node(node):
         texts = []
         if isinstance(node, dict):
@@ -330,8 +321,7 @@ def _extract_pages_from_json(data: dict, max_pages: int = 0, parser: str = "mark
         if "pages" in data:
             all_pages = data["pages"]
         elif "children" in data:
-            all_pages = [c for c in data["children"]
-                         if isinstance(c, dict) and c.get("block_type") == "Page"]
+            all_pages = [c for c in data["children"] if isinstance(c, dict) and c.get("block_type") == "Page"]
 
     if max_pages > 0 and len(all_pages) > max_pages:
         all_pages = all_pages[:max_pages]
@@ -342,13 +332,15 @@ def _extract_pages_from_json(data: dict, max_pages: int = 0, parser: str = "mark
         if isinstance(page_data, dict):
             page_text = _extract_page_text(page_data)
 
-        pages_results.append(PageResult(
-            page_num=idx + 1,
-            text=page_text,
-            parser=parser,
-            char_count=len(page_text),
-            original_char_count=len(page_text)
-        ))
+        pages_results.append(
+            PageResult(
+                page_num=idx + 1,
+                text=page_text,
+                parser=parser,
+                char_count=len(page_text),
+                original_char_count=len(page_text),
+            )
+        )
 
     return pages_results
 
@@ -367,15 +359,12 @@ def _build_result(file_name: str, pages: list[PageResult], parser_mode: str) -> 
         marker_pages=len(pages),
         success_rate=1.0 if pages else 0.0,
         full_text="\n\n".join(full_text_parts),
-        parser_mode=parser_mode
+        parser_mode=parser_mode,
     )
 
 
 def parse_pdf_file(
-    pdf_path: str,
-    max_pages: int = 0,
-    save_trace: bool = True,
-    parser_mode: str = "marker"
+    pdf_path: str, max_pages: int = 0, save_trace: bool = True, parser_mode: str = "marker"
 ) -> PDFParseResult:
     """
     解析 PDF 文件
@@ -397,17 +386,15 @@ def parse_pdf_file(
     if parser_mode in ("auto", "datalab"):
         try:
             import ds_course_agent.shared.config as config
+
             datalab_key = config.DATALAB_API_KEY
         except Exception:
             datalab_key = os.getenv("DATALAB_API_KEY", "")
 
         if datalab_key and datalab_key != "your_datalab_api_key_here":
-            print(f"  解析器: Datalab 云端 (balanced)")
+            print("  解析器: Datalab 云端 (balanced)")
             success, content, data = parse_with_datalab(
-                pdf_path,
-                api_key=datalab_key,
-                max_pages=max_pages,
-                mode="balanced"
+                pdf_path, api_key=datalab_key, max_pages=max_pages, mode="balanced"
             )
 
             if success:
@@ -422,35 +409,22 @@ def parse_pdf_file(
             else:
                 print(f"  [Datalab 失败] {content}")
                 if parser_mode == "datalab":
-                    return PDFParseResult(
-                        file_name=file_name, total_pages=0,
-                        pages=[], parser_mode="datalab"
-                    )
-                print(f"  回退到本地 Marker...")
+                    return PDFParseResult(file_name=file_name, total_pages=0, pages=[], parser_mode="datalab")
+                print("  回退到本地 Marker...")
         elif parser_mode == "datalab":
-            print(f"  [ERROR] DATALAB_API_KEY 未设置")
-            return PDFParseResult(
-                file_name=file_name, total_pages=0,
-                pages=[], parser_mode="datalab"
-            )
+            print("  [ERROR] DATALAB_API_KEY 未设置")
+            return PDFParseResult(file_name=file_name, total_pages=0, pages=[], parser_mode="datalab")
 
     # === 本地 Marker 解析 ===
-    print(f"  解析器: 本地 Marker")
+    print("  解析器: 本地 Marker")
     output_dir = tempfile.mkdtemp()
 
     try:
-        success, content, data = parse_with_marker(
-            pdf_path,
-            output_dir=output_dir,
-            max_pages=max_pages
-        )
+        success, content, data = parse_with_marker(pdf_path, output_dir=output_dir, max_pages=max_pages)
 
         if not success:
             print(f"  [ERROR] {content}")
-            return PDFParseResult(
-                file_name=file_name, total_pages=0,
-                pages=[], parser_mode="marker"
-            )
+            return PDFParseResult(file_name=file_name, total_pages=0, pages=[], parser_mode="marker")
 
         pages_results = _extract_pages_from_json(data, max_pages, parser="marker")
         print(f"[PDF] {file_name}: 解析完成")
@@ -479,14 +453,9 @@ def save_parse_trace(parse_result: PDFParseResult, output_path: str = "artifacts
         parser_mode=parse_result.parser_mode,
         generated_at=datetime.now().isoformat(),
         pages=[
-            {
-                "page_num": p.page_num,
-                "parser": p.parser,
-                "char_count": p.char_count,
-                "error": p.error
-            }
+            {"page_num": p.page_num, "parser": p.parser, "char_count": p.char_count, "error": p.error}
             for p in parse_result.pages
-        ]
+        ],
     )
 
     with open(output_path, "w", encoding="utf-8") as f:

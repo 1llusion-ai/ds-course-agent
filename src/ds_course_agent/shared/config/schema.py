@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from pydantic import Field, field_validator, model_validator
@@ -206,7 +205,7 @@ class Settings(BaseSettings):
         return _project_path(value)
 
     @model_validator(mode="after")
-    def _apply_derived_values(self) -> "Settings":
+    def _apply_derived_values(self) -> Settings:
         if self.COURSE_COLLECTION_NAME:
             self.COLLECTION_NAME = self.COURSE_COLLECTION_NAME
         return self

@@ -12,7 +12,7 @@ from ds_course_agent.tools._shared import _warn_large_tool_result
 def python_exec_tool(code: str) -> str:
     """在安全沙箱中执行 Python 代码并返回输出。仅用于用户明确要求运行/执行/看输出的场景；可用第三方库取决于部署的沙箱镜像。"""
     from ds_course_agent.rag.code_executor import PythonSandbox, format_python_execution_answer
-    from ds_course_agent.rag.query_trace import trace_step, trace_error
+    from ds_course_agent.rag.query_trace import trace_error, trace_step
 
     trace_step("tool.invoke", tool="python_exec_tool")
     try:

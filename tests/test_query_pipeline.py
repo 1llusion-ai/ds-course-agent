@@ -3,12 +3,14 @@
 
 验证 QueryContext、Router、Postprocessor、Rewriter 的基本功能
 """
+
 import pytest
+
 from ds_course_agent.rag.query_pipeline import (
     DetectedConcept,
+    RouteType,
     get_preprocessor,
     get_router,
-    RouteType,
 )
 from ds_course_agent.rag.route_handlers import default_route_handlers
 
@@ -494,22 +496,25 @@ class TestAgentRouteSharing:
 
         monkeypatch.setattr(service, "stream_chat_with_history", fake_stream)
 
-        events = list(service.chat_with_history(
-            "现在几点？",
-            "session-1",
-            stream=True,
-            student_id="student-1",
-        ))
+        events = list(
+            service.chat_with_history(
+                "现在几点？",
+                "session-1",
+                stream=True,
+                student_id="student-1",
+            )
+        )
 
         assert called["args"] == ("现在几点？", "session-1", "student-1")
         assert events == [{"type": "done", "content": "ok"}]
 
     def test_prepare_query_route_returns_route_decision(self, monkeypatch):
         """_prepare_query_route 应返回 QueryContext 和 RouteDecision。"""
+        from langchain_core.messages import HumanMessage
+
         from ds_course_agent.rag.agent import AgentService
         from ds_course_agent.rag.profile_models import StudentProfile
         from ds_course_agent.rag.query_pipeline import RouteType
-        from langchain_core.messages import HumanMessage
 
         service = object.__new__(AgentService)
         service.skill_loader = None
@@ -564,12 +569,7 @@ class TestAgentRouteSharing:
         monkeypatch.setattr(service, "_build_schedule_tool_query", lambda question: question)
 
         state = service._prepare_query_route(
-            user_input=(
-                "帮我解析这段代码在做什么：\n"
-                "```python\n"
-                "scores = cross_val_score(model, X, y, cv=5)\n"
-                "```"
-            ),
+            user_input=("帮我解析这段代码在做什么：\n```python\nscores = cross_val_score(model, X, y, cv=5)\n```"),
             session_id="session-1",
             student_id="student-1",
         )
@@ -650,7 +650,6 @@ class TestAgentRouteSharing:
 class TestQueryRouterRegressions:
     """针对 code review findings 的回归测试。"""
 
-
     def test_semester_schedule_route(self):
         """学期级课程时间问题应走 schedule tool，而不是 RAG。"""
         preprocessor = get_preprocessor(enable_concept_detection=False)
@@ -712,9 +711,9 @@ class TestQueryRouterRegressions:
         decision = router.route(context)
         assert decision.route == RouteType.LEARNING_PATH_SKILL
 
-
     def test_router_uses_high_confidence_rewrite_as_course_followup_signal(self):
         from langchain_core.messages import AIMessage, HumanMessage
+
         from ds_course_agent.rag.query_pipeline import get_rewriter
 
         preprocessor = get_preprocessor(enable_concept_detection=False)
@@ -745,6 +744,7 @@ class TestQueryRouterRegressions:
 
     def test_router_does_not_promote_low_confidence_contextual_rewrite(self):
         from langchain_core.messages import AIMessage, HumanMessage
+
         from ds_course_agent.rag.query_pipeline import get_rewriter
 
         preprocessor = get_preprocessor(enable_concept_detection=False)
@@ -789,7 +789,6 @@ class TestQueryRouterRegressions:
         assert decision.route == RouteType.GENERIC_AGENT
 
 
-
 class TestQueryPostprocessor:
     """测试 Query Pipeline 后处理最小闭环。"""
 
@@ -817,7 +816,6 @@ class TestQueryPostprocessor:
         assert response.trace["confidence"] == 0.6
         assert response.trace["reasons"] == ["fallback"]
 
-
     def test_postprocessor_preserves_svm_kernel_judgement_contract(self):
         from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteType, get_postprocessor
 
@@ -844,10 +842,11 @@ class TestAgentStreamPostprocessRegressions:
     """锁定 stream/sync 后处理一致性回归。"""
 
     def _make_service(self, monkeypatch, *, chat_stream_chunks, chat_sync_result=None, route=None):
+        from langchain_core.messages import AIMessage, HumanMessage
+
         from ds_course_agent.rag.agent import AgentService
         from ds_course_agent.rag.profile_models import StudentProfile
         from ds_course_agent.rag.query_pipeline import RouteType
-        from langchain_core.messages import AIMessage, HumanMessage
 
         service = object.__new__(AgentService)
         service.llm = None
@@ -905,11 +904,13 @@ class TestAgentStreamPostprocessRegressions:
             chat_stream_chunks=["要结合数据分布判断。"],
         )
 
-        events = list(service.stream_chat_with_history(
-            "如果线性可分，它还需要吗？",
-            "session-1",
-            student_id="student-1",
-        ))
+        events = list(
+            service.stream_chat_with_history(
+                "如果线性可分，它还需要吗？",
+                "session-1",
+                student_id="student-1",
+            )
+        )
 
         deltas = "".join(event.get("delta", "") for event in events if event["type"] == "delta")
         done = events[-1]
@@ -930,7 +931,9 @@ class TestAgentStreamPostprocessRegressions:
             chat_stream_chunks=["\n\n"],
             chat_sync_result="\n\n",
         )
-        monkeypatch.setattr("ds_course_agent.tools.course_rag.get_retrieval_trace", lambda: RetrievalTrace(used_retrieval=True))
+        monkeypatch.setattr(
+            "ds_course_agent.tools.course_rag.get_retrieval_trace", lambda: RetrievalTrace(used_retrieval=True)
+        )
 
         class FakeRagTool:
             def invoke(self, query):
@@ -939,7 +942,9 @@ class TestAgentStreamPostprocessRegressions:
         monkeypatch.setattr("ds_course_agent.tools.course_rag.course_rag_tool", FakeRagTool())
 
         sync_result = service.chat_with_history("你叫什么名字？", "session-sync", student_id="student-1")
-        stream_events = list(service.stream_chat_with_history("你叫什么名字？", "session-stream", student_id="student-1"))
+        stream_events = list(
+            service.stream_chat_with_history("你叫什么名字？", "session-stream", student_id="student-1")
+        )
 
         assert sync_result.startswith("⚠️ **无法生成回答**")
         assert stream_events[-1]["content"] == sync_result
@@ -1017,7 +1022,9 @@ class TestAgentStreamPostprocessRegressions:
         )
 
         sync_result = service.chat_with_history("结合我的进度解释 SVM", "session-sync", student_id="student-1")
-        stream_events = list(service.stream_chat_with_history("结合我的进度解释 SVM", "session-stream", student_id="student-1"))
+        stream_events = list(
+            service.stream_chat_with_history("结合我的进度解释 SVM", "session-stream", student_id="student-1")
+        )
 
         assert sync_result == "个性化解释结果"
         assert stream_events[-1]["content"] == "个性化解释结果"
@@ -1035,6 +1042,7 @@ class TestAgentStreamPostprocessRegressions:
             "_maybe_force_grounded_answer",
             lambda *args, **kwargs: None if kwargs.get("skip") else "RAG 覆盖",
         )
+
         class FakeSandbox:
             def execute(self, code):
                 assert code == "print(1 + 1)"
@@ -1056,10 +1064,11 @@ class TestAgentStreamPostprocessRegressions:
         assert history.added[-1].content == result
 
     def test_grounded_rag_route_uses_rewritten_grounded_tool_query(self, monkeypatch):
+        from langchain_core.messages import AIMessage, HumanMessage
+
         from ds_course_agent.rag.agent import AgentService
         from ds_course_agent.rag.profile_models import StudentProfile
         from ds_course_agent.rag.query_pipeline import RouteType
-        from langchain_core.messages import AIMessage, HumanMessage
 
         service = object.__new__(AgentService)
         service.llm = None
@@ -1124,6 +1133,7 @@ class TestQueryRewriter:
 
     def test_followup_pronoun_rewrite_uses_recent_topic_without_changing_original(self):
         from langchain_core.messages import AIMessage, HumanMessage
+
         from ds_course_agent.rag.query_pipeline import get_rewriter
 
         history = [
@@ -1141,9 +1151,9 @@ class TestQueryRewriter:
         assert result.rewritten_query in context.enriched_query
         assert context.metadata["rewrite"]["changed"] is True
 
-
     def test_svm_kernel_followup_rewrites_generic_pronoun_quality_question(self):
         from langchain_core.messages import AIMessage, HumanMessage
+
         from ds_course_agent.rag.query_pipeline import get_rewriter
 
         history = [
@@ -1161,6 +1171,7 @@ class TestQueryRewriter:
 
     def test_course_entity_followup_rewrites_overfitting_solution_question(self):
         from langchain_core.messages import AIMessage, HumanMessage
+
         from ds_course_agent.rag.query_pipeline import get_rewriter
 
         history = [
@@ -1178,6 +1189,7 @@ class TestQueryRewriter:
 
     def test_contextual_followup_builds_grounded_query_when_no_specific_template(self):
         from langchain_core.messages import AIMessage, HumanMessage
+
         from ds_course_agent.rag.query_pipeline import get_rewriter
 
         history = [
@@ -1197,6 +1209,7 @@ class TestQueryRewriter:
 
     def test_rewriter_skips_schedule_and_datetime_queries(self):
         from langchain_core.messages import AIMessage, HumanMessage
+
         from ds_course_agent.rag.query_pipeline import get_rewriter
 
         history = [
@@ -1215,9 +1228,10 @@ class TestQueryRewriter:
         assert datetime_context.enriched_query == "现在几点？"
 
     def test_prepare_query_route_runs_rewriter_before_router(self, monkeypatch):
+        from langchain_core.messages import AIMessage, HumanMessage
+
         from ds_course_agent.rag.agent import AgentService
         from ds_course_agent.rag.profile_models import StudentProfile
-        from langchain_core.messages import AIMessage, HumanMessage
 
         service = object.__new__(AgentService)
         service.skill_loader = None
@@ -1249,8 +1263,9 @@ class TestQueryPipelineUtils:
     """共享 query utils 的回归测试，防止各模块再次分叉。"""
 
     def test_collect_recent_context_is_summary_aware_and_dict_compatible(self):
-        from ds_course_agent.rag.query_pipeline.utils import collect_recent_context
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+        from ds_course_agent.rag.query_pipeline.utils import collect_recent_context
 
         history = [
             SystemMessage(

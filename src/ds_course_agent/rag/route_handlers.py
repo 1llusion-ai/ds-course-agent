@@ -13,7 +13,6 @@ from collections.abc import Iterator
 from typing import Any, Protocol
 
 from ds_course_agent.rag.query_pipeline import RouteType
-from ds_course_agent.shared.error_response import truncate_error
 from ds_course_agent.rag.taxonomy import (
     LOW_SUCCESS_FETCH_DOMAINS,
     RELIABLE_WEB_DOMAINS,
@@ -22,6 +21,7 @@ from ds_course_agent.rag.taxonomy import (
     web_query_traits,
 )
 from ds_course_agent.shared.config_utils import config_bool, config_float, config_int
+from ds_course_agent.shared.error_response import truncate_error
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ class GroundedRagRouteHandler:
         return route_state["decision"].route == RouteType.GROUNDED_RAG
 
     def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
-        from ds_course_agent.rag.query_trace import trace_step, trace_span
+        from ds_course_agent.rag.query_trace import trace_span, trace_step
         from ds_course_agent.tools.course_rag import course_rag_tool
 
         context = route_state["context"]
@@ -288,9 +288,8 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             return any(term and term in q for term in terms)
 
         if domain_matches(domain, LOW_SUCCESS_FETCH_DOMAINS):
-            if (
-                ("youtube" in domain or "youtu.be" in domain)
-                and _explicitly_requested("youtube", "youtu.be", "视频", "教程")
+            if ("youtube" in domain or "youtu.be" in domain) and _explicitly_requested(
+                "youtube", "youtu.be", "视频", "教程"
             ):
                 return False
             if ("reddit.com" in domain) and _explicitly_requested("reddit"):
@@ -334,9 +333,13 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             score -= 15
         if any(term in q for term in ("github", "开源", "repo", "repository", "项目")) and "github.com" in domain:
             score -= 25
-        if any(term in q for term in ("论文", "paper", "arxiv")) and any(item in domain for item in ("arxiv.org", "openreview.net")):
+        if any(term in q for term in ("论文", "paper", "arxiv")) and any(
+            item in domain for item in ("arxiv.org", "openreview.net")
+        ):
             score -= 25
-        if any(term in q for term in ("官方", "文档", "docs", "documentation")) and ("official" in title or "docs" in url):
+        if any(term in q for term in ("官方", "文档", "docs", "documentation")) and (
+            "official" in title or "docs" in url
+        ):
             score -= 20
         return score, source_index
 
@@ -360,12 +363,14 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             seen.add(url)
             if domain:
                 seen_domains.add(domain)
-            selected.append({
-                "source_index": index,
-                "url": url,
-                "title": self._result_title(result),
-                "domain": domain,
-            })
+            selected.append(
+                {
+                    "source_index": index,
+                    "url": url,
+                    "title": self._result_title(result),
+                    "domain": domain,
+                }
+            )
             if len(selected) >= max_attempts:
                 break
         return sorted(selected, key=lambda target: self._fetch_candidate_score(target, question))
@@ -397,7 +402,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         if target.get("domain"):
             metadata["source_domain"] = target.get("domain")
         try:
-            setattr(page, "metadata", metadata)
+            page.metadata = metadata
         except Exception:
             pass
         return page
@@ -551,7 +556,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         yielding them to the frontend.
         """
 
-        from ds_course_agent.rag.query_trace import trace_error, trace_step, trace_span
+        from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
         from ds_course_agent.tools._shared import _track_retrieval
 
         context = route_state["context"]
@@ -596,12 +601,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
                 )
             }
         if not response_results:
-            return {
-                "fallback": (
-                    "我已尝试联网搜索，但没有搜索到可用结果。"
-                    "你可以换一个更具体的关键词，或稍后再试。"
-                )
-            }
+            return {"fallback": ("我已尝试联网搜索，但没有搜索到可用结果。你可以换一个更具体的关键词，或稍后再试。")}
 
         evidence_context = (
             getattr(web_response, "evidence_context", None)
@@ -635,11 +635,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
                         # Unit tests and older integrations may monkeypatch a
                         # simpler ``fetch_web_pages(urls)`` callable.
                         fetch_pages = fetch_web_pages(urls)
-                target_by_url = {
-                    str(target.get("url") or ""): target
-                    for target in fetch_targets
-                    if target.get("url")
-                }
+                target_by_url = {str(target.get("url") or ""): target for target in fetch_targets if target.get("url")}
                 fetch_pages = [
                     self._annotate_fetch_page(
                         page,
@@ -677,10 +673,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
 
         if not evidence_context or not str(evidence_context).strip():
             return {
-                "fallback": (
-                    "我已尝试联网搜索，但没有获得可用的搜索摘要。"
-                    "你可以换一个更具体的关键词，或稍后再试。"
-                )
+                "fallback": ("我已尝试联网搜索，但没有获得可用的搜索摘要。你可以换一个更具体的关键词，或稍后再试。")
             }
 
         web_turn_context = self._build_web_turn_context(
@@ -748,7 +741,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
     ) -> Iterator[Any]:
         """Yield web-fetch progress events and return enriched context metadata."""
 
-        from ds_course_agent.rag.query_trace import trace_error, trace_step, trace_span
+        from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
 
         fetch_pages: list[Any] = []
         attempted_fetch_count = 0
@@ -767,11 +760,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
                 event = self._stream_progress_event(
                     route_state,
                     "web_fetch_start",
-                    (
-                        "正在浏览页面"
-                        if target_success_count and fetch_targets
-                        else "使用搜索摘要生成回答"
-                    ),
+                    ("正在浏览页面" if target_success_count and fetch_targets else "使用搜索摘要生成回答"),
                     tool="web_fetch_tool",
                     details={
                         "query": question,
@@ -874,10 +863,12 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
                                 if batch_size <= 0:
                                     break
 
-                                batch_targets = fetch_targets[next_target_index:next_target_index + batch_size]
+                                batch_targets = fetch_targets[next_target_index : next_target_index + batch_size]
                                 next_target_index += batch_size
                                 future_map = {
-                                    executor.submit(_fetch_target, next_target_index - batch_size + offset, target): target
+                                    executor.submit(
+                                        _fetch_target, next_target_index - batch_size + offset, target
+                                    ): target
                                     for offset, target in enumerate(batch_targets, start=1)
                                 }
                                 pending = set(future_map)
@@ -976,7 +967,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         }
 
     def stream_execute(self, agent: Any, route_state: dict[str, Any]) -> Iterator[Any]:
-        from ds_course_agent.rag.query_trace import trace_error, trace_step, trace_span
+        from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
         from ds_course_agent.tools._shared import _track_retrieval
 
         context = route_state["context"]
@@ -1036,8 +1027,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         response_error = getattr(web_response, "error", None)
         response_results = self._response_results(web_response)
         result_payloads = [
-            self._result_progress_payload(result, index)
-            for index, result in enumerate(response_results, start=1)
+            self._result_progress_payload(result, index) for index, result in enumerate(response_results, start=1)
         ]
 
         if response_error and not response_results:
@@ -1078,8 +1068,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             if event:
                 yield event
             yield from agent._yield_text_chunks(
-                "我已尝试联网搜索，但没有搜索到可用结果。"
-                "你可以换一个更具体的关键词，或稍后再试。"
+                "我已尝试联网搜索，但没有搜索到可用结果。你可以换一个更具体的关键词，或稍后再试。"
             )
             return
 
@@ -1123,8 +1112,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             if event:
                 yield event
             yield from agent._yield_text_chunks(
-                "我已尝试联网搜索，但没有获得可用的搜索摘要。"
-                "你可以换一个更具体的关键词，或稍后再试。"
+                "我已尝试联网搜索，但没有获得可用的搜索摘要。你可以换一个更具体的关键词，或稍后再试。"
             )
             return
 
@@ -1182,6 +1170,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         result = agent._finalize_route_result(route_state, result, stream=True)
         yield from agent._yield_text_chunks(result)
 
+
 class PythonExecRouteHandler(BufferedRouteHandlerMixin):
     def can_handle(self, agent: Any, route_state: dict[str, Any]) -> bool:
         return route_state["decision"].route == RouteType.PYTHON_EXEC
@@ -1192,16 +1181,13 @@ class PythonExecRouteHandler(BufferedRouteHandlerMixin):
             extract_python_code,
             format_python_execution_answer,
         )
-        from ds_course_agent.rag.query_trace import trace_step, trace_span
+        from ds_course_agent.rag.query_trace import trace_span, trace_step
 
         question = route_state["context"].original_query
         trace_step("agent.branch", branch="python_exec")
         code = extract_python_code(question)
         if not code:
-            return (
-                "没有检测到可执行的 Python 代码。"
-                "请把代码放在 ```python ... ``` 代码块中，或直接发送要运行的代码。"
-            )
+            return "没有检测到可执行的 Python 代码。请把代码放在 ```python ... ``` 代码块中，或直接发送要运行的代码。"
 
         with trace_span("execute.python_sandbox"):
             execution_result = PythonSandbox().execute(code)
@@ -1280,7 +1266,7 @@ class GenericAgentRouteHandler:
 
     def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_pipeline import get_postprocessor
-        from ds_course_agent.rag.query_trace import trace_step, trace_span
+        from ds_course_agent.rag.query_trace import trace_span, trace_step
 
         context = route_state["context"]
         decision = route_state["decision"]

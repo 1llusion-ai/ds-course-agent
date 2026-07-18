@@ -2,17 +2,17 @@
 Knowledge Mapper 回归测试
 用真实学生问题验证三层映射策略
 """
+
 import sys
 from pathlib import Path
 
-import pytest
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ds_course_agent.rag.knowledge_mapper import KnowledgeGraph, KnowledgeMapper, map_question_to_concepts
 from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
-
 
 QUESTION_CASES = [
     ("什么是支持向量机？", ["svm"], "display_name 精确匹配"),
@@ -78,7 +78,7 @@ def run_regression_test():
                 missing.append(expected_id)
 
         if not missing:
-            print(f"      [OK] 通过")
+            print("      [OK] 通过")
             passed += 1
         else:
             print(f"      [FAIL] 失败 - 缺失: {missing}")
@@ -116,7 +116,7 @@ def test_edge_cases():
         if matches:
             print(f"      匹配到: {[(m.concept_id, m.method, m.score) for m in matches]}")
         else:
-            print(f"      未匹配到任何概念（符合预期）")
+            print("      未匹配到任何概念（符合预期）")
 
 
 def test_rule_match_skips_query_embedding(monkeypatch):
@@ -141,8 +141,7 @@ def test_rule_match_skips_query_embedding(monkeypatch):
     assert matches
     assert matches[0].concept_id == "svm"
     assert any(
-        event["stage"] == "concept_map.embedding_skipped"
-        and event["data"]["reason"] == "rule_match"
+        event["stage"] == "concept_map.embedding_skipped" and event["data"]["reason"] == "rule_match"
         for event in trace["events"]
     )
 

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -39,9 +40,7 @@ class ToolSpec:
     def __post_init__(self) -> None:
         actual_name = getattr(self.tool, "name", None)
         if actual_name and actual_name != self.name:
-            raise ValueError(
-                f"ToolSpec name mismatch: spec={self.name!r}, tool.name={actual_name!r}"
-            )
+            raise ValueError(f"ToolSpec name mismatch: spec={self.name!r}, tool.name={actual_name!r}")
         if self.read_only and self.side_effect:
             raise ValueError(f"Tool {self.name!r} cannot be both read_only and side_effect")
         if not self.progress_label:

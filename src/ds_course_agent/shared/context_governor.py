@@ -8,14 +8,15 @@ marked ``SystemMessage`` summary while the most recent turn(s) stay verbatim.
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import math
 import re
-import concurrent.futures
 import threading
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -239,10 +240,7 @@ def is_context_summary_message(message: Any) -> bool:
     if not isinstance(message, SystemMessage) and message_role(message) != "system":
         return False
     kwargs = getattr(message, "additional_kwargs", {}) or {}
-    return bool(
-        kwargs.get(CONTEXT_SUMMARY_MARKER)
-        or kwargs.get("short_memory_summary")
-    )
+    return bool(kwargs.get(CONTEXT_SUMMARY_MARKER) or kwargs.get("short_memory_summary"))
 
 
 def _strip_summary_title(text: str) -> str:
@@ -493,7 +491,11 @@ def compact_messages_to_budget(
     preserve_recent = max(1, preserve_recent)
     summary_max_chars = max(
         80,
-        int(summary_max_chars if summary_max_chars is not None else config_int("SHORT_MEMORY_SUMMARY_MAX_CHARS", 2000, minimum=1)),
+        int(
+            summary_max_chars
+            if summary_max_chars is not None
+            else config_int("SHORT_MEMORY_SUMMARY_MAX_CHARS", 2000, minimum=1)
+        ),
     )
 
     leading: list[BaseMessage] = []

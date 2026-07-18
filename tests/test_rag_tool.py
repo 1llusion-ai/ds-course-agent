@@ -1,12 +1,12 @@
 """
 RAG Tool 单元测试
 """
+
 import time
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import patch, MagicMock
-
 from langchain_core.documents import Document
 
 import ds_course_agent.tools.course_rag as course_rag_module
@@ -141,8 +141,6 @@ class TestCourseRAGTool:
             for event in trace["events"]
         )
 
-
-
     def test_source_uses_outline_number_when_chapter_metadata_drifts(self):
         """metadata 章字段错位时，来源展示应按 section_no 纠偏。"""
         from ds_course_agent.tools.course_rag import build_sources_from_documents
@@ -159,9 +157,7 @@ class TestCourseRAGTool:
             "book_page": 20,
         }
 
-        assert build_sources_from_documents([doc]) == [
-            {"reference": "《第2章 数据科学基本知识》第20页"}
-        ]
+        assert build_sources_from_documents([doc]) == [{"reference": "《第2章 数据科学基本知识》第20页"}]
 
     def test_source_uses_toc_title_when_chapter_number_matches(self):
         """章号已正确但章名陈旧时，来源展示仍应按目录标题纠偏。"""
@@ -175,9 +171,7 @@ class TestCourseRAGTool:
             "book_page": 20,
         }
 
-        assert build_sources_from_documents([doc]) == [
-            {"reference": "《第2章 数据科学基本知识》第20页"}
-        ]
+        assert build_sources_from_documents([doc]) == [{"reference": "《第2章 数据科学基本知识》第20页"}]
 
     @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_tool_tracks_empty_sources_when_no_results(self, mock_get_service):
@@ -326,8 +320,7 @@ class TestCourseRAGTool:
         assert "PCA 通过投影" in result
         assert "《第7章 无监督学习算法》第140页" in result
         assert any(
-            event["stage"] == "rag.answer.timeout_degraded"
-            and event["status"] == "warning"
+            event["stage"] == "rag.answer.timeout_degraded" and event["status"] == "warning"
             for event in trace["events"]
         )
         assert any(

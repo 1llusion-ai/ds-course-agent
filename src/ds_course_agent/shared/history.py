@@ -5,8 +5,8 @@ import os
 import re
 import tempfile
 import threading
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import (
@@ -73,7 +73,6 @@ class FileChatMessageHistory(BaseChatMessageHistory):
         try:
             with open(
                 self.file_path,
-                "r",
                 encoding="utf-8",
             ) as f:
                 messages_data = json.load(f)
@@ -228,9 +227,7 @@ class FileChatMessageHistory(BaseChatMessageHistory):
                 additional_kwargs={SUMMARY_MARKER: True},
             )
 
-        merged_body = "\n".join(
-            part for part in [self._summary_body(current), self._summary_body(incoming)] if part
-        )
+        merged_body = "\n".join(part for part in [self._summary_body(current), self._summary_body(incoming)] if part)
         return self._new_summary_message(self._truncate_text(merged_body, self.memory_policy.summary_max_chars))
 
     def _is_summary_message(self, message: BaseMessage) -> bool:

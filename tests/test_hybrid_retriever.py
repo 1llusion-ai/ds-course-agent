@@ -2,8 +2,8 @@ from unittest.mock import MagicMock, patch
 
 from langchain_core.documents import Document
 
-from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.rag.hybrid_retriever import BM25Retriever, HybridRetriever, _normalize_latin_tokens
+from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.shared import embeddings
 
 
@@ -59,9 +59,7 @@ def test_hybrid_retriever_traces_vector_timeout_degraded(monkeypatch):
     retriever.k = 1
     retriever.use_rerank = False
     retriever.reranker = None
-    retriever.documents = [
-        Document(page_content="SVM 使用核函数处理非线性问题", metadata={"chunk_id": "svm"})
-    ]
+    retriever.documents = [Document(page_content="SVM 使用核函数处理非线性问题", metadata={"chunk_id": "svm"})]
     retriever.bm25_retriever = MagicMock()
     retriever.bm25_retriever.retrieve.return_value = [(0, 1.0)]
     retriever._vector_search = MagicMock(side_effect=TimeoutError("embedding timed out"))

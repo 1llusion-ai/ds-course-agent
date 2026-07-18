@@ -1,29 +1,30 @@
 import asyncio
 import base64
+import json
+import re
 from collections import Counter
 from datetime import datetime, timezone
 from functools import lru_cache
-import json
 from pathlib import Path
-import re
 
-from fastapi.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from pypdf import PdfReader
 
-from ..schemas.profile import (
-    ProfileSummary,
-    ProfileDetail,
-    ConceptFocus,
-    WeakSpot,
-    LearningProgress,
-    ProfileStats,
-    ConceptDetail,
-    RelatedConcept,
-)
-from ds_course_agent.tools.course_rag import build_sources_from_documents, get_rag_service
 from ds_course_agent.kb.toc_parser import get_toc_parser
+from ds_course_agent.tools.course_rag import build_sources_from_documents, get_rag_service
+
 from ..auth.deps import get_current_student_id
+from ..schemas.profile import (
+    ConceptDetail,
+    ConceptFocus,
+    LearningProgress,
+    ProfileDetail,
+    ProfileStats,
+    ProfileSummary,
+    RelatedConcept,
+    WeakSpot,
+)
 
 router = APIRouter()
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -32,6 +33,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 
 def get_memory():
     from ..core_bridge import get_memory_core
+
     return get_memory_core()
 
 
@@ -98,13 +100,9 @@ def _build_daily_activity(memory_core, student_id: str) -> dict[str, int]:
 @lru_cache(maxsize=1)
 def _get_concept_catalog():
     catalog_path = DATA_DIR / "knowledge_graph.json"
-    with open(catalog_path, "r", encoding="utf-8") as handle:
+    with open(catalog_path, encoding="utf-8") as handle:
         data = json.load(handle)
-    return {
-        item["canonical_id"]: item
-        for item in data.get("concepts", [])
-        if item.get("canonical_id")
-    }
+    return {item["canonical_id"]: item for item in data.get("concepts", []) if item.get("canonical_id")}
 
 
 @lru_cache(maxsize=1)
@@ -180,9 +178,7 @@ def _find_toc_section(concept: dict):
         return None, None
 
     section_candidates = [
-        section
-        for section in toc.all_sections
-        if chapter_info.page <= section.page <= chapter_info.end_page
+        section for section in toc.all_sections if chapter_info.page <= section.page <= chapter_info.end_page
     ]
 
     if section_no:
@@ -254,12 +250,12 @@ def _build_concept_summary(concept: dict, related_concepts: list[RelatedConcept]
     section = concept.get("section")
     aliases = concept.get("aliases", [])
     alias_text = "、".join(aliases[:3]) if aliases else "暂无别名"
-    related_text = "、".join(item.display_name for item in related_concepts[:4]) if related_concepts else "暂无关联知识点"
+    related_text = (
+        "、".join(item.display_name for item in related_concepts[:4]) if related_concepts else "暂无关联知识点"
+    )
     section_text = f"{chapter} {section}" if section else chapter
     return (
-        f"{concept['display_name']} 位于 {section_text}。"
-        f" 常见检索词包括：{alias_text}。"
-        f" 相关知识点有：{related_text}。"
+        f"{concept['display_name']} 位于 {section_text}。 常见检索词包括：{alias_text}。 相关知识点有：{related_text}。"
     )
 
 
@@ -295,8 +291,7 @@ async def get_profile_summary(student_id: str = Depends(get_current_student_id))
     profile = memory_core.get_profile(student_id)
 
     recent_concepts = [
-        _serialize_concept_focus(concept_id, focus)
-        for concept_id, focus in _sorted_recent_concepts(profile)[:5]
+        _serialize_concept_focus(concept_id, focus) for concept_id, focus in _sorted_recent_concepts(profile)[:5]
     ]
     pending_weak_spots = [_serialize_weak_spot(spot) for spot in profile.pending_weak_spots]
     weak_spots = [_serialize_weak_spot(spot) for spot in profile.weak_spot_candidates]
@@ -323,8 +318,7 @@ async def get_profile_detail(student_id: str = Depends(get_current_student_id)):
         chapter_counts[chapter] = chapter_counts.get(chapter, 0) + focus.mention_count
 
     recent_concepts = [
-        _serialize_concept_focus(concept_id, focus)
-        for concept_id, focus in _sorted_recent_concepts(profile)
+        _serialize_concept_focus(concept_id, focus) for concept_id, focus in _sorted_recent_concepts(profile)
     ]
     pending_weak_spots = [_serialize_weak_spot(spot) for spot in profile.pending_weak_spots]
     weak_spots = [_serialize_weak_spot(spot) for spot in profile.weak_spot_candidates]

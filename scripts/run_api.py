@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
@@ -16,12 +16,14 @@ ensure_src_path()
 
 import uvicorn
 
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the RAG System FastAPI backend.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8084)
     parser.add_argument("--reload", action="store_true")
     return parser
+
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
@@ -33,6 +35,7 @@ def main(argv: list[str] | None = None) -> None:
         reload=args.reload,
         app_dir=str(PROJECT_ROOT / "src"),
     )
+
 
 if __name__ == "__main__":
     main()

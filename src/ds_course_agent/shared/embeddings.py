@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import concurrent.futures
 import contextvars
-from collections import OrderedDict, namedtuple
 import logging
 import threading
 import time
+from collections import OrderedDict, namedtuple
 from typing import Any
 
 from langchain_openai import OpenAIEmbeddings
@@ -173,9 +173,7 @@ def embed_query_cached(model: Any, text: str, *, timeout_seconds: float | None =
             remaining_seconds=round(remaining, 3),
             last_error=last_error,
         )
-        raise EmbeddingUnavailable(
-            f"Embedding service temporarily unavailable; circuit open for {remaining:.1f}s"
-        )
+        raise EmbeddingUnavailable(f"Embedding service temporarily unavailable; circuit open for {remaining:.1f}s")
 
     try:
         vector = _embed_query_with_optional_timeout(

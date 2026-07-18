@@ -45,6 +45,7 @@ def fresh_client(monkeypatch):
 
     # Patch the actual module where chat router imports the function from
     import ds_course_agent.api.routers.chat as chat_module
+
     monkeypatch.setattr(chat_module, "stream_chat_with_history", fake_stream_chat_with_history)
     return TestClient(app)
 

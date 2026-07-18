@@ -15,7 +15,7 @@ from typing import Any
 import requests
 from langchain_core.tools import tool
 
-import ds_course_agent.shared.config as config
+import ds_course_agent.shared.config as config  # noqa: F401  # module-level seam: tests monkeypatch web_search.config.*
 from ds_course_agent.shared.config_utils import config_bool, config_float, config_int, config_str
 from ds_course_agent.shared.error_response import truncate_error
 from ds_course_agent.tools._shared import (
@@ -133,20 +133,9 @@ def _provider_api_key(provider: str) -> str:
 
 
 def _normalize_result(item: dict[str, Any], *, provider: str) -> WebSearchResult:
-    title = _normalize_text(
-        item.get("title")
-        or item.get("name")
-        or item.get("Title")
-        or item.get("Name")
-        or ""
-    )
+    title = _normalize_text(item.get("title") or item.get("name") or item.get("Title") or item.get("Name") or "")
     url = str(
-        item.get("url")
-        or item.get("link")
-        or item.get("href")
-        or item.get("Url")
-        or item.get("URL")
-        or ""
+        item.get("url") or item.get("link") or item.get("href") or item.get("Url") or item.get("URL") or ""
     ).strip()
     snippet = _normalize_text(
         item.get("snippet")
@@ -159,11 +148,7 @@ def _normalize_result(item: dict[str, Any], *, provider: str) -> WebSearchResult
         or ""
     )
     published_at = str(
-        item.get("published_date")
-        or item.get("publishedAt")
-        or item.get("date")
-        or item.get("age")
-        or ""
+        item.get("published_date") or item.get("publishedAt") or item.get("date") or item.get("age") or ""
     ).strip()
     return WebSearchResult(
         title=title,
@@ -312,7 +297,7 @@ def _run_provider_search(provider: str, query: str, top_k: int) -> list[WebSearc
 def search_web(query: str, top_k: int | None = None) -> WebSearchResponse:
     """Run configured web search and return compacted evidence + sources."""
 
-    from ds_course_agent.rag.query_trace import trace_error, trace_step, trace_span
+    from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
 
     query = str(query or "").strip()
     provider = config_str("WEB_SEARCH_PROVIDER", "tavily").strip().lower() or "tavily"

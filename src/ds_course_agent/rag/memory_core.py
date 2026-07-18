@@ -6,21 +6,21 @@ Memory Core 核心模块。
 2. 画像读取（从磁盘加载）
 3. 聚合更新（按事件重建画像）
 """
+
 import json
 import logging
-from typing import List, Dict, Optional
-from pathlib import Path
 from collections import Counter, defaultdict
+from pathlib import Path
 
-from ds_course_agent.rag.events import BaseEvent, EventType, build_mastery_signal_event
-from ds_course_agent.rag.profile_models import StudentProfile, ConceptFocus, WeakSpotCandidate
 import ds_course_agent.shared.config as config
+from ds_course_agent.rag.events import BaseEvent, EventType, build_mastery_signal_event
+from ds_course_agent.rag.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
 
 logger = logging.getLogger(__name__)
 
 
 class MemoryCore:
-    def __init__(self, base_dir: Optional[str] = None):
+    def __init__(self, base_dir: str | None = None):
         if base_dir is None:
             base_dir = config.CHAT_HISTORY_DIR
 
@@ -29,7 +29,7 @@ class MemoryCore:
         self.profiles_dir = self.base_dir / "profiles"
         self.events_dir.mkdir(parents=True, exist_ok=True)
         self.profiles_dir.mkdir(parents=True, exist_ok=True)
-        self._profile_cache: Dict[str, StudentProfile] = {}
+        self._profile_cache: dict[str, StudentProfile] = {}
 
     # ========== 事件记录 ==========
 
@@ -46,15 +46,15 @@ class MemoryCore:
     def load_events(
         self,
         student_id: str,
-        event_types: Optional[List[EventType]] = None,
-    ) -> List[BaseEvent]:
-        events: List[BaseEvent] = []
+        event_types: list[EventType] | None = None,
+    ) -> list[BaseEvent]:
+        events: list[BaseEvent] = []
         file_path = self.events_dir / f"{student_id}_events.jsonl"
 
         if not file_path.exists():
             return events
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             for line in f:
                 try:
                     data = json.loads(line.strip())
@@ -75,7 +75,7 @@ class MemoryCore:
 
         profile_path = self.profiles_dir / f"{student_id}.json"
         if profile_path.exists():
-            with open(profile_path, "r", encoding="utf-8") as f:
+            with open(profile_path, encoding="utf-8") as f:
                 data = json.load(f)
             profile = StudentProfile.from_dict(data)
         else:
@@ -101,7 +101,7 @@ class MemoryCore:
             return
 
         seen_event_ids = set()
-        unique_events: List[BaseEvent] = []
+        unique_events: list[BaseEvent] = []
         for event in events:
             if event.event_id in seen_event_ids:
                 continue
@@ -138,7 +138,7 @@ class MemoryCore:
         except Exception:
             return 0.0
 
-    def _update_recent_concepts(self, profile: StudentProfile, events: List[BaseEvent]) -> None:
+    def _update_recent_concepts(self, profile: StudentProfile, events: list[BaseEvent]) -> None:
         for event in events:
             if event.event_type != EventType.CONCEPT_MENTIONED:
                 continue
@@ -177,7 +177,7 @@ class MemoryCore:
             if focus.first_mentioned_at is None or (ts and ts < focus.first_mentioned_at):
                 focus.first_mentioned_at = ts
 
-    def _update_progress(self, profile: StudentProfile, events: List[BaseEvent]) -> None:
+    def _update_progress(self, profile: StudentProfile, events: list[BaseEvent]) -> None:
         chapter_counts = Counter()
 
         for event in events:
@@ -204,11 +204,11 @@ class MemoryCore:
         profile: StudentProfile,
         concept_id: str,
         clarification_count: int,
-        signals: List[Dict],
-        first_detected_at: Optional[float],
-        last_triggered_at: Optional[float],
-        resolved_at: Optional[float] = None,
-        resolution_note: Optional[str] = None,
+        signals: list[dict],
+        first_detected_at: float | None,
+        last_triggered_at: float | None,
+        resolved_at: float | None = None,
+        resolution_note: str | None = None,
     ) -> WeakSpotCandidate:
         concept = profile.recent_concepts.get(concept_id)
         display_name = concept.display_name if concept else concept_id
@@ -227,8 +227,8 @@ class MemoryCore:
             resolution_note=resolution_note,
         )
 
-    def _detect_weak_spots(self, profile: StudentProfile, events: List[BaseEvent]) -> None:
-        grouped_events: Dict[str, List[BaseEvent]] = defaultdict(list)
+    def _detect_weak_spots(self, profile: StudentProfile, events: list[BaseEvent]) -> None:
+        grouped_events: dict[str, list[BaseEvent]] = defaultdict(list)
 
         for event in events:
             payload = getattr(event, "payload", {}) or {}
@@ -237,13 +237,13 @@ class MemoryCore:
                 continue
             grouped_events[concept_id].append(event)
 
-        pending_spots: List[WeakSpotCandidate] = []
-        active_spots: List[WeakSpotCandidate] = []
-        resolved_spots: List[WeakSpotCandidate] = []
+        pending_spots: list[WeakSpotCandidate] = []
+        active_spots: list[WeakSpotCandidate] = []
+        resolved_spots: list[WeakSpotCandidate] = []
 
         for concept_id, concept_events in grouped_events.items():
             concept_events.sort(key=self._event_timestamp)
-            cycle: Optional[Dict] = None
+            cycle: dict | None = None
 
             for event in concept_events:
                 timestamp = self._event_timestamp(event)
@@ -314,11 +314,7 @@ class MemoryCore:
                     continue
 
             if cycle:
-                target = (
-                    active_spots
-                    if cycle["clarification_count"] >= 2
-                    else pending_spots
-                )
+                target = active_spots if cycle["clarification_count"] >= 2 else pending_spots
                 target.append(
                     self._build_weak_spot(
                         profile,
@@ -339,7 +335,7 @@ class MemoryCore:
 
     # ========== 辅助接口 ==========
 
-    def get_evidence_chain(self, student_id: str, concept_id: str) -> List[Dict]:
+    def get_evidence_chain(self, student_id: str, concept_id: str) -> list[dict]:
         events = self.load_events(student_id)
         evidence = []
 
@@ -359,7 +355,7 @@ class MemoryCore:
 
         return evidence
 
-    def get_memory_stats(self, student_id: str) -> Dict:
+    def get_memory_stats(self, student_id: str) -> dict:
         profile = self.get_profile(student_id)
         events = self.load_events(student_id)
         return {
@@ -386,11 +382,7 @@ class MemoryCore:
             raise KeyError(concept_id)
 
         source_event_id = next(
-            (
-                signal.get("event_id")
-                for signal in reversed(weak_spot.signals)
-                if signal.get("event_id")
-            ),
+            (signal.get("event_id") for signal in reversed(weak_spot.signals) if signal.get("event_id")),
             f"manual_anchor::{concept_id}",
         )
 
@@ -412,7 +404,7 @@ class MemoryCore:
         return resolved_spot
 
 
-_memory_core: Optional[MemoryCore] = None
+_memory_core: MemoryCore | None = None
 
 
 def get_memory_core() -> MemoryCore:

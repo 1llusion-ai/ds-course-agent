@@ -5,8 +5,6 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from typing import List
-
 
 project_root = Path(__file__).parent.parent.parent.parent
 if str(project_root) not in sys.path:
@@ -90,7 +88,7 @@ class PersonalizedExplanationSkill:
         scaffold = self._build_scaffold(strategy, matched_concepts)
         return self._merge_response(response, scaffold)
 
-    def _infer_from_profile(self, question: str, profile: StudentProfile) -> List:
+    def _infer_from_profile(self, question: str, profile: StudentProfile) -> list:
         inferred = []
         seen = set()
 
@@ -125,13 +123,12 @@ class PersonalizedExplanationSkill:
     def _build_prompt(
         self,
         question: str,
-        matched_concepts: List,
+        matched_concepts: list,
         strategy: TeachingStrategy,
         knowledge: str,
     ) -> str:
         concept_info = "\n".join(
-            f"- {item.display_name}（匹配方式：{item.method}，分数：{item.score:.2f}）"
-            for item in matched_concepts
+            f"- {item.display_name}（匹配方式：{item.method}，分数：{item.score:.2f}）" for item in matched_concepts
         )
         relevant_known = "、".join(strategy.relevant_known_concepts) or "无"
         relevant_weak = "、".join(strategy.relevant_weak_spots) or "无"
@@ -180,7 +177,7 @@ class PersonalizedExplanationSkill:
 3. 不要为了个性化而强行关联无关知识点。
 """
 
-    def _build_scaffold(self, strategy: TeachingStrategy, matched_concepts: List) -> str:
+    def _build_scaffold(self, strategy: TeachingStrategy, matched_concepts: list) -> str:
         if not matched_concepts:
             return ""
 
@@ -195,10 +192,7 @@ class PersonalizedExplanationSkill:
 
         if strategy.relevant_known_concepts:
             related = "、".join(strategy.relevant_known_concepts[:2])
-            return (
-                f"这次我会把 {target} 和你之前学过的 {related} 连起来讲。"
-                "我会先讲核心直觉，再展开关键点。"
-            )
+            return f"这次我会把 {target} 和你之前学过的 {related} 连起来讲。我会先讲核心直觉，再展开关键点。"
 
         return ""
 

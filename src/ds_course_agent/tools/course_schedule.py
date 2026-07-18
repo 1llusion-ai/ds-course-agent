@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timedelta
-from typing import Optional
 
 from langchain_core.tools import tool
 
@@ -13,9 +12,10 @@ import ds_course_agent.shared.config as config
 from ds_course_agent.shared.paths import PROJECT_ROOT
 from ds_course_agent.tools._shared import _warn_large_tool_result
 
-_SCHEDULE_CACHE: Optional[dict] = None
+_SCHEDULE_CACHE: dict | None = None
 _SCHEDULE_DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y年%m月%d日")
 _WEEKDAY_CN = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
+
 
 def _load_course_schedule() -> dict:
     global _SCHEDULE_CACHE
@@ -31,7 +31,7 @@ def _load_course_schedule() -> dict:
     return _SCHEDULE_CACHE or {}
 
 
-def _parse_schedule_date(value: str) -> Optional[datetime]:
+def _parse_schedule_date(value: str) -> datetime | None:
     text = str(value or "").strip()
     if not text:
         return None
@@ -55,9 +55,7 @@ def _format_cn_date_with_weekday(value: datetime) -> str:
 def _get_week_start(semester_start: str, week: int) -> datetime:
     start = _parse_schedule_date(semester_start)
     if start is None:
-        raise ValueError(
-            "semester_start 日期格式无效，支持 YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD / YYYY年MM月DD日"
-        )
+        raise ValueError("semester_start 日期格式无效，支持 YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD / YYYY年MM月DD日")
     return start + timedelta(days=7 * (week - 1))
 
 
@@ -79,13 +77,7 @@ def _schedule_parse_weeks_spec_v2(weeks: str) -> set[int]:
     if not weeks:
         return parsed
 
-    normalized = (
-        weeks.replace("，", ",")
-        .replace("、", ",")
-        .replace("；", ",")
-        .replace("至", "-")
-        .replace("~", "-")
-    )
+    normalized = weeks.replace("，", ",").replace("、", ",").replace("；", ",").replace("至", "-").replace("~", "-")
 
     for part in re.split(r"[\s,]+", normalized.strip()):
         if not part:
@@ -132,7 +124,7 @@ def _schedule_period_start_v2(period: str) -> tuple[int, int]:
     return start_time_map.get(int(match.group(1)), (8, 0))
 
 
-def _schedule_resolve_day_v2(dates: dict[str, datetime], day: str) -> Optional[datetime]:
+def _schedule_resolve_day_v2(dates: dict[str, datetime], day: str) -> datetime | None:
     if day in dates:
         return dates[day]
 
@@ -194,7 +186,7 @@ def _schedule_build_all_classes_v2(
     return classes
 
 
-def _schedule_query_day_offset_v2(normalized_query: str) -> Optional[int]:
+def _schedule_query_day_offset_v2(normalized_query: str) -> int | None:
     if "今天" in normalized_query:
         return 0
     if "明天" in normalized_query:
@@ -229,7 +221,7 @@ def _format_next_class_v2(class_info: dict) -> str:
     )
 
 
-def _resolve_schedule_query_v2(query: str, schedule: dict, now: Optional[datetime] = None) -> str:
+def _resolve_schedule_query_v2(query: str, schedule: dict, now: datetime | None = None) -> str:
     if not schedule:
         return "抱歉，课程安排信息暂未配置。"
 
@@ -304,9 +296,7 @@ def _resolve_schedule_query_v2(query: str, schedule: dict, now: Optional[datetim
                 second=0,
                 microsecond=0,
             )
-            target_classes = [
-                item for item in all_classes if item["datetime"].date() == target_day.date()
-            ]
+            target_classes = [item for item in all_classes if item["datetime"].date() == target_day.date()]
 
             lines = [f"{day_label}是{_format_cn_date_with_weekday(target_day)}。"]
             if target_classes:
@@ -362,7 +352,8 @@ def _resolve_schedule_query(query: str, schedule: dict) -> str:
 @tool
 def course_schedule_tool(query: str) -> str:
     """课程时间查询工具。用于回答上课时间、教室、周次安排等问题。"""
-    from ds_course_agent.rag.query_trace import trace_step, trace_error
+    from ds_course_agent.rag.query_trace import trace_error, trace_step
+
     trace_step("tool.invoke", tool="course_schedule_tool", query=query)
     try:
         schedule = _load_course_schedule()
@@ -373,6 +364,7 @@ def course_schedule_tool(query: str) -> str:
     except Exception as exc:
         trace_error("tool.invoke", exc, tool="course_schedule_tool")
         return f"查询课程安排时出错：{exc}。请稍后重试。"
+
 
 __all__ = [
     "course_schedule_tool",

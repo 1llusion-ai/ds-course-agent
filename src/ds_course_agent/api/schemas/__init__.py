@@ -13,7 +13,6 @@ from .profile import (
 )
 from .session import SessionCreate, SessionList, SessionResponse, SessionUpdate
 
-
 __all__ = [
     "ChatHistoryResponse",
     "ChatMessage",

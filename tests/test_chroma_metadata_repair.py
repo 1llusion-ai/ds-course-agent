@@ -29,18 +29,22 @@ def test_repair_metadata_converts_parser_page_to_textbook_page():
 
 def test_repair_metadata_is_idempotent_after_first_repair():
     index = _build_toc_index()
-    repaired_once = normalized_metadata({
-        "chapter_no": "第2章",
-        "chapter": "数据科学基本知识",
-        "section_no": "2.2",
-        "subsection_no": "2.2.1",
-        "page": 20,
-        "book_page": 20,
-        "source_page": 28,
-        "source_pages": "[28]",
-        "metadata_repaired": True,
-        "metadata_repair_page_offset": 8,
-    }, index, page_offset=8)
+    repaired_once = normalized_metadata(
+        {
+            "chapter_no": "第2章",
+            "chapter": "数据科学基本知识",
+            "section_no": "2.2",
+            "subsection_no": "2.2.1",
+            "page": 20,
+            "book_page": 20,
+            "source_page": 28,
+            "source_pages": "[28]",
+            "metadata_repaired": True,
+            "metadata_repair_page_offset": 8,
+        },
+        index,
+        page_offset=8,
+    )
 
     assert normalized_metadata(repaired_once, index, page_offset=8) == repaired_once
 

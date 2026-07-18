@@ -10,7 +10,6 @@ import re
 import threading
 import time
 from collections import OrderedDict
-from typing import Optional
 
 from langchain_core.documents import Document
 from langchain_core.tools import tool
@@ -92,7 +91,7 @@ def _extract_chapter_no(metadata: dict) -> str:
     return ""
 
 
-def _get_absolute_page(doc) -> Optional[int]:
+def _get_absolute_page(doc) -> int | None:
     """Convert chunk-local page information into textbook absolute pages."""
     global _CHAPTER_START_PAGES
 
@@ -226,10 +225,12 @@ def build_extractive_rag_fallback(
     ]
 
     if not usable_docs:
-        lines.extend([
-            f"抱歉，在《{config.COURSE_NAME}》课程资料中暂时无法整理出可展示的片段。",
-            "你可以稍后重试，或换一个更具体的关键词重新提问。",
-        ])
+        lines.extend(
+            [
+                f"抱歉，在《{config.COURSE_NAME}》课程资料中暂时无法整理出可展示的片段。",
+                "你可以稍后重试，或换一个更具体的关键词重新提问。",
+            ]
+        )
         return "\n".join(lines)
 
     for index, doc in enumerate(usable_docs[:max_docs], start=1):
@@ -242,10 +243,12 @@ def build_extractive_rag_fallback(
             prefix += f"{source}："
         lines.append(f"{prefix}{excerpt}")
 
-    lines.extend([
-        "",
-        "建议：根据上面的片段先定位关键词；等生成服务恢复后，可以继续追问“请基于这些片段总结/举例”。",
-    ])
+    lines.extend(
+        [
+            "",
+            "建议：根据上面的片段先定位关键词；等生成服务恢复后，可以继续追问“请基于这些片段总结/举例”。",
+        ]
+    )
 
     if error is not None:
         lines.append("[系统注：本轮已降级为教材片段模式。]")
@@ -314,7 +317,7 @@ def _trace_answer_cache(stage: str, **data) -> None:
         pass
 
 
-def _get_cached_answer(question: str, context: str) -> Optional[str]:
+def _get_cached_answer(question: str, context: str) -> str | None:
     maxsize = _answer_cache_size()
     ttl = _answer_cache_ttl_seconds()
     if not _answer_cache_enabled() or maxsize <= 0 or ttl <= 0:
@@ -381,7 +384,7 @@ def _answer_with_context_timeout_guard(service, question: str, context: str):
 @tool
 def course_rag_tool(question: str) -> str:
     """课程资料检索与问答工具。用于基于教材内容回答课程相关问题。"""
-    from ds_course_agent.rag.query_trace import trace_step, trace_error, trace_span
+    from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
 
     trace_step("tool.invoke", tool="course_rag_tool", question=question)
     try:

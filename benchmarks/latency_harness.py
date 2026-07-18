@@ -9,17 +9,17 @@ end-to-end wall-clock latency in v1; true streaming TTFB is not captured here.
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
-from contextlib import contextmanager
-from datetime import datetime
 import io
 import json
 import math
-from pathlib import Path
 import sys
 import time
-from typing import Any, Iterator, Optional
-
+from collections import Counter, defaultdict
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
@@ -50,7 +50,7 @@ def _utcish_now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
-def _to_float(value: Any) -> Optional[float]:
+def _to_float(value: Any) -> float | None:
     if value is None:
         return None
     try:
@@ -59,14 +59,14 @@ def _to_float(value: Any) -> Optional[float]:
         return None
 
 
-def _round_ms(value: Any) -> Optional[float]:
+def _round_ms(value: Any) -> float | None:
     number = _to_float(value)
     if number is None:
         return None
     return round(number, 3)
 
 
-def _percentile(sorted_values: list[float], percentile: float) -> Optional[float]:
+def _percentile(sorted_values: list[float], percentile: float) -> float | None:
     if not sorted_values:
         return None
     if len(sorted_values) == 1:
@@ -191,7 +191,7 @@ def _stage_hotspots(stage_values: dict[str, list[float]], *, limit: int = 10) ->
 
 def load_fixed_queries(
     benchmark_path: Path | str = DEFAULT_BENCHMARK_PATH,
-    limit: Optional[int] = None,
+    limit: int | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Load benchmark task turns as a deterministic query list."""
     path = Path(benchmark_path)
@@ -247,7 +247,7 @@ def extract_query_trace_metrics(query_trace: Any) -> dict[str, Any]:
     events = _query_trace_events(query_trace)
     stage_durations_ms: dict[str, list[float]] = defaultdict(list)
     stage_duration_events: list[dict[str, Any]] = []
-    route: Optional[str] = None
+    route: str | None = None
 
     for event in events:
         stage = str(event.get("stage") or "")
@@ -285,7 +285,7 @@ def extract_query_trace_metrics(query_trace: Any) -> dict[str, Any]:
 
 
 @contextmanager
-def maybe_isolated_benchmark_environment(warnings: list[str]) -> Iterator[Optional[Path]]:
+def maybe_isolated_benchmark_environment(warnings: list[str]) -> Iterator[Path | None]:
     """
     Reuse the existing benchmark sandbox when available.
 
@@ -311,7 +311,7 @@ def run_single_query(
 ) -> dict[str, Any]:
     """Run one query through core_bridge and return latency/trace metrics."""
     start_perf = time.perf_counter()
-    error: Optional[dict[str, str]] = None
+    error: dict[str, str] | None = None
     response: dict[str, Any] = {}
 
     try:
@@ -377,7 +377,7 @@ def build_latency_report(
     benchmark_path: Path | str,
     output_path: Path | str,
     student_id: str,
-    limit: Optional[int],
+    limit: int | None,
     started_at: str,
     finished_at: str,
     isolated_environment: bool,
@@ -434,9 +434,7 @@ def build_latency_report(
             "routes": dict(route_counts),
             "used_retrieval_count": sum(1 for result in results if result.get("used_retrieval")),
             "used_retrieval_rate": (
-                sum(1 for result in results if result.get("used_retrieval")) / total_queries
-                if total_queries
-                else 0.0
+                sum(1 for result in results if result.get("used_retrieval")) / total_queries if total_queries else 0.0
             ),
             "avg_sources_count": (
                 round(sum(result.get("sources_count", 0) for result in results) / total_queries, 3)
@@ -446,8 +444,7 @@ def build_latency_report(
             "agent_force_grounded_count": sum(1 for result in results if result.get("agent_force_grounded")),
             "retrieval_guard_force_count": sum(1 for result in results if result.get("retrieval_guard_force")),
             "stage_duration_ms": {
-                stage: _stats(durations)
-                for stage, durations in sorted(stage_values.items(), key=lambda item: item[0])
+                stage: _stats(durations) for stage, durations in sorted(stage_values.items(), key=lambda item: item[0])
             },
             "stage_hotspots": _stage_hotspots(stage_values),
             "slow_queries": _slow_query_diagnostics(results),
@@ -460,7 +457,7 @@ def run_latency_harness(
     *,
     benchmark_path: Path | str = DEFAULT_BENCHMARK_PATH,
     output_path: Path | str = DEFAULT_REPORT_PATH,
-    limit: Optional[int] = None,
+    limit: int | None = None,
     student_id: str = DEFAULT_STUDENT_ID,
 ) -> dict[str, Any]:
     if limit is not None and limit < 0:
@@ -520,17 +517,13 @@ def run_latency_harness(
         safe_print("Top stage hotspots by p95:")
         for hotspot in hotspots[:5]:
             safe_print(
-                f"  - {hotspot['stage']}: p95={hotspot['p95']} ms, "
-                f"max={hotspot['max']} ms, count={hotspot['count']}"
+                f"  - {hotspot['stage']}: p95={hotspot['p95']} ms, max={hotspot['max']} ms, count={hotspot['count']}"
             )
     slow_queries = report["summary"].get("slow_queries") or []
     if slow_queries:
         safe_print("Slowest queries:")
         for item in slow_queries[:3]:
-            safe_print(
-                f"  - {item['query_id']}: {item['total_latency_ms']} ms, "
-                f"route={item['route']}"
-            )
+            safe_print(f"  - {item['query_id']}: {item['total_latency_ms']} ms, route={item['route']}")
     safe_print(f"Saved report to: {output_file}")
 
     return report

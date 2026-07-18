@@ -2,29 +2,31 @@
 检索效果对比评测：BM25 混合检索 vs 纯向量检索 vs 混合+rerank
 指标：Recall@K, Precision@K, MRR, nDCG@K, Hit@K
 """
+
 import json
-from pathlib import Path
-from typing import List, Dict, Optional
 from dataclasses import dataclass
+from pathlib import Path
 
 import chromadb
 
 import ds_course_agent.shared.config as config
-from ds_course_agent.rag.rag import RAGService
-from benchmarks.qa_dataset import load_retrieval_qa_dataset, find_missing_annotated_chunk_ids
 from benchmarks.metrics.retrieval import (
-    calculate_recall_at_k,
-    calculate_precision_at_k,
     calculate_mrr,
     calculate_ndcg_at_k,
+    calculate_precision_at_k,
+    calculate_recall_at_k,
 )
+from benchmarks.qa_dataset import find_missing_annotated_chunk_ids, load_retrieval_qa_dataset
+from ds_course_agent.rag.rag import RAGService
 
 try:
     from scipy import stats
+
     HAS_SCIPY = True
 except Exception:
     HAS_SCIPY = False
     stats = None
+
 
 @dataclass
 class BenchmarkResult:
@@ -46,21 +48,21 @@ class BenchmarkResult:
     hybrid_rerank_ndcg: float
     hybrid_rerank_hit: bool
 
-def load_active_chunk_ids(collection_name: Optional[str] = None) -> set[str]:
+
+def load_active_chunk_ids(collection_name: str | None = None) -> set[str]:
     """Load chunk ids from the active Chroma collection used by retrieval."""
     client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
     collection = client.get_collection(collection_name or config.collection_name)
     results = collection.get(include=["metadatas"])
     return {
-        metadata.get("chunk_id")
-        for metadata in results.get("metadatas", [])
-        if metadata and metadata.get("chunk_id")
+        metadata.get("chunk_id") for metadata in results.get("metadatas", []) if metadata and metadata.get("chunk_id")
     }
 
+
 def validate_dataset_integrity(
-    qa_pairs: List[dict],
-    collection_name: Optional[str] = None,
-) -> Dict[str, object]:
+    qa_pairs: list[dict],
+    collection_name: str | None = None,
+) -> dict[str, object]:
     """Fail fast when benchmark labels reference chunk ids absent from the KB."""
     active_collection = collection_name or config.collection_name
     active_chunk_ids = load_active_chunk_ids(active_collection)
@@ -68,8 +70,7 @@ def validate_dataset_integrity(
 
     if issues:
         preview = "; ".join(
-            f"{item['id']}:{item['query']} ({len(item['missing_chunk_ids'])} missing)"
-            for item in issues[:5]
+            f"{item['id']}:{item['query']} ({len(item['missing_chunk_ids'])} missing)" for item in issues[:5]
         )
         raise ValueError(
             "Benchmark dataset is inconsistent with the active collection "
@@ -83,12 +84,13 @@ def validate_dataset_integrity(
         "validated_queries": len(qa_pairs),
     }
 
+
 def evaluate_method(
     service: RAGService,
-    qa_pairs: List[dict],
+    qa_pairs: list[dict],
     top_k: int = 5,
-    similarity_threshold: Optional[float] = None,
-) -> List[dict]:
+    similarity_threshold: float | None = None,
+) -> list[dict]:
     results = []
     for qa in qa_pairs:
         query = qa["query"]
@@ -104,26 +106,29 @@ def evaluate_method(
         retrieved_ids = [d.metadata.get("chunk_id", "") for d in retrieval.documents]
         matched_ids = [cid for cid in retrieved_ids[:top_k] if cid in acceptable_ids]
 
-        results.append({
-            "id": qa["id"],
-            "query": query,
-            "category": qa["category"],
-            "recall": calculate_recall_at_k(retrieved_ids, acceptable_ids, k=top_k),
-            "precision": calculate_precision_at_k(retrieved_ids, acceptable_ids, k=top_k),
-            "mrr": calculate_mrr(retrieved_ids, acceptable_ids),
-            "ndcg": calculate_ndcg_at_k(retrieved_ids, relevance_scores, k=top_k),
-            "hit": any(cid in retrieved_ids[:top_k] for cid in acceptable_ids),
-            "retrieved_ids": retrieved_ids,
-            "matched_ids": matched_ids,
-            "gt_ids": primary_ids,
-            "acceptable_ids": acceptable_ids,
-            "relevance_scores": relevance_scores,
-            "review_status": qa.get("review_status", "auto_generated"),
-            "review_notes": qa.get("review_notes", ""),
-        })
+        results.append(
+            {
+                "id": qa["id"],
+                "query": query,
+                "category": qa["category"],
+                "recall": calculate_recall_at_k(retrieved_ids, acceptable_ids, k=top_k),
+                "precision": calculate_precision_at_k(retrieved_ids, acceptable_ids, k=top_k),
+                "mrr": calculate_mrr(retrieved_ids, acceptable_ids),
+                "ndcg": calculate_ndcg_at_k(retrieved_ids, relevance_scores, k=top_k),
+                "hit": any(cid in retrieved_ids[:top_k] for cid in acceptable_ids),
+                "retrieved_ids": retrieved_ids,
+                "matched_ids": matched_ids,
+                "gt_ids": primary_ids,
+                "acceptable_ids": acceptable_ids,
+                "relevance_scores": relevance_scores,
+                "review_status": qa.get("review_status", "auto_generated"),
+                "review_notes": qa.get("review_notes", ""),
+            }
+        )
     return results
 
-def aggregate(results: List[dict]) -> Dict:
+
+def aggregate(results: list[dict]) -> dict:
     n = len(results)
     if n == 0:
         return {}
@@ -136,7 +141,8 @@ def aggregate(results: List[dict]) -> Dict:
         "count": n,
     }
 
-def calculate_significance(base_results: List[dict], new_results: List[dict]) -> Dict:
+
+def calculate_significance(base_results: list[dict], new_results: list[dict]) -> dict:
     """计算统计显著性：配对 t 检验和 Wilcoxon 符号秩检验"""
     if not HAS_SCIPY or not base_results or not new_results:
         return {"note": "scipy not installed or empty results"}
@@ -161,6 +167,7 @@ def calculate_significance(base_results: List[dict], new_results: List[dict]) ->
         }
     return significance
 
+
 def run_benchmark(
     top_k: int = 5,
     output_path: str = "var/artifacts/benchmarks/retrieval_benchmark_report.json",
@@ -174,8 +181,7 @@ def run_benchmark(
 
     print(f"加载测试集: {len(qa_pairs)} 条查询，禁用样本 {len(disabled_pairs)} 条，Top-K={top_k}")
     print(
-        f"Dataset integrity OK: collection={integrity['collection_name']}, "
-        f"chunk_ids={integrity['active_chunk_count']}"
+        f"Dataset integrity OK: collection={integrity['collection_name']}, chunk_ids={integrity['active_chunk_count']}"
     )
     print("=" * 70)
 
@@ -226,7 +232,8 @@ def run_benchmark(
     significance_vector_hybrid = calculate_significance(vector_results, hybrid_results)
     significance_hybrid_rerank = (
         calculate_significance(hybrid_results, hybrid_rerank_results)
-        if rerank_available else {"note": "reranker unavailable; rerank benchmark skipped"}
+        if rerank_available
+        else {"note": "reranker unavailable; rerank benchmark skipped"}
     )
 
     # 打印对比表格
@@ -290,7 +297,9 @@ def run_benchmark(
             hrv = hr.get(key, 0)
             delta_hv = (hv - vv) / vv * 100 if vv > 0 else 0
             delta_hr = (hrv - hv) / hv * 100 if hv > 0 else 0
-            print(f"  {metric:<16} 向量 {vv:>10.4f}  混合 {hv:>10.4f}({delta_hv:>+6.1f}%)  Rerank {hrv:>10.4f}({delta_hr:>+6.1f}%)")
+            print(
+                f"  {metric:<16} 向量 {vv:>10.4f}  混合 {hv:>10.4f}({delta_hv:>+6.1f}%)  Rerank {hrv:>10.4f}({delta_hr:>+6.1f}%)"
+            )
 
     report = {
         "top_k": top_k,
@@ -335,8 +344,10 @@ def run_benchmark(
     print(f"\n报告已保存: {output_path}")
     return report
 
+
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="检索效果对比评测")
     parser.add_argument("--top-k", type=int, default=5, help="Top-K 结果数量")
     parser.add_argument("--output", type=str, default="var/artifacts/benchmarks/retrieval_benchmark_report.json")

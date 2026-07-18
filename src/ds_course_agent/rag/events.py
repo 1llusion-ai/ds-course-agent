@@ -1,12 +1,13 @@
 """
 学习事件 Schema 定义。
 """
-from enum import Enum
-from typing import Literal, Dict, Any
-from dataclasses import dataclass, field
+
 import hashlib
 import time
 import uuid
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Literal
 
 
 class EventType(str, Enum):
@@ -29,7 +30,7 @@ class BaseEvent:
     event_type: EventType
     timestamp: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         event_type = self.event_type.value if hasattr(self.event_type, "value") else str(self.event_type)
         return {
             "event_id": self.event_id,
@@ -40,7 +41,7 @@ class BaseEvent:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "BaseEvent":
+    def from_dict(cls, data: dict[str, Any]) -> "BaseEvent":
         event_type = EventType(data["event_type"])
         payload = data.get("payload", {})
         base_kwargs = {
@@ -69,7 +70,7 @@ class ConceptMentionedEvent(BaseEvent):
     """概念提及事件。"""
 
     event_type: Literal[EventType.CONCEPT_MENTIONED] = EventType.CONCEPT_MENTIONED
-    payload: Dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         required = ["concept_id", "concept_name", "chapter", "question_type", "matched_score"]
@@ -77,7 +78,7 @@ class ConceptMentionedEvent(BaseEvent):
             if key not in self.payload:
                 self.payload[key] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         base = super().to_dict()
         base["payload"] = self.payload
         return base
@@ -88,7 +89,7 @@ class ClarificationEvent(BaseEvent):
     """澄清事件。"""
 
     event_type: Literal[EventType.CLARIFICATION] = EventType.CLARIFICATION
-    payload: Dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         required = ["concept_id", "parent_event_id", "clarification_type"]
@@ -96,7 +97,7 @@ class ClarificationEvent(BaseEvent):
             if key not in self.payload:
                 self.payload[key] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         base = super().to_dict()
         base["payload"] = self.payload
         return base
@@ -107,7 +108,7 @@ class FollowUpEvent(BaseEvent):
     """深入追问事件。"""
 
     event_type: Literal[EventType.FOLLOW_UP] = EventType.FOLLOW_UP
-    payload: Dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         required = ["concept_id", "follow_up_topic", "parent_event_id"]
@@ -115,7 +116,7 @@ class FollowUpEvent(BaseEvent):
             if key not in self.payload:
                 self.payload[key] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         base = super().to_dict()
         base["payload"] = self.payload
         return base
@@ -126,7 +127,7 @@ class MasterySignalEvent(BaseEvent):
     """学生明确表示自己理解/掌握的事件。"""
 
     event_type: Literal[EventType.MASTERY_SIGNAL] = EventType.MASTERY_SIGNAL
-    payload: Dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         required = ["concept_id", "source_event_id", "signal_type"]
@@ -134,7 +135,7 @@ class MasterySignalEvent(BaseEvent):
             if key not in self.payload:
                 self.payload[key] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         base = super().to_dict()
         base["payload"] = self.payload
         return base
@@ -145,7 +146,7 @@ class MisconceptionEvent(BaseEvent):
     """学生 misconception 被识别并记录的事件。"""
 
     event_type: Literal[EventType.MISCONCEPTION] = EventType.MISCONCEPTION
-    payload: Dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         required = [
@@ -160,7 +161,7 @@ class MisconceptionEvent(BaseEvent):
             if key not in self.payload:
                 self.payload[key] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         base = super().to_dict()
         base["payload"] = self.payload
         return base

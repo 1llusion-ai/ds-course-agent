@@ -55,16 +55,18 @@ def test_search_web_tavily_normalizes_sources_and_evidence(monkeypatch):
         assert json["query"] == "数据科学 最新"
         assert json["max_results"] == 2
         assert timeout == 3
-        return _FakeResponse({
-            "results": [
-                {
-                    "title": "Result A",
-                    "url": "https://example.com/a",
-                    "content": "摘要 A",
-                    "published_date": "2026-07-16",
-                }
-            ]
-        })
+        return _FakeResponse(
+            {
+                "results": [
+                    {
+                        "title": "Result A",
+                        "url": "https://example.com/a",
+                        "content": "摘要 A",
+                        "published_date": "2026-07-16",
+                    }
+                ]
+            }
+        )
 
     monkeypatch.setattr(web_search_module.requests, "post", fake_post)
 

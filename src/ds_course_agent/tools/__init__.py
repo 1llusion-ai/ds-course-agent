@@ -6,8 +6,6 @@ from ds_course_agent.tools.datetime_tool import current_datetime_tool
 from ds_course_agent.tools.knowledge_base_status import check_knowledge_base_status
 from ds_course_agent.tools.misconception import record_misconception_event
 from ds_course_agent.tools.python_exec import python_exec_tool
-from ds_course_agent.tools.web_fetch import web_fetch_tool
-from ds_course_agent.tools.web_search import web_search_tool
 from ds_course_agent.tools.registry import (
     ToolRegistry,
     ToolSpec,
@@ -17,6 +15,8 @@ from ds_course_agent.tools.registry import (
     get_rag_tool_spec,
     get_rag_tools,
 )
+from ds_course_agent.tools.web_fetch import web_fetch_tool
+from ds_course_agent.tools.web_search import web_search_tool
 
 __all__ = [
     "ToolRegistry",

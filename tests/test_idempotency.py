@@ -2,17 +2,18 @@
 幂等性测试
 验证 record_event() 和 aggregate_profile() 重复运行不会重复记账
 """
-import sys
-import os
+
 import json
-import tempfile
+import os
 import shutil
+import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ds_course_agent.rag.memory_core import MemoryCore
 from ds_course_agent.rag.events import build_concept_mentioned_event
+from ds_course_agent.rag.memory_core import MemoryCore
 from ds_course_agent.rag.profile_models import StudentProfile
 
 
@@ -39,7 +40,7 @@ def test_record_event_idempotency():
             chapter="第6章",
             question_type="概念理解",
             matched_score=0.95,
-            raw_question="什么是SVM？"
+            raw_question="什么是SVM？",
         )
 
         # 记录3次（模拟重复调用）
@@ -89,6 +90,7 @@ def test_aggregate_profile_idempotency():
 
         # 记录3个不同事件（手动设置时间戳以确保递增）
         import time
+
         base_time = int(time.time()) - 10  # 10秒前
 
         for i, concept_id in enumerate(["svm", "svm", "svm_kernel"]):
@@ -100,12 +102,12 @@ def test_aggregate_profile_idempotency():
                 chapter="第6章",
                 question_type="概念理解",
                 matched_score=0.9,
-                raw_question=f"问题{i}"
+                raw_question=f"问题{i}",
             )
             event.timestamp = base_time + i  # 确保时间戳递增
             core.record_event(event)
 
-        print(f"  记录事件数: 3")
+        print("  记录事件数: 3")
 
         # 第一次聚合
         core.aggregate_profile("stu_002")
@@ -156,7 +158,7 @@ def test_full_recalc_correctness():
                 chapter="第8章",
                 question_type="概念理解",
                 matched_score=0.9,
-                raw_question=f"问题{i}"
+                raw_question=f"问题{i}",
             )
             core.record_event(event)
 
@@ -192,6 +194,7 @@ def test_concept_focus_keeps_lifetime_count_and_latest_timestamp():
 
         # 模拟31天前的事件（应被滑动窗口排除）
         import time
+
         now = int(time.time())
 
         # 创建31天前的事件（直接修改时间戳）
@@ -203,7 +206,7 @@ def test_concept_focus_keeps_lifetime_count_and_latest_timestamp():
             chapter="第7章",
             question_type="概念理解",
             matched_score=0.9,
-            raw_question="旧问题"
+            raw_question="旧问题",
         )
         old_event.timestamp = now - 31 * 86400  # 31天前
         core.record_event(old_event)
@@ -217,7 +220,7 @@ def test_concept_focus_keeps_lifetime_count_and_latest_timestamp():
             chapter="第7章",
             question_type="概念理解",
             matched_score=0.9,
-            raw_question="新问题"
+            raw_question="新问题",
         )
         core.record_event(new_event)
 

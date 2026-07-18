@@ -2,15 +2,15 @@
 评测运行脚本
 运行评测并生成报告
 """
+
+import io
 import json
 import sys
-from pathlib import Path
-import io
 from datetime import datetime
-from typing import Optional
 
-from benchmarks.samples import get_eval_samples, EvalSample
+from benchmarks.samples import EvalSample, get_eval_samples
 from ds_course_agent.tools.course_rag import course_rag_tool
+
 
 def safe_print(text: str):
     """安全打印，处理 Windows 编码问题"""
@@ -18,6 +18,7 @@ def safe_print(text: str):
         print(text)
     except UnicodeEncodeError:
         print(text.encode(sys.stdout.encoding, errors="replace").decode(sys.stdout.encoding))
+
 
 def check_keywords_in_response(response: str, keywords: list[str]) -> tuple[bool, list[str]]:
     """检查回答中是否包含期望关键词"""
@@ -30,6 +31,7 @@ def check_keywords_in_response(response: str, keywords: list[str]) -> tuple[bool
 
     coverage = len(found_keywords) / len(keywords) if keywords else 0
     return coverage >= 0.3, found_keywords
+
 
 def run_single_eval(sample: EvalSample) -> dict:
     """运行单个评测"""
@@ -63,7 +65,8 @@ def run_single_eval(sample: EvalSample) -> dict:
             "error": str(e),
         }
 
-def run_evaluation(output_file: Optional[str] = None):
+
+def run_evaluation(output_file: str | None = None):
     """运行完整评测"""
     samples = get_eval_samples()
     results = []
@@ -103,7 +106,7 @@ def run_evaluation(output_file: Optional[str] = None):
         "results": results,
     }
 
-    safe_print(f"\n评测报告:")
+    safe_print("\n评测报告:")
     safe_print(f"  总样本数: {total}")
     safe_print(f"  通过数: {passed_count}")
     safe_print(f"  通过率: {pass_rate:.1%}")
@@ -116,6 +119,7 @@ def run_evaluation(output_file: Optional[str] = None):
         safe_print(f"\n报告已保存到: {output_file}")
 
     return report
+
 
 if __name__ == "__main__":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")

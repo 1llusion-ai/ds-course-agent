@@ -1,8 +1,9 @@
 import pytest
 from fastapi import Request
 from fastapi.testclient import TestClient
-from ds_course_agent.api.main import app
+
 from ds_course_agent.api.auth.deps import get_current_student_id
+from ds_course_agent.api.main import app
 
 
 @pytest.fixture
@@ -13,9 +14,9 @@ def client():
 @pytest.fixture(autouse=True)
 def isolated_backend_runtime(monkeypatch):
     """Keep backend API tests deterministic and independent from real LLM/RAG."""
-    from ds_course_agent.api.state import _chat_history, _sessions
     import ds_course_agent.api.routers.chat as chat_module
     import ds_course_agent.api.routers.profile as profile_module
+    from ds_course_agent.api.state import _chat_history, _sessions
 
     _sessions.clear()
     _chat_history.clear()

@@ -1,17 +1,18 @@
 """Tests for the Python code execution sandbox and LangChain tool."""
 
 import subprocess
+
 from ds_course_agent.rag.code_executor import (
-    _DockerPythonExecutor,
     PythonSandbox,
     SandboxResult,
     SandboxStatus,
+    _DockerPythonExecutor,
     extract_python_code,
     extract_question,
     format_python_execution_answer,
 )
-from ds_course_agent.tools.registry import get_rag_tools
 from ds_course_agent.tools.python_exec import python_exec_tool
+from ds_course_agent.tools.registry import get_rag_tools
 
 
 def test_python_sandbox_executes_code_successfully():
@@ -341,11 +342,7 @@ def test_extract_python_code_strips_trailing_question_on_separate_line():
 
 def test_extract_python_code_strips_trailing_question_on_full_script():
     """Full reproduction of the reported failing interaction."""
-    text = (
-        "import random\n"
-        "secret = random.randint(1, 100)\n"
-        'print("游戏结束，感谢游玩！")    这个代码正确吗'
-    )
+    text = 'import random\nsecret = random.randint(1, 100)\nprint("游戏结束，感谢游玩！")    这个代码正确吗'
 
     code = extract_python_code(text)
 

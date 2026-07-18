@@ -22,7 +22,6 @@ import json
 import re
 import sys
 from pathlib import Path
-import sys
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
@@ -31,10 +30,11 @@ from scripts._path import PROJECT_ROOT, ensure_src_path
 
 ensure_src_path()
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import requests
 
@@ -55,11 +55,13 @@ from ds_course_agent.rag.course_graph import (
     normalize_concept_id,
 )
 
+
 @dataclass
 class SourceChunk:
     chunk_id: str
     text: str
     metadata: dict[str, Any]
+
 
 NOISE_PATTERNS = (
     "logo of",
@@ -76,11 +78,13 @@ NOISE_PATTERNS = (
     "定价",
 )
 
+
 def _compact_text(text: str, max_chars: int) -> str:
     text = re.sub(r"\s+", " ", str(text or "")).strip()
     if len(text) <= max_chars:
         return text
     return text[:max_chars].rstrip() + "..."
+
 
 def is_probably_teaching_chunk(chunk: SourceChunk, min_chars: int = 700) -> bool:
     text = _compact_text(chunk.text, max_chars=500).lower()
@@ -94,6 +98,7 @@ def is_probably_teaching_chunk(chunk: SourceChunk, min_chars: int = 700) -> bool
     if section.strip() in {"目录", "前言"}:
         return False
     return True
+
 
 def load_chunks_from_chroma(
     collection_name: str | None = None,
@@ -127,6 +132,7 @@ def load_chunks_from_chroma(
 
     return chunks
 
+
 def load_chunks_from_json(path: str | Path, limit: int | None = None, skip_noise: bool = False) -> list[SourceChunk]:
     """Load chunks from a JSON/JSONL file for experimentation.
 
@@ -153,6 +159,7 @@ def load_chunks_from_json(path: str | Path, limit: int | None = None, skip_noise
             break
     return chunks
 
+
 def build_extraction_prompt(chunk: SourceChunk, max_chars: int = 2400) -> str:
     chapter = chunk.metadata.get("chapter") or chunk.metadata.get("chapter_no") or ""
     section = chunk.metadata.get("section") or chunk.metadata.get("section_no") or ""
@@ -165,9 +172,9 @@ def build_extraction_prompt(chunk: SourceChunk, max_chars: int = 2400) -> str:
 目标不是抽取所有名词，而是抽取能服务个性化教学 RAG 的信息：核心概念、算法/方法、公式/指标、易混淆关系、前置关系、教材证据、以及可选的常见误解。
 
 严格约束：
-1. 只能使用以下节点类型：{', '.join(ALLOWED_NODE_TYPES)}。
-2. 只能使用以下关系类型：{', '.join(ALLOWED_RELATION_TYPES)}。
-3. pedagogical_type 只能是：{', '.join(ALLOWED_PEDAGOGICAL_TYPES)}。
+1. 只能使用以下节点类型：{", ".join(ALLOWED_NODE_TYPES)}。
+2. 只能使用以下关系类型：{", ".join(ALLOWED_RELATION_TYPES)}。
+3. pedagogical_type 只能是：{", ".join(ALLOWED_PEDAGOGICAL_TYPES)}。
 4. 每个节点和关系必须能被当前 chunk 支持；没有证据就不要生成。
 5. prerequisite_of 表示 source 是 target 的前置知识，例如 “训练集/测试集 prerequisite_of 交叉验证”。
 6. confusable_with 只用于学生容易混淆的概念，例如 “PCA confusable_with KMeans”。
@@ -230,6 +237,7 @@ chunk 元信息：
 }}
 """.strip()
 
+
 def get_chat_model(llm_timeout: float | None = None, max_output_tokens: int | None = None):
     """Return the configured chat model for offline extraction."""
     if config.USE_REMOTE_LLM:
@@ -255,6 +263,7 @@ def get_chat_model(llm_timeout: float | None = None, max_output_tokens: int | No
         sync_client_kwargs=sync_client_kwargs,
     )
 
+
 def invoke_remote_direct(prompt: str, llm_timeout: float | None = None, max_output_tokens: int | None = None) -> str:
     if not config.USE_REMOTE_LLM:
         raise RuntimeError("--llm-provider direct requires USE_REMOTE_LLM=true")
@@ -275,6 +284,7 @@ def invoke_remote_direct(prompt: str, llm_timeout: float | None = None, max_outp
     data = response.json()
     return str(data["choices"][0]["message"].get("content") or "")
 
+
 def _extract_json_object(text: str) -> dict[str, Any]:
     raw = str(text or "").strip()
     if raw.startswith("```"):
@@ -289,11 +299,13 @@ def _extract_json_object(text: str) -> dict[str, Any]:
             return json.loads(raw[start : end + 1])
         raise
 
+
 def _coerce_float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
     except Exception:
         return default
+
 
 def graph_from_payload(payload: dict[str, Any], course_name: str, fallback_chunk: SourceChunk) -> CourseGraph:
     nodes: list[CourseGraphNode] = []
@@ -314,8 +326,18 @@ def graph_from_payload(payload: dict[str, Any], course_name: str, fallback_chunk
                 name=name,
                 type=node_type,
                 aliases=[str(v) for v in item.get("aliases", []) if str(v).strip()],
-                chapter=str(item.get("chapter") or fallback_chunk.metadata.get("chapter") or fallback_chunk.metadata.get("chapter_no") or ""),
-                section=str(item.get("section") or fallback_chunk.metadata.get("section") or fallback_chunk.metadata.get("section_no") or ""),
+                chapter=str(
+                    item.get("chapter")
+                    or fallback_chunk.metadata.get("chapter")
+                    or fallback_chunk.metadata.get("chapter_no")
+                    or ""
+                ),
+                section=str(
+                    item.get("section")
+                    or fallback_chunk.metadata.get("section")
+                    or fallback_chunk.metadata.get("section_no")
+                    or ""
+                ),
                 definition=str(item.get("definition") or ""),
                 evidence_chunk_ids=[str(v) for v in evidence if str(v).strip()],
                 confidence=_coerce_float(item.get("confidence")),
@@ -379,13 +401,18 @@ def graph_from_payload(payload: dict[str, Any], course_name: str, fallback_chunk
                 concept_id=concept_id,
                 wrong_belief=wrong,
                 correction=correction,
-                confusable_concept_ids=[normalize_concept_id(str(v)) for v in item.get("confusable_concept_ids", []) if str(v).strip()],
+                confusable_concept_ids=[
+                    normalize_concept_id(str(v)) for v in item.get("confusable_concept_ids", []) if str(v).strip()
+                ],
                 evidence_chunk_ids=[str(v) for v in evidence if str(v).strip()],
                 confidence=_coerce_float(item.get("confidence")),
             )
         )
 
-    return CourseGraph(course_name=course_name, nodes=nodes, edges=edges, chunk_tags=tags, misconceptions=misconceptions)
+    return CourseGraph(
+        course_name=course_name, nodes=nodes, edges=edges, chunk_tags=tags, misconceptions=misconceptions
+    )
+
 
 def extract_with_prompt_backend(
     chunks: Iterable[SourceChunk],
@@ -430,6 +457,7 @@ def extract_with_prompt_backend(
         graphs.append(graph_from_payload(payload, course_name=course_name, fallback_chunk=chunk))
 
     return graphs
+
 
 def extract_with_transformer_backend(
     chunks: Iterable[SourceChunk],
@@ -477,7 +505,9 @@ def extract_with_transformer_backend(
 
     for graph_doc, document in zip(graph_documents, documents):
         chunk_id = str(document.metadata.get("chunk_id") or "")
-        fallback = chunk_by_id.get(chunk_id) or SourceChunk(chunk_id=chunk_id, text=document.page_content, metadata=document.metadata)
+        fallback = chunk_by_id.get(chunk_id) or SourceChunk(
+            chunk_id=chunk_id, text=document.page_content, metadata=document.metadata
+        )
         nodes: list[CourseGraphNode] = []
         edges: list[CourseGraphEdge] = []
 
@@ -520,33 +550,51 @@ def extract_with_transformer_backend(
                     )
                 )
 
-        tags = [
-            ChunkConceptTag(
-                chunk_id=fallback.chunk_id,
-                concept_ids=[node.id for node in nodes],
-                pedagogical_type="other",
-                confidence=0.5,
-            )
-        ] if nodes else []
+        tags = (
+            [
+                ChunkConceptTag(
+                    chunk_id=fallback.chunk_id,
+                    concept_ids=[node.id for node in nodes],
+                    pedagogical_type="other",
+                    confidence=0.5,
+                )
+            ]
+            if nodes
+            else []
+        )
         graphs.append(CourseGraph(course_name=course_name, nodes=nodes, edges=edges, chunk_tags=tags))
 
     return graphs
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build an experimental course graph from course chunks.")
     parser.add_argument("--backend", choices=["prompt", "transformer"], default="prompt")
     parser.add_argument("--input-json", help="Optional JSON/JSONL chunks file. Defaults to Chroma collection.")
-    parser.add_argument("--collection-name", default=None, help="Chroma collection name. Defaults to config.collection_name.")
-    parser.add_argument("--limit", type=int, default=5, help="Number of chunks to process. Use small limits while testing.")
+    parser.add_argument(
+        "--collection-name", default=None, help="Chroma collection name. Defaults to config.collection_name."
+    )
+    parser.add_argument(
+        "--limit", type=int, default=5, help="Number of chunks to process. Use small limits while testing."
+    )
     parser.add_argument("--output", default="data/course_graph_v2.json")
     parser.add_argument("--course-name", default=config.COURSE_NAME)
-    parser.add_argument("--llm-provider", choices=["langchain", "direct"], default="langchain", help="LLM call path for prompt backend.")
+    parser.add_argument(
+        "--llm-provider", choices=["langchain", "direct"], default="langchain", help="LLM call path for prompt backend."
+    )
     parser.add_argument("--llm-timeout", type=float, default=60.0, help="Per-request LLM timeout in seconds.")
-    parser.add_argument("--max-chars", type=int, default=1400, help="Maximum chunk characters sent to the prompt backend.")
+    parser.add_argument(
+        "--max-chars", type=int, default=1400, help="Maximum chunk characters sent to the prompt backend."
+    )
     parser.add_argument("--max-output-tokens", type=int, default=900, help="Maximum LLM output tokens per chunk.")
-    parser.add_argument("--no-skip-noise", action="store_true", help="Do not skip cover/TOC/noisy chunks before extraction.")
-    parser.add_argument("--dry-run", action="store_true", help="Print prompts without calling the LLM. Only for prompt backend.")
+    parser.add_argument(
+        "--no-skip-noise", action="store_true", help="Do not skip cover/TOC/noisy chunks before extraction."
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print prompts without calling the LLM. Only for prompt backend."
+    )
     return parser.parse_args()
+
 
 def main() -> None:
     args = parse_args()
@@ -600,6 +648,7 @@ def main() -> None:
         f"nodes={len(merged.nodes)} edges={len(merged.edges)} "
         f"chunk_tags={len(merged.chunk_tags)} misconceptions={len(merged.misconceptions)}"
     )
+
 
 if __name__ == "__main__":
     main()

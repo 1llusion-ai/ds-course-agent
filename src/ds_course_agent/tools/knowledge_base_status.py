@@ -15,10 +15,7 @@ def check_knowledge_base_status() -> str:
         service = get_rag_service()
         service.retrieve("测试", top_k=1)
         result = (
-            "知识库状态正常\n"
-            f"课程名称：{config.COURSE_NAME}\n"
-            f"课程范围：{config.COURSE_DESCRIPTION}\n"
-            "检索功能：可用"
+            f"知识库状态正常\n课程名称：{config.COURSE_NAME}\n课程范围：{config.COURSE_DESCRIPTION}\n检索功能：可用"
         )
         _warn_large_tool_result("check_knowledge_base_status", result, status="ok")
         return result

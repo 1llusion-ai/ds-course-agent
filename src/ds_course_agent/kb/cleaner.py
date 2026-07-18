@@ -5,25 +5,27 @@ CLEAN-1 修复版本：
 - 修复中文标点前后空格残留
 - 保护章节标题行不被删除
 """
+
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
 class CleanedPage:
     """清洗后的页面"""
+
     page_num: int
     original_text: str
     cleaned_text: str
     char_removed: int
     headers_removed: int
-    title: Optional[str] = None
+    title: str | None = None
 
 
 @dataclass
 class CleanedDocument:
     """清洗后的文档"""
+
     file_name: str
     pages: list[CleanedPage]
     full_text: str
@@ -32,36 +34,36 @@ class CleanedDocument:
 
 
 HEADER_PATTERNS = [
-    re.compile(r'^[\s]*数据科学导论[\s]*$', re.MULTILINE),
-    re.compile(r'^[\s]*第\s*\d+\s*页[\s]*$', re.MULTILINE),
-    re.compile(r'^[\s]*Page\s*\d+[\s]*$', re.MULTILINE | re.IGNORECASE),
-    re.compile(r'^[\s]*-\s*\d+\s*-[\s]*$', re.MULTILINE),
-    re.compile(r'^[\s]*\.{3,}[\s]*$', re.MULTILINE),
+    re.compile(r"^[\s]*数据科学导论[\s]*$", re.MULTILINE),
+    re.compile(r"^[\s]*第\s*\d+\s*页[\s]*$", re.MULTILINE),
+    re.compile(r"^[\s]*Page\s*\d+[\s]*$", re.MULTILINE | re.IGNORECASE),
+    re.compile(r"^[\s]*-\s*\d+\s*-[\s]*$", re.MULTILINE),
+    re.compile(r"^[\s]*\.{3,}[\s]*$", re.MULTILINE),
 ]
 
 FOOTER_PATTERNS = [
-    re.compile(r'[\s]*版权所有[\s\S]*$', re.IGNORECASE),
-    re.compile(r'[\s]*Copyright[\s\S]*$', re.IGNORECASE),
-    re.compile(r'[\s]*All rights reserved[\s\S]*$', re.IGNORECASE),
+    re.compile(r"[\s]*版权所有[\s\S]*$", re.IGNORECASE),
+    re.compile(r"[\s]*Copyright[\s\S]*$", re.IGNORECASE),
+    re.compile(r"[\s]*All rights reserved[\s\S]*$", re.IGNORECASE),
 ]
 
 TITLE_PATTERNS = [
-    re.compile(r'^#{1,3}\s*第\s*(\d+|[一二三四五六七八九十]+)\s*章[：:\s]*(.*)$', re.MULTILINE),
-    re.compile(r'^#{1,3}\s*(\d+)\s*\.\s*(\d+)[：:\s]*(.*)$', re.MULTILINE),
-    re.compile(r'^第\s*(\d+|[一二三四五六七八九十]+)\s*章[：:\s]*(.*)$', re.MULTILINE),
-    re.compile(r'^(\d+)\s*\.\s*(\d+)[：:\s]*(.*)$', re.MULTILINE),
+    re.compile(r"^#{1,3}\s*第\s*(\d+|[一二三四五六七八九十]+)\s*章[：:\s]*(.*)$", re.MULTILINE),
+    re.compile(r"^#{1,3}\s*(\d+)\s*\.\s*(\d+)[：:\s]*(.*)$", re.MULTILINE),
+    re.compile(r"^第\s*(\d+|[一二三四五六七八九十]+)\s*章[：:\s]*(.*)$", re.MULTILINE),
+    re.compile(r"^(\d+)\s*\.\s*(\d+)[：:\s]*(.*)$", re.MULTILINE),
 ]
 
 PUNCTUATION_MAP = {
-    ',': '，',
-    '?': '？',
-    '!': '！',
-    ':': '：',
-    ';': '；',
-    '(': '（',
-    ')': '）',
-    '[': '【',
-    ']': '】',
+    ",": "，",
+    "?": "？",
+    "!": "！",
+    ":": "：",
+    ";": "；",
+    "(": "（",
+    ")": "）",
+    "[": "【",
+    "]": "】",
 }
 
 
@@ -69,13 +71,13 @@ def is_title_line(line: str) -> bool:
     """检查是否为标题行（需要保护）"""
     stripped = line.strip()
 
-    if re.match(r'^#{1,3}\s*第\s*\d+\s*章', stripped):
+    if re.match(r"^#{1,3}\s*第\s*\d+\s*章", stripped):
         return True
-    if re.match(r'^#{1,3}\s*\d+\s*\.\s*\d+', stripped):
+    if re.match(r"^#{1,3}\s*\d+\s*\.\s*\d+", stripped):
         return True
-    if re.match(r'^第\s*\d+\s*章', stripped):
+    if re.match(r"^第\s*\d+\s*章", stripped):
         return True
-    if re.match(r'^\d+\s*\.\s*\d+', stripped):
+    if re.match(r"^\d+\s*\.\s*\d+", stripped):
         return True
 
     return False
@@ -93,45 +95,45 @@ def merge_hanzi_spaces(text: str, max_iterations: int = 10) -> str:
     while prev_text != text and iteration < max_iterations:
         prev_text = text
         iteration += 1
-        text = re.sub(r'([\u4e00-\u9fff])\s+([\u4e00-\u9fff])', r'\1\2', text)
+        text = re.sub(r"([\u4e00-\u9fff])\s+([\u4e00-\u9fff])", r"\1\2", text)
 
     return text
 
 
 def remove_parser_artifacts(text: str) -> str:
     """移除解析器产生的特殊标记"""
-    text = re.sub(r'<!--\s*image\s*-->', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<!--\s*table\s*-->', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<!--\s*figure\s*-->', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<!--\s*pagebreak\s*-->', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\|\s*\|', '', text)
-    text = re.sub(r'^\s*\|[\s\-:]*\|\s*$', '', text, flags=re.MULTILINE)
-    text = re.sub(r'\{#\d+\}', '', text)
-    text = re.sub(r'\{\.pagebreak\}', '', text)
+    text = re.sub(r"<!--\s*image\s*-->", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"<!--\s*table\s*-->", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"<!--\s*figure\s*-->", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"<!--\s*pagebreak\s*-->", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\|\s*\|", "", text)
+    text = re.sub(r"^\s*\|[\s\-:]*\|\s*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\{#\d+\}", "", text)
+    text = re.sub(r"\{\.pagebreak\}", "", text)
 
     return text
 
 
 def remove_private_use_chars(text: str) -> str:
     """移除私有区字符和异常符号"""
-    text = re.sub(r'[\uE000-\uF8FF]', '', text)
-    text = re.sub(r'[\uDB80-\uDBFF][\uDC00-\uDFFF]', '', text)
-    text = re.sub(r'[\uFDD0-\uFDEF]', '', text)
-    text = re.sub(r'[\uFFF0-\uFFFF]', '', text)
-    text = re.sub(r'[\U0001F000-\U0001FFFF]', '', text)
-    text = re.sub(r'[\U000F0000-\U000FFFFD]', '', text)
-    text = re.sub(r'[\U00100000-\U0010FFFD]', '', text)
-    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
-    text = re.sub(r'[\u200b-\u200f\u2028-\u202f\u205f-\u206f\ufeff]', '', text)
-    text = re.sub(r'�+', '', text)
-    text = re.sub(r'•', '·', text)
-    text = re.sub(r'●', '·', text)
-    text = re.sub(r'○', '·', text)
-    text = re.sub(r'◆', '·', text)
-    text = re.sub(r'■', '·', text)
-    text = re.sub(r'□', '·', text)
-    text = re.sub(r'★', '·', text)
-    text = re.sub(r'☆', '·', text)
+    text = re.sub(r"[\uE000-\uF8FF]", "", text)
+    text = re.sub(r"[\uDB80-\uDBFF][\uDC00-\uDFFF]", "", text)
+    text = re.sub(r"[\uFDD0-\uFDEF]", "", text)
+    text = re.sub(r"[\uFFF0-\uFFFF]", "", text)
+    text = re.sub(r"[\U0001F000-\U0001FFFF]", "", text)
+    text = re.sub(r"[\U000F0000-\U000FFFFD]", "", text)
+    text = re.sub(r"[\U00100000-\U0010FFFD]", "", text)
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]", "", text)
+    text = re.sub(r"[\u200b-\u200f\u2028-\u202f\u205f-\u206f\ufeff]", "", text)
+    text = re.sub(r"�+", "", text)
+    text = re.sub(r"•", "·", text)
+    text = re.sub(r"●", "·", text)
+    text = re.sub(r"○", "·", text)
+    text = re.sub(r"◆", "·", text)
+    text = re.sub(r"■", "·", text)
+    text = re.sub(r"□", "·", text)
+    text = re.sub(r"★", "·", text)
+    text = re.sub(r"☆", "·", text)
 
     return text
 
@@ -146,15 +148,15 @@ def normalize_heading_format(text: str) -> str:
     - "1 . 4 . 1" -> "1.4.1"
     - "第 一 章" -> "第一章"
     """
-    text = re.sub(r'第\s+(\d+)\s+章', r'第\1章', text)
-    text = re.sub(r'第\s+([一二三四五六七八九十]+)\s+章', r'第\1章', text)
+    text = re.sub(r"第\s+(\d+)\s+章", r"第\1章", text)
+    text = re.sub(r"第\s+([一二三四五六七八九十]+)\s+章", r"第\1章", text)
 
-    text = re.sub(r'(\d+)\s*\.\s*(\d+)\s*\.\s*(\d+)\s*\.\s*(\d+)', r'\1.\2.\3.\4', text)
-    text = re.sub(r'(\d+)\s*\.\s*(\d+)\s*\.\s*(\d+)', r'\1.\2.\3', text)
-    text = re.sub(r'(\d+)\s*\.\s*(\d+)', r'\1.\2', text)
+    text = re.sub(r"(\d+)\s*\.\s*(\d+)\s*\.\s*(\d+)\s*\.\s*(\d+)", r"\1.\2.\3.\4", text)
+    text = re.sub(r"(\d+)\s*\.\s*(\d+)\s*\.\s*(\d+)", r"\1.\2.\3", text)
+    text = re.sub(r"(\d+)\s*\.\s*(\d+)", r"\1.\2", text)
 
-    text = re.sub(r'(\d+\.\d+)\s*\.\s*(\d+)', r'\1.\2', text)
-    text = re.sub(r'(\d+\.\d+\.\d+)\s*\.\s*(\d+)', r'\1.\2', text)
+    text = re.sub(r"(\d+\.\d+)\s*\.\s*(\d+)", r"\1.\2", text)
+    text = re.sub(r"(\d+\.\d+\.\d+)\s*\.\s*(\d+)", r"\1.\2", text)
 
     return text
 
@@ -166,7 +168,7 @@ def remove_headers_footers_safe(text: str) -> tuple[str, int]:
     CLEAN-1: 保护标题行不被删除
     """
     removed_count = 0
-    lines = text.split('\n')
+    lines = text.split("\n")
     result_lines = []
 
     for line in lines:
@@ -184,12 +186,12 @@ def remove_headers_footers_safe(text: str) -> tuple[str, int]:
         if not should_remove:
             result_lines.append(line)
 
-    text = '\n'.join(result_lines)
+    text = "\n".join(result_lines)
 
     for pattern in FOOTER_PATTERNS:
         matches = pattern.findall(text)
         removed_count += sum(len(m) for m in matches)
-        text = pattern.sub('', text)
+        text = pattern.sub("", text)
 
     return text, removed_count
 
@@ -200,11 +202,11 @@ def normalize_punctuation(text: str) -> str:
 
     for idx, char in enumerate(text):
         if char in PUNCTUATION_MAP:
-            prev_is_chinese = result and '\u4e00' <= result[-1] <= '\u9fff'
+            prev_is_chinese = result and "\u4e00" <= result[-1] <= "\u9fff"
             next_is_chinese = False
             if idx + 1 < len(text):
                 next_char = text[idx + 1]
-                next_is_chinese = '\u4e00' <= next_char <= '\u9fff'
+                next_is_chinese = "\u4e00" <= next_char <= "\u9fff"
 
             if prev_is_chinese or next_is_chinese:
                 result.append(PUNCTUATION_MAP[char])
@@ -213,7 +215,7 @@ def normalize_punctuation(text: str) -> str:
         else:
             result.append(char)
 
-    return ''.join(result)
+    return "".join(result)
 
 
 def normalize_spaces(text: str) -> str:
@@ -222,19 +224,19 @@ def normalize_spaces(text: str) -> str:
 
     CLEAN-1: 去除标点前空格、中文标点后多余空格
     """
-    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r"[ \t]+", " ", text)
 
-    text = re.sub(r'\s+([，。！？；：、）】》」』"\'])', r'\1', text)
+    text = re.sub(r'\s+([，。！？；：、）】》」』"\'])', r"\1", text)
 
-    text = re.sub(r'([，。！？；：、（【《「『""])\s+', r'\1', text)
+    text = re.sub(r'([，。！？；：、（【《「『""])\s+', r"\1", text)
 
-    text = re.sub(r'\s+([,.!?;:)])', r'\1', text)
+    text = re.sub(r"\s+([,.!?;:)])", r"\1", text)
 
-    text = re.sub(r'([,.!?;:(\[])\s+', r'\1', text)
+    text = re.sub(r"([,.!?;:(\[])\s+", r"\1", text)
 
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    text = re.sub(r'[^\S\n]+\n', '\n', text)
-    text = re.sub(r'\n[^\S\n]+', '\n', text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = re.sub(r"[^\S\n]+\n", "\n", text)
+    text = re.sub(r"\n[^\S\n]+", "\n", text)
 
     return text
 
@@ -255,7 +257,7 @@ def extract_titles(text: str) -> list[str]:
         matches = pattern.findall(text)
         for match in matches:
             if isinstance(match, tuple):
-                title = ' '.join(str(p) for p in match if p).strip()
+                title = " ".join(str(p) for p in match if p).strip()
             else:
                 title = match.strip()
             if title and len(title) < 100:
@@ -296,7 +298,7 @@ def clean_page(page_num: int, text: str) -> CleanedPage:
         if match:
             groups = match.groups()
             if groups:
-                title = ' '.join(str(g) for g in groups if g).strip()
+                title = " ".join(str(g) for g in groups if g).strip()
             else:
                 title = match.group(0).strip()
             break
@@ -307,7 +309,7 @@ def clean_page(page_num: int, text: str) -> CleanedPage:
         cleaned_text=cleaned_text,
         char_removed=char_removed,
         headers_removed=headers_removed,
-        title=title
+        title=title,
     )
 
 
@@ -349,7 +351,7 @@ def clean_document(pages: list[tuple[int, str]], file_name: str) -> CleanedDocum
         pages=cleaned_pages,
         full_text=full_text,
         total_chars_removed=total_removed,
-        titles_found=all_titles
+        titles_found=all_titles,
     )
 
 

@@ -1,9 +1,9 @@
 """端到端测试：验证 misconception-handling skill 的识别、纠正、画像写入链路。"""
 
 import json
+import shutil
 import sys
 import tempfile
-import shutil
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,8 +11,8 @@ project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+from ds_course_agent.rag.memory_core import MemoryCore, aggregate_profile, get_memory_core
 from ds_course_agent.rag.skill_system import SkillRegistry
-from ds_course_agent.rag.memory_core import MemoryCore, get_memory_core, aggregate_profile
 
 
 def test_misconception_skill_end_to_end():
@@ -69,9 +69,9 @@ def test_misconception_skill_end_to_end():
 
             spot = profile.weak_spot_candidates[0]
             assert spot.concept_id == "knn", f"concept_id 不匹配: {spot.concept_id}"
-            assert any(
-                s.get("type") == "MISCONCEPTION" for s in spot.signals
-            ), f"signals 中缺少 MISCONCEPTION 标记: {spot.signals}"
+            assert any(s.get("type") == "MISCONCEPTION" for s in spot.signals), (
+                f"signals 中缺少 MISCONCEPTION 标记: {spot.signals}"
+            )
 
             print("=" * 60)
             print("测试通过！")

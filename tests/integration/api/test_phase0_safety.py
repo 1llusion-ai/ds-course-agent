@@ -55,8 +55,8 @@ def test_memory_core_default_uses_config_chat_history_dir(monkeypatch, tmp_path)
 def test_hybrid_retriever_does_not_mutate_shared_doc_metadata():
     from langchain_core.documents import Document
 
-    from ds_course_agent.shared import embeddings
     from ds_course_agent.rag.hybrid_retriever import HybridRetriever
+    from ds_course_agent.shared import embeddings
 
     embeddings.reset_embedding_circuit_breaker()
     embeddings.clear_embedding_query_cache()

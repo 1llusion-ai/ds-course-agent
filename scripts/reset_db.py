@@ -1,5 +1,6 @@
 import os
 import shutil
+
 import ds_course_agent.shared.config as config
 
 if os.path.exists(config.persist_directory):

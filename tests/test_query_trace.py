@@ -20,4 +20,3 @@ def test_query_trace_records_steps_and_errors():
     assert payload["errors"]
     assert payload["errors"][0]["message"] == "boom"
     assert payload["status"] == "error"
-

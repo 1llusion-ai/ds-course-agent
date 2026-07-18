@@ -1,17 +1,18 @@
-from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Any, List, Optional, Literal
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
 
 
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
     timestamp: datetime = Field(default_factory=datetime.now)
-    sources: Optional[List[dict]] = None
-    route: Optional[str] = None
-    progress: Optional[dict[str, Any]] = None
-    progress_events: Optional[List[dict[str, Any]]] = None
-    metadata: Optional[dict[str, Any]] = None
+    sources: list[dict] | None = None
+    route: str | None = None
+    progress: dict[str, Any] | None = None
+    progress_events: list[dict[str, Any]] | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class ChatRequest(BaseModel):
@@ -34,5 +35,5 @@ class ChatResponse(BaseModel):
 
 class ChatHistoryResponse(BaseModel):
     session_id: str
-    messages: List[ChatMessage]
+    messages: list[ChatMessage]
     total: int

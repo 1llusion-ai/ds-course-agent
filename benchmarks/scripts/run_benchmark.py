@@ -1,11 +1,11 @@
 """运行完整评测"""
+
 import json
-from pathlib import Path
 from datetime import datetime
 
-from benchmarks.metrics.retrieval import RetrievalMetrics, calculate_recall_at_k, calculate_precision_at_k, calculate_mrr, calculate_ndcg_at_k
 from benchmarks.metrics.answer import evaluate_answer
 from ds_course_agent.rag.rag import RAGService
+
 
 class BenchmarkRunner:
     def __init__(self):
@@ -13,7 +13,7 @@ class BenchmarkRunner:
         self.results = []
 
     def load_qa_pairs(self, path: str = "benchmarks/data/qa_pairs.json"):
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
         return data.get("qa_pairs", [])
 
@@ -33,9 +33,7 @@ class BenchmarkRunner:
 
         # 评估回答
         answer_metrics = evaluate_answer(
-            question=question,
-            answer=answer,
-            expected_keywords=qa_pair.get("expected_keywords", [])
+            question=question, answer=answer, expected_keywords=qa_pair.get("expected_keywords", [])
         )
 
         result = {
@@ -48,8 +46,8 @@ class BenchmarkRunner:
                 "correctness": answer_metrics.correctness_score,
                 "has_source": answer_metrics.has_source,
                 "keyword_coverage": answer_metrics.keyword_coverage,
-                "avg_score": answer_metrics.avg_score
-            }
+                "avg_score": answer_metrics.avg_score,
+            },
         }
 
         print(f"  回答平均分: {answer_metrics.avg_score:.2%}")
@@ -71,7 +69,7 @@ class BenchmarkRunner:
         report = self.generate_report()
 
         if output_path:
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(report, f, ensure_ascii=False, indent=2)
             print(f"\n报告已保存: {output_path}")
 
@@ -86,19 +84,15 @@ class BenchmarkRunner:
             "correctness": sum(r["answer_quality"]["correctness"] for r in valid) / len(valid),
             "has_source_rate": sum(r["answer_quality"]["has_source"] for r in valid) / len(valid),
             "keyword_coverage": sum(r["answer_quality"]["keyword_coverage"] for r in valid) / len(valid),
-            "avg_score": sum(r["answer_quality"]["avg_score"] for r in valid) / len(valid)
+            "avg_score": sum(r["answer_quality"]["avg_score"] for r in valid) / len(valid),
         }
 
         report = {
             "timestamp": datetime.now().isoformat(),
-            "summary": {
-                "total": len(self.results),
-                "successful": len(valid),
-                "failed": len(self.results) - len(valid)
-            },
+            "summary": {"total": len(self.results), "successful": len(valid), "failed": len(self.results) - len(valid)},
             "answer_metrics": avg_answer,
             "overall_score": avg_answer["avg_score"],
-            "results": self.results
+            "results": self.results,
         }
 
         print("\n" + "=" * 60)
@@ -115,6 +109,7 @@ class BenchmarkRunner:
         print(f"\n【总体评分】{report['overall_score']:.2%}")
 
         return report
+
 
 if __name__ == "__main__":
     runner = BenchmarkRunner()

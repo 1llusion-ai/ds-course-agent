@@ -4,9 +4,9 @@ import threading
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
+import ds_course_agent.shared.context_governor as context_governor
 import ds_course_agent.shared.history as history_module
 from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
-import ds_course_agent.shared.context_governor as context_governor
 from ds_course_agent.shared.context_governor import ContextBudget
 from ds_course_agent.shared.history import FileChatMessageHistory, MemoryPolicy
 from ds_course_agent.shared.tool_result_store import TOOL_RESULT_COMPACTED_MARKER
@@ -51,8 +51,7 @@ def test_file_chat_history_updates_existing_summary_without_summary_duplication(
 
     messages = history.messages
     summaries = [
-        msg for msg in messages
-        if isinstance(msg, SystemMessage) and msg.additional_kwargs.get("short_memory_summary")
+        msg for msg in messages if isinstance(msg, SystemMessage) and msg.additional_kwargs.get("short_memory_summary")
     ]
     assert len(summaries) == 1
     assert "问题1" in summaries[0].content
@@ -96,11 +95,7 @@ def test_history_large_message_warning_does_not_change_persisted_content(tmp_pat
     trace = end_query_trace(token)
 
     assert history.messages[0].content == large_answer
-    warning_events = [
-        event
-        for event in trace["events"]
-        if event["stage"] == "context_governor.warning"
-    ]
+    warning_events = [event for event in trace["events"] if event["stage"] == "context_governor.warning"]
     assert any(event["data"]["kind"] == "large_message" for event in warning_events)
 
 
@@ -119,14 +114,18 @@ def test_history_compacts_old_tool_results_but_preserves_incoming_tool_result(tm
     old_payload = "旧工具结果" * 10
     current_payload = "当前工具结果" * 10
 
-    history.add_messages([
-        ToolMessage(content=old_payload, name="course_rag_tool", tool_call_id="old-call"),
-    ])
+    history.add_messages(
+        [
+            ToolMessage(content=old_payload, name="course_rag_tool", tool_call_id="old-call"),
+        ]
+    )
     assert history.messages[0].content == old_payload
 
-    history.add_messages([
-        ToolMessage(content=current_payload, name="course_rag_tool", tool_call_id="current-call"),
-    ])
+    history.add_messages(
+        [
+            ToolMessage(content=current_payload, name="course_rag_tool", tool_call_id="current-call"),
+        ]
+    )
 
     messages = history.messages
     assert messages[0].content.startswith("[Prior course_rag_tool result compacted: artifact://")

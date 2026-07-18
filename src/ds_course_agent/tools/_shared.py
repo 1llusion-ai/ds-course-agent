@@ -13,7 +13,7 @@ import html
 import re
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from ds_course_agent.shared.config_utils import (
     config_bool,
@@ -33,11 +33,11 @@ class RetrievalTrace:
     sources: list[dict] = field(default_factory=list)
 
 
-_retrieval_trace: ContextVar[Optional[RetrievalTrace]] = ContextVar(
+_retrieval_trace: ContextVar[RetrievalTrace | None] = ContextVar(
     "retrieval_trace",
     default=None,
 )
-_rag_service: Optional["RAGService"] = None
+_rag_service: RAGService | None = None
 
 
 def strip_html_tags(text: Any) -> str:
@@ -94,7 +94,7 @@ def truncate_text_only(text: Any, max_chars: int, *, marker: str = "...") -> str
     return truncate_text(text, max_chars, marker=marker)[0]
 
 
-def get_rag_service() -> "RAGService":
+def get_rag_service() -> RAGService:
     global _rag_service
     if _rag_service is None:
         from ds_course_agent.rag.rag import RAGService

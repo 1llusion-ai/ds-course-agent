@@ -1,8 +1,10 @@
 """
 课程知识库存储测试
 """
+
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 class TestSanitizeCollectionName:
@@ -17,7 +19,7 @@ class TestSanitizeCollectionName:
         assert len(result) >= 3
         assert result[0].isalnum()
         assert result[-1].isalnum()
-        assert all(c.isalnum() or c in '._-' for c in result)
+        assert all(c.isalnum() or c in "._-" for c in result)
 
     def test_sanitize_english_name(self):
         """测试英文名称"""
@@ -43,9 +45,9 @@ class TestSanitizeCollectionName:
 
         result = sanitize_collection_name("test@#$%name!")
 
-        assert '@' not in result
-        assert '#' not in result
-        assert '$' not in result
+        assert "@" not in result
+        assert "#" not in result
+        assert "$" not in result
         assert result[0].isalnum()
         assert result[-1].isalnum()
 
@@ -122,9 +124,7 @@ class TestCourseKnowledgeBase:
 
         mock_vector_store.delete_collection.assert_called_once()
         mock_chroma.assert_called_once_with(
-            collection_name="test_collection",
-            embedding_function=mock_embedding,
-            persist_directory="/tmp/test"
+            collection_name="test_collection", embedding_function=mock_embedding, persist_directory="/tmp/test"
         )
         assert kb.hashes == {}
 
@@ -150,19 +150,12 @@ class TestIngestResult:
         from ds_course_agent.kb.store import IngestResult
 
         result = IngestResult(
-            source_file="test.pdf",
-            total_chunks=10,
-            success_count=8,
-            skip_count=2,
-            error_count=0,
-            errors=[]
+            source_file="test.pdf", total_chunks=10, success_count=8, skip_count=2, error_count=0, errors=[]
         )
 
         assert result.source_file == "test.pdf"
         assert result.total_chunks == 10
         assert result.success_count == 8
-
-
 
 
 class TestMetadataBuild:
@@ -239,7 +232,7 @@ class TestKBStatus:
             course_name="测试课程",
             document_count=100,
             last_updated="2024-01-01",
-            sources=["a.pdf", "b.pdf"]
+            sources=["a.pdf", "b.pdf"],
         )
 
         assert status.collection_name == "test_collection"

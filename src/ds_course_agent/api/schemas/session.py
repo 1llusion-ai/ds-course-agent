@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -20,9 +19,9 @@ class SessionResponse(BaseModel):
 
 
 class SessionList(BaseModel):
-    sessions: List[SessionResponse]
+    sessions: list[SessionResponse]
     total: int
 
 
 class SessionUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=1, max_length=100)
+    title: str | None = Field(None, min_length=1, max_length=100)

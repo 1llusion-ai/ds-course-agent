@@ -3,32 +3,32 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Iterable, List, Sequence
 
 
 @dataclass
 class RouteStep:
     title: str
-    details: List[str] = field(default_factory=list)
+    details: list[str] = field(default_factory=list)
 
 
 @dataclass
 class LearningPathPlan:
     summary: str
     current_chapter: str | None
-    recent_focuses: List[str] = field(default_factory=list)
-    weak_spots: List[str] = field(default_factory=list)
-    targets: List[str] = field(default_factory=list)
-    priorities: List[str] = field(default_factory=list)
-    steps: List[RouteStep] = field(default_factory=list)
-    quick_actions: List[str] = field(default_factory=list)
-    checkpoints: List[str] = field(default_factory=list)
+    recent_focuses: list[str] = field(default_factory=list)
+    weak_spots: list[str] = field(default_factory=list)
+    targets: list[str] = field(default_factory=list)
+    priorities: list[str] = field(default_factory=list)
+    steps: list[RouteStep] = field(default_factory=list)
+    quick_actions: list[str] = field(default_factory=list)
+    checkpoints: list[str] = field(default_factory=list)
 
 
-def _dedupe_keep_order(items: Iterable[str]) -> List[str]:
+def _dedupe_keep_order(items: Iterable[str]) -> list[str]:
     seen = set()
-    result: List[str] = []
+    result: list[str] = []
     for item in items:
         if not item or item in seen:
             continue
@@ -46,7 +46,7 @@ def _chapter_number(chapter: str | None) -> int | None:
     return int(match.group(1))
 
 
-def _pick_recent_focuses(profile, limit: int = 3) -> List[str]:
+def _pick_recent_focuses(profile, limit: int = 3) -> list[str]:
     concepts = sorted(
         profile.recent_concepts.values(),
         key=lambda item: (item.last_mentioned_at or 0, item.mention_count),
@@ -55,7 +55,7 @@ def _pick_recent_focuses(profile, limit: int = 3) -> List[str]:
     return [item.display_name for item in concepts[:limit] if item.display_name]
 
 
-def _pick_active_weak_spots(profile, limit: int = 3) -> List[str]:
+def _pick_active_weak_spots(profile, limit: int = 3) -> list[str]:
     spots = sorted(
         profile.weak_spot_candidates,
         key=lambda item: (item.confidence, item.last_triggered_at or 0),
@@ -64,11 +64,8 @@ def _pick_active_weak_spots(profile, limit: int = 3) -> List[str]:
     return [item.display_name for item in spots[:limit] if item.display_name]
 
 
-def _target_names(matched_concepts: Sequence) -> List[str]:
-    return _dedupe_keep_order(
-        getattr(item, "display_name", "")
-        for item in list(matched_concepts)[:2]
-    )
+def _target_names(matched_concepts: Sequence) -> list[str]:
+    return _dedupe_keep_order(getattr(item, "display_name", "") for item in list(matched_concepts)[:2])
 
 
 def _find_concept_by_display_name(mapper, display_name: str):
@@ -78,8 +75,8 @@ def _find_concept_by_display_name(mapper, display_name: str):
     return None
 
 
-def _related_concepts(mapper, matched_concepts: Sequence, limit: int = 4) -> List[dict]:
-    related: List[dict] = []
+def _related_concepts(mapper, matched_concepts: Sequence, limit: int = 4) -> list[dict]:
+    related: list[dict] = []
     blocked = set(_target_names(matched_concepts))
 
     for concept in list(matched_concepts)[:2]:
@@ -94,7 +91,7 @@ def _related_concepts(mapper, matched_concepts: Sequence, limit: int = 4) -> Lis
                 }
             )
 
-    unique: List[dict] = []
+    unique: list[dict] = []
     seen = set()
     for item in related:
         key = item["display_name"]
@@ -114,18 +111,24 @@ def build_learning_path_plan(question: str, matched_concepts: Sequence, profile,
     current_chapter = profile.progress.current_chapter or None
     related = _related_concepts(mapper, matched_concepts)
 
-    primary_target_chapter = _chapter_number(getattr(matched_concepts[0], "chapter", None)) if matched_concepts else None
+    primary_target_chapter = (
+        _chapter_number(getattr(matched_concepts[0], "chapter", None)) if matched_concepts else None
+    )
     prerequisites = []
     extensions = []
     for item in related:
         item_chapter_num = _chapter_number(item.get("chapter"))
-        if primary_target_chapter is not None and item_chapter_num is not None and item_chapter_num <= primary_target_chapter:
+        if (
+            primary_target_chapter is not None
+            and item_chapter_num is not None
+            and item_chapter_num <= primary_target_chapter
+        ):
             prerequisites.append(item["display_name"])
         else:
             extensions.append(item["display_name"])
 
     weak_priority = [name for name in weak_spots if name in targets or name in prerequisites or name in extensions]
-    priorities: List[str] = []
+    priorities: list[str] = []
     for name in weak_priority[:2]:
         priorities.append(f"优先补薄弱点：{name}")
     for name in prerequisites[:2]:
@@ -153,33 +156,27 @@ def build_learning_path_plan(question: str, matched_concepts: Sequence, profile,
         if not step1_details:
             step1_details.append(f"先明确 {primary_target} 解决什么问题、为什么需要它。")
 
-        step2_details = [
-            f"再集中学习 {primary_target} 的核心定义、关键直觉和典型使用场景。"
-        ]
+        step2_details = [f"再集中学习 {primary_target} 的核心定义、关键直觉和典型使用场景。"]
         if len(targets) > 1:
             step2_details.append(f"如果时间够，再把 {targets[1]} 一起纳入主线，避免只学到一半。")
 
         step3_details = []
         if extensions:
-            step3_details.append(f"最后把 {primary_target} 和 {', '.join(extensions[:2])} 做对比，检查自己是否真的分清。")
+            step3_details.append(
+                f"最后把 {primary_target} 和 {', '.join(extensions[:2])} 做对比，检查自己是否真的分清。"
+            )
         else:
             step3_details.append(f"最后用一个小例子或一道小题检验自己是否真的理解了 {primary_target}。")
     else:
-        step1_details = [
-            "先按薄弱程度找出最需要先补的 1-2 个概念，不要同时摊太多。"
-        ]
+        step1_details = ["先按薄弱程度找出最需要先补的 1-2 个概念，不要同时摊太多。"]
         if weak_spots:
             step1_details.append(f"当前优先考虑：{', '.join(weak_spots[:2])}。")
 
-        step2_details = [
-            "再按章节顺序把相关知识点串起来，先补前面基础，再看后面内容。"
-        ]
+        step2_details = ["再按章节顺序把相关知识点串起来，先补前面基础，再看后面内容。"]
         if current_chapter:
             step2_details.append(f"你现在可以把 {current_chapter} 当作主线参考。")
 
-        step3_details = [
-            "最后做一轮自测：能否复述定义、说清区别、举出一个例子。"
-        ]
+        step3_details = ["最后做一轮自测：能否复述定义、说清区别、举出一个例子。"]
 
     steps = [
         RouteStep("先定优先级", step1_details),

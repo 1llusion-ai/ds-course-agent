@@ -19,8 +19,8 @@ class RetrievalGuardHook:
         if agent is None:
             return result
 
-        from ds_course_agent.rag.query_trace import trace_step
         from ds_course_agent.rag.query_pipeline import RouteType
+        from ds_course_agent.rag.query_trace import trace_step
 
         context = state["context"]
         decision = state["decision"]

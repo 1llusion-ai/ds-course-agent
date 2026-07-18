@@ -3,12 +3,13 @@ Query Preprocessor
 
 负责将用户输入和上下文信息整理成标准的 QueryContext
 """
+
 import logging
 import re
 import threading
-from typing import List, Optional, Dict, Any
+from typing import Any
 
-from .models import QueryContext, DetectedConcept
+from .models import DetectedConcept, QueryContext
 from .utils import collect_recent_context, is_contextual_followup
 
 logger = logging.getLogger(__name__)
@@ -22,11 +23,35 @@ _CODE_STRONG_PATTERNS = [
 ]
 
 _CONCEPT_QUESTION_CUES = [
-    "什么是", "是什么", "解释", "解析", "说明", "做什么",
-    "什么意思", "怎么写", "示例", "为什么", "区别", "原理",
-    "作用", "影响", "含义", "对比", "比较", "不同", "关系",
-    "效果", "不收敛", "收敛", "调参", "超参数",
-    "会不会", "太大", "太小", "怎么选", "如何选",
+    "什么是",
+    "是什么",
+    "解释",
+    "解析",
+    "说明",
+    "做什么",
+    "什么意思",
+    "怎么写",
+    "示例",
+    "为什么",
+    "区别",
+    "原理",
+    "作用",
+    "影响",
+    "含义",
+    "对比",
+    "比较",
+    "不同",
+    "关系",
+    "效果",
+    "不收敛",
+    "收敛",
+    "调参",
+    "超参数",
+    "会不会",
+    "太大",
+    "太小",
+    "怎么选",
+    "如何选",
 ]
 
 _ASSIGNMENT_RE = re.compile(
@@ -79,8 +104,8 @@ class QueryPreprocessor:
         user_input: str,
         session_id: str,
         student_id: str,
-        chat_history: List[Any],
-        profile: Optional[Any] = None,
+        chat_history: list[Any],
+        profile: Any | None = None,
     ) -> QueryContext:
         """
         处理查询，生成 QueryContext
@@ -146,11 +171,12 @@ class QueryPreprocessor:
 
         # 去除多余空白
         import re
-        normalized = re.sub(r'\s+', ' ', normalized)
+
+        normalized = re.sub(r"\s+", " ", normalized)
 
         return normalized
 
-    def _collect_recent_context(self, chat_history: List[Any], limit: int = 4) -> str:
+    def _collect_recent_context(self, chat_history: list[Any], limit: int = 4) -> str:
         """收集最近的对话上下文"""
         return collect_recent_context(
             chat_history,
@@ -159,11 +185,7 @@ class QueryPreprocessor:
             ai_truncate_chars=200,
         )
 
-    def _detect_concepts(
-        self,
-        query: str,
-        profile: Optional[Any] = None
-    ) -> List[DetectedConcept]:
+    def _detect_concepts(self, query: str, profile: Any | None = None) -> list[DetectedConcept]:
         """概念识别（调用现有的 knowledge mapper）。"""
         detected = []
 
@@ -172,21 +194,23 @@ class QueryPreprocessor:
 
             matches = map_question_to_concepts(query, top_k=5)
             for match in matches:
-                detected.append(DetectedConcept(
-                    concept_id=match.concept_id,
-                    method=match.method,
-                    confidence=float(match.score),
-                    metadata={
-                        "display_name": match.display_name,
-                        "chapter": match.chapter,
-                    }
-                ))
+                detected.append(
+                    DetectedConcept(
+                        concept_id=match.concept_id,
+                        method=match.method,
+                        confidence=float(match.score),
+                        metadata={
+                            "display_name": match.display_name,
+                            "chapter": match.chapter,
+                        },
+                    )
+                )
         except Exception as e:
             logger.warning("概念识别失败: %s", e)
 
         return detected
 
-    def _detect_intents(self, query: str) -> List[str]:
+    def _detect_intents(self, query: str) -> list[str]:
         """意图识别（规则 + 关键词）"""
         intents = []
         q = query.lower()
@@ -286,11 +310,28 @@ class QueryPreprocessor:
         question_part = extract_question(query).lower() or q
 
         review_cues = [
-            "正确吗", "对吗", "对不对", "有问题吗", "有没有问题",
-            "错在哪", "哪里错了", "哪里错", "哪里有问题",
-            "有bug", "有错", "有问题", "为什么不", "为什么报错", "为什么不对",
-            "怎么回事", "帮我看看", "帮我检查", "帮我找错", "检查一下",
-            "review", "check my code",
+            "正确吗",
+            "对吗",
+            "对不对",
+            "有问题吗",
+            "有没有问题",
+            "错在哪",
+            "哪里错了",
+            "哪里错",
+            "哪里有问题",
+            "有bug",
+            "有错",
+            "有问题",
+            "为什么不",
+            "为什么报错",
+            "为什么不对",
+            "怎么回事",
+            "帮我看看",
+            "帮我检查",
+            "帮我找错",
+            "检查一下",
+            "review",
+            "check my code",
         ]
         has_review = any(cue in question_part for cue in review_cues)
 
@@ -303,19 +344,24 @@ class QueryPreprocessor:
     def _is_clarification_signal(self, query: str) -> bool:
         """判断是否是澄清请求"""
         patterns = [
-            "不太懂", "不理解", "不明白", "没懂", "不清楚",
-            "再解释", "详细", "具体", "为什么",
-            "怎么理解", "什么意思"
+            "不太懂",
+            "不理解",
+            "不明白",
+            "没懂",
+            "不清楚",
+            "再解释",
+            "详细",
+            "具体",
+            "为什么",
+            "怎么理解",
+            "什么意思",
         ]
         q = query.lower()
         return any(p in q for p in patterns)
 
     def _is_mastery_signal(self, query: str) -> bool:
         """判断是否是掌握信号"""
-        patterns = [
-            "我懂了", "明白了", "理解了", "会了", "清楚了",
-            "知道了", "学会了"
-        ]
+        patterns = ["我懂了", "明白了", "理解了", "会了", "清楚了", "知道了", "学会了"]
         q = query.lower()
         return any(p in q for p in patterns)
 
@@ -351,11 +397,11 @@ class QueryPreprocessor:
 
         return candidates
 
-    def _is_followup_question(self, query: str, chat_history: List[Any]) -> bool:
+    def _is_followup_question(self, query: str, chat_history: list[Any]) -> bool:
         """判断是否是后续问题"""
         return bool(chat_history) and is_contextual_followup(query, allow_short_question=False)
 
-    def _build_profile_snapshot(self, profile: Optional[Any]) -> Optional[Dict[str, Any]]:
+    def _build_profile_snapshot(self, profile: Any | None) -> dict[str, Any] | None:
         """构建画像快照"""
         if profile is None:
             return None
@@ -368,14 +414,15 @@ class QueryPreprocessor:
                 "pending_weak_spots": len(getattr(profile, "pending_weak_spots", [])),
                 "resolved_weak_spots": len(getattr(profile, "resolved_weak_spots", [])),
                 "current_chapter": getattr(profile.progress, "current_chapter", None)
-                    if hasattr(profile, "progress") else None,
+                if hasattr(profile, "progress")
+                else None,
             }
         except Exception as e:
             logger.warning("构建画像快照失败: %s", e)
             return None
 
 
-_preprocessor: Optional[QueryPreprocessor] = None
+_preprocessor: QueryPreprocessor | None = None
 _preprocessor_lock = threading.Lock()
 
 
@@ -387,14 +434,8 @@ def get_preprocessor(enable_concept_detection: bool = True) -> QueryPreprocessor
     已有单例不一致时，需要重建单例，避免测试或运行时出现隐式状态污染。
     """
     global _preprocessor
-    if (
-        _preprocessor is None
-        or _preprocessor.enable_concept_detection != enable_concept_detection
-    ):
+    if _preprocessor is None or _preprocessor.enable_concept_detection != enable_concept_detection:
         with _preprocessor_lock:
-            if (
-                _preprocessor is None
-                or _preprocessor.enable_concept_detection != enable_concept_detection
-            ):
+            if _preprocessor is None or _preprocessor.enable_concept_detection != enable_concept_detection:
                 _preprocessor = QueryPreprocessor(enable_concept_detection=enable_concept_detection)
     return _preprocessor

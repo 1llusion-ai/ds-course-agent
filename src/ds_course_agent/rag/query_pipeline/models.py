@@ -3,13 +3,15 @@ Query Pipeline 数据模型
 
 定义 QueryContext, RouteDecision, FinalResponse 等核心数据结构
 """
+
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
 from enum import Enum
+from typing import Any
 
 
 class RouteType(str, Enum):
     """路由类型枚举"""
+
     COURSE_SCHEDULE = "course_schedule"
     CURRENT_DATETIME = "current_datetime"
     LEARNING_PATH_SKILL = "learning_path_skill"
@@ -26,10 +28,11 @@ class RouteType(str, Enum):
 @dataclass
 class DetectedConcept:
     """识别到的概念"""
+
     concept_id: str
     method: str  # "exact", "fuzzy", "graph", etc.
     confidence: float = 1.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -39,6 +42,7 @@ class QueryContext:
 
     包含了处理查询所需的所有信息，是 preprocessor 的输出
     """
+
     # 基础信息
     original_query: str
     normalized_query: str
@@ -46,21 +50,21 @@ class QueryContext:
     student_id: str
 
     # 对话历史
-    chat_history: List[Any]  # List[BaseMessage]
+    chat_history: list[Any]  # List[BaseMessage]
     recent_context: str = ""
 
     # 面向 tool/RAG 的增强查询；默认等于 normalized_query，
     # 调用方可根据 route 注入 schedule_tool_query / grounded_tool_query。
-    enriched_query: Optional[str] = None
+    enriched_query: str | None = None
 
     # 学生画像快照
-    profile_snapshot: Optional[Dict[str, Any]] = None
+    profile_snapshot: dict[str, Any] | None = None
 
     # 概念识别
-    detected_concepts: List[DetectedConcept] = field(default_factory=list)
+    detected_concepts: list[DetectedConcept] = field(default_factory=list)
 
     # 意图信号
-    detected_intents: List[str] = field(default_factory=list)
+    detected_intents: list[str] = field(default_factory=list)
     is_followup: bool = False
     is_clarification_signal: bool = False
     is_mastery_signal: bool = False
@@ -69,7 +73,7 @@ class QueryContext:
     skill_candidate_keys: set = field(default_factory=set)
 
     # 元数据
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -79,20 +83,21 @@ class RouteDecision:
 
     Router 的输出，描述应该走哪条路径
     """
+
     route: RouteType
     confidence: float
-    reasons: List[str] = field(default_factory=list)
+    reasons: list[str] = field(default_factory=list)
 
     # 路由相关配置
-    required_tools: List[str] = field(default_factory=list)
+    required_tools: list[str] = field(default_factory=list)
     retrieval_policy: str = "optional"  # "required", "optional", "disabled"
-    skill_name: Optional[str] = None
+    skill_name: str | None = None
 
     # 降级路由
-    fallback_route: Optional[RouteType] = None
+    fallback_route: RouteType | None = None
 
     # 元数据
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -102,21 +107,22 @@ class FinalResponse:
 
     Postprocessor 的输出，返回给用户的标准格式
     """
+
     content: str
-    sources: List[Dict[str, Any]] = field(default_factory=list)
+    sources: list[dict[str, Any]] = field(default_factory=list)
 
     # trace 信息
     route: RouteType = RouteType.GENERIC_AGENT
-    trace: Dict[str, Any] = field(default_factory=dict)
+    trace: dict[str, Any] = field(default_factory=dict)
 
     # 记忆事件（待写入）
-    memory_events: List[Any] = field(default_factory=list)
+    memory_events: list[Any] = field(default_factory=list)
 
     # 元数据
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     used_retrieval: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典格式，用于 API 返回"""
         return {
             "content": self.content,

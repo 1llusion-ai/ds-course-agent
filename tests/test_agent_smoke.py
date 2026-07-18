@@ -23,8 +23,8 @@ class TestAgentServiceMock:
     @patch("ds_course_agent.rag.agent.get_chat_model")
     @patch("ds_course_agent.rag.agent.get_skill_loader")
     def test_agent_service_initialization(self, mock_get_skill_loader, mock_get_chat_model):
-        from ds_course_agent.rag.agent import AgentService
         import ds_course_agent.rag.agent as agent_module
+        from ds_course_agent.rag.agent import AgentService
         from ds_course_agent.tools.registry import ToolRegistry
 
         mock_get_chat_model.return_value = MagicMock()
@@ -59,10 +59,10 @@ class TestAgentServiceMock:
         assert result == "test answer"
 
     def test_prepare_query_route_warns_when_pre_turn_context_exceeds_budget(self, tmp_path, monkeypatch):
-        from ds_course_agent.rag.agent import AgentService
-        from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
         import ds_course_agent.shared.config as config
         import ds_course_agent.shared.context_governor as context_governor
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
         from ds_course_agent.shared.context_governor import ContextBudget
 
         monkeypatch.setattr(config, "storage_path", str(tmp_path))
@@ -81,8 +81,7 @@ class TestAgentServiceMock:
 
         assert route_state["decision"].retrieval_policy == "disabled"
         assert any(
-            event["stage"] == "context_governor.warning"
-            and event["data"]["location"] == "agent.prepare_query_route"
+            event["stage"] == "context_governor.warning" and event["data"]["location"] == "agent.prepare_query_route"
             for event in trace["events"]
         )
 
@@ -120,8 +119,8 @@ class TestAgentServiceMock:
         ]
 
     def test_agent_chat_retries_retryable_errors_with_exponential_backoff(self, monkeypatch):
-        from ds_course_agent.rag.agent import AgentService
         import ds_course_agent.rag.agent as agent_module
+        from ds_course_agent.rag.agent import AgentService
 
         mock_agent = MagicMock()
         mock_agent.invoke.side_effect = [
@@ -145,8 +144,8 @@ class TestAgentServiceMock:
         assert mock_agent.invoke.call_count == 3
 
     def test_agent_chat_does_not_retry_permanent_auth_error(self, monkeypatch):
-        from ds_course_agent.rag.agent import AgentService
         import ds_course_agent.rag.agent as agent_module
+        from ds_course_agent.rag.agent import AgentService
 
         class AuthError(Exception):
             status_code = 401
@@ -170,8 +169,8 @@ class TestAgentServiceMock:
         sleep.assert_not_called()
 
     def test_agent_chat_degrades_bad_request_to_basic_rag(self, monkeypatch):
-        from ds_course_agent.rag.agent import AgentService
         import ds_course_agent.rag.agent as agent_module
+        from ds_course_agent.rag.agent import AgentService
 
         class BadRequestError(Exception):
             status_code = 400
@@ -194,8 +193,8 @@ class TestAgentServiceMock:
         assert mock_agent.invoke.call_count == 1
 
     def test_agent_stream_retries_pre_delta_retryable_error_with_blocking_invoke(self, monkeypatch):
-        from ds_course_agent.rag.agent import AgentService
         import ds_course_agent.rag.agent as agent_module
+        from ds_course_agent.rag.agent import AgentService
 
         mock_agent = MagicMock()
         mock_agent.stream.side_effect = TimeoutError("timeout before first delta")
@@ -325,6 +324,7 @@ class TestSystemPrompt:
 
     def test_system_prompt_has_course_name(self):
         from pathlib import Path
+
         import ds_course_agent.shared.config as config
 
         prompt_path = Path(__file__).parent.parent / "docs" / "prompts" / "system_prompt.txt"
@@ -413,11 +413,10 @@ class TestFormatChatHistory:
         assert result[1].content == "a1"
         assert result[2].content == "q2"
 
-
-
     def test_build_grounded_query_from_history_uses_shared_context_template(self):
-        from ds_course_agent.rag.query_pipeline.utils import build_grounded_query_from_history
         from langchain_core.messages import AIMessage, HumanMessage
+
+        from ds_course_agent.rag.query_pipeline.utils import build_grounded_query_from_history
 
         history = [
             HumanMessage(content="SVM 的核函数有什么作用？"),
@@ -451,9 +450,7 @@ class TestChatWithHistory:
         mock_get_history.return_value = mock_history
 
         mock_memory = MagicMock()
-        mock_memory.get_profile.return_value = SimpleNamespace(
-            progress=SimpleNamespace(current_chapter=None)
-        )
+        mock_memory.get_profile.return_value = SimpleNamespace(progress=SimpleNamespace(current_chapter=None))
         mock_get_memory_core.return_value = mock_memory
 
         service = AgentService.__new__(AgentService)
@@ -475,9 +472,7 @@ class TestChatWithHistory:
     @patch("ds_course_agent.shared.history.get_history")
     @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
     @patch("ds_course_agent.rag.agent.get_memory_core")
-    def test_chat_with_history_with_existing_messages(
-        self, mock_get_memory_core, _mock_map, mock_get_history
-    ):
+    def test_chat_with_history_with_existing_messages(self, mock_get_memory_core, _mock_map, mock_get_history):
         from ds_course_agent.rag.agent import AgentService
 
         mock_agent = MagicMock()
@@ -491,9 +486,7 @@ class TestChatWithHistory:
         mock_get_history.return_value = mock_history
 
         mock_memory = MagicMock()
-        mock_memory.get_profile.return_value = SimpleNamespace(
-            progress=SimpleNamespace(current_chapter=None)
-        )
+        mock_memory.get_profile.return_value = SimpleNamespace(progress=SimpleNamespace(current_chapter=None))
         mock_get_memory_core.return_value = mock_memory
 
         service = AgentService.__new__(AgentService)
@@ -654,10 +647,12 @@ class TestChatWithHistory:
         assert result == "next class answer"
         mock_resolve_schedule.assert_called_once()
 
+
 class TestAgentShortTermMemory:
     def test_format_chat_history_keeps_summary_before_recent_window(self):
-        from ds_course_agent.rag.agent import AgentService
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+        from ds_course_agent.rag.agent import AgentService
 
         service = AgentService.__new__(AgentService)
         summary = SystemMessage(
@@ -677,8 +672,9 @@ class TestAgentShortTermMemory:
         assert isinstance(result[2], AIMessage)
 
     def test_collect_recent_context_includes_summary_and_recent_messages(self):
-        from ds_course_agent.rag.query_pipeline.utils import collect_recent_context
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+        from ds_course_agent.rag.query_pipeline.utils import collect_recent_context
 
         history = [
             SystemMessage(
@@ -696,9 +692,10 @@ class TestAgentShortTermMemory:
         assert "上一答" in context
 
     def test_prepare_query_route_uses_compacted_history(self, monkeypatch):
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
         from ds_course_agent.rag.agent import AgentService
         from ds_course_agent.rag.profile_models import StudentProfile
-        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
         service = object.__new__(AgentService)
         service.skill_loader = None

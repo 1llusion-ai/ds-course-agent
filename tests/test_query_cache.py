@@ -3,9 +3,9 @@ import time
 import pytest
 
 from ds_course_agent.rag import knowledge_mapper
-from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.rag.knowledge_mapper import MatchedConcept
 from ds_course_agent.rag.query_pipeline import utils
+from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.shared import embeddings
 
 
@@ -136,11 +136,7 @@ def test_embedding_query_timeout_guard_opens_circuit(monkeypatch):
     trace = end_query_trace(token)
 
     assert model.calls == 1
-    assert any(
-        event["stage"] == "embedding.timeout"
-        and event["status"] == "error"
-        for event in trace["events"]
-    )
+    assert any(event["stage"] == "embedding.timeout" and event["status"] == "error" for event in trace["events"])
 
     with pytest.raises(embeddings.EmbeddingUnavailable):
         embeddings.embed_query_cached(model, "第二次")

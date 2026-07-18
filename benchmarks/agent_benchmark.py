@@ -12,25 +12,25 @@ import hashlib
 import io
 import json
 import sys
-from pathlib import Path
 import tempfile
 from collections import Counter, defaultdict
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-import ds_course_agent.shared.config as config
-from ds_course_agent.api import core_bridge
 import ds_course_agent.rag.agent as agent_module
 import ds_course_agent.rag.memory_core as memory_core_module
+import ds_course_agent.shared.config as config
+from ds_course_agent.api import core_bridge
 from ds_course_agent.rag.profile_models import ConceptFocus, ProgressInfo, StudentProfile, WeakSpotCandidate
 
 DEFAULT_BENCHMARK_PATH = Path(__file__).parent / "data" / "agent_tasks_v1.json"
 DEFAULT_REPORT_PATH = Path("var") / "artifacts" / "benchmarks" / "agent_benchmark_report.json"
 PROMPT_PATH = Path(__file__).parent.parent / "docs" / "prompts" / "system_prompt.txt"
 KNOWLEDGE_GRAPH_PATH = Path(__file__).parent.parent / "data" / "knowledge_graph.json"
+
 
 def safe_print(text: str) -> None:
     """Print text without crashing on Windows encoding issues."""
@@ -40,12 +40,14 @@ def safe_print(text: str) -> None:
         encoding = sys.stdout.encoding or "utf-8"
         print(text.encode(encoding, errors="replace").decode(encoding))
 
-def _sha256_of_file(path: Path) -> Optional[str]:
+
+def _sha256_of_file(path: Path) -> str | None:
     if not path.exists():
         return None
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
-def _normalize_keyword_groups(items: Optional[list[Any]]) -> list[list[str]]:
+
+def _normalize_keyword_groups(items: list[Any] | None) -> list[list[str]]:
     groups: list[list[str]] = []
     for item in items or []:
         if isinstance(item, str):
@@ -56,8 +58,10 @@ def _normalize_keyword_groups(items: Optional[list[Any]]) -> list[list[str]]:
                 groups.append(group)
     return groups
 
+
 def _contains_keyword(text: str, keyword: str) -> bool:
     return keyword.lower() in text.lower()
+
 
 def _match_keyword_groups(text: str, groups: list[list[str]]) -> tuple[bool, list[dict[str, Any]]]:
     details: list[dict[str, Any]] = []
@@ -68,8 +72,10 @@ def _match_keyword_groups(text: str, groups: list[list[str]]) -> tuple[bool, lis
 
     return all(item["matched"] for item in details), details
 
+
 def _find_forbidden_keywords(text: str, keywords: list[str]) -> list[str]:
     return [keyword for keyword in keywords if _contains_keyword(text, keyword)]
+
 
 @dataclass
 class AgentTask:
@@ -77,7 +83,7 @@ class AgentTask:
     category: str
     description: str
     turns: list[str]
-    must_use_tool: Optional[bool] = None
+    must_use_tool: bool | None = None
     must_use_context: bool = False
     must_personalize: bool = False
     must_fail_safe: bool = False
@@ -90,7 +96,7 @@ class AgentTask:
     notes: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AgentTask":
+    def from_dict(cls, data: dict[str, Any]) -> AgentTask:
         return cls(
             id=data["id"],
             category=data["category"],
@@ -109,12 +115,14 @@ class AgentTask:
             notes=data.get("notes", ""),
         )
 
+
 def load_agent_tasks(path: Path | str = DEFAULT_BENCHMARK_PATH) -> tuple[dict[str, Any], list[AgentTask]]:
     benchmark_path = Path(path)
     payload = json.loads(benchmark_path.read_text(encoding="utf-8"))
     tasks = [AgentTask.from_dict(item) for item in payload.get("tasks", [])]
     metadata = {key: value for key, value in payload.items() if key != "tasks"}
     return metadata, tasks
+
 
 def collect_benchmark_snapshot(benchmark_path: Path | str) -> dict[str, Any]:
     benchmark_path = Path(benchmark_path)
@@ -156,6 +164,7 @@ def collect_benchmark_snapshot(benchmark_path: Path | str) -> dict[str, Any]:
         },
     }
 
+
 def _build_seed_profile(student_id: str, seed: dict[str, Any]) -> StudentProfile:
     profile = StudentProfile(student_id=student_id)
 
@@ -193,6 +202,7 @@ def _build_seed_profile(student_id: str, seed: dict[str, Any]) -> StudentProfile
 
     return profile
 
+
 @contextmanager
 def isolated_benchmark_environment():
     """Run benchmark in a temporary history/profile sandbox."""
@@ -221,12 +231,17 @@ def isolated_benchmark_environment():
             config.storage_path = old_storage_path
             config.CHAT_HISTORY_DIR = old_chat_history_dir
 
+
 def score_agent_task(task: AgentTask, turn_results: list[dict[str, Any]]) -> dict[str, Any]:
-    final_turn = turn_results[-1] if turn_results else {
-        "assistant": "",
-        "used_retrieval": False,
-        "sources": [],
-    }
+    final_turn = (
+        turn_results[-1]
+        if turn_results
+        else {
+            "assistant": "",
+            "used_retrieval": False,
+            "sources": [],
+        }
+    )
     final_response = final_turn.get("assistant", "")
     retrieval_used_any_turn = any(item.get("used_retrieval") for item in turn_results)
     sources_present = any(item.get("sources") for item in turn_results)
@@ -295,11 +310,12 @@ def score_agent_task(task: AgentTask, turn_results: list[dict[str, Any]]) -> dic
         },
     }
 
+
 def run_agent_benchmark(
     benchmark_path: Path | str = DEFAULT_BENCHMARK_PATH,
     output_path: Path | str = DEFAULT_REPORT_PATH,
-    limit: Optional[int] = None,
-    task_ids: Optional[list[str]] = None,
+    limit: int | None = None,
+    task_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     metadata, tasks = load_agent_tasks(benchmark_path)
 
@@ -368,6 +384,7 @@ def run_agent_benchmark(
 
     return report
 
+
 def build_benchmark_report(
     metadata: dict[str, Any],
     snapshot: dict[str, Any],
@@ -397,9 +414,9 @@ def build_benchmark_report(
         by_category[category] = {
             "total": len(items),
             "passed": sum(1 for item in items if item["score"]["success"]),
-            "success_rate": _rate(items, "task_completion") if not items else sum(
-                1 for item in items if item["score"]["success"]
-            ) / len(items),
+            "success_rate": _rate(items, "task_completion")
+            if not items
+            else sum(1 for item in items if item["score"]["success"]) / len(items),
         }
 
     return {
@@ -419,6 +436,7 @@ def build_benchmark_report(
         "by_category": by_category,
         "results": results,
     }
+
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the agent task benchmark")
@@ -445,6 +463,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Run only specific task ids. Can be provided multiple times.",
     )
     return parser
+
 
 if __name__ == "__main__":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")

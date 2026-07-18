@@ -66,41 +66,186 @@ _GREETING_TERMS = ("你好", "您好", "hello", "hi", "早上好", "晚上好")
 _THANKS_TERMS = ("谢谢", "多谢", "感谢", "收到", "好的谢谢", "好嘞谢谢")
 
 _LEARNING_TERMS = (
-    "课程", "学习", "教学", "教育", "教程", "教材", "作业", "考试", "复习",
-    "论文", "paper", "arxiv", "openreview", "github", "开源", "项目", "代码",
-    "编程", "python", "pandas", "numpy", "sklearn", "sql", "数据", "数据集",
-    "数据科学", "数据分析", "机器学习", "深度学习", "人工智能", "大模型", "llm",
-    "agent", "rag", "gpt", "openai", "claude", "gemini", "算法", "模型", "统计", "概率", "可视化", "分类", "回归",
-    "聚类", "神经网络", "强化学习", "nlp", "transformer", "微调", "训练",
-    "评估", "特征", "损失函数", "梯度", "过拟合", "欠拟合", "svm", "pca",
-    "cnn", "rnn", "gan", "vae", "ppo", "dapo", "dpo", "grpo", "gspo",
-    "rlhf", "edu", "tutor", "course", "learning", "teaching", "education",
-    "dataset", "data science", "machine learning", "deep learning",
-    "reinforcement learning", "open source",
+    "课程",
+    "学习",
+    "教学",
+    "教育",
+    "教程",
+    "教材",
+    "作业",
+    "考试",
+    "复习",
+    "论文",
+    "paper",
+    "arxiv",
+    "openreview",
+    "github",
+    "开源",
+    "项目",
+    "代码",
+    "编程",
+    "python",
+    "pandas",
+    "numpy",
+    "sklearn",
+    "sql",
+    "数据",
+    "数据集",
+    "数据科学",
+    "数据分析",
+    "机器学习",
+    "深度学习",
+    "人工智能",
+    "大模型",
+    "llm",
+    "agent",
+    "rag",
+    "gpt",
+    "openai",
+    "claude",
+    "gemini",
+    "算法",
+    "模型",
+    "统计",
+    "概率",
+    "可视化",
+    "分类",
+    "回归",
+    "聚类",
+    "神经网络",
+    "强化学习",
+    "nlp",
+    "transformer",
+    "微调",
+    "训练",
+    "评估",
+    "特征",
+    "损失函数",
+    "梯度",
+    "过拟合",
+    "欠拟合",
+    "svm",
+    "pca",
+    "cnn",
+    "rnn",
+    "gan",
+    "vae",
+    "ppo",
+    "dapo",
+    "dpo",
+    "grpo",
+    "gspo",
+    "rlhf",
+    "edu",
+    "tutor",
+    "course",
+    "learning",
+    "teaching",
+    "education",
+    "dataset",
+    "data science",
+    "machine learning",
+    "deep learning",
+    "reinforcement learning",
+    "open source",
 )
 
 _DATA_ANALYSIS_BRIDGE_TERMS = (
-    "数据", "数据集", "统计", "分析", "可视化", "建模", "预测", "回归", "分类",
-    "聚类", "采集", "爬取", "清洗", "特征", "分布", "相关性", "python", "pandas",
-    "图表", "dataset", "data", "analysis", "visualization", "modeling",
+    "数据",
+    "数据集",
+    "统计",
+    "分析",
+    "可视化",
+    "建模",
+    "预测",
+    "回归",
+    "分类",
+    "聚类",
+    "采集",
+    "爬取",
+    "清洗",
+    "特征",
+    "分布",
+    "相关性",
+    "python",
+    "pandas",
+    "图表",
+    "dataset",
+    "data",
+    "analysis",
+    "visualization",
+    "modeling",
 )
 
 _OFF_TOPIC_TERMS = (
-    "天气", "气温", "下雨", "娱乐", "八卦", "明星", "股价", "股票", "基金",
-    "彩票", "体育", "比分", "nba", "足球", "篮球", "政治新闻", "时政", "旅游",
-    "酒店", "机票", "餐厅", "外卖", "菜谱", "优惠券", "购物", "商品", "房价",
-    "星座", "电影票房", "bitcoin", "比特币", "crypto", "旅游攻略",
+    "天气",
+    "气温",
+    "下雨",
+    "娱乐",
+    "八卦",
+    "明星",
+    "股价",
+    "股票",
+    "基金",
+    "彩票",
+    "体育",
+    "比分",
+    "nba",
+    "足球",
+    "篮球",
+    "政治新闻",
+    "时政",
+    "旅游",
+    "酒店",
+    "机票",
+    "餐厅",
+    "外卖",
+    "菜谱",
+    "优惠券",
+    "购物",
+    "商品",
+    "房价",
+    "星座",
+    "电影票房",
+    "bitcoin",
+    "比特币",
+    "crypto",
+    "旅游攻略",
 )
 
 _SPORTS_OR_CELEBRITY_TERMS = (
-    "詹姆斯", "勒布朗", "lebron", "james", "库里", "curry", "乔丹", "jordan",
-    "梅西", "messi", "c罗", "ronaldo", "科比", "kobe", "nba", "球员", "球队",
-    "明星", "演员", "歌手",
+    "詹姆斯",
+    "勒布朗",
+    "lebron",
+    "james",
+    "库里",
+    "curry",
+    "乔丹",
+    "jordan",
+    "梅西",
+    "messi",
+    "c罗",
+    "ronaldo",
+    "科比",
+    "kobe",
+    "nba",
+    "球员",
+    "球队",
+    "明星",
+    "演员",
+    "歌手",
 )
 
 _POLITICS_GENERAL_TERMS = (
-    "美国总统", "现任总统", "总统是谁", "总统叫什么", "国家主席", "首相是谁",
-    "总理是谁", "president", "prime minister",
+    "美国总统",
+    "现任总统",
+    "总统是谁",
+    "总统叫什么",
+    "国家主席",
+    "首相是谁",
+    "总理是谁",
+    "president",
+    "prime minister",
 )
 
 _GENERAL_FACT_PATTERNS = (
@@ -149,7 +294,9 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
         )
 
     has_learning_signal = _contains_any(compact_lowered, _LEARNING_TERMS) or _contains_any(lowered, _LEARNING_TERMS)
-    has_bridge_signal = _contains_any(compact_lowered, _DATA_ANALYSIS_BRIDGE_TERMS) or _contains_any(lowered, _DATA_ANALYSIS_BRIDGE_TERMS)
+    has_bridge_signal = _contains_any(compact_lowered, _DATA_ANALYSIS_BRIDGE_TERMS) or _contains_any(
+        lowered, _DATA_ANALYSIS_BRIDGE_TERMS
+    )
 
     # Data-analysis framing makes otherwise general-world subjects acceptable.
     if has_learning_signal or has_bridge_signal:
@@ -160,8 +307,12 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
             "contains course/data-science/programming/research signal",
         )
 
-    politics_hit = _contains_any(compact_lowered, _POLITICS_GENERAL_TERMS) or _contains_any(lowered, _POLITICS_GENERAL_TERMS)
-    if politics_hit or _matches_any(raw, (r"(美国|中国|法国|英国|德国|日本|韩国).*(总统|主席|首相|总理).*(谁|哪位|叫什么)",)):
+    politics_hit = _contains_any(compact_lowered, _POLITICS_GENERAL_TERMS) or _contains_any(
+        lowered, _POLITICS_GENERAL_TERMS
+    )
+    if politics_hit or _matches_any(
+        raw, (r"(美国|中国|法国|英国|德国|日本|韩国).*(总统|主席|首相|总理).*(谁|哪位|叫什么)",)
+    ):
         return ScopeDecision(
             "refuse",
             "politics_general_fact",
@@ -173,7 +324,9 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
             ),
         )
 
-    sports_or_celebrity_hit = _contains_any(compact_lowered, _SPORTS_OR_CELEBRITY_TERMS) or _contains_any(lowered, _SPORTS_OR_CELEBRITY_TERMS)
+    sports_or_celebrity_hit = _contains_any(compact_lowered, _SPORTS_OR_CELEBRITY_TERMS) or _contains_any(
+        lowered, _SPORTS_OR_CELEBRITY_TERMS
+    )
     if sports_or_celebrity_hit and _matches_any(compact_lowered, _GENERAL_FACT_PATTERNS):
         return ScopeDecision(
             "refuse",

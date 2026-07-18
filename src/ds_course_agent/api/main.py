@@ -1,13 +1,13 @@
 """FastAPI application entrypoint."""
-import logging
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ds_course_agent.shared.logging_config import setup_logging
 import ds_course_agent.shared.config as config
+from ds_course_agent.shared.logging_config import setup_logging
 
 # 在应用启动时初始化日志（必须在导入其他业务模块之前）
 setup_logging(level=config.LOG_LEVEL)
@@ -35,9 +35,7 @@ app = FastAPI(
 )
 
 _cors_origins = [
-    origin.strip()
-    for origin in str(getattr(config, "CORS_ALLOW_ORIGINS", "") or "").split(",")
-    if origin.strip()
+    origin.strip() for origin in str(getattr(config, "CORS_ALLOW_ORIGINS", "") or "").split(",") if origin.strip()
 ]
 if not _cors_origins:
     _cors_origins = [

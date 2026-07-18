@@ -1,9 +1,10 @@
 """Shared query-pipeline text and message helpers."""
+
 from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.messages import BaseMessage
 
@@ -14,17 +15,41 @@ JUDGEMENT_CUES = ["是否", "要不要", "需不需要", "还需要", "还能不
 SUMMARY_MARKER = "short_memory_summary"
 
 SCHEDULE_CUES = [
-    "课表", "课程安排", "上课时间", "什么时候上课",
-    "几点上课", "上课地点", "在哪上课", "教室",
-    "第几周", "周几上课", "第几节",
-    "这周有什么课", "本周有什么课", "今天有课吗", "今天有没有课",
-    "明天有课吗", "明天有没有课", "后天有课吗", "后天有没有课",
-    "今天上课吗", "明天上课吗", "后天上课吗", "下周有什么课",
-    "这学期什么时候有课", "本学期什么时候有课",
-    "这学期有哪些课", "本学期有哪些课",
-    "这学期课程安排", "本学期课程安排",
-    "这学期上课安排", "本学期上课安排",
-    "下次课", "下一次课", "下节课", "下下节课",
+    "课表",
+    "课程安排",
+    "上课时间",
+    "什么时候上课",
+    "几点上课",
+    "上课地点",
+    "在哪上课",
+    "教室",
+    "第几周",
+    "周几上课",
+    "第几节",
+    "这周有什么课",
+    "本周有什么课",
+    "今天有课吗",
+    "今天有没有课",
+    "明天有课吗",
+    "明天有没有课",
+    "后天有课吗",
+    "后天有没有课",
+    "今天上课吗",
+    "明天上课吗",
+    "后天上课吗",
+    "下周有什么课",
+    "这学期什么时候有课",
+    "本学期什么时候有课",
+    "这学期有哪些课",
+    "本学期有哪些课",
+    "这学期课程安排",
+    "本学期课程安排",
+    "这学期上课安排",
+    "本学期上课安排",
+    "下次课",
+    "下一次课",
+    "下节课",
+    "下下节课",
 ]
 
 DATETIME_CUES = [
@@ -46,11 +71,35 @@ DATETIME_CUES = [
 ]
 
 FOLLOWUP_CUES = [
-    "那它", "那这个", "这个", "那个", "它", "他", "她", "上面", "上述",
-    "刚才", "前面", "前面说的", "那为什么", "那怎么", "那是不是",
-    "还需要", "那还", "那如果", "这种情况", "继续", "再解释",
-    "再讲", "展开", "详细说", "能再解释一下吗", "再解释一下",
-    "什么意思", "怎么理解", "需要吗",
+    "那它",
+    "那这个",
+    "这个",
+    "那个",
+    "它",
+    "他",
+    "她",
+    "上面",
+    "上述",
+    "刚才",
+    "前面",
+    "前面说的",
+    "那为什么",
+    "那怎么",
+    "那是不是",
+    "还需要",
+    "那还",
+    "那如果",
+    "这种情况",
+    "继续",
+    "再解释",
+    "再讲",
+    "展开",
+    "详细说",
+    "能再解释一下吗",
+    "再解释一下",
+    "什么意思",
+    "怎么理解",
+    "需要吗",
 ]
 
 
@@ -131,9 +180,7 @@ def is_summary_message(message: Any) -> bool:
             getattr(message, "additional_kwargs", {}).get(SUMMARY_MARKER)
         )
     if isinstance(message, dict):
-        return message.get("role") == "system" and bool(
-            message.get("additional_kwargs", {}).get(SUMMARY_MARKER)
-        )
+        return message.get("role") == "system" and bool(message.get("additional_kwargs", {}).get(SUMMARY_MARKER))
     return False
 
 
@@ -159,11 +206,11 @@ def message_content(message: Any) -> str:
 
 
 def collect_recent_context(
-    chat_history: Optional[list[Any]],
+    chat_history: list[Any] | None,
     *,
     limit: int = 4,
     include_roles: bool = False,
-    ai_truncate_chars: Optional[int] = None,
+    ai_truncate_chars: int | None = None,
     include_summary: bool = True,
 ) -> str:
     """Collect summary-aware recent context from supported chat history shapes."""
@@ -210,7 +257,7 @@ def build_grounded_context_query(question: str, recent_context: str) -> str:
 
 def build_grounded_query_from_history(
     question: str,
-    chat_history: Optional[list[Any]],
+    chat_history: list[Any] | None,
     *,
     allow_short_question: bool = False,
     include_roles: bool = False,

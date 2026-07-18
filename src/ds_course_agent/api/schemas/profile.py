@@ -1,14 +1,13 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict
 
 
 class ConceptFocus(BaseModel):
     concept_id: str
     display_name: str
     mention_count: int
-    chapter: Optional[str] = None
-    last_mentioned_at: Optional[str] = None
-    last_question_type: Optional[str] = None
+    chapter: str | None = None
+    last_mentioned_at: str | None = None
+    last_question_type: str | None = None
 
 
 class WeakSpot(BaseModel):
@@ -17,14 +16,14 @@ class WeakSpot(BaseModel):
     confidence: float = Field(ge=0, le=1)
     evidence_count: int
     clarification_count: int = 0
-    first_detected_at: Optional[str] = None
-    last_triggered_at: Optional[str] = None
-    resolved_at: Optional[str] = None
-    resolution_note: Optional[str] = None
+    first_detected_at: str | None = None
+    last_triggered_at: str | None = None
+    resolved_at: str | None = None
+    resolution_note: str | None = None
 
 
 class LearningProgress(BaseModel):
-    current_chapter: Optional[str] = None
+    current_chapter: str | None = None
     total_interactions: int
     concepts_explored: int
 
@@ -46,30 +45,30 @@ class RelatedConcept(BaseModel):
 class ConceptDetail(BaseModel):
     concept_id: str
     display_name: str
-    chapter: Optional[str] = None
-    section: Optional[str] = None
-    aliases: List[str]
-    related_concepts: List[RelatedConcept]
-    textbook_excerpt: Optional[str] = None
-    sources: List[dict] = []
+    chapter: str | None = None
+    section: str | None = None
+    aliases: list[str]
+    related_concepts: list[RelatedConcept]
+    textbook_excerpt: str | None = None
+    sources: list[dict] = []
 
 
 class ProfileSummary(BaseModel):
     student_id: str
-    recent_concepts: List[ConceptFocus]
-    pending_weak_spots: List[WeakSpot]
-    weak_spots: List[WeakSpot]
+    recent_concepts: list[ConceptFocus]
+    pending_weak_spots: list[WeakSpot]
+    weak_spots: list[WeakSpot]
     resolved_weak_spot_count: int = 0
     total_overcome_weak_spots: int = 0
 
 
 class ProfileDetail(BaseModel):
     student_id: str
-    recent_concepts: List[ConceptFocus]
-    pending_weak_spots: List[WeakSpot]
-    weak_spots: List[WeakSpot]
-    resolved_weak_spots: List[WeakSpot]
+    recent_concepts: list[ConceptFocus]
+    pending_weak_spots: list[WeakSpot]
+    weak_spots: list[WeakSpot]
+    resolved_weak_spots: list[WeakSpot]
     progress: LearningProgress
-    chapter_stats: Dict[str, int]
-    daily_activity: Dict[str, int]
+    chapter_stats: dict[str, int]
+    daily_activity: dict[str, int]
     stats: ProfileStats

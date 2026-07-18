@@ -4,10 +4,10 @@ Query Rewriter
 保守版查询改写器：不修改 original_query / normalized_query，只生成面向检索和
 follow-up 理解的 enriched_query，并把改写轨迹写入 context.metadata["rewrite"]。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from .models import QueryContext
 from .utils import (
@@ -139,15 +139,14 @@ class QueryRewriter:
         normalized = normalize_query_text(query)
         return is_datetime_request(normalized) or is_schedule_request(normalized)
 
-    def _rewrite_specific_followup(self, query: str, recent_context: str) -> Optional[str]:
+    def _rewrite_specific_followup(self, query: str, recent_context: str) -> str | None:
         normalized_query = normalize_query_text(query)
         normalized_context = normalize_query_text(recent_context)
         if not recent_context.strip():
             return None
 
         has_svm_kernel_context = any(
-            token in normalized_context
-            for token in ["svm", "支持向量机", "核函数", "线性核", "kernel"]
+            token in normalized_context for token in ["svm", "支持向量机", "核函数", "线性核", "kernel"]
         )
         asks_linear_separable_kernel = (
             "线性可分" in normalized_query
@@ -159,8 +158,7 @@ class QueryRewriter:
 
         return None
 
-
-    def _rewrite_entity_followup(self, query: str, recent_context: str) -> Optional[str]:
+    def _rewrite_entity_followup(self, query: str, recent_context: str) -> str | None:
         if not recent_context.strip():
             return None
 
@@ -184,7 +182,7 @@ class QueryRewriter:
 
         return None
 
-    def _latest_context_entity(self, recent_context: str) -> Optional[str]:
+    def _latest_context_entity(self, recent_context: str) -> str | None:
         normalized_context = normalize_query_text(recent_context)
         latest: tuple[int, str] | None = None
         for canonical, aliases in COURSE_ENTITY_ALIASES:
@@ -196,11 +194,11 @@ class QueryRewriter:
                 latest = (position, canonical)
         return latest[1] if latest else None
 
-    def _replace_pronoun_prefix(self, query: str, entity: str) -> Optional[str]:
+    def _replace_pronoun_prefix(self, query: str, entity: str) -> str | None:
         stripped = query.strip()
         for pronoun in PRONOUN_PREFIXES:
             if stripped.startswith(pronoun):
-                suffix = stripped[len(pronoun):].lstrip("的")
+                suffix = stripped[len(pronoun) :].lstrip("的")
                 return f"{entity}{suffix}" if suffix else entity
         return None
 
@@ -211,9 +209,24 @@ class QueryRewriter:
             return False
 
         topic_cues = [
-            "过拟合", "欠拟合", "正则化", "剪枝", "泛化", "效果", "优缺点",
-            "优点", "缺点", "怎么解决", "如何解决", "怎么办", "怎么处理",
-            "为什么", "适用场景", "应用场景", "参数", "复杂度",
+            "过拟合",
+            "欠拟合",
+            "正则化",
+            "剪枝",
+            "泛化",
+            "效果",
+            "优缺点",
+            "优点",
+            "缺点",
+            "怎么解决",
+            "如何解决",
+            "怎么办",
+            "怎么处理",
+            "为什么",
+            "适用场景",
+            "应用场景",
+            "参数",
+            "复杂度",
         ]
         return any(cue in normalized_query for cue in topic_cues)
 
@@ -232,7 +245,7 @@ class QueryRewriter:
         return build_grounded_context_query(rewritten_query, recent_context)
 
 
-_rewriter: Optional[QueryRewriter] = None
+_rewriter: QueryRewriter | None = None
 
 
 def get_rewriter() -> QueryRewriter:

@@ -2,10 +2,10 @@
 重排序模块 - 基于 CrossEncoder 的精排层
 接收粗排候选文档，计算 query-doc 相关性分数，返回重排后的结果
 """
+
 import logging
 import warnings
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple
 
 from langchain_core.documents import Document
 
@@ -18,7 +18,7 @@ class BaseReranker(ABC):
     """重排序器抽象基类"""
 
     @abstractmethod
-    def rerank(self, query: str, documents: List[Document]) -> List[Tuple[Document, float]]:
+    def rerank(self, query: str, documents: list[Document]) -> list[tuple[Document, float]]:
         """
         对候选文档进行重排序
 
@@ -46,6 +46,7 @@ class CrossEncoderReranker(BaseReranker):
         """延迟加载 CrossEncoder 模型"""
         try:
             from sentence_transformers import CrossEncoder
+
             # CrossEncoder 不接受 'auto' 作为 device，需要转换为 None 让库自动推断
             device = None if self.device == "auto" else self.device
             logger.info("加载模型: %s (device=%s)", self.model_name, self.device)
@@ -58,7 +59,7 @@ class CrossEncoderReranker(BaseReranker):
     def is_available(self) -> bool:
         return self._model is not None
 
-    def rerank(self, query: str, documents: List[Document]) -> List[Tuple[Document, float]]:
+    def rerank(self, query: str, documents: list[Document]) -> list[tuple[Document, float]]:
         if not documents:
             return []
 
@@ -79,7 +80,7 @@ class CrossEncoderReranker(BaseReranker):
             return [(doc, 0.0) for doc in documents]
 
 
-def get_reranker() -> Optional[BaseReranker]:
+def get_reranker() -> BaseReranker | None:
     """
     根据配置获取重排序器实例
     """

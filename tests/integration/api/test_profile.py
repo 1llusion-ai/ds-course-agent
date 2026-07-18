@@ -278,7 +278,9 @@ class TestProfileAPI:
 
         self.memory.aggregate_profile("student004")
 
-        resp = client.post("/api/profile/weak-spots/cross_validation/resolve", headers={"x-test-student-id": "student004"})
+        resp = client.post(
+            "/api/profile/weak-spots/cross_validation/resolve", headers={"x-test-student-id": "student004"}
+        )
         assert resp.status_code == 200
         data = resp.json()
 

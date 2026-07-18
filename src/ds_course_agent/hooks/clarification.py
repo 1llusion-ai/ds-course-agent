@@ -12,6 +12,7 @@ import json
 import re
 from typing import Any
 
+
 def _normalize_query_text(text: str) -> str:
     from ds_course_agent.rag.query_pipeline.utils import normalize_query_text
 
@@ -24,16 +25,38 @@ class ClarificationDetectorHook:
     def is_clarification_request(self, question: str) -> bool:
         normalized = _normalize_query_text(question)
         cues = [
-            "没懂", "不懂", "没明白", "还是不懂", "还是没懂", "再讲", "再解释",
-            "怎么理解", "看不懂", "有点混", "混淆", "通俗", "直观", "举个例子",
-            "再说一遍", "梳理一下", "为什么", "为什么会",
+            "没懂",
+            "不懂",
+            "没明白",
+            "还是不懂",
+            "还是没懂",
+            "再讲",
+            "再解释",
+            "怎么理解",
+            "看不懂",
+            "有点混",
+            "混淆",
+            "通俗",
+            "直观",
+            "举个例子",
+            "再说一遍",
+            "梳理一下",
+            "为什么",
+            "为什么会",
         ]
         return any(cue in normalized for cue in cues)
 
     def is_mastery_signal(self, question: str) -> bool:
         normalized = _normalize_query_text(question)
         cues = [
-            "懂了", "明白了", "会了", "清楚了", "知道了", "理解了", "学会了", "搞懂了",
+            "懂了",
+            "明白了",
+            "会了",
+            "清楚了",
+            "知道了",
+            "理解了",
+            "学会了",
+            "搞懂了",
         ]
         return any(cue in normalized for cue in cues)
 
@@ -63,7 +86,19 @@ class ClarificationDetectorHook:
 
     def extract_distinction_labels(self, question: str, matched_concepts: list[Any]) -> list[str]:
         prefix = question
-        for cue in ["有什么区别", "有什么差别", "区别是什么", "差别是什么", "区别", "差别", "分不清", "混淆", "对比", "比较", "区分"]:
+        for cue in [
+            "有什么区别",
+            "有什么差别",
+            "区别是什么",
+            "差别是什么",
+            "区别",
+            "差别",
+            "分不清",
+            "混淆",
+            "对比",
+            "比较",
+            "区分",
+        ]:
             idx = prefix.find(cue)
             if idx != -1:
                 prefix = prefix[:idx]
@@ -104,13 +139,7 @@ class ClarificationDetectorHook:
         if len(stable_labels) < 2:
             return None
 
-        related_ids = sorted(
-            {
-                match.concept_id
-                for match in matched_concepts[:2]
-                if getattr(match, "concept_id", None)
-            }
-        )
+        related_ids = sorted({match.concept_id for match in matched_concepts[:2] if getattr(match, "concept_id", None)})
         chapter = next(
             (match.chapter for match in matched_concepts if getattr(match, "chapter", None)),
             "",
@@ -120,9 +149,11 @@ class ClarificationDetectorHook:
             "chapter": chapter,
             "related_ids": related_ids,
         }
-        encoded = base64.urlsafe_b64encode(
-            json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
-        ).decode("ascii").rstrip("=")
+        encoded = (
+            base64.urlsafe_b64encode(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+            .decode("ascii")
+            .rstrip("=")
+        )
 
         return {
             "concept_id": f"distinction::{encoded}",

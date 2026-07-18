@@ -9,12 +9,11 @@ Responsibilities:
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 project_root = Path(__file__).parent.parent.parent.parent
 if str(project_root) not in sys.path:
@@ -24,11 +23,12 @@ from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
 from ds_course_agent.tools.course_rag import course_rag_tool
 from ds_course_agent.tools.misconception import record_misconception_event
 
-
 # ---- LLM helpers ----
+
 
 def _get_llm():
     from ds_course_agent.shared.llm import get_chat_model
+
     return get_chat_model()
 
 
@@ -41,6 +41,7 @@ def _call_llm(prompt: str) -> str:
 
 
 # ---- Internal misconception detector (NOT a public tool) ----
+
 
 def _build_classification_prompt(user_question: str, matched_concepts: list) -> str:
     concept_info = ""
@@ -84,7 +85,7 @@ C. 明确错误认知 — 学生明确断言一个错误概念，语气肯定，
 }}"""
 
 
-def _parse_classification_result(raw: str) -> Dict[str, Any]:
+def _parse_classification_result(raw: str) -> dict[str, Any]:
     """Parse JSON from LLM response, return default A if parse fails."""
     try:
         match = re.search(r"\{[^{}]*\}", raw, re.DOTALL)
@@ -104,7 +105,7 @@ def _parse_classification_result(raw: str) -> Dict[str, Any]:
         return _default_a()
 
 
-def _default_a() -> Dict[str, Any]:
+def _default_a() -> dict[str, Any]:
     return {
         "classification": "A",
         "misconception_text": "",
@@ -156,7 +157,7 @@ def _normalize_question(question: str) -> str:
     return re.sub(r"\s+", "", (question or "").lower())
 
 
-def _quick_classify(user_question: str) -> Optional[Dict[str, Any]]:
+def _quick_classify(user_question: str) -> dict[str, Any] | None:
     """Cheap fast-path to avoid LLM classification for obvious normal questions."""
     normalized = _normalize_question(user_question)
     if not normalized:
@@ -173,7 +174,7 @@ def _quick_classify(user_question: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def misconception_detector(user_question: str, matched_concepts: list) -> Dict[str, Any]:
+def misconception_detector(user_question: str, matched_concepts: list) -> dict[str, Any]:
     """Internal LLM step — not a public tool."""
     quick = _quick_classify(user_question)
     if quick is not None:
@@ -184,6 +185,7 @@ def misconception_detector(user_question: str, matched_concepts: list) -> Dict[s
 
 
 # ---- Answer generators ----
+
 
 def _generate_normal_answer(user_question: str, knowledge: str) -> str:
     if knowledge and knowledge != "无相关资料" and len(knowledge) > 30:
@@ -248,6 +250,7 @@ def _generate_direct_correction_answer(
 
 # ---- Record helper ----
 
+
 def _call_record_event(
     session_id: str,
     student_id: str,
@@ -263,28 +266,33 @@ def _call_record_event(
 ) -> None:
     """Call record_misconception_event tool, swallow errors."""
     try:
-        result = record_misconception_event.invoke({
-            "session_id": session_id,
-            "student_id": student_id,
-            "concept_id": concept_id,
-            "misconception_text": misconception_text,
-            "correct_answer": correct_answer,
-            "misconception_type": misconception_type,
-            "severity": severity,
-            "source_evidence": source_evidence,
-            "raw_user_question": raw_user_question,
-            "turn_id": turn_id,
-            "target_bucket": target_bucket,
-        })
+        result = record_misconception_event.invoke(
+            {
+                "session_id": session_id,
+                "student_id": student_id,
+                "concept_id": concept_id,
+                "misconception_text": misconception_text,
+                "correct_answer": correct_answer,
+                "misconception_type": misconception_type,
+                "severity": severity,
+                "source_evidence": source_evidence,
+                "raw_user_question": raw_user_question,
+                "turn_id": turn_id,
+                "target_bucket": target_bucket,
+            }
+        )
         # Log result for debugging
         import logging
+
         logging.debug(f"[Misconception] recorded: {result}")
     except Exception as exc:
         import logging
+
         logging.warning(f"[Misconception] record failed: {exc}")
 
 
 # ---- Main executor ----
+
 
 def execute(
     user_question: str,

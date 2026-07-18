@@ -6,21 +6,22 @@
 2. 生成正则表达式匹配章节标题
 3. 根据页码范围将内容分配到对应章节
 """
+
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
 class SectionInfo:
     """章节信息"""
-    level: int                    # 层级：1=章, 2=节, 3=子节
-    title: str                    # 完整标题
-    number: str                   # 编号：如 "1.1", "1.1.1"
-    name: str                     # 纯名称：如 "数据思维无处不在"
-    page: int                     # 起始页码
-    end_page: Optional[int] = None  # 结束页码（计算得出）
+
+    level: int  # 层级：1=章, 2=节, 3=子节
+    title: str  # 完整标题
+    number: str  # 编号：如 "1.1", "1.1.1"
+    name: str  # 纯名称：如 "数据思维无处不在"
+    page: int  # 起始页码
+    end_page: int | None = None  # 结束页码（计算得出）
     children: list = field(default_factory=list)
 
 
@@ -28,9 +29,9 @@ class TOCParser:
     """目录解析器"""
 
     # 章节编号正则模式
-    CHAPTER_PATTERN = re.compile(r'^第\s*(\d+|十?[一二三四五六七八九十]+)\s*章')
-    SECTION_PATTERN = re.compile(r'^(\d+)\.(\d+)\s+')
-    SUBSECTION_PATTERN = re.compile(r'^(\d+)\.(\d+)\.(\d+)\s+')
+    CHAPTER_PATTERN = re.compile(r"^第\s*(\d+|十?[一二三四五六七八九十]+)\s*章")
+    SECTION_PATTERN = re.compile(r"^(\d+)\.(\d+)\s+")
+    SUBSECTION_PATTERN = re.compile(r"^(\d+)\.(\d+)\.(\d+)\s+")
 
     def __init__(self, toc_path: str = "data/目录.json"):
         self.toc_path = toc_path
@@ -39,62 +40,48 @@ class TOCParser:
 
     def _load_toc(self):
         """加载目录文件"""
-        with open(self.toc_path, 'r', encoding='utf-8') as f:
+        with open(self.toc_path, encoding="utf-8") as f:
             data = json.load(f)
 
-        self.title = data.get('title', '')
-        self._parse_toc_items(data.get('toc', []), level=1)
+        self.title = data.get("title", "")
+        self._parse_toc_items(data.get("toc", []), level=1)
         self._calculate_end_pages()
 
     def _parse_toc_items(self, items: list, level: int):
         """递归解析目录项"""
         for item in items:
-            title = item.get('title', '')
-            page = item.get('page', 0)
+            title = item.get("title", "")
+            page = item.get("page", 0)
 
             # 提取章节编号
             number, name = self._extract_number_and_name(title)
 
-            section = SectionInfo(
-                level=level,
-                title=title,
-                number=number,
-                name=name,
-                page=page
-            )
+            section = SectionInfo(level=level, title=title, number=number, name=name, page=page)
 
             # 递归处理子章节
-            children = item.get('children', [])
+            children = item.get("children", [])
             if children:
                 child_sections = []
                 for child in children:
-                    child_title = child.get('title', '')
-                    child_page = child.get('page', 0)
+                    child_title = child.get("title", "")
+                    child_page = child.get("page", 0)
                     child_num, child_name = self._extract_number_and_name(child_title)
 
                     child_section = SectionInfo(
-                        level=level + 1,
-                        title=child_title,
-                        number=child_num,
-                        name=child_name,
-                        page=child_page
+                        level=level + 1, title=child_title, number=child_num, name=child_name, page=child_page
                     )
 
                     # 处理孙章节
-                    grand_children = child.get('children', [])
+                    grand_children = child.get("children", [])
                     if grand_children:
                         for gc in grand_children:
-                            gc_title = gc.get('title', '')
-                            gc_page = gc.get('page', 0)
+                            gc_title = gc.get("title", "")
+                            gc_page = gc.get("page", 0)
                             gc_num, gc_name = self._extract_number_and_name(gc_title)
 
-                            child_section.children.append(SectionInfo(
-                                level=level + 2,
-                                title=gc_title,
-                                number=gc_num,
-                                name=gc_name,
-                                page=gc_page
-                            ))
+                            child_section.children.append(
+                                SectionInfo(level=level + 2, title=gc_title, number=gc_num, name=gc_name, page=gc_page)
+                            )
 
                     child_sections.append(child_section)
 
@@ -108,21 +95,21 @@ class TOCParser:
         match = self.SUBSECTION_PATTERN.match(title)
         if match:
             number = f"{match.group(1)}.{match.group(2)}.{match.group(3)}"
-            name = title[match.end():].strip()
+            name = title[match.end() :].strip()
             return number, name
 
         # 匹配 1.1 格式
         match = self.SECTION_PATTERN.match(title)
         if match:
             number = f"{match.group(1)}.{match.group(2)}"
-            name = title[match.end():].strip()
+            name = title[match.end() :].strip()
             return number, name
 
         # 匹配 第X章 格式
         match = self.CHAPTER_PATTERN.match(title)
         if match:
             number = f"第{match.group(1)}章"
-            name = title[match.end():].strip()
+            name = title[match.end() :].strip()
             return number, name
 
         # 无编号（如"习题"）
@@ -168,7 +155,7 @@ class TOCParser:
         collect_sections(self.sections)
         self.all_sections = all_sections
 
-    def get_section_by_page(self, page: int) -> Optional[SectionInfo]:
+    def get_section_by_page(self, page: int) -> SectionInfo | None:
         """根据页码查找对应章节，返回层级最深（最具体）的匹配章节"""
         matched_sections = []
         for sec in self.all_sections:
@@ -183,7 +170,7 @@ class TOCParser:
         # 应该返回 "1.4.1"
         return max(matched_sections, key=lambda s: s.level)
 
-    def get_chapter_by_page(self, page: int) -> Optional[SectionInfo]:
+    def get_chapter_by_page(self, page: int) -> SectionInfo | None:
         """根据页码查找对应章"""
         for sec in self.sections:
             if sec.page <= page <= sec.end_page:
@@ -201,20 +188,14 @@ class TOCParser:
                 escaped_num = re.escape(sec.number)
 
                 # 检查是否是数字编号（如 1.1, 1.1.1）
-                if '.' in sec.number:
+                if "." in sec.number:
                     # 数字编号：要求前面不是数字或点，避免 1.4.1 被识别为 4.1
                     # (?<!\d) 负向回顾断言：确保前面不是数字
                     # (?<!\.) 负向回顾断言：确保前面不是点
-                    pattern = re.compile(
-                        rf'(?<!\d)(?<!\.){escaped_num}(?:\s|[^\d\n]){{0,20}}',
-                        re.MULTILINE
-                    )
+                    pattern = re.compile(rf"(?<!\d)(?<!\.){escaped_num}(?:\s|[^\d\n]){{0,20}}", re.MULTILINE)
                 else:
                     # 章编号（如 "第1章"）：直接匹配
-                    pattern = re.compile(
-                        rf'{escaped_num}\s*[^\d\n]{{0,20}}',
-                        re.MULTILINE
-                    )
+                    pattern = re.compile(rf"{escaped_num}\s*[^\d\n]{{0,20}}", re.MULTILINE)
                 patterns[sec.number] = pattern
 
         return patterns

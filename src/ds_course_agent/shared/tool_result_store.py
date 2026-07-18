@@ -15,11 +15,12 @@ import json
 import os
 import re
 import tempfile
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.shared.context_governor import (
@@ -248,11 +249,7 @@ def compact_large_tool_messages(
     compacted: list[Any] = []
     compacted_count = 0
     for index, message in enumerate(message_list):
-        if (
-            index >= preserve_from
-            or _is_compacted_message(message)
-            or not _is_tool_like_message(message)
-        ):
+        if index >= preserve_from or _is_compacted_message(message) or not _is_tool_like_message(message):
             compacted.append(message)
             continue
 

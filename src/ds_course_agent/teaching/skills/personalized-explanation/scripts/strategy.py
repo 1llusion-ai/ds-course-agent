@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import List, Sequence
 
 
 @dataclass
 class TeachingStrategy:
-    target_concepts: List[str] = field(default_factory=list)
-    relevant_weak_spots: List[str] = field(default_factory=list)
-    relevant_known_concepts: List[str] = field(default_factory=list)
+    target_concepts: list[str] = field(default_factory=list)
+    relevant_weak_spots: list[str] = field(default_factory=list)
+    relevant_known_concepts: list[str] = field(default_factory=list)
     suggest_examples: bool = False
 
 
-def _dedupe_keep_order(items: Sequence[str]) -> List[str]:
+def _dedupe_keep_order(items: Sequence[str]) -> list[str]:
     seen = set()
-    result: List[str] = []
+    result: list[str] = []
     for item in items:
         if not item or item in seen:
             continue
@@ -36,7 +36,7 @@ def build_strategy(matched_concepts: list, profile, question: str) -> TeachingSt
 
     mapper = get_knowledge_mapper()
     target_ids = [item.concept_id for item in matched_concepts]
-    related_names: List[str] = []
+    related_names: list[str] = []
 
     for concept in matched_concepts[:2]:
         related_names.extend(mapper.get_related_concepts(concept.concept_id))
@@ -75,17 +75,13 @@ def build_strategy(matched_concepts: list, profile, question: str) -> TeachingSt
 
 def strategy_to_string(strategy: TeachingStrategy, matched_concepts: list) -> str:
     """Render strategy into a short natural-language summary for prompting."""
-    parts: List[str] = []
+    parts: list[str] = []
 
     if strategy.relevant_weak_spots:
-        parts.append(
-            f"学生在 {', '.join(strategy.relevant_weak_spots)} 上还有明显困惑，解释时要更直观，并强调区别。"
-        )
+        parts.append(f"学生在 {', '.join(strategy.relevant_weak_spots)} 上还有明显困惑，解释时要更直观，并强调区别。")
 
     if strategy.relevant_known_concepts:
-        parts.append(
-            f"可以只关联这些强相关旧知识点：{', '.join(strategy.relevant_known_concepts)}。"
-        )
+        parts.append(f"可以只关联这些强相关旧知识点：{', '.join(strategy.relevant_known_concepts)}。")
 
     if strategy.suggest_examples:
         parts.append("建议加入一个小例子或对比例子，帮助学生真正分清概念。")

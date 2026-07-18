@@ -7,7 +7,8 @@ AgentService: concept mentioned, clarification, mastery signal, and synthetic
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ds_course_agent.hooks.clarification import ClarificationDetectorHook
 
@@ -22,7 +23,7 @@ class LearningEventHook:
         self,
         student_id: str,
         session_id: str,
-        concept_id: Optional[str] = None,
+        concept_id: str | None = None,
         *,
         get_memory_core_fn: Callable[[], Any],
     ):
@@ -95,7 +96,7 @@ class LearningEventHook:
         session_id: str,
         student_id: str,
         matched_concepts: list[Any],
-        special_case_response: Optional[str] = None,
+        special_case_response: str | None = None,
         get_memory_core_fn: Callable[[], Any],
         record_event_fn: Callable[[Any], Any],
         classify_question_type_fn: Callable[[str], str],
@@ -168,11 +169,7 @@ class LearningEventHook:
         parent_event_id = (
             distinction_event.event_id
             if distinction_event is not None
-            else (
-                concept_event.event_id
-                if concept_event is not None
-                else learning_concept.get("source_event_id")
-            )
+            else (concept_event.event_id if concept_event is not None else learning_concept.get("source_event_id"))
             or ""
         )
         clarification_concept_id = (

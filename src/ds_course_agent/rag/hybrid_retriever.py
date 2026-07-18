@@ -6,25 +6,24 @@
 2. 向量语义检索: 基于embedding的语义相似度
 3. 融合排序: RR (Reciprocal Rank Fusion)
 """
+
 import copy
 import logging
 import re
 import warnings
-import numpy as np
-from typing import List, Optional
 from dataclasses import dataclass
 
-from rank_bm25 import BM25Okapi
+import chromadb
+import numpy as np
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
-import chromadb
+from rank_bm25 import BM25Okapi
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.shared.embeddings import embed_query_cached, embedding_model_kwargs
 
 logger = logging.getLogger(__name__)
 from ds_course_agent.rag.query_trace import trace_span, trace_step
-
 
 _jieba = None
 
@@ -71,6 +70,7 @@ def _normalize_latin_tokens(text: str) -> str:
 @dataclass
 class RetrievalResult:
     """检索结果"""
+
     document: Document
     bm25_score: float = 0.0
     vector_score: float = 0.0
@@ -81,20 +81,49 @@ class BM25Retriever:
     """BM25稀疏检索器"""
 
     def __init__(self):
-        self.bm25: Optional[BM25Okapi] = None
-        self.documents: List[Document] = []
-        self.tokenized_corpus: List[List[str]] = []
+        self.bm25: BM25Okapi | None = None
+        self.documents: list[Document] = []
+        self.tokenized_corpus: list[list[str]] = []
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """中文分词"""
         text = _normalize_latin_tokens(text)
         # 使用 jieba 分词；lazy import 避免第三方 pkg_resources 警告污染测试输出。
         tokens = list(_get_jieba().cut(text))
         # 过滤停用词和短词
-        stopwords = {'的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一', '一个', '上', '也', '很', '到', '说', '要', '去', '你', '会', '着', '没有', '看', '好', '自己', '这'}
+        stopwords = {
+            "的",
+            "了",
+            "在",
+            "是",
+            "我",
+            "有",
+            "和",
+            "就",
+            "不",
+            "人",
+            "都",
+            "一",
+            "一个",
+            "上",
+            "也",
+            "很",
+            "到",
+            "说",
+            "要",
+            "去",
+            "你",
+            "会",
+            "着",
+            "没有",
+            "看",
+            "好",
+            "自己",
+            "这",
+        }
         return [t.strip() for t in tokens if len(t.strip()) > 1 and t.strip() not in stopwords]
 
-    def add_documents(self, documents: List[Document]):
+    def add_documents(self, documents: list[Document]):
         """添加文档并构建BM25索引"""
         self.documents = documents
         self.tokenized_corpus = []
@@ -107,7 +136,7 @@ class BM25Retriever:
         if self.tokenized_corpus:
             self.bm25 = BM25Okapi(self.tokenized_corpus)
 
-    def retrieve(self, query: str, top_k: int = 10) -> List[tuple[int, float]]:
+    def retrieve(self, query: str, top_k: int = 10) -> list[tuple[int, float]]:
         """
         BM25检索
 
@@ -137,7 +166,7 @@ class BM25Retriever:
 class HybridRetriever:
     """混合检索器 - 融合BM25和向量检索"""
 
-    def __init__(self, collection_name: Optional[str] = None, k: int = 5, use_rerank: Optional[bool] = None):
+    def __init__(self, collection_name: str | None = None, k: int = 5, use_rerank: bool | None = None):
         """
         初始化混合检索器
 
@@ -151,6 +180,7 @@ class HybridRetriever:
         self.use_rerank = use_rerank if use_rerank is not None else config.ENABLE_RERANK
         if self.use_rerank:
             from ds_course_agent.rag.reranker import CrossEncoderReranker
+
             reranker = CrossEncoderReranker()
             if reranker.is_available:
                 self.reranker = reranker
@@ -183,7 +213,7 @@ class HybridRetriever:
         documents = []
         self._doc_text_to_index = {}
         self._doc_prefix_to_index = {}
-        for idx, (text, meta) in enumerate(zip(results['documents'], results['metadatas'])):
+        for idx, (text, meta) in enumerate(zip(results["documents"], results["metadatas"])):
             documents.append(Document(page_content=text, metadata=meta))
             self._doc_text_to_index.setdefault(text, idx)
             self._doc_prefix_to_index.setdefault(text[:200], idx)
@@ -194,7 +224,7 @@ class HybridRetriever:
 
         logger.info("加载了 %d 个文档到BM25索引", len(documents))
 
-    def _vector_search(self, query: str, top_k: int = 10) -> List[tuple[int, float]]:
+    def _vector_search(self, query: str, top_k: int = 10) -> list[tuple[int, float]]:
         """向量语义检索 - 使用ChromaDB"""
         query = _normalize_latin_tokens(query)
         with trace_span("retriever.embedding_query"):
@@ -208,13 +238,13 @@ class HybridRetriever:
             results = self.collection.query(
                 query_embeddings=[query_embedding],
                 n_results=min(top_k * 3, len(self.documents)),
-                include=["documents", "distances"]
+                include=["documents", "distances"],
             )
 
         # 通过内容匹配找到对应的文档索引
         results_list = []
-        if results['documents'] and results['documents'][0]:
-            for doc_text, distance in zip(results['documents'][0], results['distances'][0]):
+        if results["documents"] and results["documents"][0]:
+            for doc_text, distance in zip(results["documents"][0], results["distances"][0]):
                 similarity = 1.0 - float(distance)
                 idx = self._doc_text_to_index.get(doc_text)
                 if idx is None:
@@ -234,11 +264,8 @@ class HybridRetriever:
         return unique_results[:top_k]
 
     def _reciprocal_rank_fusion(
-        self,
-        bm25_results: List[tuple[int, float]],
-        vector_results: List[tuple[int, float]],
-        k: int = 60
-    ) -> List[tuple[int, float]]:
+        self, bm25_results: list[tuple[int, float]], vector_results: list[tuple[int, float]], k: int = 60
+    ) -> list[tuple[int, float]]:
         """
         RRF (Reciprocal Rank Fusion) 融合排序
 
@@ -268,7 +295,7 @@ class HybridRetriever:
         sorted_results = sorted(fusion_scores.items(), key=lambda x: x[1], reverse=True)
         return sorted_results
 
-    def retrieve(self, query: str, top_k: Optional[int] = None) -> List[Document]:
+    def retrieve(self, query: str, top_k: int | None = None) -> list[Document]:
         """
         混合检索
 
@@ -334,7 +361,7 @@ class HybridRetriever:
                 doc = copy.copy(self.documents[doc_idx])
                 # 添加融合分数到返回文档副本，避免污染共享索引文档
                 doc.metadata = dict(doc.metadata or {})
-                doc.metadata['fused_score'] = fused_score
+                doc.metadata["fused_score"] = fused_score
                 candidate_docs.append(doc)
 
         # 重排序
@@ -343,7 +370,7 @@ class HybridRetriever:
             reranked = self.reranker.rerank(query, candidate_docs)
             documents = [doc for doc, score in reranked[:k]]
             for doc, score in reranked[:k]:
-                doc.metadata['rerank_score'] = score
+                doc.metadata["rerank_score"] = score
             logger.debug("Rerank后返回 Top-%d", k)
         else:
             documents = candidate_docs[:k]
@@ -356,21 +383,16 @@ if __name__ == "__main__":
     print("测试混合检索器...")
     retriever = HybridRetriever(k=5)
 
-    test_queries = [
-        "什么是过拟合",
-        "决策树算法",
-        "LASSO回归",
-        "第6章 监督学习"
-    ]
+    test_queries = ["什么是过拟合", "决策树算法", "LASSO回归", "第6章 监督学习"]
 
     for query in test_queries:
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"查询: {query}")
-        print('='*50)
+        print("=" * 50)
 
         results = retriever.retrieve(query)
         for i, doc in enumerate(results, 1):
-            chapter = doc.metadata.get('chapter', 'Unknown')
-            score = doc.metadata.get('fused_score', 0)
+            chapter = doc.metadata.get("chapter", "Unknown")
+            score = doc.metadata.get("fused_score", 0)
             print(f"{i}. [{chapter}] 融合分数: {score:.4f}")
             print(f"   {doc.page_content[:100]}...")

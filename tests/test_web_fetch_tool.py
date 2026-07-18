@@ -2,8 +2,8 @@ import ds_course_agent.tools.web_fetch as web_fetch_module
 from ds_course_agent.tools.web_fetch import (
     WebFetchResult,
     compact_fetched_pages,
-    fetch_web_pages,
     fetch_web_page,
+    fetch_web_pages,
     validate_url_target,
 )
 

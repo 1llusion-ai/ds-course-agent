@@ -48,13 +48,15 @@ def content_to_text(
         parts: list[str] = []
         for item in content:
             if isinstance(item, (str, bytes)):
-                parts.append(content_to_text(
-                    item,
-                    list_joiner=list_joiner,
-                    normalize_whitespace=False,
-                    dict_keys=dict_keys,
-                    json_fallback=json_fallback,
-                ))
+                parts.append(
+                    content_to_text(
+                        item,
+                        list_joiner=list_joiner,
+                        normalize_whitespace=False,
+                        dict_keys=dict_keys,
+                        json_fallback=json_fallback,
+                    )
+                )
             elif isinstance(item, dict):
                 value = next((item.get(key) for key in dict_keys if item.get(key) is not None), None)
                 if value is not None:
