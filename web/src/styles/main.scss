@@ -126,6 +126,29 @@ html.theme-dark .theme-toggle:hover {
   border-color: var(--dark-border) !important;
 }
 
+html.theme-dark .thread-title-button {
+  color: var(--dark-text) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+html.theme-dark .thread-title-button:not(:disabled):hover {
+  color: var(--dark-text) !important;
+  background: var(--dark-panel-soft) !important;
+}
+
+html.theme-dark .thread-title-edit-icon {
+  color: var(--dark-text-faint) !important;
+}
+
+html.theme-dark .thread-title-input,
+html.theme-dark .session-title-input {
+  color: var(--dark-text) !important;
+  background: var(--dark-panel) !important;
+  border-color: #4a4a4a !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06) !important;
+}
+
 html.theme-dark .chat-sidebar {
   color: var(--dark-text) !important;
   background: var(--dark-sidebar) !important;
@@ -218,6 +241,11 @@ html.theme-dark .session-wrapper--active {
   background: var(--dark-panel-soft) !important;
   border-color: transparent !important;
   box-shadow: none !important;
+}
+
+html.theme-dark .session-wrapper--editing {
+  background: var(--dark-panel-soft) !important;
+  border-color: #4a4a4a !important;
 }
 
 html.theme-dark .session-title,

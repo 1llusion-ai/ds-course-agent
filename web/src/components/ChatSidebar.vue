@@ -110,7 +110,8 @@
             class="session-wrapper"
             :class="{
               'session-wrapper--active': sessionStore.currentSessionId === session.id,
-              'session-wrapper--pinned': sessionStore.isPinned(session.id)
+              'session-wrapper--pinned': sessionStore.isPinned(session.id),
+              'session-wrapper--editing': editingSessionId === session.id
             }"
             @click="handleSessionClick(session.id, $event)"
           >
@@ -120,11 +121,24 @@
 
             <div class="session-body">
               <div class="session-row">
-                <span class="session-title">
+                <input
+                  v-if="editingSessionId === session.id"
+                  :ref="el => setSessionRenameInputRef(el, session.id)"
+                  v-model="editingTitle"
+                  class="session-title-input"
+                  type="text"
+                  aria-label="重命名会话"
+                  autocomplete="off"
+                  @click.stop
+                  @keydown.enter.prevent="commitSessionRename(session)"
+                  @keydown.esc.prevent.stop="cancelSessionRename"
+                  @blur="commitSessionRename(session)"
+                />
+                <span v-else class="session-title">
                   {{ session.title }}
                 </span>
                 <span
-                  v-if="chatStore.isSessionPending(session.id)"
+                  v-if="editingSessionId !== session.id && chatStore.isSessionPending(session.id)"
                   class="session-status"
                   title="进行中"
                 >
@@ -135,7 +149,7 @@
 
             </div>
 
-            <div class="session-actions">
+            <div v-if="editingSessionId !== session.id" class="session-actions">
               <span
                 v-if="sessionStore.unreadCounts[session.id]"
                 class="unread-badge"
@@ -256,16 +270,17 @@ const searchOpen = ref(false)
 const searchInputRef = ref(null)
 const searchButtonRef = ref(null)
 const searchContainerRef = ref(null)
+const editingSessionId = ref(null)
+const editingTitle = ref('')
+const sessionRenameSaving = ref(false)
+const sessionRenameInputRefs = new Map()
 
 const hasSearchQuery = computed(() => Boolean(normalizeSearchText(searchQuery.value)))
 
 const sessionDialogClasses = {
   overlay: 'session-dialog-overlay',
-  dialog: 'session-dialog',
   deleteDialog: 'session-dialog session-dialog--delete',
-  renameDialog: 'session-dialog session-dialog--rename',
   cancelButton: 'session-dialog__cancel',
-  confirmButton: 'session-dialog__confirm',
   dangerConfirmButton: 'session-dialog__confirm session-dialog__confirm--danger'
 }
 
@@ -443,6 +458,60 @@ function handleCreate() {
   router.push('/chat')
 }
 
+function setSessionRenameInputRef(el, sessionId) {
+  if (el) {
+    sessionRenameInputRefs.set(sessionId, el)
+  } else {
+    sessionRenameInputRefs.delete(sessionId)
+  }
+}
+
+function focusSessionRenameInput(sessionId) {
+  nextTick(() => {
+    const input = sessionRenameInputRefs.get(sessionId)
+    input?.focus()
+    input?.select()
+  })
+}
+
+function startSessionRename(session) {
+  if (!session?.id) return
+  editingSessionId.value = session.id
+  editingTitle.value = session.title || ''
+  focusSessionRenameInput(session.id)
+}
+
+function cancelSessionRename() {
+  editingSessionId.value = null
+  editingTitle.value = ''
+}
+
+async function commitSessionRename(session) {
+  if (sessionRenameSaving.value || editingSessionId.value !== session?.id) {
+    return
+  }
+
+  const nextTitle = editingTitle.value.trim()
+  const previousTitle = String(session.title || '').trim()
+
+  if (!nextTitle || nextTitle === previousTitle) {
+    cancelSessionRename()
+    return
+  }
+
+  sessionRenameSaving.value = true
+  try {
+    await sessionStore.updateSession(session.id, { title: nextTitle })
+    cancelSessionRename()
+  } catch (error) {
+    console.error('重命名失败:', error)
+    ElMessage.error('重命名失败，请稍后再试')
+    focusSessionRenameInput(session.id)
+  } finally {
+    sessionRenameSaving.value = false
+  }
+}
+
 async function handleDelete(id) {
   try {
     await ElMessageBox.confirm(
@@ -474,29 +543,7 @@ async function handleCommand(cmd, session) {
   } else if (cmd === 'delete') {
     await handleDelete(session.id)
   } else if (cmd === 'rename') {
-    try {
-      const { value } = await ElMessageBox.prompt(
-        '请输入新的会话标题',
-        '重命名会话',
-        {
-          ...sessionDialogBaseOptions,
-          customClass: sessionDialogClasses.renameDialog,
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          confirmButtonClass: sessionDialogClasses.confirmButton,
-          inputValue: session.title,
-          inputPlaceholder: '输入新的会话标题',
-          inputPattern: /\S+/,
-          inputErrorMessage: '标题不能为空',
-        }
-      )
-      await sessionStore.updateSession(session.id, { title: value.trim() })
-      ElMessage.success('会话已重命名')
-    } catch (error) {
-      if (error !== 'cancel' && error !== 'close') {
-        ElMessage.error('重命名失败，请稍后再试')
-      }
-    }
+    startSessionRename(session)
   }
 }
 
@@ -867,6 +914,11 @@ onBeforeUnmount(() => {
   border-color: transparent;
 }
 
+.session-wrapper--editing {
+  background: rgba(255, 255, 255, 0.62);
+  border-color: rgba(147, 197, 253, 0.50);
+}
+
 .session-leading {
   display: none;
   align-items: center;
@@ -920,6 +972,22 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 650;
   line-height: 1.35;
+}
+
+.session-title-input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  color: #292524;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(147, 197, 253, 0.72);
+  border-radius: 8px;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.10);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .session-wrapper--active .session-title {

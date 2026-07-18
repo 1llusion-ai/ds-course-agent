@@ -5,7 +5,30 @@
     <div class="chat-main">
       <header class="chat-header">
         <div class="thread-header-left">
-          <span class="thread-title">{{ headerTitle }}</span>
+          <input
+            v-if="headerRenaming"
+            ref="headerRenameInputRef"
+            v-model="headerRenameTitle"
+            class="thread-title-input"
+            type="text"
+            aria-label="重命名当前会话"
+            autocomplete="off"
+            @keydown.enter.prevent="commitHeaderRename"
+            @keydown.esc.prevent.stop="cancelHeaderRename"
+            @blur="commitHeaderRename"
+          />
+          <button
+            v-else
+            type="button"
+            class="thread-title-button"
+            :class="{ 'thread-title-button--disabled': !canRenameCurrentSession }"
+            :disabled="!canRenameCurrentSession"
+            :title="canRenameCurrentSession ? '点击重命名' : undefined"
+            @click="startHeaderRename"
+          >
+            <span class="thread-title">{{ headerTitle }}</span>
+            <el-icon v-if="canRenameCurrentSession" class="thread-title-edit-icon"><EditPen /></el-icon>
+          </button>
         </div>
         <div class="header-status">
           <button
@@ -155,10 +178,15 @@ const webSearchEnabled = ref(readWebSearchPreference())
 const sourcesPanelOpen = ref(false)
 const sourcesPanelTitle = ref('搜索来源')
 const sourcesPanelSources = ref([])
+const headerRenameInputRef = ref(null)
+const headerRenaming = ref(false)
+const headerRenameTitle = ref('')
+const headerRenameSaving = ref(false)
 let scrollFrameId = null
 let messagesResizeObserver = null
 
 const headerTitle = computed(() => sessionStore.currentSession?.title || '新对话')
+const canRenameCurrentSession = computed(() => Boolean(sessionStore.currentSessionId && sessionStore.currentSession))
 const isDarkTheme = computed(() => theme.value === 'dark')
 
 const starterPrompts = [
@@ -207,6 +235,7 @@ watch(
 )
 
 watch(() => sessionStore.currentSessionId, (newId) => {
+  cancelHeaderRename()
   if (!newId) return
   const exists = sessionStore.sessions.some(session => session.id === newId)
   if (!exists) return
@@ -287,6 +316,57 @@ async function handleSend(message, sendOptions = {}) {
 function handleStarterPrompt(prompt) {
   if (chatStore.loading) return
   handleSend(prompt)
+}
+
+function focusHeaderRenameInput() {
+  nextTick(() => {
+    headerRenameInputRef.value?.focus()
+    headerRenameInputRef.value?.select()
+  })
+}
+
+function startHeaderRename() {
+  if (!canRenameCurrentSession.value) return
+  headerRenameTitle.value = sessionStore.currentSession?.title || ''
+  headerRenaming.value = true
+  focusHeaderRenameInput()
+}
+
+function cancelHeaderRename() {
+  headerRenaming.value = false
+  headerRenameTitle.value = ''
+}
+
+async function commitHeaderRename() {
+  if (headerRenameSaving.value || !headerRenaming.value) {
+    return
+  }
+
+  const session = sessionStore.currentSession
+  if (!session?.id) {
+    cancelHeaderRename()
+    return
+  }
+
+  const nextTitle = headerRenameTitle.value.trim()
+  const previousTitle = String(session.title || '').trim()
+
+  if (!nextTitle || nextTitle === previousTitle) {
+    cancelHeaderRename()
+    return
+  }
+
+  headerRenameSaving.value = true
+  try {
+    await sessionStore.updateSession(session.id, { title: nextTitle })
+    cancelHeaderRename()
+  } catch (error) {
+    console.error('重命名当前会话失败:', error)
+    ElMessage.error('重命名失败，请稍后再试')
+    focusHeaderRenameInput()
+  } finally {
+    headerRenameSaving.value = false
+  }
 }
 
 function readWebSearchPreference() {
@@ -528,14 +608,70 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.thread-title {
+.thread-title-button {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
   max-width: min(58vw, 34rem);
+  gap: 7px;
+  padding: 5px 8px;
+  color: #44403c;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.thread-title-button:not(:disabled):hover {
+  color: #1c1917;
+  background: rgba(28, 25, 23, 0.05);
+}
+
+.thread-title-button--disabled {
+  cursor: default;
+}
+
+.thread-title {
+  min-width: 0;
   overflow: hidden;
-  color: #78716c;
+  color: currentColor;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.thread-title-edit-icon {
+  flex: 0 0 auto;
+  color: #a8a29e;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.16s ease, color 0.16s ease;
+}
+
+.thread-title-button:hover .thread-title-edit-icon {
+  color: #78716c;
+  opacity: 1;
+}
+
+.thread-title-input {
+  width: min(58vw, 34rem);
+  max-width: 34rem;
+  height: 34px;
+  padding: 0 10px;
+  color: #292524;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(147, 197, 253, 0.70);
+  border-radius: 10px;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.10);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
 }
 
 .header-status {
