@@ -48,13 +48,13 @@
       <button
         type="button"
         class="new-chat-button"
-        :title="props.collapsed ? '新建聊天' : undefined"
+        :title="props.collapsed ? '开启新对话' : undefined"
         @click="handleCreate"
       >
         <span class="new-chat-button__icon">
-          <el-icon><Plus /></el-icon>
+          <el-icon><EditPen /></el-icon>
         </span>
-        <span v-if="!props.collapsed" class="new-chat-button__text">新建聊天</span>
+        <span v-if="!props.collapsed" class="new-chat-button__text">开启新对话</span>
       </button>
 
       <label
@@ -86,7 +86,7 @@
     </div>
 
     <el-scrollbar v-if="!props.collapsed" class="session-scroll">
-      <div v-if="groupedSessions.length === 0" class="session-empty">
+      <div v-if="showSessionEmpty" class="session-empty">
         <div class="session-empty__icon">
           <el-icon><Search /></el-icon>
         </div>
@@ -257,6 +257,8 @@ const searchInputRef = ref(null)
 const searchButtonRef = ref(null)
 const searchContainerRef = ref(null)
 
+const hasSearchQuery = computed(() => Boolean(normalizeSearchText(searchQuery.value)))
+
 const sessionDialogClasses = {
   overlay: 'session-dialog-overlay',
   dialog: 'session-dialog',
@@ -287,7 +289,7 @@ const filteredSessions = computed(() => {
 })
 
 const groupedSessions = computed(() => {
-  if (normalizeSearchText(searchQuery.value)) {
+  if (hasSearchQuery.value) {
     return filteredSessions.value.length
       ? [{ key: 'search', label: '搜索结果', sessions: filteredSessions.value }]
       : []
@@ -329,6 +331,8 @@ const groupedSessions = computed(() => {
 
   return groups
 })
+
+const showSessionEmpty = computed(() => hasSearchQuery.value && groupedSessions.value.length === 0)
 
 const profileSummaryText = computed(() => {
   const summary = profileStore.summary
@@ -679,41 +683,50 @@ onBeforeUnmount(() => {
 .new-chat-button {
   display: flex;
   align-items: center;
+  justify-content: center;
   width: 100%;
-  min-height: 40px;
-  gap: 8px;
-  padding: 8px 10px;
-  color: #292524;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 11px;
-  box-shadow: none;
+  min-height: 44px;
+  gap: 7px;
+  padding: 0 14px;
+  color: #2563eb;
+  background: rgba(239, 246, 255, 0.92);
+  border: 1px solid rgba(147, 197, 253, 0.58);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 8px 22px rgba(37, 99, 235, 0.08);
   cursor: pointer;
   font: inherit;
-  transition: background 0.16s ease, color 0.16s ease;
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
 
 .chat-sidebar--collapsed .new-chat-button {
   justify-content: center;
-  width: 40px;
-  min-height: 40px;
+  width: 42px;
+  min-height: 42px;
   padding: 0;
-  border-radius: 13px;
+  border-radius: 14px;
 }
 
 .new-chat-button:hover {
-  background: rgba(28, 25, 23, 0.06);
+  color: #1d4ed8;
+  background: #e8f1ff;
+  border-color: rgba(96, 165, 250, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 10px 26px rgba(37, 99, 235, 0.12);
+  transform: translateY(-1px);
+}
+
+.new-chat-button:active {
+  transform: translateY(0) scale(0.985);
 }
 
 .new-chat-button__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  color: #57534e;
+  width: 22px;
+  height: 22px;
+  color: currentColor;
   background: transparent;
-  border-radius: 8px;
+  border-radius: 999px;
   box-shadow: none;
 }
 
@@ -723,10 +736,11 @@ onBeforeUnmount(() => {
 }
 
 .new-chat-button__text {
-  flex: 1;
+  flex: 0 1 auto;
   font-size: 14px;
   font-weight: 700;
-  text-align: left;
+  line-height: 1;
+  text-align: center;
 }
 
 .new-chat-button__hint {

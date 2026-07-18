@@ -152,19 +152,20 @@ html.theme-dark .session-menu-btn:focus {
 
 html.theme-dark .new-chat-button {
   color: var(--dark-text) !important;
-  background: transparent !important;
-  border-color: transparent !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.11) !important;
   box-shadow: none !important;
 }
 
 html.theme-dark .new-chat-button:hover {
-  background: var(--dark-panel-soft) !important;
-  border-color: transparent !important;
+  color: var(--dark-text) !important;
+  background: var(--dark-hover) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
   box-shadow: none !important;
 }
 
 html.theme-dark .new-chat-button__icon {
-  color: var(--dark-text-muted) !important;
+  color: currentColor !important;
   background: transparent !important;
   box-shadow: none !important;
 }
