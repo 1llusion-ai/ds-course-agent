@@ -216,7 +216,7 @@ def run_benchmark(
     hybrid_rerank_summary = aggregate(hybrid_rerank_results)
 
     # 按 category 聚合
-    categories = sorted(set(q["category"] for q in qa_pairs))
+    categories = sorted({q["category"] for q in qa_pairs})
     cat_reports = {}
     for cat in categories:
         v_cat = [r for r in vector_results if r["category"] == cat]

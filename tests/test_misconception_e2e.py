@@ -87,7 +87,6 @@ def test_misconception_skill_end_to_end():
 def test_misconception_pending_weakness():
     """测试试探性错误（B类）进入 pending weak spots。"""
     tmpdir = tempfile.mkdtemp(prefix="misconception_e2e_")
-    tmp_path = Path(tmpdir)
 
     test_core = MemoryCore(base_dir=str(tmpdir))
 

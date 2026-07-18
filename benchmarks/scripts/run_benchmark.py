@@ -27,10 +27,6 @@ class BenchmarkRunner:
         # 生成回答
         answer = self.rag_service.answer_with_context(question, retrieved_docs)
 
-        # 评估检索
-        ground_truth = qa_pair.get("ground_truth", {})
-        retrieved_ids = [d.metadata.get("id", str(i)) for i, d in enumerate(retrieved_docs)]
-
         # 评估回答
         answer_metrics = evaluate_answer(
             question=question, answer=answer, expected_keywords=qa_pair.get("expected_keywords", [])

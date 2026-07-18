@@ -213,7 +213,7 @@ class HybridRetriever:
         documents = []
         self._doc_text_to_index = {}
         self._doc_prefix_to_index = {}
-        for idx, (text, meta) in enumerate(zip(results["documents"], results["metadatas"])):
+        for idx, (text, meta) in enumerate(zip(results["documents"], results["metadatas"], strict=True)):
             documents.append(Document(page_content=text, metadata=meta))
             self._doc_text_to_index.setdefault(text, idx)
             self._doc_prefix_to_index.setdefault(text[:200], idx)
@@ -244,7 +244,7 @@ class HybridRetriever:
         # 通过内容匹配找到对应的文档索引
         results_list = []
         if results["documents"] and results["documents"][0]:
-            for doc_text, distance in zip(results["documents"][0], results["distances"][0]):
+            for doc_text, distance in zip(results["documents"][0], results["distances"][0], strict=True):
                 similarity = 1.0 - float(distance)
                 idx = self._doc_text_to_index.get(doc_text)
                 if idx is None:

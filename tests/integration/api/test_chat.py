@@ -46,7 +46,7 @@ class TestChatAPI:
         session_id = session_resp.json()["id"]
 
         # 其他学生尝试发送
-        resp = client.post("/api/chat/send", json={"session_id": session_id, "message": "测试", "student_id": "hacker"})
+        client.post("/api/chat/send", json={"session_id": session_id, "message": "测试", "student_id": "hacker"})
         # 应该成功发送（业务逻辑不做校验），但历史查询会校验
         # 实际应该限制，这是已知的改进点
 

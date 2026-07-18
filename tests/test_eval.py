@@ -44,7 +44,7 @@ class TestEvalSamples:
         from benchmarks.samples import get_eval_samples, get_samples_by_category
 
         all_samples = get_eval_samples()
-        categories = set(s.category for s in all_samples)
+        categories = {s.category for s in all_samples}
 
         for category in categories:
             samples = get_samples_by_category(category)
@@ -209,3 +209,4 @@ class TestRunEvaluation:
             saved_report = json.load(f)
 
         assert saved_report["total_samples"] == 1
+        assert saved_report == report

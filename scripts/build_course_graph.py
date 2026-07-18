@@ -503,7 +503,7 @@ def extract_with_transformer_backend(
     graph_documents = transformer.convert_to_graph_documents(documents)
     graphs: list[CourseGraph] = []
 
-    for graph_doc, document in zip(graph_documents, documents):
+    for graph_doc, document in zip(graph_documents, documents, strict=True):
         chunk_id = str(document.metadata.get("chunk_id") or "")
         fallback = chunk_by_id.get(chunk_id) or SourceChunk(
             chunk_id=chunk_id, text=document.page_content, metadata=document.metadata

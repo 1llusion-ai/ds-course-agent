@@ -52,7 +52,7 @@ class CrossEncoderReranker(BaseReranker):
             logger.info("加载模型: %s (device=%s)", self.model_name, self.device)
             self._model = CrossEncoder(self.model_name, device=device, max_length=512)
         except Exception as e:
-            warnings.warn(f"[Reranker] 加载模型失败: {e}. 将自动禁用重排序功能。")
+            warnings.warn(f"[Reranker] 加载模型失败: {e}. 将自动禁用重排序功能。", stacklevel=2)
             self._model = None
 
     @property
@@ -72,11 +72,11 @@ class CrossEncoderReranker(BaseReranker):
             scores = self._model.predict(pairs, batch_size=self.batch_size, show_progress_bar=False)
 
             # 按分数降序排列
-            scored = list(zip(documents, [float(s) for s in scores]))
+            scored = list(zip(documents, [float(s) for s in scores], strict=True))
             scored.sort(key=lambda x: x[1], reverse=True)
             return scored
         except Exception as e:
-            warnings.warn(f"[Reranker] 重排序失败: {e}. 退回原始顺序。")
+            warnings.warn(f"[Reranker] 重排序失败: {e}. 退回原始顺序。", stacklevel=2)
             return [(doc, 0.0) for doc in documents]
 
 

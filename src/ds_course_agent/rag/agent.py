@@ -429,18 +429,18 @@ class AgentService:
                         raise RuntimeError(
                             f"Ollama 模型 '{config.MODEL_CHAT}' 未找到。请先运行: ollama pull {config.MODEL_CHAT}"
                         )
-            except requests.exceptions.ConnectionError:
+            except requests.exceptions.ConnectionError as err:
                 if attempt < max_retries - 1:
                     time.sleep(2)
                     continue
                 raise RuntimeError(
                     f"无法连接到 Ollama 服务 ({config.BASE_URL_CHAT})。请确保 Ollama 已安装并正在运行 (ollama serve)"
-                )
+                ) from err
             except Exception as e:
                 if attempt < max_retries - 1:
                     time.sleep(2)
                     continue
-                raise RuntimeError(f"Ollama 连接检查失败: {e}")
+                raise RuntimeError(f"Ollama 连接检查失败: {e}") from e
 
         return False
 

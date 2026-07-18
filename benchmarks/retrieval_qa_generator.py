@@ -121,7 +121,7 @@ def find_relevant_chunks(query_keywords: list[str], top_k: int = 3) -> list[str]
     matched = []
     fallback = []
     if results["documents"] and results["documents"][0]:
-        for doc_text, meta in zip(results["documents"][0], results["metadatas"][0]):
+        for doc_text, meta in zip(results["documents"][0], results["metadatas"][0], strict=True):
             if meta.get("chunk_type") != "semantic":
                 continue
             chunk_id = meta.get("chunk_id")
@@ -139,7 +139,7 @@ def find_relevant_chunks(query_keywords: list[str], top_k: int = 3) -> list[str]
     # 去重并按文档长度降序（通常长文档包含更完整解释）
     seen = set()
     unique = []
-    for cid, length in sorted(source, key=lambda x: x[1], reverse=True):
+    for cid, _length in sorted(source, key=lambda x: x[1], reverse=True):
         if cid not in seen:
             seen.add(cid)
             unique.append(cid)

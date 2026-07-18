@@ -263,7 +263,7 @@ def parse_with_marker(
         # Marker outputs to a subdirectory named after the PDF file
         # Due to encoding issues on Windows, we need to find the JSON file dynamically
         json_files = []
-        for root, dirs, files in os.walk(output_dir):
+        for root, _dirs, files in os.walk(output_dir):
             for f in files:
                 if f.endswith(".json") and not f.endswith("_meta.json"):
                     json_files.append(os.path.join(root, f))

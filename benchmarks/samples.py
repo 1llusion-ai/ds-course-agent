@@ -263,7 +263,7 @@ def export_samples_to_json(filepath: str):
 if __name__ == "__main__":
     print(f"共有 {len(EVAL_SAMPLES)} 条评测样本")
 
-    categories = set(s.category for s in EVAL_SAMPLES)
+    categories = {s.category for s in EVAL_SAMPLES}
     for cat in categories:
         count = len(get_samples_by_category(cat))
         print(f"  - {cat}: {count} 条")

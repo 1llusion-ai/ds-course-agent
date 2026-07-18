@@ -335,7 +335,7 @@ class CourseChunkerV2:
                 ):
                     code_indicators += 1
             # 超过一半行有代码特征
-            non_empty = [l for l in lines if l.strip()]
+            non_empty = [line for line in lines if line.strip()]
             return len(non_empty) > 0 and code_indicators >= len(non_empty) * 0.5
 
         def _ends_with_code_block_open(para: str) -> bool:

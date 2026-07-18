@@ -9,13 +9,15 @@ from ds_course_agent.kb.store import CourseKnowledgeBase
 from ds_course_agent.kb.toc_parser import TOCParser, get_toc_parser
 
 __all__ = [
-    "parse_pdf_file",
-    "parse_pdf_directory",
-    "clean_text",
-    "TextCleaner",
-    "chunk_document",
-    "ChunkResult",
+    "ChunkingResultV2",
+    "CleanedDocument",
+    "CleanedPage",
     "CourseKnowledgeBase",
     "TOCParser",
+    "chunk_document",
+    "clean_document",
+    "clean_text",
     "get_toc_parser",
+    "parse_pdf_directory",
+    "parse_pdf_file",
 ]

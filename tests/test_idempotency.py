@@ -53,7 +53,7 @@ def test_record_event_idempotency():
         print(f"  事件记录次数: {len(events)}")
 
         # 关键：聚合时应按 event_id 去重
-        unique_ids = set(e.event_id for e in events)
+        unique_ids = {e.event_id for e in events}
         print(f"  唯一事件ID数: {len(unique_ids)}")
 
         if len(unique_ids) == 1:

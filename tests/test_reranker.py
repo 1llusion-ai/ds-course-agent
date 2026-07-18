@@ -26,7 +26,7 @@ class MockCrossEncoder:
     def predict(self, pairs, batch_size=8, show_progress_bar=False):
         # 简单的 mock 逻辑：如果文本包含 "best" 则分数高
         scores = []
-        for query, text in pairs:
+        for _query, text in pairs:
             if "best" in text:
                 scores.append(0.9)
             elif "good" in text:

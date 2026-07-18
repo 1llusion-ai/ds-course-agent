@@ -94,7 +94,7 @@ def _build_daily_activity(memory_core, student_id: str) -> dict[str, int]:
         counts[day] += 1
 
     recent_days = sorted(counts.items())[-7:]
-    return {day: count for day, count in recent_days}
+    return dict(recent_days)
 
 
 @lru_cache(maxsize=1)

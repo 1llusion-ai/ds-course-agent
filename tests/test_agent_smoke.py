@@ -601,7 +601,8 @@ class TestChatWithHistory:
         result = service.chat_with_history("什么是数据科学？", "test_session")
 
         assert result == "data science grounded answer"
-        mock_rag_invoke.assert_called_once_with("什么是数据科学？")
+        mock_service.retrieve.assert_called_once_with("什么是数据科学？")
+        mock_service.answer_with_context.assert_called_once_with("什么是数据科学？", "context")
 
     @patch("ds_course_agent.shared.history.get_history")
     @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])

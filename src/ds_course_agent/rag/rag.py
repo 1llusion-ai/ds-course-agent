@@ -433,7 +433,7 @@ class RAGService:
             documents = []
             if results["documents"] and results["documents"][0]:
                 for doc_text, metadata, distance in zip(
-                    results["documents"][0], results["metadatas"][0], results["distances"][0]
+                    results["documents"][0], results["metadatas"][0], results["distances"][0], strict=True
                 ):
                     # 只保留相似度高于阈值的文档（距离小于阈值）
                     if similarity_threshold is None or distance <= similarity_threshold:

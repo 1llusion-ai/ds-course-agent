@@ -342,13 +342,13 @@ def repair_collection(
         update_docs: list[str] = []
         update_embeddings: list[list[float]] = []
         update_metas: list[dict[str, Any]] = []
-        for idx, (item_id, metadata) in enumerate(zip(ids, metadatas)):
+        for idx, (item_id, document, metadata) in enumerate(zip(ids, documents, metadatas, strict=True)):
             metadata = dict(metadata or {})
             normalized = normalized_metadata(metadata, index, page_offset)
             if normalized != metadata:
                 changed += 1
                 update_ids.append(item_id)
-                update_docs.append(documents[idx])
+                update_docs.append(document)
                 if embeddings is not None:
                     update_embeddings.append(embeddings[idx])
                 update_metas.append(normalized)
