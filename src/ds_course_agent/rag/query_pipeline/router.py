@@ -6,15 +6,17 @@ Query Router
 
 import logging
 import re
+from typing import Any
 
-from .models import QueryContext, RouteDecision, RouteType
+from .models import QueryContext, RetrievalPolicy, RouteDecision, RouteType
 from .preprocessor import (
     _assignment_counts_as_code,
     _has_assignment_signal,
     _has_concept_question_cue,
     _has_strong_python_signal,
 )
-from .utils import is_datetime_request, is_judgement_question, is_schedule_request, normalize_query_text
+from .route_rules import RouteRule, build_route_rules
+from .utils import is_judgement_question, normalize_query_text
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +124,7 @@ class QueryRouter:
     """查询路由器"""
 
     def __init__(self):
-        pass
+        self._rules = build_route_rules(self)
 
     def _normalize(self, query: str) -> str:
         """与 query_pipeline.utils.normalize_query_text 保持一致的路由归一化。
@@ -132,148 +134,45 @@ class QueryRouter:
         """
         return normalize_query_text(query)
 
-    def route(self, context: QueryContext) -> RouteDecision:
+    def route(self, context: QueryContext, *, enricher: Any | None = None) -> RouteDecision:
         """
         根据 QueryContext 进行路由决策
 
-        优先级顺序：
-        1. 系统工具类（时间、课程安排）
-        2. 明确教学策略类（学习路径、错误理解、个性化解释）
-        3. 课程知识问答类（grounded RAG）
-        4. 通用 agent fallback
+        规则按 priority 升序求值，首个 match 生效。``enricher`` 是 QueryPipeline
+        注入的惰性富化器，分两个 memoized 阶段：
+
+        - 求值到 ``requires_skills`` 规则前调用 ``ensure_skills()``（廉价 skill_select）；
+        - 求值到 ``requires_concepts`` 规则前调用 ``ensure_concepts()``（昂贵的
+          concept_map + rewrite + profile）。
+
+        高置信 fast-path 规则（二者皆 False）在富化前命中并短路——datetime/
+        schedule/code/python 不触发任何富化；autonomous(p60) 与纯 skill 路由只触发
+        廉价 skill_select，不跑 concept_map。无 ``enricher`` 时（契约测试/独立调用）
+        规则在裸 context 上求值，保持向后兼容。
 
         Args:
             context: 查询上下文
+            enricher: 可选惰性富化器，暴露 ``ensure_skills()``/``ensure_concepts()``
+                与 ``concepts_ran``/``skills_ran``
 
         Returns:
             RouteDecision
         """
-        query = self._normalize(context.normalized_query)
+        for rule in self._rules:
+            if enricher is not None:
+                if rule.requires_skills:
+                    enricher.ensure_skills()
+                if rule.requires_concepts:
+                    enricher.ensure_concepts()
+            if rule.match_fn(context):
+                return rule.build_decision(context)
 
-        # 0. 代码审查请求：贴了代码并问"对不对/错在哪" → 走 code-review skill，
-        #    定位错误并给出修正代码，而不是盲目执行。优先于 PYTHON_EXEC。
-        if "code_review" in context.detected_intents:
-            return RouteDecision(
-                route=RouteType.CODE_REVIEW,
-                confidence=0.93,
-                reasons=["检测到代码审查请求"],
-                skill_name="code-review",
-                retrieval_policy="disabled",
-            )
+        raise RuntimeError("QueryRouter rules must include a fallback rule")
 
-        # 1. 明确 Python 代码执行请求：直接走运行时工具，不查教材、不附来源。
-        # 放在系统工具前，避免代码字符串里的“今天/第3周”等词误触发时间/课表。
-        if "python_execution" in context.detected_intents:
-            return RouteDecision(
-                route=RouteType.PYTHON_EXEC,
-                confidence=0.95,
-                reasons=["检测到明确 Python 代码执行请求"],
-                required_tools=["python_exec_tool"],
-                retrieval_policy="disabled",
-            )
-
-        # 2. 系统工具类
-        if self._is_datetime_request(query):
-            return RouteDecision(
-                route=RouteType.CURRENT_DATETIME,
-                confidence=0.95,
-                reasons=["检测到时间查询关键词"],
-                required_tools=["current_datetime_tool"],
-                retrieval_policy="disabled",
-            )
-
-        if self._is_schedule_request(query):
-            return RouteDecision(
-                route=RouteType.COURSE_SCHEDULE,
-                confidence=0.95,
-                reasons=["检测到课程安排查询关键词"],
-                required_tools=["course_schedule_tool"],
-                retrieval_policy="optional",
-            )
-
-        # 3. 高置信误认知信号仍然优先进入教学策略。
-        #
-        # 代码/示例类请求默认交给 agent 自主选工具，但明确带有“我以为/难道不是”
-        # 等错误前提时，misconception skill 是更合适的教学路径。
-        # code_review / python_exec 已在更高优先级拦截，所以这里不会抢走明确
-        # 的运行或审查请求。
-        if self._should_use_misconception_skill(context) and self._has_explicit_misconception_signal(context):
-            return RouteDecision(
-                route=RouteType.MISCONCEPTION_SKILL,
-                confidence=0.89,
-                reasons=self._get_misconception_reasons(context) + ["明确误认知信号优先于 autonomous tool choice"],
-                skill_name="misconception-handling",
-                retrieval_policy="required",
-                fallback_route=RouteType.GROUNDED_RAG,
-            )
-
-        # 4. 模糊/代码类请求：交给通用 agent 自主选择工具。
-        #
-        # 这是借鉴 nanobot 的关键边界：Router 只抢占高置信、低歧义路径；
-        # 带代码/示例/实现意图的请求即使命中课程概念，也不应被直接强制
-        # grounded RAG。让 tool-capable agent 根据上下文决定是否需要查教材、
-        # 审查代码、运行 Python，或直接解释。
-        autonomous_decision = self._route_autonomous_tool_choice(context)
-        if autonomous_decision is not None:
-            return autonomous_decision
-
-        # 5. 教学策略类
-
-        # 5.1 学习路径 skill
-        if self._should_use_learning_path_skill(context):
-            return RouteDecision(
-                route=RouteType.LEARNING_PATH_SKILL,
-                confidence=0.90,
-                reasons=self._get_learning_path_reasons(context),
-                skill_name="learning-path",
-                retrieval_policy="optional",
-                fallback_route=RouteType.GROUNDED_RAG,
-            )
-
-        # 5.2 错误理解 / misconception skill
-        if self._should_use_misconception_skill(context):
-            return RouteDecision(
-                route=RouteType.MISCONCEPTION_SKILL,
-                confidence=0.88,
-                reasons=self._get_misconception_reasons(context),
-                skill_name="misconception-handling",
-                retrieval_policy="required",
-                fallback_route=RouteType.GROUNDED_RAG,
-            )
-
-        # 5.3 个性化解释 skill
-        if self._should_use_explanation_skill(context):
-            return RouteDecision(
-                route=RouteType.PERSONALIZED_EXPLANATION_SKILL,
-                confidence=0.85,
-                reasons=self._get_explanation_reasons(context),
-                skill_name="personalized-explanation",
-                retrieval_policy="required",
-                fallback_route=RouteType.GROUNDED_RAG,
-            )
-
-        # 6. Query rewrite 指向明确课程追问时，优先进入 grounded RAG。
-        rewrite_decision = self._route_rewritten_followup(context)
-        if rewrite_decision is not None:
-            return rewrite_decision
-
-        # 7. 课程知识问答类 - 明确概念/原理/定义类问题使用 grounded RAG
-        if self._is_likely_course_question(context):
-            return RouteDecision(
-                route=RouteType.GROUNDED_RAG,
-                confidence=0.80,
-                reasons=["课程相关知识问答"],
-                retrieval_policy="required",
-                fallback_route=RouteType.GENERIC_AGENT,
-            )
-
-        # 8. 通用 agent fallback
-        return RouteDecision(
-            route=RouteType.GENERIC_AGENT,
-            confidence=0.60,
-            reasons=["未匹配到特定路由，使用通用 agent"],
-            retrieval_policy="optional",
-        )
+    @property
+    def rules(self) -> tuple[RouteRule, ...]:
+        """只读规则表，供契约测试确认优先级和覆盖面。"""
+        return self._rules
 
     def _route_autonomous_tool_choice(self, context: QueryContext) -> RouteDecision | None:
         """Return generic-agent routing for ambiguous code/example requests.
@@ -296,27 +195,25 @@ class QueryRouter:
                 route=RouteType.GENERIC_AGENT,
                 confidence=0.82,
                 reasons=["代码/示例/演示请求，直接生成示例，不调用执行工具"],
-                retrieval_policy="optional",
-                metadata={
-                    "direct_llm_answer": True,
-                    "direct_llm_reason": "code_example_without_execution",
-                },
+                allowed_tools=[],
+                retrieval_policy=RetrievalPolicy.OPTIONAL,
+                direct_llm_answer=True,
+                direct_llm_reason="code_example_without_execution",
             )
 
+        allowed_tools = [
+            "course_rag_tool",
+            "python_exec_tool",
+            "course_schedule_tool",
+            "current_datetime_tool",
+        ]
         return RouteDecision(
             route=RouteType.GENERIC_AGENT,
             confidence=0.78,
             reasons=["代码/示例/实现类请求，交给 agent 自主选择工具"],
-            retrieval_policy="optional",
-            metadata={
-                "autonomous_tool_choice": True,
-                "allowed_tool_hints": [
-                    "course_rag_tool",
-                    "python_exec_tool",
-                    "course_schedule_tool",
-                    "current_datetime_tool",
-                ],
-            },
+            allowed_tools=allowed_tools,
+            retrieval_policy=RetrievalPolicy.OPTIONAL,
+            autonomous_tool_choice=True,
         )
 
     def _is_direct_code_example_request(self, context: QueryContext, query: str) -> bool:
@@ -365,7 +262,8 @@ class QueryRouter:
             route=RouteType.GROUNDED_RAG,
             confidence=max(0.82, min(0.90, confidence)),
             reasons=["query rewrite 指向课程追问", f"rewrite_strategy={strategy}"],
-            retrieval_policy="required",
+            allowed_tools=["course_rag_tool"],
+            retrieval_policy=RetrievalPolicy.REQUIRED,
             fallback_route=RouteType.GENERIC_AGENT,
             metadata={
                 "rewrite_strategy": strategy,
@@ -373,24 +271,6 @@ class QueryRouter:
                 "rewritten_query": rewritten_query,
             },
         )
-
-    # ========== 系统工具判断 ==========
-
-    def is_datetime_request(self, query: str) -> bool:
-        """Public datetime-query predicate shared with rewriter/agent."""
-        return is_datetime_request(query)
-
-    def is_schedule_request(self, query: str) -> bool:
-        """Public schedule-query predicate shared with rewriter/agent."""
-        return is_schedule_request(query)
-
-    def _is_datetime_request(self, query: str) -> bool:
-        """Compatibility wrapper for existing tests/callers."""
-        return self.is_datetime_request(query)
-
-    def _is_schedule_request(self, query: str) -> bool:
-        """Compatibility wrapper for existing tests/callers."""
-        return self.is_schedule_request(query)
 
     # ========== 教学策略判断 ==========
 

@@ -3,11 +3,14 @@
 Implements a single-agent loop with RAG tools and LangGraph-backed tool use.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 import time
 import uuid
 from collections.abc import Iterator, Mapping
+from typing import Any
 
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -20,12 +23,11 @@ from ds_course_agent.hooks.retrieval_guard import RetrievalGuardHook
 from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
 from ds_course_agent.rag.memory_core import get_memory_core, record_event
 from ds_course_agent.rag.prompt import get_system_prompt
+from ds_course_agent.rag.query_pipeline import RouteState
 from ds_course_agent.rag.query_pipeline.utils import (
     build_grounded_query_from_history,
     collect_recent_context,
-    is_datetime_request,
     is_judgement_question,
-    is_schedule_request,
     normalize_query_text,
 )
 from ds_course_agent.rag.route_handlers import default_route_handlers
@@ -73,6 +75,7 @@ class AgentService:
         if not config.USE_REMOTE_LLM:
             self._check_ollama_connection()
 
+        self._agent_cache_by_tools: dict[tuple[str, ...], Any] = {}
         self.agent = self._create_agent()
 
     def _load_system_prompt(self) -> str:
@@ -111,7 +114,7 @@ class AgentService:
             self.route_handlers = handlers
         return handlers
 
-    def _select_route_handler(self, route_state: dict):
+    def _select_route_handler(self, route_state: RouteState):
         """Return the first route handler that accepts the route state."""
 
         for handler in self._get_route_handlers():
@@ -247,13 +250,15 @@ class AgentService:
         messages: list,
         *,
         fallback_input: str,
+        graph_agent: Any | None = None,
         start_attempt: int = 0,
     ) -> str:
         """Invoke the agent with structured retry/degrade handling."""
+        agent = graph_agent or self.agent
         max_retries = max(0, int(config.CHAT_MAX_RETRIES))
         for attempt in range(start_attempt, max_retries + 1):
             try:
-                result = self.agent.invoke({"messages": messages})
+                result = agent.invoke({"messages": messages})
                 response = self._extract_response(result)
 
                 if not response or not response.strip():
@@ -386,7 +391,13 @@ class AgentService:
 
         return self._build_error_response("处理请求时出错", f"错误信息：{truncate_error(exc)}", is_retryable=True)
 
-    def _stream_chat_with_retry(self, messages: list, *, fallback_input: str) -> Iterator[str]:
+    def _stream_chat_with_retry(
+        self,
+        messages: list,
+        *,
+        fallback_input: str,
+        graph_agent: Any | None = None,
+    ) -> Iterator[str]:
         """Stream once, then retry retryable pre-delta failures via blocking invoke.
 
         If a stream has already emitted content, retrying would duplicate tokens
@@ -397,7 +408,7 @@ class AgentService:
         max_retries = max(0, int(config.CHAT_MAX_RETRIES))
         emitted = False
         try:
-            for chunk in self._stream_chat_messages(messages):
+            for chunk in self._stream_chat_messages(messages, graph_agent=graph_agent):
                 if chunk:
                     emitted = True
                     yield chunk
@@ -409,6 +420,7 @@ class AgentService:
             recovered = self._invoke_messages_with_retry(
                 messages,
                 fallback_input=fallback_input,
+                graph_agent=graph_agent,
                 start_attempt=1,
             )
             yield from self._yield_text_chunks(recovered)
@@ -444,13 +456,49 @@ class AgentService:
 
         return False
 
-    def _create_agent(self):
+    def _create_agent(self, tools: list[Any] | None = None):
         """创建 ReAct Agent - 使用 LangGraph"""
+        selected_tools = getattr(self, "tools", []) if tools is None else tools
         agent = create_agent(
             model=self.llm,
-            tools=self.tools,
+            tools=selected_tools,
             system_prompt=self.system_prompt,
         )
+        return agent
+
+    def _agent_for_tools(self, allowed_tools: list[str] | None):
+        """Return a graph agent bound to the allowed tool subset.
+
+        ``None`` means use the default full exposed tool set. ``[]`` means the
+        route should bypass tool calling entirely and use ``direct_chat``.
+        """
+
+        cache = getattr(self, "_agent_cache_by_tools", None)
+        if cache is None:
+            cache = {}
+            self._agent_cache_by_tools = cache
+
+        if allowed_tools is None:
+            return self.agent
+        if not allowed_tools:
+            return None
+
+        if getattr(self, "llm", None) is None or getattr(self, "tool_registry", None) is None:
+            # Contract 3: 非空 allowlist 意图是子集绑定；缺依赖时 fail closed，
+            # 不能退回默认全工具 agent（否则模型物理拿到未授权工具）。
+            raise RuntimeError(
+                "Cannot build a tool-subset agent without llm and tool_registry "
+                "(allowed_tools must be None or [] when deps are unavailable)."
+            )
+
+        tool_names = tuple(sorted(allowed_tools))
+        cached = cache.get(tool_names)
+        if cached is not None:
+            return cached
+
+        tools = self.tool_registry.as_langchain_tools_for(tool_names)
+        agent = self._create_agent(tools=tools)
+        cache[tool_names] = agent
         return agent
 
     def chat(
@@ -459,6 +507,7 @@ class AgentService:
         chat_history: list | None = None,
         stream: bool = False,
         turn_context: str | None = None,
+        graph_agent: Any | None = None,
     ):
         """
         与 Agent 进行对话
@@ -487,9 +536,9 @@ class AgentService:
         )
 
         if stream:
-            return self._stream_chat_with_retry(messages, fallback_input=user_input)
+            return self._stream_chat_with_retry(messages, fallback_input=user_input, graph_agent=graph_agent)
 
-        return self._invoke_messages_with_retry(messages, fallback_input=user_input)
+        return self._invoke_messages_with_retry(messages, fallback_input=user_input, graph_agent=graph_agent)
 
     def direct_chat(
         self,
@@ -520,15 +569,16 @@ class AgentService:
 
         return self._invoke_direct_messages_with_retry(messages, fallback_input=user_input)
 
-    def _stream_chat(self, messages: list) -> Iterator[str]:
+    def _stream_chat(self, messages: list, *, graph_agent: Any | None = None) -> Iterator[str]:
         """流式输出对话响应"""
-        for chunk in self.agent.stream({"messages": messages}):
+        agent = graph_agent or self.agent
+        for chunk in agent.stream({"messages": messages}):
             if "agent" in chunk:
                 for msg in chunk["agent"]["messages"]:
                     if hasattr(msg, "content") and msg.content:
                         yield msg.content
 
-    def _stream_chat_messages(self, messages: list) -> Iterator[str]:
+    def _stream_chat_messages(self, messages: list, *, graph_agent: Any | None = None) -> Iterator[str]:
         """Yield text deltas from LangGraph/LangChain agent message streams.
 
         LangChain 1.x ``create_agent(...).stream(..., stream_mode="messages")``
@@ -552,9 +602,10 @@ class AgentService:
             "skipped_node": 0,
             "nodes": {},
         }
+        agent = graph_agent or self.agent
 
         try:
-            for item in self.agent.stream(
+            for item in agent.stream(
                 {"messages": messages},
                 stream_mode="messages",
             ):
@@ -646,7 +697,7 @@ class AgentService:
         *,
         stream_id: str,
         **metadata,
-    ) -> dict:
+    ) -> dict[str, Any]:
         return {
             "type": "progress",
             "phase": phase,
@@ -773,15 +824,15 @@ class AgentService:
         matches = loader.select_candidates(question)
         return {item.skill.key for item in matches}
 
-    def _build_turn_system_context(self, route_state: dict) -> str:
+    def _build_turn_system_context(self, route_state: RouteState) -> str:
         """Build per-turn system context for the generic agent branch."""
 
         sections: list[str] = []
-        profile_summary = self._format_student_profile_for_prompt(route_state.get("profile"))
+        profile_summary = self._format_student_profile_for_prompt(route_state.profile)
         if profile_summary:
             sections.append(profile_summary)
 
-        skill_keys = sorted(route_state.get("skill_candidate_keys") or [])
+        skill_keys = sorted(route_state.skill_candidate_keys or [])
         if skill_keys:
             sections.append(
                 "# Matched Teaching Skill Hints\n"
@@ -790,7 +841,7 @@ class AgentService:
                 + ". Use the inline SKILL.md instructions in the main system prompt when appropriate."
             )
 
-        matched_concepts = route_state.get("matched_concepts") or []
+        matched_concepts = route_state.matched_concepts or []
         concept_labels = []
         for item in matched_concepts[:5]:
             display_name = getattr(item, "display_name", None) or getattr(item, "concept_id", "")
@@ -885,57 +936,23 @@ class AgentService:
             or context.original_query
         )
 
-    def _can_direct_stream_route(self, route_state: dict) -> bool:
+    def _can_direct_stream_route(self, route_state: RouteState) -> bool:
         """Whether stream_chat_with_history can yield generic chunks directly."""
         from ds_course_agent.rag.query_pipeline import RouteType
 
-        decision = route_state["decision"]
+        decision = route_state.decision
         if decision.route != RouteType.GENERIC_AGENT:
             return False
         if decision.retrieval_policy == "required":
             return False
         return not self._svm_kernel_answer_needs_buffered_postprocess(route_state)
 
-    def _can_direct_llm_route(self, route_state: dict) -> bool:
-        """Whether a generic route should bypass the tool-calling agent.
-
-        This is intentionally narrower than ``_can_direct_stream_route``.  It is
-        set by the router only for turns that should be answered directly, such
-        as code-example/demo requests that do not ask to run or review code.
-        """
-
-        from ds_course_agent.rag.query_pipeline import RouteType
-
-        decision = route_state["decision"]
-        if decision.route != RouteType.GENERIC_AGENT:
-            return False
-        if not (decision.metadata or {}).get("direct_llm_answer"):
-            return False
-        if decision.required_tools:
-            return False
-        if decision.retrieval_policy == "required":
-            return False
-        return not self._svm_kernel_answer_needs_buffered_postprocess(route_state)
-
-    def _build_direct_llm_turn_context(self, route_state: dict, base_turn_context: str = "") -> str:
-        """Add direct-answer rules for generic routes that bypass tools."""
-
-        direct_rules = (
-            "# Direct Answer Mode\n"
-            "本轮问题被路由为直接回答：不要调用或假装调用工具，不要声称已经运行代码。\n"
-            "如果用户要求代码示例/演示，请给出可复制运行的完整 Python 示例，并用简短要点解释代码。\n"
-            "除非用户贴出了代码让你检查，否则不要使用“代码逻辑是正确的”这类代码审查口吻。"
-        )
-        return "\n\n".join(section for section in [base_turn_context, direct_rules] if section)
-
-    def _svm_kernel_answer_needs_buffered_postprocess(self, route_state: dict) -> bool:
+    def _svm_kernel_answer_needs_buffered_postprocess(self, route_state: RouteState) -> bool:
         """Detect the SVM/kernel judgment case where postprocessor may prepend content."""
-        context = route_state["context"]
+        context = route_state.context
         question = context.original_query
         normalized = normalize_query_text(question)
-        recent_context = normalize_query_text(
-            collect_recent_context(route_state.get("chat_history"), include_roles=False)
-        )
+        recent_context = normalize_query_text(collect_recent_context(route_state.chat_history, include_roles=False))
         refers_to_kernel = (
             "核函数" in normalized
             or "线性核" in normalized
@@ -981,7 +998,7 @@ class AgentService:
             chat_history=chat_history,
         )
 
-    def _retrieval_guard_skip_reason(self, route_state: dict, result: str | None = None) -> str | None:
+    def _retrieval_guard_skip_reason(self, route_state: RouteState, result: str | None = None) -> str | None:
         """Return a reason to skip forced grounding, or None when guard may run.
 
         Forced grounding is an expensive safety net.  It should only run for
@@ -991,10 +1008,10 @@ class AgentService:
         """
         from ds_course_agent.rag.query_pipeline import RouteType
 
-        decision = route_state["decision"]
+        decision = route_state.decision
         route = decision.route
 
-        if route_state.get("special_case_response"):
+        if route_state.special_case_response:
             return "special_case_response"
 
         if route == RouteType.GROUNDED_RAG and isinstance(result, str) and result.strip():
@@ -1034,188 +1051,53 @@ class AgentService:
         session_id: str,
         student_id: str = None,
         web_search: bool = False,
-    ) -> dict:
+    ) -> RouteState:
+        """构建 QueryContext 并执行统一路由决策（sync/stream 共享入口）。
+
+        薄委托到 :class:`QueryPipeline.prepare`；fast/prepass/full 三路 early-return
+        已收敛为单一线性管道，路由判定统一来自声明式规则表。见 phase1-backbone-spec
+        契约 4/5。
         """
-        构建 QueryContext 并执行统一路由决策。
+        from ds_course_agent.rag.query_pipeline import QueryPipeline
 
-        这是 sync / stream 共享的唯一路由入口，避免两条路径行为漂移。
+        return QueryPipeline(self).prepare(
+            user_input,
+            session_id,
+            student_id,
+            web_search=web_search,
+        )
+
+    def _enrich_skills(self, context, user_input: str) -> set:
+        """惰性富化阶段 A：廉价的 skill_select（keyword，无 embedding）。
+
+        由 QueryPipeline 富化器在求值到 requires_skills 规则前调用（memoized）。
+        原地设置 ``context.skill_candidate_keys``。fast-path 与 autonomous 路由
+        不依赖 skill，因此 datetime/schedule/code/python/demo 不会触发本方法。
         """
-        from ds_course_agent.rag.query_pipeline import (
-            DetectedConcept,
-            QueryContext,
-            RouteDecision,
-            RouteType,
-            get_preprocessor,
-            get_rewriter,
-            get_router,
-        )
-        from ds_course_agent.rag.query_trace import trace_span, trace_step
-        from ds_course_agent.rag.scope_guard import assess_query_scope
-        from ds_course_agent.shared.history import get_history
+        from ds_course_agent.rag.query_trace import trace_span
 
-        student_id = student_id or session_id
-        with trace_span("prepare.history_load"):
-            history = get_history(session_id)
-            chat_history = history.messages
-        self._warn_context_budget(
-            [SystemMessage(content=getattr(self, "system_prompt", ""))]
-            + list(chat_history)
-            + [HumanMessage(content=user_input)],
-            location="agent.prepare_query_route",
-            session_id=session_id,
-            student_id=student_id,
-        )
+        with trace_span("prepare.skill_select"):
+            skill_candidate_keys = self._select_skill_candidates(user_input)
+        context.skill_candidate_keys = skill_candidate_keys
+        return skill_candidate_keys
 
-        # Product-scope guard is stronger than the explicit web-search switch:
-        # the course assistant may search external resources for learning /
-        # data-science tasks, but should not become a general-purpose search
-        # engine for sports, celebrity, politics, weather, stocks, etc.
-        with trace_span("prepare.scope_guard"):
-            scope_decision = assess_query_scope(user_input, web_search_requested=web_search)
-        trace_step(
-            "scope_guard.result",
-            action=scope_decision.action,
-            category=scope_decision.category,
-            confidence=scope_decision.confidence,
-            reason=scope_decision.reason,
-        )
+    def _enrich_concepts(
+        self,
+        context,
+        user_input: str,
+        student_id: str,
+    ):
+        """惰性富化阶段 B：昂贵的 profile + concept_map + rewrite。
 
-        if scope_decision.allowed:
-            # When the user explicitly clicks the web-search switch, treat that
-            # as a turn-level mode choice rather than a keyword heuristic.  Do
-            # not let the older generic special-case/off-topic guard
-            # short-circuit the requested search path.
-            special_case_response = None if web_search else self._handle_special_case(user_input)
-        else:
-            special_case_response = scope_decision.response
-
-        def lightweight_state(route, confidence, reasons, *, required_tools=None, retrieval_policy="disabled"):
-            context = QueryContext(
-                original_query=user_input,
-                normalized_query=user_input.strip(),
-                session_id=session_id,
-                student_id=student_id,
-                enriched_query=user_input.strip(),
-                chat_history=chat_history,
-                metadata={
-                    "schedule_tool_query": self._build_schedule_tool_query(user_input),
-                    "fast_path": True,
-                    "web_search_requested": bool(web_search),
-                    "scope_guard": scope_decision.to_dict(),
-                },
-            )
-            decision = RouteDecision(
-                route=route,
-                confidence=confidence,
-                reasons=reasons,
-                required_tools=required_tools or [],
-                retrieval_policy=retrieval_policy,
-            )
-            trace_step(
-                "query_pipeline.route",
-                route=decision.route.value,
-                confidence=decision.confidence,
-                reasons=decision.reasons,
-                fast_path=True,
-            )
-            state = {
-                "student_id": student_id,
-                "history": history,
-                "chat_history": chat_history,
-                "profile": None,
-                "special_case_response": special_case_response,
-                "matched_concepts": [],
-                "skill_candidate_keys": set(),
-                "context": context,
-                "decision": decision,
-            }
-            self._get_hooks().before_route(state)
-            self._get_hooks().after_route(state, decision)
-            return state
-
-        if special_case_response:
-            return lightweight_state(
-                RouteType.GENERIC_AGENT,
-                1.0,
-                ["特殊问候/致谢/范围保护响应" if scope_decision.allowed else "课程助教范围保护"],
-                retrieval_policy="disabled",
-            )
-
-        if web_search:
-            return lightweight_state(
-                RouteType.WEB_SEARCH,
-                1.0,
-                ["用户显式开启联网搜索"],
-                required_tools=["web_search_tool"],
-                retrieval_policy="required",
-            )
-
-        # Fast path: system requests do not need profile, concept map, or rewrite.
-        if is_datetime_request(user_input):
-            return lightweight_state(
-                RouteType.CURRENT_DATETIME,
-                0.98,
-                ["fast path: 当前日期时间查询"],
-                required_tools=["current_datetime_tool"],
-                retrieval_policy="disabled",
-            )
-        if is_schedule_request(user_input):
-            return lightweight_state(
-                RouteType.COURSE_SCHEDULE,
-                0.98,
-                ["fast path: 课程安排查询"],
-                required_tools=["course_schedule_tool"],
-                retrieval_policy="optional",
-            )
-
-        # Lightweight prepass: high-confidence code/tool-autonomous routes do
-        # not need the expensive profile/concept-map/rewrite path.  This keeps
-        # code review, Python execution, and code/example/demo requests fast
-        # while preserving the full QueryPipeline for grounded course questions.
-        preprocessor = get_preprocessor(enable_concept_detection=False)
-        with trace_span("prepare.lightweight_preprocess"):
-            pre_context = preprocessor.process(
-                user_input=user_input,
-                session_id=session_id,
-                student_id=student_id,
-                chat_history=chat_history,
-                profile=None,
-            )
-        pre_context.metadata["schedule_tool_query"] = self._build_schedule_tool_query(user_input)
-        pre_context.metadata["grounded_tool_query"] = pre_context.enriched_query or pre_context.normalized_query
-        with trace_span("prepare.lightweight_router"):
-            pre_decision = get_router().route(pre_context)
-
-        decision_metadata = pre_decision.metadata or {}
-        autonomous_tool_choice = bool(decision_metadata.get("autonomous_tool_choice"))
-        direct_llm_answer = bool(decision_metadata.get("direct_llm_answer"))
-        if pre_decision.route in {RouteType.PYTHON_EXEC, RouteType.CODE_REVIEW} or (
-            pre_decision.route == RouteType.GENERIC_AGENT
-            and pre_decision.retrieval_policy != "required"
-            and (autonomous_tool_choice or direct_llm_answer)
-        ):
-            trace_step(
-                "query_pipeline.route",
-                route=pre_decision.route.value,
-                confidence=pre_decision.confidence,
-                reasons=pre_decision.reasons,
-                fast_path=True,
-                lightweight_prepass=True,
-            )
-            state = {
-                "student_id": student_id,
-                "history": history,
-                "chat_history": chat_history,
-                "profile": None,
-                "special_case_response": special_case_response,
-                "matched_concepts": [],
-                "skill_candidate_keys": pre_context.skill_candidate_keys,
-                "context": pre_context,
-                "decision": pre_decision,
-            }
-            self._get_hooks().before_route(state)
-            self._get_hooks().after_route(state, pre_decision)
-            return state
+        由 QueryPipeline 富化器在求值到 requires_concepts 规则前调用（memoized）。
+        原地设置 ``context.detected_concepts``/``profile_snapshot``/
+        ``metadata["grounded_tool_query"]``，返回
+        ``(profile, matched_concepts, rewrite_result)``。只有 explanation/
+        rewritten_followup/grounded_rag 触发本方法，因此 autonomous/skill 路由
+        不跑 concept_map（恢复旧 prepass 对 code/example/demo 的快速路径）。
+        """
+        from ds_course_agent.rag.query_pipeline import DetectedConcept, get_preprocessor, get_rewriter
+        from ds_course_agent.rag.query_trace import trace_span
 
         with trace_span("prepare.profile_load"):
             profile = get_memory_core().get_profile(student_id)
@@ -1223,19 +1105,9 @@ class AgentService:
         # 保持与旧逻辑一致：学习事件和路由概念都复用 map_question_to_concepts。
         with trace_span("prepare.concept_map"):
             matched_concepts = map_question_to_concepts(user_input, top_k=3)
-        with trace_span("prepare.skill_select"):
-            skill_candidate_keys = self._select_skill_candidates(user_input)
 
-        # 这里禁用 preprocessor 内部的概念识别，避免重复调用 heavy mapper；
-        # 随后把旧逻辑得到的 matched_concepts 注入到 context。
-        with trace_span("prepare.preprocess"):
-            context = preprocessor.process(
-                user_input=user_input,
-                session_id=session_id,
-                student_id=student_id,
-                chat_history=chat_history,
-                profile=profile,
-            )
+        # 禁用 preprocessor 内部的概念识别，避免重复调用 heavy mapper；
+        # 把 map_question_to_concepts 的结果直接注入 context 供规则求值使用。
         context.detected_concepts = [
             DetectedConcept(
                 concept_id=item.concept_id,
@@ -1248,69 +1120,56 @@ class AgentService:
             )
             for item in matched_concepts
         ]
-        context.skill_candidate_keys = skill_candidate_keys
+        context.profile_snapshot = get_preprocessor(enable_concept_detection=False)._build_profile_snapshot(profile)
 
         with trace_span("prepare.rewrite"):
             rewrite_result = get_rewriter().rewrite(context)
-        context.metadata["schedule_tool_query"] = self._build_schedule_tool_query(user_input)
         context.metadata["grounded_tool_query"] = rewrite_result.enriched_query
 
-        route_state_base = {
-            "student_id": student_id,
-            "history": history,
-            "chat_history": chat_history,
-            "profile": profile,
-            "special_case_response": special_case_response,
-            "matched_concepts": matched_concepts,
-            "skill_candidate_keys": skill_candidate_keys,
-            "context": context,
-        }
-        self._get_hooks().before_route(route_state_base)
+        return profile, matched_concepts, rewrite_result
 
-        with trace_span("prepare.router"):
-            decision = get_router().route(context)
-        trace_step(
-            "query_pipeline.route",
-            route=decision.route.value,
-            confidence=decision.confidence,
-            reasons=decision.reasons,
+    def _build_route_state(
+        self,
+        *,
+        context,
+        decision,
+        chat_history,
+        student_id: str,
+        session_id: str,
+        history,
+        profile,
+        matched_concepts,
+        skill_candidate_keys,
+        special_case_response,
+        stream_id: str | None = None,
+    ) -> RouteState:
+        """Single RouteState builder for every route (Contract 1).
+
+        Replaces the former lightweight_state/full-path dual construction so all
+        routes——fast-path included——produce the same field set. Empty enrichment
+        results (``profile=None``, ``matched_concepts=[]``) are passed through for
+        fast-path turns that skipped enrichment.
+        """
+        return RouteState(
+            context=context,
+            decision=decision,
+            chat_history=chat_history,
+            student_id=student_id,
+            session_id=session_id,
+            history=history,
+            profile=profile,
+            matched_concepts=matched_concepts or [],
+            skill_candidate_keys=skill_candidate_keys or set(),
+            special_case_response=special_case_response,
+            stream_id=stream_id,
         )
-        logger.info(
-            "路由决策: %s (confidence=%.2f, reasons=%s)",
-            decision.route.value,
-            decision.confidence,
-            ", ".join(decision.reasons),
-        )
 
-        with trace_span("prepare.record_learning_events"):
-            self._record_learning_events(
-                question=user_input,
-                session_id=session_id,
-                student_id=student_id,
-                matched_concepts=matched_concepts,
-                special_case_response=special_case_response,
-            )
-
-        state = {
-            "student_id": student_id,
-            "history": history,
-            "chat_history": chat_history,
-            "profile": profile,
-            "special_case_response": special_case_response,
-            "matched_concepts": matched_concepts,
-            "skill_candidate_keys": skill_candidate_keys,
-            "context": context,
-            "decision": decision,
-        }
-        self._get_hooks().after_route(state, decision)
-        return state
-
-    def _finalize_route_result(self, route_state: dict, result, *, stream: bool = False) -> str:
+    def _finalize_route_result(self, route_state: RouteState, result, *, stream: bool = False) -> str:
         """Apply route-level hooks and empty-result fallback to a handler result."""
         from ds_course_agent.rag.query_trace import trace_error
 
-        user_input = route_state["context"].original_query
-        chat_history = route_state["chat_history"]
+        user_input = route_state.context.original_query
+        chat_history = route_state.chat_history
 
         try:
             result = self._get_hooks().after_llm(route_state, result, agent=self, stream=stream)
@@ -1343,7 +1202,7 @@ class AgentService:
 
         return result
 
-    def _observe_stream_end(self, route_state: dict, result: str, *, stream: bool = True) -> None:
+    def _observe_stream_end(self, route_state: RouteState, result: str, *, stream: bool = True) -> None:
         """Run observational stream-end hooks after direct streaming completes.
 
         Direct streaming intentionally yields tokens before postprocessing can
@@ -1359,7 +1218,7 @@ class AgentService:
             trace_error("hook.after_stream_end", e)
             logger.error("after_stream_end hook failed: %s", e, exc_info=True)
 
-    def _execute_selected_route_handler(self, handler, route_state: dict, stream: bool = False) -> str:
+    def _execute_selected_route_handler(self, handler, route_state: RouteState, stream: bool = False) -> str:
         """Execute an already-selected route handler without re-running selection."""
         from ds_course_agent.rag.query_trace import trace_error
 
@@ -1374,7 +1233,7 @@ class AgentService:
 
         return self._finalize_route_result(route_state, result, stream=stream)
 
-    def _execute_route(self, route_state: dict, stream: bool = False) -> str:
+    def _execute_route(self, route_state: RouteState, stream: bool = False) -> str:
         """按统一 RouteDecision 执行回答；sync/stream 共享此执行核心。"""
         from ds_course_agent.rag.query_trace import trace_error
 
@@ -1388,11 +1247,11 @@ class AgentService:
 
         return self._execute_selected_route_handler(handler, route_state, stream=stream)
 
-    def _execute_route_sync(self, route_state: dict) -> str:
+    def _execute_route_sync(self, route_state: RouteState) -> str:
         """Compatibility wrapper for non-streaming route execution."""
         return self._execute_route(route_state, stream=False)
 
-    def _iter_route_response(self, route_state: dict) -> Iterator[str]:
+    def _iter_route_response(self, route_state: RouteState) -> Iterator[str]:
         """Delegate streaming route execution to the selected RouteHandler."""
 
         from ds_course_agent.rag.query_trace import trace_error
@@ -1405,7 +1264,7 @@ class AgentService:
             logger.error("agent.stream_generate failed: %s", exc, exc_info=True)
             raise
 
-    def _iter_grounded_rag_response(self, route_state: dict) -> Iterator[str]:
+    def _iter_grounded_rag_response(self, route_state: RouteState) -> Iterator[str]:
         """Stream the common grounded-RAG route directly from the RAG model call."""
         from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
         from ds_course_agent.tools._shared import _track_retrieval
@@ -1417,7 +1276,7 @@ class AgentService:
             trace_answer_degraded,
         )
 
-        question = self._route_execution_query(route_state["context"], route_state["decision"])
+        question = self._route_execution_query(route_state.context, route_state.decision)
 
         trace_step("agent.branch", branch="grounded_rag_stream")
         trace_step("tool.invoke", tool="course_rag_tool", question=question)
@@ -1499,10 +1358,10 @@ class AgentService:
             if web_search
             else self._prepare_query_route(user_input, session_id, student_id)
         )
-        route_state["history"].add_messages([HumanMessage(content=user_input)])
+        route_state.history.add_messages([HumanMessage(content=user_input)])
         result = self._execute_route(route_state, stream=False)
 
-        route_state["history"].add_messages(
+        route_state.history.add_messages(
             [
                 AIMessage(content=result if isinstance(result, str) else "系统错误"),
             ]
@@ -1534,8 +1393,8 @@ class AgentService:
             if web_search
             else self._prepare_query_route(user_input, session_id, student_id)
         )
-        route_state["stream_id"] = stream_id
-        decision = route_state["decision"]
+        route_state.stream_id = stream_id
+        decision = route_state.decision
         route = decision.route
         yield self._progress_event(
             "context",
@@ -1545,7 +1404,7 @@ class AgentService:
             confidence=decision.confidence,
             resuming=False,
         )
-        route_state["history"].add_messages([HumanMessage(content=user_input)])
+        route_state.history.add_messages([HumanMessage(content=user_input)])
 
         if route == RouteType.WEB_SEARCH:
             yield self._progress_event(
@@ -1617,7 +1476,7 @@ class AgentService:
             route=route.value,
             resuming=False,
         )
-        route_state["history"].add_messages(
+        route_state.history.add_messages(
             [
                 AIMessage(content=final_result if isinstance(final_result, str) else "系统错误"),
             ]

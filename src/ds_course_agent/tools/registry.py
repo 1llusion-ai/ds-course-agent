@@ -117,6 +117,21 @@ class ToolRegistry:
     def as_langchain_tools(self, *, exposed_only: bool = True) -> list[Any]:
         return [spec.tool for spec in self.specs(exposed_only=exposed_only)]
 
+    def as_langchain_tools_for(self, names: Iterable[str]) -> list[Any]:
+        """Return the concrete tools for a named subset.
+
+        ``names`` must resolve to registered, agent-exposed tools. This keeps the
+        agent-side tool gate structural rather than prompt-driven.
+        """
+
+        tools = []
+        for name in names:
+            spec = self.get(name)
+            if not spec.expose_to_agent:
+                raise ValueError(f"Tool {name!r} is not exposed to the generic agent")
+            tools.append(spec.tool)
+        return tools
+
     def metadata(self, *, exposed_only: bool = False) -> list[dict[str, Any]]:
         return [spec.to_metadata() for spec in self.specs(exposed_only=exposed_only)]
 

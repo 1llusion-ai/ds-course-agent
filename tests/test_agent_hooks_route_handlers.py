@@ -3,10 +3,10 @@
 import pytest
 
 from ds_course_agent.hooks import HookManager, RetrievalGuardHook
-from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteType
+from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteState, RouteType
 
 
-def _route_state(*, route=RouteType.GENERIC_AGENT, retrieval_policy="required"):
+def _route_state(*, route=RouteType.GENERIC_AGENT, retrieval_policy="required", allowed_tools=None):
     context = QueryContext(
         original_query="什么是过拟合？",
         normalized_query="什么是过拟合",
@@ -19,15 +19,20 @@ def _route_state(*, route=RouteType.GENERIC_AGENT, retrieval_policy="required"):
         confidence=0.9,
         reasons=["unit-test"],
         retrieval_policy=retrieval_policy,
+        allowed_tools=allowed_tools if allowed_tools is not None else [],
     )
-    return {
-        "context": context,
-        "decision": decision,
-        "chat_history": [],
-        "student_id": "student-hooks",
-        "special_case_response": None,
-        "matched_concepts": [],
-    }
+    return RouteState(
+        student_id="student-hooks",
+        session_id="session-hooks",
+        history=None,
+        chat_history=[],
+        profile=None,
+        special_case_response=None,
+        matched_concepts=[],
+        skill_candidate_keys=set(),
+        context=context,
+        decision=decision,
+    )
 
 
 def test_hook_manager_after_llm_transforms_result_in_order():
@@ -101,7 +106,7 @@ def test_execute_route_dispatches_to_route_handler_without_if_ladder():
 
     class FakeHandler:
         def can_handle(self, agent, route_state):
-            calls.append(("can", route_state["decision"].route.value))
+            calls.append(("can", route_state.decision.route.value))
             return True
 
         def execute(self, agent, route_state, *, stream=False):
@@ -125,14 +130,14 @@ def test_stream_route_dispatches_to_route_handler_stream_contract():
 
     class FakeHandler:
         def can_handle(self, agent, route_state):
-            calls.append(("can", route_state["decision"].route.value))
+            calls.append(("can", route_state.decision.route.value))
             return True
 
         def execute(self, agent, route_state, *, stream=False):
             raise AssertionError("stream dispatch should call stream_execute")
 
         def stream_execute(self, agent, route_state):
-            calls.append(("stream_execute", route_state["decision"].route.value))
+            calls.append(("stream_execute", route_state.decision.route.value))
             yield "chunk-1"
             yield "chunk-2"
 
@@ -168,7 +173,7 @@ def test_stream_route_exception_is_not_swallowed_or_persisted():
 
     history = FakeHistory()
     state = _route_state(route=RouteType.GENERIC_AGENT, retrieval_policy="optional")
-    state["history"] = history
+    state.history = history
 
     service = AgentService.__new__(AgentService)
     service.route_handlers = [BrokenStreamingHandler()]
@@ -191,7 +196,7 @@ def test_buffered_stream_handler_uses_selected_handler_without_second_dispatch()
 
     class FakeBufferedHandler(BufferedRouteHandlerMixin):
         def can_handle(self, agent, route_state):
-            calls.append(("can", route_state["decision"].route.value))
+            calls.append(("can", route_state.decision.route.value))
             return True
 
         def execute(self, agent, route_state, *, stream=False):
@@ -235,7 +240,7 @@ def test_web_search_route_handler_compacts_evidence_and_tracks_sources(monkeypat
 
     captured = {}
 
-    def fake_chat(user_input, chat_history=None, stream=False, turn_context=None):
+    def fake_chat(user_input, chat_history=None, stream=False, turn_context=None, **kwargs):
         captured["user_input"] = user_input
         captured["turn_context"] = turn_context
         captured["stream"] = stream
@@ -271,7 +276,7 @@ def test_web_search_route_rejects_obvious_non_teaching_queries_without_search(mo
     )
 
     state = _route_state(route=RouteType.WEB_SEARCH)
-    state["context"].original_query = "今天北京天气怎么样？"
+    state.context.original_query = "今天北京天气怎么样？"
     service = AgentService.__new__(AgentService)
     service.chat = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("chat should not be called"))
     service._build_turn_system_context = lambda route_state: ""
@@ -300,13 +305,13 @@ def test_web_search_route_rejects_general_fact_queries_without_search(monkeypatc
     service._build_turn_system_context = lambda route_state: ""
 
     state = _route_state(route=RouteType.WEB_SEARCH)
-    state["context"].original_query = "詹姆斯多大了？"
+    state.context.original_query = "詹姆斯多大了？"
     result = WebSearchRouteHandler().execute(service, state, stream=False)
     assert "本次不进行通用联网搜索" in result
     assert "体育数据科学项目" in result
 
     state = _route_state(route=RouteType.WEB_SEARCH)
-    state["context"].original_query = "美国总统是谁？"
+    state.context.original_query = "美国总统是谁？"
     result = WebSearchRouteHandler().execute(service, state, stream=False)
     assert "本次不进行通用联网搜索" in result
     assert "历任总统年龄" in result
@@ -406,7 +411,7 @@ def test_web_search_route_handler_streams_answer_chunks_directly(monkeypatch):
 
     observed = {}
 
-    def fake_chat(user_input, chat_history=None, stream=False, turn_context=None):
+    def fake_chat(user_input, chat_history=None, stream=False, turn_context=None, **kwargs):
         assert stream is True
         observed["turn_context"] = turn_context
         yield "第一段"
@@ -513,7 +518,7 @@ def test_web_search_route_handler_stream_emits_detailed_progress_with_stream_id(
     service.hooks = HookManager([])
 
     state = _route_state(route=RouteType.WEB_SEARCH)
-    state["stream_id"] = "stream-1"
+    state.stream_id = "stream-1"
 
     chunks = list(WebSearchRouteHandler().stream_execute(service, state))
     progress_events = [item for item in chunks if isinstance(item, dict) and item.get("type") == "progress"]
@@ -570,7 +575,7 @@ def test_web_search_route_handler_adds_deep_fetch_context_and_metadata(monkeypat
 
     captured = {}
 
-    def fake_chat(user_input, chat_history=None, stream=False, turn_context=None):
+    def fake_chat(user_input, chat_history=None, stream=False, turn_context=None, **kwargs):
         captured["turn_context"] = turn_context
         return "联网深读回答 [1]"
 
@@ -636,7 +641,7 @@ def test_web_search_deep_fetch_keeps_original_source_number(monkeypatch):
 
     captured = {}
 
-    def fake_chat(user_input, chat_history=None, stream=False, turn_context=None):
+    def fake_chat(user_input, chat_history=None, stream=False, turn_context=None, **kwargs):
         captured["turn_context"] = turn_context
         return "answer [2]"
 
@@ -716,7 +721,11 @@ def test_direct_stream_route_runs_stream_end_hooks_and_retrieval_guard_trace():
     from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
     from ds_course_agent.rag.route_handlers import GenericAgentRouteHandler
 
-    state = _route_state(route=RouteType.GENERIC_AGENT, retrieval_policy="optional")
+    state = _route_state(
+        route=RouteType.GENERIC_AGENT,
+        retrieval_policy="optional",
+        allowed_tools=[],
+    )
     observed = {}
 
     class CaptureStreamEndHook:
@@ -726,13 +735,14 @@ def test_direct_stream_route_runs_stream_end_hooks_and_retrieval_guard_trace():
             observed["agent"] = kwargs.get("agent")
             observed["stream"] = kwargs.get("stream")
 
-    def fake_chat(user_input, chat_history=None, stream=False, turn_context=None):
+    def fake_chat(user_input, chat_history=None, stream=False, turn_context=None, **kwargs):
         assert stream is True
         yield "你"
         yield "好"
 
     service = AgentService.__new__(AgentService)
-    service.chat = fake_chat
+    # allowed_tools==[] → direct_chat 路径（Contract 3）；直接走 direct-stream。
+    service.direct_chat = fake_chat
     service.hooks = HookManager([RetrievalGuardHook(), CaptureStreamEndHook()])
 
     token = begin_query_trace({"entrypoint": "unit_test"})
@@ -758,13 +768,13 @@ def test_direct_llm_generic_route_bypasses_tool_agent_for_streaming():
     from ds_course_agent.rag.route_handlers import GenericAgentRouteHandler
 
     state = _route_state(route=RouteType.GENERIC_AGENT, retrieval_policy="optional")
-    state["decision"].metadata["direct_llm_answer"] = True
+    state.decision.direct_llm_answer = True
     captured = {}
 
     def forbidden_chat(*_args, **_kwargs):
         raise AssertionError("tool-calling agent should not run for direct LLM route")
 
-    def fake_direct_chat(user_input, chat_history=None, stream=False, turn_context=None):
+    def fake_direct_chat(user_input, chat_history=None, stream=False, turn_context=None, **kwargs):
         assert stream is True
         captured["turn_context"] = turn_context
         yield "示例"
@@ -778,7 +788,7 @@ def test_direct_llm_generic_route_bypasses_tool_agent_for_streaming():
     chunks = list(GenericAgentRouteHandler().stream_execute(service, state))
 
     assert chunks == ["示例", "代码"]
-    assert "Direct Answer Mode" in captured["turn_context"]
+    assert captured["turn_context"] == ""
 
 
 def test_agent_stream_messages_accepts_langgraph_model_node():

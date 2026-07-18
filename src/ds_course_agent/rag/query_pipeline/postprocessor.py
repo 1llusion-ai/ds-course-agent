@@ -44,7 +44,7 @@ class QueryPostprocessor:
         }
 
         metadata = dict(decision.metadata or {})
-        metadata.setdefault("retrieval_policy", decision.retrieval_policy)
+        metadata.setdefault("retrieval_policy", decision.retrieval_policy.value)
         if decision.skill_name:
             metadata.setdefault("skill_name", decision.skill_name)
 
@@ -54,7 +54,7 @@ class QueryPostprocessor:
             route=decision.route,
             trace=trace,
             metadata=metadata,
-            used_retrieval=decision.retrieval_policy == "required",
+            used_retrieval=decision.retrieval_policy.value == "required",
         )
 
     def _scope_guard_override(self, question: str, decision: RouteDecision) -> str:

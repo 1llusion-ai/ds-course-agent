@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from benchmarks.route_harness import build_route_report, evaluate_case
 from ds_course_agent.rag.query_pipeline import RouteDecision, RouteType
 
@@ -7,7 +9,9 @@ class _FakeService:
         self.decision = decision
 
     def _prepare_query_route(self, query, session_id, student_id):
-        return {"decision": self.decision}
+        # QueryPipeline.prepare returns a typed RouteState; the harness reads
+        # state.decision directly (the old dict compat shim was removed).
+        return SimpleNamespace(decision=self.decision)
 
 
 def test_route_harness_evaluate_case_flags_unexpected_rag():

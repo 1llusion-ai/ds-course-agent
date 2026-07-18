@@ -12,7 +12,7 @@ import logging
 from collections.abc import Iterator
 from typing import Any, Protocol
 
-from ds_course_agent.rag.query_pipeline import RouteType
+from ds_course_agent.rag.query_pipeline import RouteState, RouteType
 from ds_course_agent.rag.taxonomy import (
     LOW_SUCCESS_FETCH_DOMAINS,
     RELIABLE_WEB_DOMAINS,
@@ -29,15 +29,15 @@ logger = logging.getLogger(__name__)
 class RouteHandler(Protocol):
     """Execute one RouteDecision branch in sync or streaming mode."""
 
-    def can_handle(self, agent: Any, route_state: dict[str, Any]) -> bool: ...
-    def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str: ...
-    def stream_execute(self, agent: Any, route_state: dict[str, Any]) -> Iterator[Any]: ...
+    def can_handle(self, agent: Any, route_state: RouteState) -> bool: ...
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str: ...
+    def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[Any]: ...
 
 
 class BufferedRouteHandlerMixin:
     """Default streaming behavior for handlers that only produce buffered text."""
 
-    def stream_execute(self, agent: Any, route_state: dict[str, Any]) -> Iterator[str]:
+    def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str]:
         # Route-level hooks (notably RetrievalGuardHook) live in
         # AgentService's route finalization, so buffered streaming must go
         # through that path rather than calling execute() directly.  Use the
@@ -47,54 +47,54 @@ class BufferedRouteHandlerMixin:
 
 
 class SpecialCaseRouteHandler(BufferedRouteHandlerMixin):
-    def can_handle(self, agent: Any, route_state: dict[str, Any]) -> bool:
-        return bool(route_state.get("special_case_response"))
+    def can_handle(self, agent: Any, route_state: RouteState) -> bool:
+        return bool(route_state.special_case_response)
 
-    def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_step
 
         trace_step("agent.branch", branch="special_case")
-        return str(route_state["special_case_response"])
+        return str(route_state.special_case_response)
 
 
 class CourseScheduleRouteHandler(BufferedRouteHandlerMixin):
-    def can_handle(self, agent: Any, route_state: dict[str, Any]) -> bool:
-        return route_state["decision"].route == RouteType.COURSE_SCHEDULE
+    def can_handle(self, agent: Any, route_state: RouteState) -> bool:
+        return route_state.decision.route == RouteType.COURSE_SCHEDULE
 
-    def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_step
         from ds_course_agent.tools.course_schedule import course_schedule_tool
 
-        question = route_state["context"].original_query
+        question = route_state.context.original_query
         trace_step("agent.branch", branch="schedule")
         result = course_schedule_tool.invoke(agent._build_schedule_tool_query(question))
         return result
 
 
 class CurrentDatetimeRouteHandler(BufferedRouteHandlerMixin):
-    def can_handle(self, agent: Any, route_state: dict[str, Any]) -> bool:
-        return route_state["decision"].route == RouteType.CURRENT_DATETIME
+    def can_handle(self, agent: Any, route_state: RouteState) -> bool:
+        return route_state.decision.route == RouteType.CURRENT_DATETIME
 
-    def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_step
         from ds_course_agent.tools.datetime_tool import current_datetime_tool
 
-        question = route_state["context"].original_query
+        question = route_state.context.original_query
         trace_step("agent.branch", branch="datetime")
         result = current_datetime_tool.invoke(question)
         return result
 
 
 class GroundedRagRouteHandler:
-    def can_handle(self, agent: Any, route_state: dict[str, Any]) -> bool:
-        return route_state["decision"].route == RouteType.GROUNDED_RAG
+    def can_handle(self, agent: Any, route_state: RouteState) -> bool:
+        return route_state.decision.route == RouteType.GROUNDED_RAG
 
-    def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_span, trace_step
         from ds_course_agent.tools.course_rag import course_rag_tool
 
-        context = route_state["context"]
-        decision = route_state["decision"]
+        context = route_state.context
+        decision = route_state.decision
         execution_query = agent._route_execution_query(context, decision)
 
         trace_step("agent.branch", branch="grounded_rag_direct")
@@ -104,7 +104,7 @@ class GroundedRagRouteHandler:
         with trace_span("execute.grounded_rag_tool"):
             return course_rag_tool.invoke(execution_query)
 
-    def stream_execute(self, agent: Any, route_state: dict[str, Any]) -> Iterator[str]:
+    def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str]:
         yield from agent._iter_grounded_rag_response(route_state)
 
 
@@ -117,8 +117,8 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
     them, while full source metadata is tracked for the API/UI.
     """
 
-    def can_handle(self, agent: Any, route_state: dict[str, Any]) -> bool:
-        return route_state["decision"].route == RouteType.WEB_SEARCH
+    def can_handle(self, agent: Any, route_state: RouteState) -> bool:
+        return route_state.decision.route == RouteType.WEB_SEARCH
 
     def _response_sources(self, web_response: Any) -> list[dict[str, Any]]:
         sources = getattr(web_response, "sources", None)
@@ -455,7 +455,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
     def _build_web_turn_context(
         self,
         agent: Any,
-        route_state: dict[str, Any],
+        route_state: RouteState,
         *,
         evidence_context: str,
         response_results: list[Any],
@@ -477,7 +477,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
 
     def _stream_progress_event(
         self,
-        route_state: dict[str, Any],
+        route_state: RouteState,
         phase: str,
         message: str,
         *,
@@ -485,7 +485,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         details: dict[str, Any] | None = None,
         **metadata: Any,
     ) -> dict[str, Any] | None:
-        stream_id = route_state.get("stream_id") or route_state.get("__stream_id")
+        stream_id = route_state.stream_id
         if not stream_id:
             return None
         event: dict[str, Any] = {
@@ -548,7 +548,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             pass
         return search_web(question)
 
-    def _prepare_web_answer_context(self, agent: Any, route_state: dict[str, Any]) -> dict[str, Any]:
+    def _prepare_web_answer_context(self, agent: Any, route_state: RouteState) -> dict[str, Any]:
         """Search/fetch web evidence and build the LLM turn context once.
 
         The sync and stream paths share this method so streaming does not have
@@ -559,9 +559,9 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
         from ds_course_agent.tools._shared import _track_retrieval
 
-        context = route_state["context"]
+        context = route_state.context
         question = context.original_query
-        chat_history = route_state["chat_history"]
+        chat_history = route_state.chat_history
 
         trace_step("agent.branch", branch="web_search")
         scope_response = self._web_search_scope_response(question)
@@ -689,7 +689,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             "turn_context": web_turn_context,
         }
 
-    def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_span
 
         prepared = self._prepare_web_answer_context(agent, route_state)
@@ -732,7 +732,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
 
     def _stream_fetch_context(
         self,
-        route_state: dict[str, Any],
+        route_state: RouteState,
         *,
         question: str,
         response_results: list[Any],
@@ -966,13 +966,13 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             "fetch_pages": fetch_pages,
         }
 
-    def stream_execute(self, agent: Any, route_state: dict[str, Any]) -> Iterator[Any]:
+    def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[Any]:
         from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
         from ds_course_agent.tools._shared import _track_retrieval
 
-        context = route_state["context"]
+        context = route_state.context
         question = context.original_query
-        chat_history = route_state["chat_history"]
+        chat_history = route_state.chat_history
 
         trace_step("agent.branch", branch="web_search")
 
@@ -1172,10 +1172,10 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
 
 
 class PythonExecRouteHandler(BufferedRouteHandlerMixin):
-    def can_handle(self, agent: Any, route_state: dict[str, Any]) -> bool:
-        return route_state["decision"].route == RouteType.PYTHON_EXEC
+    def can_handle(self, agent: Any, route_state: RouteState) -> bool:
+        return route_state.decision.route == RouteType.PYTHON_EXEC
 
-    def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.code_executor import (
             PythonSandbox,
             extract_python_code,
@@ -1183,7 +1183,7 @@ class PythonExecRouteHandler(BufferedRouteHandlerMixin):
         )
         from ds_course_agent.rag.query_trace import trace_span, trace_step
 
-        question = route_state["context"].original_query
+        question = route_state.context.original_query
         trace_step("agent.branch", branch="python_exec")
         code = extract_python_code(question)
         if not code:
@@ -1202,22 +1202,22 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
         RouteType.PERSONALIZED_EXPLANATION_SKILL: ("explanation_skill", "explanation_skill"),
     }
 
-    def can_handle(self, agent: Any, route_state: dict[str, Any]) -> bool:
-        route = route_state["decision"].route
+    def can_handle(self, agent: Any, route_state: RouteState) -> bool:
+        route = route_state.decision.route
         if route not in self._ROUTES:
             return False
         attr, _branch = self._ROUTES[route]
         return bool(getattr(agent, attr, None))
 
-    def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_step
 
-        context = route_state["context"]
-        route = route_state["decision"].route
-        student_id = route_state["student_id"]
+        context = route_state.context
+        route = route_state.decision.route
+        student_id = route_state.student_id
         session_id = context.session_id
         question = context.original_query
-        matched_concepts = route_state.get("matched_concepts") or []
+        matched_concepts = route_state.matched_concepts or []
         attr, branch = self._ROUTES[route]
         skill = getattr(agent, attr)
 
@@ -1238,73 +1238,77 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
 class GenericAgentRouteHandler:
     """Fallback handler for all routes not claimed by earlier handlers."""
 
-    def can_handle(self, agent: Any, route_state: dict[str, Any]) -> bool:
+    def can_handle(self, agent: Any, route_state: RouteState) -> bool:
         return True
 
     def _chat_callable_and_context(
         self,
         agent: Any,
-        route_state: dict[str, Any],
+        route_state: RouteState,
         base_turn_context: str,
     ):
-        can_direct_llm = getattr(agent, "_can_direct_llm_route", lambda _state: False)
-        direct_llm = bool(can_direct_llm(route_state))
-        if not direct_llm:
-            return agent.chat, base_turn_context, False
+        from ds_course_agent.rag.query_trace import trace_step
 
-        direct_chat = getattr(agent, "direct_chat", None)
-        if not callable(direct_chat):
-            return agent.chat, base_turn_context, False
+        decision = route_state.decision
+        allowed_tools = decision.allowed_tools
 
-        build_direct_context = getattr(agent, "_build_direct_llm_turn_context", None)
-        turn_context = (
-            build_direct_context(route_state, base_turn_context)
-            if callable(build_direct_context)
-            else base_turn_context
+        # Contract 3 三态门控：
+        #   []  → 直连 LLM（无工具 agent），无条件走 direct_chat；
+        #   None → 默认全工具 agent；
+        #   [...] → 子集 agent。
+        # direct_llm_answer 是观测/语义信号，不再是门控触发器——[] 本身物理保证无工具。
+        if allowed_tools == []:
+            trace_step(
+                "agent.tool_gating",
+                route=decision.route.value,
+                allowed_tools=[],
+                policy="none",
+            )
+            direct_chat = getattr(agent, "direct_chat", None)
+            if callable(direct_chat):
+                return direct_chat, base_turn_context, True, None
+            return agent.chat, base_turn_context, False, None
+
+        graph_agent = getattr(agent, "_agent_for_tools", lambda _allowed_tools: None)(allowed_tools)
+        default_agent = getattr(agent, "agent", None)
+        policy = "default" if graph_agent is default_agent else "allowlist"
+        trace_step(
+            "agent.tool_gating",
+            route=decision.route.value,
+            allowed_tools=list(allowed_tools) if allowed_tools else [],
+            policy=policy,
         )
-        return direct_chat, turn_context, True
+        return agent.chat, base_turn_context, False, graph_agent
 
-    def execute(self, agent: Any, route_state: dict[str, Any], *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_pipeline import get_postprocessor
         from ds_course_agent.rag.query_trace import trace_span, trace_step
 
-        context = route_state["context"]
-        decision = route_state["decision"]
-        chat_history = route_state["chat_history"]
+        context = route_state.context
+        decision = route_state.decision
+        chat_history = route_state.chat_history
         execution_query = agent._route_execution_query(context, decision)
         turn_context = agent._build_turn_system_context(route_state)
-        chat_fn, turn_context, direct_llm = self._chat_callable_and_context(agent, route_state, turn_context)
+        chat_fn, turn_context, direct_llm, graph_agent = self._chat_callable_and_context(
+            agent, route_state, turn_context
+        )
 
         trace_step("agent.branch", branch="generic_agent")
+        chat_kwargs = {"turn_context": turn_context}
+        if graph_agent is not None:
+            chat_kwargs["graph_agent"] = graph_agent
         if stream:
             with trace_span("execute.agent_chat_stream", direct_llm=direct_llm):
                 streamed_parts = [
-                    chunk
-                    for chunk in chat_fn(
-                        execution_query,
-                        chat_history,
-                        stream=True,
-                        turn_context=turn_context,
-                    )
-                    if chunk
+                    chunk for chunk in chat_fn(execution_query, chat_history, stream=True, **chat_kwargs) if chunk
                 ]
             result = "".join(streamed_parts)
             if result == "":
                 with trace_span("execute.agent_chat", direct_llm=direct_llm):
-                    result = chat_fn(
-                        execution_query,
-                        chat_history,
-                        stream=False,
-                        turn_context=turn_context,
-                    )
+                    result = chat_fn(execution_query, chat_history, stream=False, **chat_kwargs)
         else:
             with trace_span("execute.agent_chat", direct_llm=direct_llm):
-                result = chat_fn(
-                    execution_query,
-                    chat_history,
-                    stream=False,
-                    turn_context=turn_context,
-                )
+                result = chat_fn(execution_query, chat_history, stream=False, **chat_kwargs)
 
         if hasattr(result, "__iter__") and not isinstance(result, str):
             result = "".join(result)
@@ -1317,7 +1321,7 @@ class GenericAgentRouteHandler:
         )
         return final_response.content
 
-    def stream_execute(self, agent: Any, route_state: dict[str, Any]) -> Iterator[str]:
+    def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str]:
         """Stream generic-agent routes where safe; otherwise return buffered text.
 
         The direct-stream path intentionally preserves the Phase 2 behavior:
@@ -1330,22 +1334,22 @@ class GenericAgentRouteHandler:
         from ds_course_agent.rag.query_trace import trace_span
 
         if agent._can_direct_stream_route(route_state):
-            context = route_state["context"]
-            decision = route_state["decision"]
-            chat_history = route_state["chat_history"]
+            context = route_state.context
+            decision = route_state.decision
+            chat_history = route_state.chat_history
             execution_query = agent._route_execution_query(context, decision)
             turn_context = agent._build_turn_system_context(route_state)
-            chat_fn, turn_context, direct_llm = self._chat_callable_and_context(agent, route_state, turn_context)
+            chat_fn, turn_context, direct_llm, graph_agent = self._chat_callable_and_context(
+                agent, route_state, turn_context
+            )
+            chat_kwargs = {"turn_context": turn_context}
+            if graph_agent is not None:
+                chat_kwargs["graph_agent"] = graph_agent
 
             streamed_any = False
             streamed_parts: list[str] = []
             with trace_span("execute.agent_chat_stream", direct_llm=direct_llm):
-                for chunk in chat_fn(
-                    execution_query,
-                    chat_history,
-                    stream=True,
-                    turn_context=turn_context,
-                ):
+                for chunk in chat_fn(execution_query, chat_history, stream=True, **chat_kwargs):
                     if chunk:
                         streamed_any = True
                         streamed_parts.append(chunk)

@@ -311,6 +311,6 @@ def test_agent_fast_path_required_tools_use_registry_names(tmp_path, monkeypatch
 
     for question in ["现在几点？", "下次课是什么时候？"]:
         state = service._prepare_query_route(question, "registry-fast-path", "student-1")
-        assert state["decision"].required_tools
-        for tool_name in state["decision"].required_tools:
+        assert state.decision.required_tools
+        for tool_name in state.decision.required_tools:
             assert tool_name in registry.names

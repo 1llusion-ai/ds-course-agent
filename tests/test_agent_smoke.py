@@ -79,7 +79,7 @@ class TestAgentServiceMock:
         route_state = service._prepare_query_route("你好", "session-ctx", student_id="student-ctx")
         trace = end_query_trace(token)
 
-        assert route_state["decision"].retrieval_policy == "disabled"
+        assert route_state.decision.retrieval_policy == "disabled"
         assert any(
             event["stage"] == "context_governor.warning" and event["data"]["location"] == "agent.prepare_query_route"
             for event in trace["events"]
@@ -87,6 +87,7 @@ class TestAgentServiceMock:
 
     def test_chat_with_history_persists_user_before_llm_execution(self, tmp_path, monkeypatch):
         from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteState, RouteType
         from ds_course_agent.shared.history import FileChatMessageHistory, MemoryPolicy
 
         history = FileChatMessageHistory(
@@ -97,11 +98,25 @@ class TestAgentServiceMock:
         service = AgentService.__new__(AgentService)
 
         def fake_prepare(user_input, session_id, student_id=None):
-            return {
-                "history": history,
-                "chat_history": [],
-                "student_id": student_id or session_id,
-            }
+            resolved_student_id = student_id or session_id
+            context = QueryContext(
+                original_query=user_input,
+                normalized_query=user_input,
+                session_id=session_id,
+                student_id=resolved_student_id,
+                chat_history=[],
+            )
+            decision = RouteDecision(route=RouteType.GENERIC_AGENT, confidence=1.0)
+            return RouteState(
+                student_id=resolved_student_id,
+                session_id=session_id,
+                history=history,
+                chat_history=[],
+                profile=None,
+                special_case_response=None,
+                context=context,
+                decision=decision,
+            )
 
         def fake_execute(route_state, stream=False):
             assert [message.content for message in history.messages] == ["请解释 PCA"]
@@ -458,6 +473,8 @@ class TestChatWithHistory:
         service.tools = []
         service.agent = mock_agent
         service.explanation_skill = MagicMock()
+        # 这些测试关注 history/file-store，不测工具门控；mock _agent_for_tools 返回 mock_agent。
+        service._agent_for_tools = lambda allowed_tools: mock_agent
 
         result = service.chat_with_history("test question", "test_session")
 
@@ -494,6 +511,8 @@ class TestChatWithHistory:
         service.tools = []
         service.agent = mock_agent
         service.explanation_skill = MagicMock()
+        # 这些测试关注 history/file-store，不测工具门控；mock _agent_for_tools 返回 mock_agent。
+        service._agent_for_tools = lambda allowed_tools: mock_agent
 
         result = service.chat_with_history("new question", "test_session")
 
@@ -549,6 +568,8 @@ class TestChatWithHistory:
         service.tools = []
         service.agent = mock_agent
         service.explanation_skill = MagicMock()
+        # 这些测试关注 history/file-store，不测工具门控；mock _agent_for_tools 返回 mock_agent。
+        service._agent_for_tools = lambda allowed_tools: mock_agent
 
         result = service.chat_with_history("再解释一下 SVM，我还是有点混淆。", "test_session")
 
@@ -728,6 +749,6 @@ class TestAgentShortTermMemory:
 
         state = service._prepare_query_route("继续讲", "session-1", "student-1")
 
-        assert state["chat_history"] == compacted
-        assert state["context"].chat_history == compacted
-        assert "短期记忆摘要" in state["context"].recent_context
+        assert state.chat_history == compacted
+        assert state.context.chat_history == compacted
+        assert "短期记忆摘要" in state.context.recent_context

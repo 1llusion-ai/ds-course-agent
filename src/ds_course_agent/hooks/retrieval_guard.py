@@ -8,13 +8,16 @@ later slices can move those primitives here completely.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ds_course_agent.rag.query_pipeline import RouteState
 
 
 class RetrievalGuardHook:
     """Apply RetrievalGuard after a route/LLM result is produced."""
 
-    def after_llm(self, state: dict[str, Any], result: Any, **kwargs: Any) -> Any:
+    def after_llm(self, state: RouteState, result: Any, **kwargs: Any) -> Any:
         agent = kwargs.get("agent")
         if agent is None:
             return result
@@ -22,11 +25,11 @@ class RetrievalGuardHook:
         from ds_course_agent.rag.query_pipeline import RouteType
         from ds_course_agent.rag.query_trace import trace_step
 
-        context = state["context"]
-        decision = state["decision"]
+        context = state.context
+        decision = state.decision
         route = decision.route
         user_input = context.original_query
-        chat_history = state.get("chat_history")
+        chat_history = state.chat_history
 
         if route == RouteType.GROUNDED_RAG:
             trace_step(
@@ -68,7 +71,7 @@ class RetrievalGuardHook:
         )
         return result
 
-    def after_stream_end(self, state: dict[str, Any], result: Any, **kwargs: Any) -> None:
+    def after_stream_end(self, state: RouteState, result: Any, **kwargs: Any) -> None:
         """Record RetrievalGuard disposition for direct-streamed optional routes.
 
         Direct streaming has already sent chunks to the client, so this hook is
@@ -83,7 +86,7 @@ class RetrievalGuardHook:
 
         from ds_course_agent.rag.query_trace import trace_step
 
-        decision = state["decision"]
+        decision = state.decision
         route = decision.route
         skip_reason = agent._retrieval_guard_skip_reason(state, result)
         trace_step(

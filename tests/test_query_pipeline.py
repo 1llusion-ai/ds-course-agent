@@ -200,7 +200,7 @@ class TestQueryRouter:
         assert "code_request" in context.detected_intents
         assert "python_execution" not in context.detected_intents
         assert decision.route == RouteType.GENERIC_AGENT
-        assert decision.metadata["direct_llm_answer"] is True
+        assert decision.direct_llm_answer is True
 
     def test_code_explanation_with_payload_uses_autonomous_agent_not_forced_rag(self):
         """贴代码让助教解析时应由 agent 自主选择工具，不能直接 RAG。"""
@@ -234,7 +234,13 @@ class TestQueryRouter:
         assert "code_request" in context.detected_intents
         assert decision.route == RouteType.GENERIC_AGENT
         assert decision.retrieval_policy == "optional"
-        assert decision.metadata["autonomous_tool_choice"] is True
+        assert decision.autonomous_tool_choice is True
+        assert decision.allowed_tools == [
+            "course_rag_tool",
+            "python_exec_tool",
+            "course_schedule_tool",
+            "current_datetime_tool",
+        ]
 
     def test_python_course_demo_uses_direct_answer_not_execution_tool(self):
         """“用 Python 演示课程概念”应直接给示例，不应先调用执行工具。"""
@@ -261,8 +267,9 @@ class TestQueryRouter:
         assert "code_request" in context.detected_intents
         assert decision.route == RouteType.GENERIC_AGENT
         assert decision.retrieval_policy == "optional"
-        assert decision.metadata["direct_llm_answer"] is True
-        assert "autonomous_tool_choice" not in decision.metadata
+        assert decision.direct_llm_answer is True
+        assert decision.direct_llm_reason == "code_example_without_execution"
+        assert decision.allowed_tools == []
 
     @pytest.mark.parametrize(
         "query",
@@ -411,7 +418,7 @@ class TestQueryRouter:
         finally:
             trace = end_retrieval_trace(token)
 
-        assert state["decision"].route == RouteType.COURSE_SCHEDULE
+        assert state.decision.route == RouteType.COURSE_SCHEDULE
         assert "课程安排" in result or "没有课程" in result
         assert trace.used_retrieval is False
 
@@ -539,14 +546,15 @@ class TestAgentRouteSharing:
             student_id="student-1",
         )
 
-        assert state["context"].original_query == "现在几点？"
-        assert state["context"].session_id == "session-1"
-        assert state["context"].student_id == "student-1"
-        assert state["decision"].route == RouteType.CURRENT_DATETIME
+        assert state.context.original_query == "现在几点？"
+        assert state.context.session_id == "session-1"
+        assert state.context.student_id == "student-1"
+        assert state.decision.route == RouteType.CURRENT_DATETIME
 
-    def test_code_autonomous_fast_path_skips_concept_map_and_profile(self, monkeypatch):
-        """代码解析类 autonomous route 不应先支付 concept_map 成本。"""
+    def test_code_autonomous_route_skips_concept_map(self, monkeypatch):
+        """autonomous 代码解析路由只触发廉价 skill_select，不跑 concept_map（恢复旧 prepass 快速路径）。"""
         from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.profile_models import StudentProfile
         from ds_course_agent.rag.query_pipeline import RouteType
 
         service = object.__new__(AgentService)
@@ -556,17 +564,23 @@ class TestAgentRouteSharing:
             messages = []
 
         monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: FakeHistory())
+        calls = {"profile": 0, "concept_map": 0}
 
-        def fail_get_memory_core():
-            raise AssertionError("profile should not load for autonomous code fast path")
+        class FakeMemory:
+            def get_profile(self, student_id):
+                calls["profile"] += 1
+                return StudentProfile(student_id=student_id)
 
-        def fail_concept_map(question, top_k=3):
-            raise AssertionError("concept map should not run for autonomous code fast path")
+        def concept_map(question, top_k=3):
+            calls["concept_map"] += 1
+            return []
 
-        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", fail_get_memory_core)
-        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", fail_concept_map)
+        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", lambda: FakeMemory())
+        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", concept_map)
         monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
         monkeypatch.setattr(service, "_build_schedule_tool_query", lambda question: question)
+        monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
+        monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
 
         state = service._prepare_query_route(
             user_input=("帮我解析这段代码在做什么：\n```python\nscores = cross_val_score(model, X, y, cv=5)\n```"),
@@ -574,14 +588,19 @@ class TestAgentRouteSharing:
             student_id="student-1",
         )
 
-        assert state["decision"].route == RouteType.GENERIC_AGENT
-        assert state["decision"].retrieval_policy == "optional"
-        assert state["decision"].metadata["autonomous_tool_choice"] is True
-        assert state["context"].metadata["grounded_tool_query"] == state["context"].normalized_query
+        assert state.decision.route == RouteType.GENERIC_AGENT
+        assert state.decision.retrieval_policy == "optional"
+        assert state.decision.autonomous_tool_choice is True
+        # autonomous(p60) 在 explicit_misconception(p50, requires_skills) 之后命中：
+        # 只跑了廉价 skill_select，未触发 concept_map/profile/rewrite。
+        assert calls == {"profile": 0, "concept_map": 0}
+        assert "grounded_tool_query" not in state.context.metadata
+        assert state.context.metadata["fast_path"] is True
 
-    def test_direct_code_example_fast_path_skips_concept_map_and_profile(self, monkeypatch):
-        """纯代码示例/演示请求直接回答，也不应先支付 concept_map 成本。"""
+    def test_direct_code_example_route_skips_concept_map(self, monkeypatch):
+        """代码示例(direct_llm)路由只触发廉价 skill_select，不跑 concept_map（恢复旧 prepass 快速路径）。"""
         from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.profile_models import StudentProfile
         from ds_course_agent.rag.query_pipeline import RouteType
 
         service = object.__new__(AgentService)
@@ -591,17 +610,23 @@ class TestAgentRouteSharing:
             messages = []
 
         monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: FakeHistory())
+        calls = {"profile": 0, "concept_map": 0}
 
-        def fail_get_memory_core():
-            raise AssertionError("profile should not load for direct code example fast path")
+        class FakeMemory:
+            def get_profile(self, student_id):
+                calls["profile"] += 1
+                return StudentProfile(student_id=student_id)
 
-        def fail_concept_map(question, top_k=3):
-            raise AssertionError("concept map should not run for direct code example fast path")
+        def concept_map(question, top_k=3):
+            calls["concept_map"] += 1
+            return []
 
-        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", fail_get_memory_core)
-        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", fail_concept_map)
+        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", lambda: FakeMemory())
+        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", concept_map)
         monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
         monkeypatch.setattr(service, "_build_schedule_tool_query", lambda question: question)
+        monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
+        monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
 
         state = service._prepare_query_route(
             user_input="请用 Python 演示一次交叉验证",
@@ -609,9 +634,11 @@ class TestAgentRouteSharing:
             student_id="student-1",
         )
 
-        assert state["decision"].route == RouteType.GENERIC_AGENT
-        assert state["decision"].metadata["direct_llm_answer"] is True
-        assert state["context"].metadata["grounded_tool_query"] == state["context"].normalized_query
+        assert state.decision.route == RouteType.GENERIC_AGENT
+        assert state.decision.direct_llm_answer is True
+        assert calls == {"profile": 0, "concept_map": 0}
+        assert "grounded_tool_query" not in state.context.metadata
+        assert state.context.metadata["fast_path"] is True
 
     def test_datetime_fast_path_skips_concept_map_and_profile(self, monkeypatch):
         """系统工具 fast path 不应触发概念映射或画像读取。"""
@@ -643,8 +670,8 @@ class TestAgentRouteSharing:
             student_id="student-1",
         )
 
-        assert state["decision"].route == RouteType.CURRENT_DATETIME
-        assert state["context"].metadata["fast_path"] is True
+        assert state.decision.route == RouteType.CURRENT_DATETIME
+        assert state.context.metadata["fast_path"] is True
 
 
 class TestQueryRouterRegressions:
@@ -853,6 +880,8 @@ class TestAgentStreamPostprocessRegressions:
         service.tools = []
         service.agent = None
         service.explanation_skill = lambda *_args: "个性化解释结果"
+        # 这些测试关注流式/后处理，不测工具门控；mock _agent_for_tools 避免 fail-closed。
+        service._agent_for_tools = lambda allowed_tools: None
 
         class FakeHistory:
             messages = [
@@ -884,12 +913,12 @@ class TestAgentStreamPostprocessRegressions:
 
         def fake_prepare(user_input, session_id, student_id=None):
             state = original_prepare(user_input, session_id, student_id)
-            state["decision"].route = selected_route
+            state.decision.route = selected_route
             return state
 
         monkeypatch.setattr(service, "_prepare_query_route", fake_prepare)
 
-        def fake_chat(user_input, chat_history=None, stream=False, turn_context=None):
+        def fake_chat(user_input, chat_history=None, stream=False, turn_context=None, **kwargs):
             if stream:
                 return iter(chat_stream_chunks)
             return chat_sync_result if chat_sync_result is not None else "".join(chat_stream_chunks)
@@ -1075,6 +1104,8 @@ class TestAgentStreamPostprocessRegressions:
         service.tools = []
         service.agent = None
         service.explanation_skill = lambda *_args: "个性化解释结果"
+        # 这些测试关注流式/后处理，不测工具门控；mock _agent_for_tools 避免 fail-closed。
+        service._agent_for_tools = lambda allowed_tools: None
         captured = {}
 
         class FakeHistory:
@@ -1110,11 +1141,11 @@ class TestAgentStreamPostprocessRegressions:
         monkeypatch.setattr(service, "chat", fake_chat)
 
         state = service._prepare_query_route("过拟合怎么解决？", "session-1", "student-1")
-        state["decision"].route = RouteType.GROUNDED_RAG
+        state.decision.route = RouteType.GROUNDED_RAG
         result = service._execute_route(state, stream=False)
 
         assert result == "grounded answer"
-        assert captured["tool_query"] == state["context"].metadata["grounded_tool_query"]
+        assert captured["tool_query"] == state.context.metadata["grounded_tool_query"]
         assert "当前问题：决策树过拟合怎么解决？" in captured["tool_query"]
 
 
@@ -1255,8 +1286,8 @@ class TestQueryRewriter:
 
         state = service._prepare_query_route("线性可分时它还需要吗？", "session-1", "student-1")
 
-        assert state["context"].metadata["rewrite"]["rewritten_query"] == "SVM 的核函数在线性可分时还需要吗？"
-        assert state["context"].metadata["grounded_tool_query"] == state["context"].enriched_query
+        assert state.context.metadata["rewrite"]["rewritten_query"] == "SVM 的核函数在线性可分时还需要吗？"
+        assert state.context.metadata["grounded_tool_query"] == state.context.enriched_query
 
 
 class TestQueryPipelineUtils:
@@ -1295,7 +1326,7 @@ class TestQueryPipelineUtils:
         import time
 
         from ds_course_agent.rag.agent import AgentService
-        from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteType
+        from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteState, RouteType
 
         service = object.__new__(AgentService)
 
@@ -1321,15 +1352,18 @@ class TestQueryPipelineUtils:
             reasons=["课程相关知识问答"],
             retrieval_policy="required",
         )
-        state = {
-            "student_id": "student-1",
-            "history": history,
-            "chat_history": [],
-            "special_case_response": None,
-            "matched_concepts": [],
-            "context": context,
-            "decision": decision,
-        }
+        state = RouteState(
+            student_id="student-1",
+            session_id="session-rag-stream",
+            history=history,
+            chat_history=[],
+            profile=None,
+            special_case_response=None,
+            matched_concepts=[],
+            skill_candidate_keys=set(),
+            context=context,
+            decision=decision,
+        )
 
         def fake_prepare(user_input, session_id, student_id=None):
             return state

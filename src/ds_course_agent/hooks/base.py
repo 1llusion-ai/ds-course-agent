@@ -9,7 +9,10 @@ wrap this later without changing hook contracts.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from ds_course_agent.rag.query_pipeline import RouteState
 
 
 class AgentHook(Protocol):
@@ -27,13 +30,13 @@ class AgentHook(Protocol):
     breaking existing hooks.
     """
 
-    def before_route(self, state: dict[str, Any]) -> None: ...
-    def after_route(self, state: dict[str, Any], decision: Any) -> None: ...
+    def before_route(self, state: RouteState) -> None: ...
+    def after_route(self, state: RouteState, decision: Any) -> None: ...
     def before_llm(self, messages: list[Any]) -> None: ...
-    def after_llm(self, state: dict[str, Any], result: Any, **kwargs: Any) -> Any: ...
-    def after_stream_end(self, state: dict[str, Any], result: Any, **kwargs: Any) -> None: ...
+    def after_llm(self, state: RouteState, result: Any, **kwargs: Any) -> Any: ...
+    def after_stream_end(self, state: RouteState, result: Any, **kwargs: Any) -> None: ...
     def after_tool(self, name: str, result: Any, **kwargs: Any) -> Any: ...
-    def after_turn(self, state: dict[str, Any], result: Any) -> None: ...
+    def after_turn(self, state: RouteState, result: Any) -> None: ...
     def on_session_end(self, session_id: str, **kwargs: Any) -> None: ...
 
 
@@ -53,13 +56,13 @@ class HookManager:
     def hooks(self) -> list[Any]:
         return list(self._hooks)
 
-    def before_route(self, state: dict[str, Any]) -> None:
+    def before_route(self, state: RouteState) -> None:
         for hook in self._hooks:
             callback = getattr(hook, "before_route", None)
             if callback:
                 callback(state)
 
-    def after_route(self, state: dict[str, Any], decision: Any) -> None:
+    def after_route(self, state: RouteState, decision: Any) -> None:
         for hook in self._hooks:
             callback = getattr(hook, "after_route", None)
             if callback:
@@ -71,7 +74,7 @@ class HookManager:
             if callback:
                 callback(messages)
 
-    def after_llm(self, state: dict[str, Any], result: Any, **kwargs: Any) -> Any:
+    def after_llm(self, state: RouteState, result: Any, **kwargs: Any) -> Any:
         current = result
         for hook in self._hooks:
             callback = getattr(hook, "after_llm", None)
@@ -82,7 +85,7 @@ class HookManager:
                 current = updated
         return current
 
-    def after_stream_end(self, state: dict[str, Any], result: Any, **kwargs: Any) -> None:
+    def after_stream_end(self, state: RouteState, result: Any, **kwargs: Any) -> None:
         for hook in self._hooks:
             callback = getattr(hook, "after_stream_end", None)
             if callback:
@@ -99,7 +102,7 @@ class HookManager:
                 current = updated
         return current
 
-    def after_turn(self, state: dict[str, Any], result: Any) -> None:
+    def after_turn(self, state: RouteState, result: Any) -> None:
         for hook in self._hooks:
             callback = getattr(hook, "after_turn", None)
             if callback:

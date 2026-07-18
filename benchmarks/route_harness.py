@@ -53,7 +53,7 @@ def evaluate_case(service: Any, case: dict[str, Any], *, student_id: str) -> dic
 
     try:
         state = service._prepare_query_route(str(case.get("query") or ""), session_id, student_id)
-        decision = state["decision"]
+        decision = state.decision
         route = getattr(decision.route, "value", str(decision.route))
         retrieval_policy = decision.retrieval_policy
         confidence = decision.confidence
