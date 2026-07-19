@@ -223,7 +223,7 @@ def test_t5_fast_path_routes_through_rule_table_and_skips_enrichment(monkeypatch
     assert state.decision.route is RouteType.CURRENT_DATETIME
     assert calls["route"] == 1  # 通过规则表，而非 agent.py early-return（否则为 0）
     assert calls["concept_map"] == 0  # fast-path 短路，富化不执行
-    assert state.context.metadata["fast_path"] is True
+    assert state.context.fast_path is True
 
 
 def test_t5_course_question_enriches_once_and_routes_once(monkeypatch):
@@ -243,7 +243,7 @@ def test_t5_course_question_enriches_once_and_routes_once(monkeypatch):
     assert state.decision.route is RouteType.GROUNDED_RAG
     assert calls["route"] == 1
     assert calls["concept_map"] == 1
-    assert state.context.metadata["fast_path"] is False
+    assert state.context.fast_path is False
 
 
 def _make_gated_service(monkeypatch):
@@ -409,7 +409,7 @@ def test_t5_code_demo_fast_path_skips_concept_map(monkeypatch):
     assert state.decision.direct_llm_answer is True
     assert calls["route"] == 1  # 经规则表
     assert calls["concept_map"] == 0  # demo fast-path 不跑 concept_map
-    assert state.context.metadata["fast_path"] is True
+    assert state.context.fast_path is True
 
 
 def test_t6_every_route_type_has_a_handler(monkeypatch):

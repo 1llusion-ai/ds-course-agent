@@ -3,7 +3,7 @@
 替代 ``AgentService._prepare_query_route`` 原有的 fast/prepass/full 三路
 early-return 结构，收敛为一条管道：
 
-    preprocess → scope_guard/metadata → route(惰性富化) → build RouteState
+    preprocess → scope_guard/typed signals → route(惰性富化) → build RouteState
 
 概念富化（profile + concept_map + skill_select + rewrite）是规则求值的惰性依赖：
 router 仅在求值到 ``requires_enrichment=True`` 的规则前调用富化器的
@@ -141,8 +141,6 @@ class QueryPipeline:
                 student_id=student_id,
                 chat_history=chat_history,
             )
-        context.metadata["schedule_tool_query"] = agent._build_schedule_tool_query(user_input)
-        context.metadata["scope_guard"] = scope_decision.to_dict()
         # 类型化路由控制信号（Contract 2）：不走 metadata，规则表直接读 typed 字段。
         context.web_search_requested = bool(web_search)
         context.special_case_response = special_case_response
@@ -153,7 +151,7 @@ class QueryPipeline:
         # fast_path = 未触发昂贵的 concept_map（datetime/schedule/code/python/demo/
         # 纯 skill 路由均在此列，恢复旧 prepass 快速路径）。
         fast_path = not enricher.concepts_ran
-        context.metadata["fast_path"] = fast_path
+        context.fast_path = fast_path
         trace_step(
             "query_pipeline.route",
             route=decision.route.value,

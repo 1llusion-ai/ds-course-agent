@@ -404,14 +404,6 @@ def _schedule_title_generation(session_id: str, message: str, *, is_first_messag
         _title_generation_tasks.discard(task)
 
 
-def _build_stream_error_message(text: str) -> ChatMessage:
-    return ChatMessage(
-        role="assistant",
-        content=f"⚠️ {text}",
-        timestamp=datetime.now(),
-    )
-
-
 def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 

@@ -52,14 +52,21 @@ def evaluate_case(service: Any, case: dict[str, Any], *, student_id: str) -> dic
     reasons: list[str] = []
 
     try:
-        state = service._prepare_query_route(str(case.get("query") or ""), session_id, student_id)
+        state = service._prepare_query_route(
+            str(case.get("query") or ""),
+            session_id,
+            student_id,
+            web_search=bool(case.get("web_search", False)),
+        )
         decision = state.decision
         route = getattr(decision.route, "value", str(decision.route))
         retrieval_policy = decision.retrieval_policy
         confidence = decision.confidence
         reasons = list(decision.reasons or [])
+        direct_llm_answer = bool(decision.direct_llm_answer)
     except Exception as exc:  # pragma: no cover - surfaced in JSON report
         error = {"type": type(exc).__name__, "message": str(exc)}
+        direct_llm_answer = False
 
     expected_route = case.get("expected_route")
     expected_policy = case.get("expected_retrieval_policy")
@@ -73,15 +80,21 @@ def evaluate_case(service: Any, case: dict[str, Any], *, student_id: str) -> dic
         failures.append(f"expected_retrieval_policy={expected_policy}")
     if route in disallowed_routes:
         failures.append(f"disallowed_route={route}")
+    if "expected_direct_llm_answer" in case and direct_llm_answer != bool(case["expected_direct_llm_answer"]):
+        failures.append(f"expected_direct_llm_answer={bool(case['expected_direct_llm_answer'])}")
 
     return {
         "id": case.get("id"),
+        "category": case.get("category"),
         "query": case.get("query"),
+        "web_search": bool(case.get("web_search", False)),
         "expected_route": expected_route,
         "expected_retrieval_policy": expected_policy,
+        "expected_direct_llm_answer": case.get("expected_direct_llm_answer"),
         "disallowed_routes": sorted(disallowed_routes),
         "route": route,
         "retrieval_policy": retrieval_policy,
+        "direct_llm_answer": direct_llm_answer,
         "confidence": confidence,
         "reasons": reasons,
         "passed": not failures,

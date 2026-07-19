@@ -11,7 +11,6 @@ import copy
 import logging
 import re
 import warnings
-from dataclasses import dataclass
 
 import chromadb
 import numpy as np
@@ -65,16 +64,6 @@ def _get_jieba():
 def _normalize_latin_tokens(text: str) -> str:
     """Make Latin tokens case-insensitive for retrieval, especially textbook acronyms."""
     return re.sub(r"[A-Za-z]{2,}", lambda match: match.group(0).upper(), text)
-
-
-@dataclass
-class RetrievalResult:
-    """检索结果"""
-
-    document: Document
-    bm25_score: float = 0.0
-    vector_score: float = 0.0
-    fused_score: float = 0.0
 
 
 class BM25Retriever:

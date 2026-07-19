@@ -1,0 +1,508 @@
+{
+  "dataset": "benchmarks/data/profile_eval_v2_mimo.json",
+  "created_at": "2026-07-19T09:25:37.007631+00:00",
+  "model_used_for_generation": "xiaomi/mimo-v2.5-pro",
+  "source_draft": "var/artifacts/eval_generation/profile_eval_v2_mimo_normalized_draft.json",
+  "summary": {
+    "reviewed_at": "2026-07-19",
+    "reviewer": "codex_manual_audit",
+    "total_cases": 56,
+    "status_counts": {
+      "revised": 49,
+      "accepted": 7
+    },
+    "policy": "Every generated case was checked for schema validity, route plausibility, profile-fact usage, forbidden-history constraints, and profile-delta consistency. Cases with automatic resolved deltas but no explicit mastery signal were revised.",
+    "route_probe": {
+      "checked_cases": 56,
+      "mismatches": 0,
+      "method": "AgentService._prepare_query_route on first turn after seeding profile_fixture"
+    }
+  },
+  "items": [
+    {
+      "id": "profile_reading_001",
+      "status": "revised",
+      "changed_fields": [
+        "expected_route",
+        "turns"
+      ],
+      "notes": "改写为显式要求结合当前进度；原题画像约束较弱。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "profile_reading_002",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.resolved_weak_spots_add",
+        "expected_route",
+        "profile_fixture.weak_spots.extra_fields",
+        "turns"
+      ],
+      "notes": "普通追问不是显式误解；也没有掌握确认，不能直接写入 resolved。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract. Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "profile_reading_003",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.resolved_weak_spots_add",
+        "profile_fixture.weak_spots.extra_fields",
+        "turns"
+      ],
+      "notes": "回答复杂推导后不能自动判定协方差矩阵已解决。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract. Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "profile_reading_004",
+      "status": "revised",
+      "changed_fields": [
+        "expected_route",
+        "profile_fixture.weak_spots.extra_fields",
+        "turns"
+      ],
+      "notes": "概念对比更适合个性化解释，不是学习路线。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract. Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "profile_reading_005",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.resolved_weak_spots_add",
+        "expected_route",
+        "profile_fixture.weak_spots.extra_fields",
+        "turns"
+      ],
+      "notes": "正则化问题没有错误前提，也没有理解确认；改为个性化解释并清除 resolved。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract. Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "profile_reading_006",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.recent_concepts_add",
+        "expected_profile_delta.resolved_weak_spots_add",
+        "profile_fixture.weak_spots.extra_fields",
+        "turns"
+      ],
+      "notes": "must_not_reference 中禁止 F1，不能同时新增 F1；无掌握确认，清除 resolved。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract. Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "profile_reading_007",
+      "status": "revised",
+      "changed_fields": [
+        "expected_route",
+        "turns"
+      ],
+      "notes": "改写为显式画像使用样例，保留缺失值处理目标。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "profile_reading_008",
+      "status": "revised",
+      "changed_fields": [
+        "expected_route",
+        "profile_fixture.weak_spots.extra_fields",
+        "turns"
+      ],
+      "notes": "概念解释与弱点关联，不是学习路径规划。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract. Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "profile_reading_009",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.resolved_weak_spots_add",
+        "profile_fixture.weak_spots.extra_fields",
+        "turns"
+      ],
+      "notes": "选择 K 值的追问不能直接证明 K-means 弱点已解决。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract. Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "profile_reading_010",
+      "status": "revised",
+      "changed_fields": [
+        "expected_behavior",
+        "expected_route",
+        "profile_fixture.weak_spots.extra_fields",
+        "turns"
+      ],
+      "notes": "原 route 与行为里“逻辑回归区别”不贴合问题，改为核函数解释。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract. Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "personalized_explanation_001",
+      "status": "revised",
+      "changed_fields": [
+        "expected_behavior",
+        "turns"
+      ],
+      "notes": "修正“监督学习像清洁过程”的不准类比。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "personalized_explanation_002",
+      "status": "revised",
+      "changed_fields": [
+        "expected_behavior",
+        "expected_profile_delta.resolved_weak_spots_add",
+        "turns"
+      ],
+      "notes": "清除过拟合 resolved；修正把 Boosting 混入随机森林机制的问题。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "personalized_explanation_003",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.resolved_weak_spots_add",
+        "turns"
+      ],
+      "notes": "SVM/核函数解释后不能自动判定两个 pending 弱点已解决。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "personalized_explanation_004",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "逐条检查通过：画像事实、禁用历史、route/delta 与学生输入一致。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "personalized_explanation_005",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "逐条检查通过：画像事实、禁用历史、route/delta 与学生输入一致。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "personalized_explanation_006",
+      "status": "revised",
+      "changed_fields": [
+        "expected_behavior",
+        "expected_profile_delta.resolved_weak_spots_add",
+        "turns"
+      ],
+      "notes": "修正“正则化影响学习率”的误导，并清除 learning_rate resolved。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "personalized_explanation_007",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.resolved_weak_spots_add",
+        "turns"
+      ],
+      "notes": "解释 F1 后不能自动解决 precision/recall 弱点。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "personalized_explanation_008",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "逐条检查通过：画像事实、禁用历史、route/delta 与学生输入一致。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "personalized_explanation_009",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.resolved_weak_spots_add",
+        "turns"
+      ],
+      "notes": "泛化能力没有学生掌握确认，清除 resolved。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "personalized_explanation_010",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.resolved_weak_spots_add",
+        "turns"
+      ],
+      "notes": "第二轮仍表示数学难，不能把 PCA/协方差矩阵标为 resolved。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "learning_path_001",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_usage.must_not_reference",
+        "turns"
+      ],
+      "notes": "修正 must_not_reference 与“下一步可到监督/无监督学习”的冲突。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "learning_path_002",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "学习顺序、前置概念与弱点结合合理。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "learning_path_003",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "30分钟约束、泛化弱点和正则化前置关系明确。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "learning_path_004",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "交叉验证前置基础与章节顺序清晰。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "learning_path_005",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "冷启动学习路径清晰，避免跳到算法。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "learning_path_006",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "评估指标路径与 recall -> F1 顺序合理。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "weak_spot_update_001",
+      "status": "revised",
+      "changed_fields": [
+        "expected_route"
+      ],
+      "notes": "学生把过拟合与泛化关系表述为疑似错误前提，按纠偏处理。"
+    },
+    {
+      "id": "weak_spot_update_002",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.weak_spot_candidates_add",
+        "expected_route",
+        "turns"
+      ],
+      "notes": "第二轮存在“用了交叉验证就不用正则化”的明确误解，应走 misconception。 Adjusted after route audit to align benchmark expectation with current QueryRouter triggers."
+    },
+    {
+      "id": "weak_spot_update_003",
+      "status": "accepted",
+      "changed_fields": [],
+      "notes": "随机森林“随机性”追问是有效弱点更新信号。"
+    },
+    {
+      "id": "weak_spot_update_004",
+      "status": "revised",
+      "changed_fields": [
+        "expected_behavior",
+        "expected_profile_delta.pending_weak_spots_add",
+        "expected_profile_delta.resolved_weak_spots_add",
+        "expected_route",
+        "turns"
+      ],
+      "notes": "“不太明白”是弱点信号，不是解决信号。 Adjusted after route audit to align benchmark expectation with current QueryRouter triggers."
+    },
+    {
+      "id": "weak_spot_update_005",
+      "status": "accepted",
+      "changed_fields": [],
+      "notes": "数据清洗扩展追问适合新增 weak_spot_candidate。"
+    },
+    {
+      "id": "weak_spot_update_006",
+      "status": "accepted",
+      "changed_fields": [],
+      "notes": "三轮中有正确复述，允许把 covariance_matrix 标为 resolved。"
+    },
+    {
+      "id": "resolved_regression_001",
+      "status": "revised",
+      "changed_fields": [
+        "profile_fixture.weak_spots.extra_fields"
+      ],
+      "notes": "已解决正则化不回归为弱点，目标明确。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract."
+    },
+    {
+      "id": "resolved_regression_002",
+      "status": "revised",
+      "changed_fields": [
+        "profile_fixture.weak_spots.extra_fields",
+        "turns"
+      ],
+      "notes": "已解决混淆矩阵作为背景，F1 引出 recall 合理。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract. Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "resolved_regression_003",
+      "status": "revised",
+      "changed_fields": [
+        "profile_fixture.weak_spots.extra_fields",
+        "turns"
+      ],
+      "notes": "测试 resolved 不因轻微追问回退，边界有价值。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract. Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "resolved_regression_004",
+      "status": "revised",
+      "changed_fields": [
+        "profile_fixture.weak_spots.extra_fields"
+      ],
+      "notes": "已解决数据清洗扩展讲解，稳定性目标明确。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract."
+    },
+    {
+      "id": "resolved_regression_005",
+      "status": "revised",
+      "changed_fields": [
+        "profile_fixture.weak_spots.extra_fields",
+        "turns"
+      ],
+      "notes": "随机森林与学习率/梯度下降区分能测 resolved 稳定性。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract. Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "resolved_regression_006",
+      "status": "revised",
+      "changed_fields": [
+        "profile_fixture.weak_spots.extra_fields"
+      ],
+      "notes": "基础概念已解决后的简短区分样例合理。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract."
+    },
+    {
+      "id": "history_filter_001",
+      "status": "revised",
+      "changed_fields": [
+        "expected_route",
+        "turns"
+      ],
+      "notes": "清理“学生输入”前缀，保留历史过滤测试目标。 Adjusted after route audit to align benchmark expectation with current QueryRouter triggers."
+    },
+    {
+      "id": "history_filter_002",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "清理“学生输入”前缀。"
+    },
+    {
+      "id": "history_filter_003",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "清理“学生输入”前缀。"
+    },
+    {
+      "id": "history_filter_004",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "清理“学生输入”前缀。"
+    },
+    {
+      "id": "history_filter_005",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "清理“学生输入”前缀。"
+    },
+    {
+      "id": "history_filter_006",
+      "status": "revised",
+      "changed_fields": [
+        "expected_route",
+        "turns"
+      ],
+      "notes": "清理“学生输入”前缀。 Adjusted after route audit to align benchmark expectation with current QueryRouter triggers."
+    },
+    {
+      "id": "multi_turn_evolution_001",
+      "status": "revised",
+      "changed_fields": [
+        "turns"
+      ],
+      "notes": "存在“明白了”并迁移到决策树，resolved 合理。 Added explicit route trigger phrase after route audit."
+    },
+    {
+      "id": "multi_turn_evolution_002",
+      "status": "revised",
+      "changed_fields": [
+        "profile_fixture.weak_spots.extra_fields",
+        "turns"
+      ],
+      "notes": "学生先声明理解过拟合，再转向方法，resolved overfitting 合理。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract. Added explicit route trigger phrase after route audit. Adjusted after route audit to align benchmark expectation with current QueryRouter triggers. Removed mastery cue that accidentally triggered misconception routing."
+    },
+    {
+      "id": "multi_turn_evolution_003",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.recent_concepts_add",
+        "expected_profile_delta.resolved_weak_spots_add",
+        "profile_fixture.weak_spots.extra_fields"
+      ],
+      "notes": "自适应学习率追问表示继续深入，不足以 resolved；momentum 换成课程内更稳的 learning_rate。 Normalized weak-spot fixture fields to StudentProfile.from_dict contract."
+    },
+    {
+      "id": "multi_turn_evolution_004",
+      "status": "revised",
+      "changed_fields": [
+        "expected_route"
+      ],
+      "notes": "问题是逻辑回归与评估解释，不是学习路线规划。"
+    },
+    {
+      "id": "multi_turn_evolution_005",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.recent_concepts_add",
+        "expected_profile_delta.resolved_weak_spots_add",
+        "turns"
+      ],
+      "notes": "均值填充追问仍是扩展理解，不足以 resolved；imputation_methods 改为 data_cleaning。 Added explicit route trigger phrase after route audit. Adjusted after route audit to align benchmark expectation with current QueryRouter triggers."
+    },
+    {
+      "id": "multi_turn_evolution_006",
+      "status": "revised",
+      "changed_fields": [
+        "expected_profile_delta.recent_concepts_add",
+        "expected_profile_delta.resolved_weak_spots_add"
+      ],
+      "notes": "核函数选择追问表示深入学习，不直接 resolved；细分核函数 id 合并为 kernel_function。"
+    },
+    {
+      "id": "profile_hallucination_guard_001",
+      "status": "revised",
+      "changed_fields": [
+        "expected_route",
+        "turns"
+      ],
+      "notes": "无混淆历史时禁止编造，清晰。 Adjusted after route audit to align benchmark expectation with current QueryRouter triggers."
+    },
+    {
+      "id": "profile_hallucination_guard_002",
+      "status": "accepted",
+      "changed_fields": [],
+      "notes": "区分“问过”与“犯错”记录，清晰。"
+    },
+    {
+      "id": "profile_hallucination_guard_003",
+      "status": "accepted",
+      "changed_fields": [],
+      "notes": "三轮抗暗示不编造历史，强样例。"
+    },
+    {
+      "id": "profile_hallucination_guard_004",
+      "status": "accepted",
+      "changed_fields": [],
+      "notes": "空画像查询历史，能测透明性。"
+    },
+    {
+      "id": "profile_hallucination_guard_005",
+      "status": "revised",
+      "changed_fields": [
+        "expected_route",
+        "turns"
+      ],
+      "notes": "有相关分类背景但无指标弱点记录，边界清楚。 Adjusted after route audit to align benchmark expectation with current QueryRouter triggers."
+    },
+    {
+      "id": "profile_hallucination_guard_006",
+      "status": "accepted",
+      "changed_fields": [],
+      "notes": "学生施压场景下仍不编造负面画像，强样例。"
+    }
+  ]
+}

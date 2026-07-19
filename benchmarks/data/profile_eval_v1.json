@@ -1,0 +1,6585 @@
+{
+  "schema_version": 1,
+  "dataset_name": "profile_eval_v1",
+  "version": "v1.0",
+  "created_at": "2026-07-19",
+  "generated_at": "2026-07-19T08:38:28.788447+00:00",
+  "description": "Learning-profile benchmark cases for the Data Science course teaching assistant.",
+  "categories": [
+    {
+      "name": "profile_reading",
+      "description": "检查助教是否准确读取 current_chapter、covered_chapters、recent_concepts、pending/active/resolved weak spots，并在回答中只使用相关画像事实。"
+    },
+    {
+      "name": "personalized_explanation",
+      "description": "同一概念解释要因学生画像而改变深度、类比和补救重点；尤其测试 pending_weak_spots 与 learning preference。"
+    },
+    {
+      "name": "learning_path",
+      "description": "检查学习路线是否按当前章节、前置概念、薄弱点、可用时间排序，并避免跳过前置知识。"
+    },
+    {
+      "name": "weak_spot_update",
+      "description": "检查重复困惑、错误前提、追问后是否应该新增 pending 或 active weak spot，且 delta 可客观判断。"
+    },
+    {
+      "name": "resolved_regression",
+      "description": "检查 resolved_weak_spots 不应被误判回活跃薄弱点；只有出现新证据时才提示复盘。"
+    },
+    {
+      "name": "history_filter",
+      "description": "检查无关历史、很久以前/其他章节概念不会被硬套到当前问题。"
+    },
+    {
+      "name": "multi_turn_evolution",
+      "description": "连续多轮从误解到澄清到掌握，测试上下文利用和画像状态演化。"
+    },
+    {
+      "name": "profile_hallucination_guard",
+      "description": "检查画像没有记录时不编造“你之前学过/混淆过”，并能透明说明依据。"
+    }
+  ],
+  "generation": {
+    "method": "llm_assisted_batch",
+    "endpoint": "mify_openai_compatible",
+    "model": "ppio/pa/gpt-5.5",
+    "manual_review_required": true
+  },
+  "cases": [
+    {
+      "id": "profile_reading_001",
+      "category": "profile_reading",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_pr_001",
+        "progress": {
+          "current_chapter": "第3章",
+          "covered_chapters": [
+            "第1章",
+            "第2章"
+          ]
+        },
+        "recent_concepts": {
+          "data_cleaning": {
+            "concept_id": "data_cleaning",
+            "display_name": "数据清洗",
+            "chapter": "第2章",
+            "mention_count": 3,
+            "evidence": [
+              "学生问过缺失值怎么处理",
+              "学生追问过异常值是否一定要删除"
+            ],
+            "first_mentioned_at": 10.0,
+            "last_mentioned_at": 18.0,
+            "last_question_type": "clarification"
+          },
+          "supervised_learning": {
+            "concept_id": "supervised_learning",
+            "display_name": "监督学习",
+            "chapter": "第3章",
+            "mention_count": 2,
+            "evidence": [
+              "学生询问有标签数据的训练流程"
+            ],
+            "first_mentioned_at": 20.0,
+            "last_mentioned_at": 24.0,
+            "last_question_type": "concept_explanation"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "data_cleaning",
+            "display_name": "数据清洗",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生不确定缺失值填补和删除样本的适用条件"
+              }
+            ],
+            "confidence": 0.48,
+            "clarification_count": 1,
+            "first_detected_at": 18.0,
+            "last_triggered_at": 18.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 5,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我现在学到哪一章了？顺便提醒我最近哪里还没弄清楚。"
+      ],
+      "expected_route": "learning_path_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "current_chapter 为第3章",
+          "covered_chapters 包含第1章和第2章",
+          "recent_concepts 包含数据清洗和监督学习",
+          "pending_weak_spots 中有数据清洗"
+        ],
+        "must_not_reference": [
+          "不要声称学生已经学过第4章或第5章",
+          "不要声称监督学习是待解决薄弱点",
+          "不要提到任何教材页码或 source_id"
+        ]
+      },
+      "expected_behavior": [
+        "回答中明确出现“第3章”作为当前章节",
+        "回答中明确列出或概括已覆盖“第1章”和“第2章”",
+        "回答中将“数据清洗”标为仍需关注或待解决的薄弱点",
+        "回答中不把“监督学习”描述为 pending、active 或 unresolved weak spot",
+        "回答中不出现“第4章”“第5章”“页码”“source_id”"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "progress",
+          "recent_concepts",
+          "pending_weak_spots",
+          "weak_spot_candidates",
+          "resolved_weak_spots",
+          "stats"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "progress",
+        "pending_weak_spots",
+        "recent_concepts"
+      ],
+      "notes": "该样例检查助教能否区分最近提到的概念与真正待解决薄弱点，并准确读取当前章节和已覆盖章节。",
+      "enabled": true
+    },
+    {
+      "id": "profile_reading_002",
+      "category": "profile_reading",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_pr_002",
+        "progress": {
+          "current_chapter": "第5章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章"
+          ]
+        },
+        "recent_concepts": {
+          "decision_tree": {
+            "concept_id": "decision_tree",
+            "display_name": "决策树",
+            "chapter": "第4章",
+            "mention_count": 4,
+            "evidence": [
+              "学生要求比较信息增益和基尼指数",
+              "学生问过树深度和泛化的关系"
+            ],
+            "first_mentioned_at": 31.0,
+            "last_mentioned_at": 44.0,
+            "last_question_type": "comparison"
+          },
+          "random_forest": {
+            "concept_id": "random_forest",
+            "display_name": "随机森林",
+            "chapter": "第5章",
+            "mention_count": 2,
+            "evidence": [
+              "学生问随机森林为什么能降低方差"
+            ],
+            "first_mentioned_at": 46.0,
+            "last_mentioned_at": 49.0,
+            "last_question_type": "why_question"
+          },
+          "overfitting": {
+            "concept_id": "overfitting",
+            "display_name": "过拟合",
+            "chapter": "第4章",
+            "mention_count": 2,
+            "evidence": [
+              "学生说训练集准确率高但测试集差"
+            ],
+            "first_mentioned_at": 35.0,
+            "last_mentioned_at": 43.0,
+            "last_question_type": "diagnosis"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [
+          {
+            "concept_id": "random_forest",
+            "display_name": "随机森林",
+            "parent_concept": "decision_tree",
+            "signals": [
+              {
+                "type": "HESITATION",
+                "text": "学生说不确定袋装采样和多棵树投票怎么联系"
+              }
+            ],
+            "confidence": 0.34,
+            "clarification_count": 0,
+            "first_detected_at": 49.0,
+            "last_triggered_at": 49.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "overfitting",
+            "display_name": "过拟合",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "CORRECTION",
+                "text": "学生曾把训练误差低误认为一定泛化好"
+              }
+            ],
+            "confidence": 0.72,
+            "clarification_count": 2,
+            "first_detected_at": 36.0,
+            "last_triggered_at": 43.0,
+            "resolved_at": 45.0,
+            "resolution_note": "学生已能用训练集与测试集表现差异解释过拟合"
+          }
+        ],
+        "stats": {
+          "total_questions": 9,
+          "total_concepts": 3,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "我准备复习集成学习，你先看一下我的学习画像。",
+        "我是不是还有过拟合没有解决？我接下来应该优先看什么？"
+      ],
+      "expected_route": "learning_path_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "current_chapter 为第5章",
+          "recent_concepts 包含决策树、随机森林、过拟合",
+          "weak_spot_candidates 中有随机森林",
+          "resolved_weak_spots 中有过拟合",
+          "pending_weak_spots 为空"
+        ],
+        "must_not_reference": [
+          "不要把过拟合说成未解决薄弱点",
+          "不要把随机森林说成已解决薄弱点",
+          "不要声称存在 pending weak spot"
+        ]
+      },
+      "expected_behavior": [
+        "回答中明确说明当前章节是“第5章”",
+        "回答中说明“过拟合”已经解决或已在 resolved_weak_spots 中",
+        "回答中说明当前没有 pending weak spots 或没有已确认待解决薄弱点",
+        "回答中将“随机森林”表述为候选薄弱点、可能需要确认的问题或优先复习方向",
+        "回答中不出现“过拟合未解决”“pending 过拟合”“已解决随机森林”"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "progress",
+          "pending_weak_spots",
+          "weak_spot_candidates",
+          "resolved_weak_spots",
+          "stats"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "candidate_weak_spot",
+        "resolved_weak_spot",
+        "multi_turn"
+      ],
+      "notes": "该样例要求助教在多轮中正确处理学生关于过拟合状态的追问，不能把 resolved 状态误读为 pending。",
+      "enabled": true
+    },
+    {
+      "id": "profile_reading_003",
+      "category": "profile_reading",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_pr_003",
+        "progress": {
+          "current_chapter": "第6章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章"
+          ]
+        },
+        "recent_concepts": {
+          "logistic_regression": {
+            "concept_id": "logistic_regression",
+            "display_name": "逻辑回归",
+            "chapter": "第5章",
+            "mention_count": 3,
+            "evidence": [
+              "学生问 sigmoid 输出能否解释为概率",
+              "学生追问二分类阈值如何设置"
+            ],
+            "first_mentioned_at": 50.0,
+            "last_mentioned_at": 63.0,
+            "last_question_type": "clarification"
+          },
+          "confusion_matrix": {
+            "concept_id": "confusion_matrix",
+            "display_name": "混淆矩阵",
+            "chapter": "第6章",
+            "mention_count": 2,
+            "evidence": [
+              "学生要求解释 TP、FP、FN、TN"
+            ],
+            "first_mentioned_at": 65.0,
+            "last_mentioned_at": 70.0,
+            "last_question_type": "definition"
+          },
+          "precision": {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "chapter": "第6章",
+            "mention_count": 1,
+            "evidence": [
+              "学生问预测为正的样本里有多少是真的正类"
+            ],
+            "first_mentioned_at": 72.0,
+            "last_mentioned_at": 72.0,
+            "last_question_type": "concept_explanation"
+          },
+          "recall": {
+            "concept_id": "recall",
+            "display_name": "召回率",
+            "chapter": "第6章",
+            "mention_count": 1,
+            "evidence": [
+              "学生问实际正类中找回了多少"
+            ],
+            "first_mentioned_at": 73.0,
+            "last_mentioned_at": 73.0,
+            "last_question_type": "concept_explanation"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "confusion_matrix",
+            "display_name": "混淆矩阵",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "ERROR_PATTERN",
+                "text": "学生把 FP 和 FN 的含义对调"
+              }
+            ],
+            "confidence": 0.61,
+            "clarification_count": 2,
+            "first_detected_at": 70.0,
+            "last_triggered_at": 74.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [
+          {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "parent_concept": "confusion_matrix",
+            "signals": [
+              {
+                "type": "HESITATION",
+                "text": "学生说精确率和召回率公式容易混"
+              }
+            ],
+            "confidence": 0.39,
+            "clarification_count": 0,
+            "first_detected_at": 72.0,
+            "last_triggered_at": 73.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 11,
+          "total_concepts": 4,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我想知道最近在第6章都问过哪些概念。",
+        "这些里面哪个是我确定的薄弱点，哪个只是可能薄弱？"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "current_chapter 为第6章",
+          "recent_concepts 中第6章相关概念包括混淆矩阵、精确率、召回率",
+          "pending_weak_spots 中有混淆矩阵",
+          "weak_spot_candidates 中有精确率",
+          "逻辑回归属于第5章但也是 recent_concepts"
+        ],
+        "must_not_reference": [
+          "不要把逻辑回归列为第6章概念",
+          "不要把召回率说成已确认薄弱点",
+          "不要把精确率说成 pending weak spot"
+        ]
+      },
+      "expected_behavior": [
+        "回答第6章最近概念时包含“混淆矩阵”“精确率”“召回率”",
+        "回答第6章最近概念时不把“逻辑回归”归入第6章列表",
+        "回答中明确“混淆矩阵”是已确认待解决或 pending weak spot",
+        "回答中明确“精确率”是候选薄弱点或 weak_spot_candidate",
+        "回答中不声称“召回率”有 pending、candidate 或 resolved 状态"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "progress",
+          "recent_concepts",
+          "pending_weak_spots",
+          "weak_spot_candidates",
+          "resolved_weak_spots",
+          "stats"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "chapter_filtering",
+        "weak_spot_status",
+        "multi_turn"
+      ],
+      "notes": "该样例检查助教是否能按章节过滤 recent_concepts，并区分 pending 与 candidate。",
+      "enabled": true
+    },
+    {
+      "id": "profile_reading_004",
+      "category": "profile_reading",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_pr_004",
+        "progress": {
+          "current_chapter": "第7章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章"
+          ]
+        },
+        "recent_concepts": {
+          "svm": {
+            "concept_id": "svm",
+            "display_name": "支持向量机",
+            "chapter": "第7章",
+            "mention_count": 3,
+            "evidence": [
+              "学生问最大间隔的直观含义",
+              "学生问支持向量如何决定分类边界"
+            ],
+            "first_mentioned_at": 80.0,
+            "last_mentioned_at": 90.0,
+            "last_question_type": "concept_explanation"
+          },
+          "kernel_function": {
+            "concept_id": "kernel_function",
+            "display_name": "核函数",
+            "chapter": "第7章",
+            "mention_count": 3,
+            "evidence": [
+              "学生问核技巧是否等同于显式升维",
+              "学生不确定多项式核和 RBF 核的区别"
+            ],
+            "first_mentioned_at": 91.0,
+            "last_mentioned_at": 99.0,
+            "last_question_type": "comparison"
+          },
+          "gradient_descent": {
+            "concept_id": "gradient_descent",
+            "display_name": "梯度下降",
+            "chapter": "第4章",
+            "mention_count": 2,
+            "evidence": [
+              "学生问损失函数沿负梯度方向更新的原因"
+            ],
+            "first_mentioned_at": 76.0,
+            "last_mentioned_at": 78.0,
+            "last_question_type": "why_question"
+          },
+          "learning_rate": {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "chapter": "第4章",
+            "mention_count": 1,
+            "evidence": [
+              "学生问学习率过大会怎样"
+            ],
+            "first_mentioned_at": 79.0,
+            "last_mentioned_at": 79.0,
+            "last_question_type": "what_if"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "kernel_function",
+            "display_name": "核函数",
+            "parent_concept": "svm",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生反复询问核函数是否真的计算了高维坐标"
+              }
+            ],
+            "confidence": 0.66,
+            "clarification_count": 3,
+            "first_detected_at": 94.0,
+            "last_triggered_at": 99.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [
+          {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "parent_concept": "gradient_descent",
+            "signals": [
+              {
+                "type": "HESITATION",
+                "text": "学生表示不太确定步长和收敛速度的关系"
+              }
+            ],
+            "confidence": 0.31,
+            "clarification_count": 0,
+            "first_detected_at": 79.0,
+            "last_triggered_at": 79.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "gradient_descent",
+            "display_name": "梯度下降",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "CORRECTION",
+                "text": "学生曾把负梯度方向理解为增加损失的方向"
+              }
+            ],
+            "confidence": 0.7,
+            "clarification_count": 2,
+            "first_detected_at": 76.0,
+            "last_triggered_at": 78.0,
+            "resolved_at": 82.0,
+            "resolution_note": "学生已能说明沿负梯度方向通常使损失下降"
+          }
+        ],
+        "stats": {
+          "total_questions": 14,
+          "total_concepts": 4,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "帮我根据画像规划一下今天 20 分钟复习。",
+        "只看当前章节相关的内容。",
+        "另外告诉我有哪些以前的问题已经解决了，但不要混进今天重点。"
+      ],
+      "expected_route": "learning_path_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "current_chapter 为第7章",
+          "第7章 recent_concepts 包含支持向量机和核函数",
+          "pending_weak_spots 中核函数属于第7章且 parent_concept 为 svm",
+          "resolved_weak_spots 中梯度下降已解决",
+          "learning_rate 是候选薄弱点但属于第4章"
+        ],
+        "must_not_reference": [
+          "不要把学习率纳入当前章节复习重点",
+          "不要把梯度下降纳入今天当前章节重点",
+          "不要把核函数说成已解决",
+          "不要声称当前章节是第4章"
+        ]
+      },
+      "expected_behavior": [
+        "回答中将今天当前章节复习重点限定在“支持向量机”和“核函数”",
+        "回答中明确“核函数”是当前章节的待解决薄弱点或优先项",
+        "回答中提到“梯度下降”已解决时必须说明它不是今天当前章节重点",
+        "回答中不把“学习率”列入当前章节复习重点",
+        "回答中不把“梯度下降”描述为 pending weak spot"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "progress",
+          "recent_concepts",
+          "pending_weak_spots",
+          "weak_spot_candidates",
+          "resolved_weak_spots",
+          "stats"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "current_chapter_filter",
+        "resolved_weak_spot",
+        "multi_turn",
+        "hard"
+      ],
+      "notes": "该样例有多个弱点状态和跨章节概念，能区分助教是否按照用户要求只使用当前章节相关画像事实。",
+      "enabled": true
+    },
+    {
+      "id": "profile_reading_005",
+      "category": "profile_reading",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_pr_005",
+        "progress": {
+          "current_chapter": "第8章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章",
+            "第7章"
+          ]
+        },
+        "recent_concepts": {
+          "k_means": {
+            "concept_id": "k_means",
+            "display_name": "K-means 聚类",
+            "chapter": "第8章",
+            "mention_count": 2,
+            "evidence": [
+              "学生问如何选择 K",
+              "学生问初始中心点影响结果吗"
+            ],
+            "first_mentioned_at": 100.0,
+            "last_mentioned_at": 105.0,
+            "last_question_type": "concept_explanation"
+          },
+          "unsupervised_learning": {
+            "concept_id": "unsupervised_learning",
+            "display_name": "无监督学习",
+            "chapter": "第8章",
+            "mention_count": 1,
+            "evidence": [
+              "学生问无标签数据能做什么任务"
+            ],
+            "first_mentioned_at": 98.0,
+            "last_mentioned_at": 98.0,
+            "last_question_type": "definition"
+          },
+          "cross_validation": {
+            "concept_id": "cross_validation",
+            "display_name": "交叉验证",
+            "chapter": "第5章",
+            "mention_count": 2,
+            "evidence": [
+              "学生问 K 折交叉验证怎么分训练集和验证集"
+            ],
+            "first_mentioned_at": 92.0,
+            "last_mentioned_at": 96.0,
+            "last_question_type": "procedure"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "cross_validation",
+            "display_name": "交叉验证",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "CORRECTION",
+                "text": "学生曾以为测试集可以参与调参"
+              }
+            ],
+            "confidence": 0.68,
+            "clarification_count": 1,
+            "first_detected_at": 94.0,
+            "last_triggered_at": 96.0,
+            "resolved_at": 97.0,
+            "resolution_note": "学生已能区分训练、验证和测试用途"
+          }
+        ],
+        "stats": {
+          "total_questions": 8,
+          "total_concepts": 3,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "我当前章节最近提到的概念有哪些？有没有还没解决的薄弱点？"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "current_chapter 为第8章",
+          "第8章 recent_concepts 包含 K-means 聚类和无监督学习",
+          "pending_weak_spots 为空",
+          "resolved_weak_spots 中有交叉验证但属于第5章"
+        ],
+        "must_not_reference": [
+          "不要把交叉验证列为当前章节最近概念",
+          "不要声称有未解决薄弱点",
+          "不要把 K-means 聚类说成薄弱点"
+        ]
+      },
+      "expected_behavior": [
+        "回答中明确当前章节是“第8章”",
+        "回答中列出当前章节最近概念“无监督学习”和“K-means 聚类”",
+        "回答中说明当前没有 pending weak spots 或没有还没解决的薄弱点",
+        "回答中不把“交叉验证”列入第8章最近概念",
+        "回答中不把“K-means 聚类”标记为 pending、candidate 或 resolved weak spot"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "progress",
+          "recent_concepts",
+          "pending_weak_spots",
+          "weak_spot_candidates",
+          "resolved_weak_spots",
+          "stats"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "no_pending_weak_spots",
+        "chapter_filtering"
+      ],
+      "notes": "该样例检查助教在没有 pending weak spots 时是否避免硬凑薄弱点，同时按当前章节过滤 recent_concepts。",
+      "enabled": true
+    },
+    {
+      "id": "profile_reading_006",
+      "category": "profile_reading",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_pr_006",
+        "progress": {
+          "current_chapter": "第9章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章",
+            "第7章",
+            "第8章"
+          ]
+        },
+        "recent_concepts": {
+          "pca": {
+            "concept_id": "pca",
+            "display_name": "主成分分析",
+            "chapter": "第9章",
+            "mention_count": 3,
+            "evidence": [
+              "学生问主成分为什么要互相正交",
+              "学生问降维后信息损失如何衡量"
+            ],
+            "first_mentioned_at": 120.0,
+            "last_mentioned_at": 130.0,
+            "last_question_type": "why_question"
+          },
+          "covariance_matrix": {
+            "concept_id": "covariance_matrix",
+            "display_name": "协方差矩阵",
+            "chapter": "第9章",
+            "mention_count": 2,
+            "evidence": [
+              "学生问协方差矩阵对角线和非对角线分别表示什么"
+            ],
+            "first_mentioned_at": 124.0,
+            "last_mentioned_at": 129.0,
+            "last_question_type": "definition"
+          },
+          "regularization": {
+            "concept_id": "regularization",
+            "display_name": "正则化",
+            "chapter": "第5章",
+            "mention_count": 2,
+            "evidence": [
+              "学生问 L1 和 L2 对模型参数的影响"
+            ],
+            "first_mentioned_at": 110.0,
+            "last_mentioned_at": 116.0,
+            "last_question_type": "comparison"
+          },
+          "f1": {
+            "concept_id": "f1",
+            "display_name": "F1 值",
+            "chapter": "第6章",
+            "mention_count": 1,
+            "evidence": [
+              "学生问为什么 F1 是精确率和召回率的调和平均"
+            ],
+            "first_mentioned_at": 118.0,
+            "last_mentioned_at": 118.0,
+            "last_question_type": "why_question"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "covariance_matrix",
+            "display_name": "协方差矩阵",
+            "parent_concept": "pca",
+            "signals": [
+              {
+                "type": "ERROR_PATTERN",
+                "text": "学生把协方差矩阵的非对角元素理解成单个变量的方差"
+              }
+            ],
+            "confidence": 0.64,
+            "clarification_count": 2,
+            "first_detected_at": 126.0,
+            "last_triggered_at": 129.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [
+          {
+            "concept_id": "pca",
+            "display_name": "主成分分析",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "HESITATION",
+                "text": "学生说不确定最大方差方向和降维目标的关系"
+              }
+            ],
+            "confidence": 0.42,
+            "clarification_count": 0,
+            "first_detected_at": 130.0,
+            "last_triggered_at": 130.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "regularization",
+            "display_name": "正则化",
+            "parent_concept": "generalization",
+            "signals": [
+              {
+                "type": "CORRECTION",
+                "text": "学生曾把正则化理解为提高训练集准确率的技巧"
+              }
+            ],
+            "confidence": 0.74,
+            "clarification_count": 2,
+            "first_detected_at": 112.0,
+            "last_triggered_at": 116.0,
+            "resolved_at": 117.0,
+            "resolution_note": "学生已能说明正则化主要用于约束模型复杂度、改善泛化"
+          }
+        ],
+        "stats": {
+          "total_questions": 16,
+          "total_concepts": 4,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "先别讲新知识，只根据我的画像说说状态。",
+        "我当前章节有哪些最近概念？",
+        "这些概念里哪个是确定薄弱点，哪个只是候选？同时别把旧章节混进来。"
+      ],
+      "expected_route": "learning_path_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "current_chapter 为第9章",
+          "第9章 recent_concepts 包含主成分分析和协方差矩阵",
+          "pending_weak_spots 中协方差矩阵为确定待解决薄弱点",
+          "weak_spot_candidates 中主成分分析为候选薄弱点",
+          "resolved_weak_spots 中正则化已解决但属于第5章"
+        ],
+        "must_not_reference": [
+          "不要把正则化混入当前章节概念或当前章节薄弱点",
+          "不要把 F1 值混入当前章节概念",
+          "不要把主成分分析说成 pending weak spot",
+          "不要把协方差矩阵说成 resolved weak spot"
+        ]
+      },
+      "expected_behavior": [
+        "回答中明确当前章节是“第9章”",
+        "回答中当前章节最近概念只包含或至少明确包含“主成分分析”和“协方差矩阵”",
+        "回答中将“协方差矩阵”标为 pending、确定薄弱点或待解决薄弱点",
+        "回答中将“主成分分析”标为 candidate、候选薄弱点或可能薄弱点",
+        "回答中不把“正则化”或“F1 值”列为当前章节概念",
+        "回答中不讲解新的教材内容细节，重点是画像状态汇总"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "progress",
+          "recent_concepts",
+          "pending_weak_spots",
+          "weak_spot_candidates",
+          "resolved_weak_spots",
+          "stats"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "current_chapter_filter",
+        "pending_vs_candidate",
+        "multi_turn",
+        "hard"
+      ],
+      "notes": "该样例考查三轮对话中对当前章节、recent_concepts、pending 与 candidate 状态的精确读取，同时要求过滤旧章节 resolved 概念。",
+      "enabled": true
+    },
+    {
+      "id": "personalized_explanation_001",
+      "category": "personalized_explanation",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_pe_001",
+        "progress": {
+          "current_chapter": "第3章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章"
+          ]
+        },
+        "recent_concepts": {
+          "confusion_matrix": {
+            "concept_id": "confusion_matrix",
+            "display_name": "混淆矩阵",
+            "chapter": "第3章",
+            "mention_count": 2,
+            "evidence": [
+              "学生说：我能看懂表格，但不知道四个格子分别代表什么。",
+              "学生偏好：希望用生活类比和具体例子解释。"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 2.0,
+            "last_question_type": "clarification"
+          },
+          "precision": {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "chapter": "第3章",
+            "mention_count": 1,
+            "evidence": [
+              "学生问：精确率是不是就是预测对的比例？"
+            ],
+            "first_mentioned_at": 2.0,
+            "last_mentioned_at": 2.0,
+            "last_question_type": "misconception"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "parent_concept": "confusion_matrix",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生把精确率理解为所有预测中预测正确的比例，没有限定预测为正类。"
+              }
+            ],
+            "confidence": 0.72,
+            "clarification_count": 2,
+            "first_detected_at": 2.0,
+            "last_triggered_at": 3.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 5,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我还是分不清 precision 和混淆矩阵里的四个格子，能用简单例子讲一下吗？",
+        "那 recall 和 precision 的重点差别是什么？"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "使用 pending_weak_spots 中学生把 precision 误解为所有预测正确比例这一事实",
+          "使用 recent_concepts 中学生偏好生活类比和具体例子的事实",
+          "围绕混淆矩阵、precision，并在第二轮补充 recall 的对比"
+        ],
+        "must_not_reference": []
+      },
+      "expected_behavior": [
+        "回答必须明确指出 precision 的分母是“预测为正类的样本数”，而不是全部样本数或所有预测",
+        "回答必须包含一个生活场景类比或具体二分类例子，并给出 TP、FP、FN、TN 中至少三个名称或含义",
+        "第二轮回答必须用关键词对比 precision 关注“预测为正的有多少是真的”，recall 关注“真实为正的找回多少”",
+        "解释深度应为入门级，不能直接堆叠公式而没有例子；若给公式，必须同时给文字解释"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [
+          "recall"
+        ],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "student_id",
+          "progress.covered_chapters",
+          "resolved_weak_spots"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "personalized_explanation",
+        "confusion_matrix",
+        "precision",
+        "recall",
+        "multi_turn"
+      ],
+      "notes": "同一分类指标解释需要根据画像中已有误解和偏好改为生活化、低门槛解释，并在多轮中延展到 recall。",
+      "enabled": true
+    },
+    {
+      "id": "personalized_explanation_002",
+      "category": "personalized_explanation",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_pe_002",
+        "progress": {
+          "current_chapter": "第6章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章"
+          ]
+        },
+        "recent_concepts": {
+          "gradient_descent": {
+            "concept_id": "gradient_descent",
+            "display_name": "梯度下降",
+            "chapter": "第6章",
+            "mention_count": 3,
+            "evidence": [
+              "学生说：我喜欢先看公式，再看直观解释。",
+              "学生之前能写出参数沿负梯度方向更新。"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "application"
+          },
+          "learning_rate": {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "chapter": "第6章",
+            "mention_count": 2,
+            "evidence": [
+              "学生问：学习率是不是越大越快？"
+            ],
+            "first_mentioned_at": 2.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "misconception"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "parent_concept": "gradient_descent",
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "学生认为学习率越大训练越快且总是更好。"
+              }
+            ],
+            "confidence": 0.81,
+            "clarification_count": 2,
+            "first_detected_at": 2.0,
+            "last_triggered_at": 4.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "gradient_descent",
+            "display_name": "梯度下降",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "RESOLVED",
+                "text": "学生已能说明负梯度方向用于降低损失。"
+              }
+            ],
+            "confidence": 0.9,
+            "clarification_count": 0,
+            "first_detected_at": 1.0,
+            "last_triggered_at": 3.0,
+            "resolved_at": 4.0,
+            "resolution_note": "已掌握基本更新方向。"
+          }
+        ],
+        "stats": {
+          "total_questions": 8,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "为什么学习率不能设得特别大？我已经知道梯度下降的大概公式。"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "使用 pending_weak_spots 中“学习率越大越好”的误解",
+          "使用 recent_concepts 中学生偏好先公式后直观解释",
+          "使用 resolved_weak_spots 中学生已掌握梯度下降更新方向，避免从零讲起"
+        ],
+        "must_not_reference": []
+      },
+      "expected_behavior": [
+        "回答开头或前半部分必须给出类似 theta = theta - eta * gradient 的更新式，并说明 eta 或学习率控制步长",
+        "必须明确纠正“学习率越大越好”，指出过大可能震荡、越过最小值或发散",
+        "必须包含一个直观类比，例如下山步子太大容易跨过谷底或来回震荡",
+        "不得把梯度下降基本概念从零长篇解释为主要内容；重点应放在学习率大小的影响和调参补救"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "resolved_weak_spots.gradient_descent",
+          "progress.current_chapter",
+          "stats.total_resolved_weak_spots"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "personalized_explanation",
+        "gradient_descent",
+        "learning_rate",
+        "formula_first"
+      ],
+      "notes": "测试系统是否会读取学习偏好与已解决弱点，用公式优先但不重复讲已掌握内容。",
+      "enabled": true
+    },
+    {
+      "id": "personalized_explanation_003",
+      "category": "personalized_explanation",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_pe_003",
+        "progress": {
+          "current_chapter": "第5章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章"
+          ]
+        },
+        "recent_concepts": {
+          "decision_tree": {
+            "concept_id": "decision_tree",
+            "display_name": "决策树",
+            "chapter": "第4章",
+            "mention_count": 3,
+            "evidence": [
+              "学生说：决策树像一连串 if-else 我能理解。",
+              "学生偏好：用图形结构或分支规则解释。"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 3.0,
+            "last_question_type": "understanding"
+          },
+          "random_forest": {
+            "concept_id": "random_forest",
+            "display_name": "随机森林",
+            "chapter": "第5章",
+            "mention_count": 1,
+            "evidence": [
+              "学生问：随机森林是不是就是一棵更大的树？"
+            ],
+            "first_mentioned_at": 4.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "misconception"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "random_forest",
+            "display_name": "随机森林",
+            "parent_concept": "decision_tree",
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "学生把随机森林理解为单棵更大的决策树，没有理解多棵树集成和随机性。"
+              }
+            ],
+            "confidence": 0.78,
+            "clarification_count": 1,
+            "first_detected_at": 4.0,
+            "last_triggered_at": 4.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 6,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "随机森林到底和决策树有什么区别？是不是把树加深就行？",
+        "那为什么多棵树一起投票会更稳？"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "使用 recent_concepts 中学生已理解决策树像 if-else 分支",
+          "使用 pending_weak_spots 中“随机森林是一棵更大的树”的误解",
+          "使用学生偏好图形结构或分支规则解释"
+        ],
+        "must_not_reference": [
+          "不要引入学生未问到且画像无依据的 SVM 或 kernel_function 历史"
+        ]
+      },
+      "expected_behavior": [
+        "必须明确说随机森林不是一棵更深或更大的树，而是多棵决策树组成的集成模型",
+        "必须解释至少一种随机性来源，关键词可为 bootstrap、样本随机、特征随机或随机抽样",
+        "必须使用投票或平均的机制说明多棵树如何合成预测",
+        "第二轮必须解释“更稳”的原因，至少包含降低单棵树偶然错误、降低方差或减少过拟合中的一个关键词"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "student_id",
+          "progress.covered_chapters",
+          "resolved_weak_spots"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "personalized_explanation",
+        "decision_tree",
+        "random_forest",
+        "multi_turn"
+      ],
+      "notes": "区分能否利用学生已掌握的决策树类比，同时纠正随机森林不是大树的画像弱点。",
+      "enabled": true
+    },
+    {
+      "id": "personalized_explanation_004",
+      "category": "personalized_explanation",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_pe_004",
+        "progress": {
+          "current_chapter": "第7章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章",
+            "第7章"
+          ]
+        },
+        "recent_concepts": {
+          "svm": {
+            "concept_id": "svm",
+            "display_name": "支持向量机",
+            "chapter": "第7章",
+            "mention_count": 2,
+            "evidence": [
+              "学生说：我能理解二维平面里找一条分割线。",
+              "学生偏好：不要太多公式，先用几何图像解释。"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 3.0,
+            "last_question_type": "understanding"
+          },
+          "kernel_function": {
+            "concept_id": "kernel_function",
+            "display_name": "核函数",
+            "chapter": "第7章",
+            "mention_count": 2,
+            "evidence": [
+              "学生问：核函数是不是把数据真的搬到另一个空间存起来？"
+            ],
+            "first_mentioned_at": 3.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "misconception"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "kernel_function",
+            "display_name": "核函数",
+            "parent_concept": "svm",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生不理解核技巧，倾向认为必须显式构造高维特征空间。"
+              }
+            ],
+            "confidence": 0.69,
+            "clarification_count": 2,
+            "first_detected_at": 3.0,
+            "last_triggered_at": 4.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [
+          {
+            "concept_id": "svm",
+            "display_name": "支持向量机",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "HESITATION",
+                "text": "学生对最大间隔仍有些不确定。"
+              }
+            ],
+            "confidence": 0.36,
+            "clarification_count": 1,
+            "first_detected_at": 2.0,
+            "last_triggered_at": 3.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 7,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "能不能用几何直觉解释一下 SVM 里的核函数？我不想先看一堆公式。",
+        "所以核函数是不是完全等于升维？"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "使用 recent_concepts 中学生能理解二维分割线的事实",
+          "使用 pending_weak_spots 中学生误以为必须显式构造高维空间的事实",
+          "使用学生偏好几何图像、少公式的解释方式"
+        ],
+        "must_not_reference": [
+          "不要把 weak_spot_candidates 中最大间隔不确定当作已经确定的 pending 弱点过度诊断"
+        ]
+      },
+      "expected_behavior": [
+        "必须用几何直觉解释核函数，例如把原本线性不可分的数据映射到更容易分开的表示中",
+        "必须明确说明核技巧通常通过计算相似度或内积效果来工作，不一定需要显式把数据真的存到高维空间",
+        "第二轮必须回答“核函数不完全等于升维”，并区分显式特征映射与核函数计算效果",
+        "公式数量应少；若出现公式，不能超过两个独立公式，并且必须有文字解释"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "pending_weak_spots.kernel_function",
+          "weak_spot_candidates.svm",
+          "progress.current_chapter"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "personalized_explanation",
+        "svm",
+        "kernel_function",
+        "geometry_first",
+        "multi_turn"
+      ],
+      "notes": "测试解释深度、类比方式和对 weak_spot_candidates 的过滤，避免把候选弱点当成确定事实。",
+      "enabled": true
+    },
+    {
+      "id": "personalized_explanation_005",
+      "category": "personalized_explanation",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_pe_005",
+        "progress": {
+          "current_chapter": "第4章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章"
+          ]
+        },
+        "recent_concepts": {
+          "logistic_regression": {
+            "concept_id": "logistic_regression",
+            "display_name": "逻辑回归",
+            "chapter": "第4章",
+            "mention_count": 2,
+            "evidence": [
+              "学生说：我知道线性回归输出连续数值。",
+              "学生偏好：希望从熟悉概念做对比，不喜欢纯记忆公式。"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 3.0,
+            "last_question_type": "comparison"
+          },
+          "supervised_learning": {
+            "concept_id": "supervised_learning",
+            "display_name": "监督学习",
+            "chapter": "第3章",
+            "mention_count": 1,
+            "evidence": [
+              "学生能说出监督学习有带标签训练数据。"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 1.0,
+            "last_question_type": "understanding"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "logistic_regression",
+            "display_name": "逻辑回归",
+            "parent_concept": "supervised_learning",
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "学生因为名称包含回归，误以为逻辑回归主要用于预测连续数值。"
+              }
+            ],
+            "confidence": 0.74,
+            "clarification_count": 1,
+            "first_detected_at": 3.0,
+            "last_triggered_at": 3.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 5,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "逻辑回归为什么叫回归？它不是也像线性回归一样预测一个数字吗？"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "使用 pending_weak_spots 中学生误以为逻辑回归预测连续数值的事实",
+          "使用 recent_concepts 中学生熟悉线性回归输出连续数值的事实",
+          "使用学习偏好：从熟悉概念对比而非纯记忆公式"
+        ],
+        "must_not_reference": []
+      },
+      "expected_behavior": [
+        "必须明确说明逻辑回归通常用于分类，尤其是二分类，而不是主要用于连续值预测",
+        "必须将线性回归与逻辑回归对比，至少包含“连续输出”和“概率或类别”这两个关键词含义",
+        "必须提到 sigmoid、概率映射、阈值决策三者中的至少两个",
+        "不能只解释名称来源；必须给出一个简单分类例子，例如是否流失、是否患病、是否垃圾邮件"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "student_id",
+          "progress.current_chapter",
+          "resolved_weak_spots"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "personalized_explanation",
+        "logistic_regression",
+        "supervised_learning",
+        "comparison"
+      ],
+      "notes": "测试同一概念解释能否依据学生熟悉的线性回归作对比，并聚焦名称导致的弱点。",
+      "enabled": true
+    },
+    {
+      "id": "personalized_explanation_006",
+      "category": "personalized_explanation",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_pe_006",
+        "progress": {
+          "current_chapter": "第8章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章",
+            "第7章",
+            "第8章"
+          ]
+        },
+        "recent_concepts": {
+          "overfitting": {
+            "concept_id": "overfitting",
+            "display_name": "过拟合",
+            "chapter": "第8章",
+            "mention_count": 3,
+            "evidence": [
+              "学生说：我知道训练集表现很好但测试集差可能是过拟合。",
+              "学生偏好：希望用诊断清单和操作建议，不只听概念解释。"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 3.0,
+            "last_question_type": "application"
+          },
+          "regularization": {
+            "concept_id": "regularization",
+            "display_name": "正则化",
+            "chapter": "第8章",
+            "mention_count": 2,
+            "evidence": [
+              "学生问：正则化是不是就是让训练准确率变低？"
+            ],
+            "first_mentioned_at": 2.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "misconception"
+          },
+          "cross_validation": {
+            "concept_id": "cross_validation",
+            "display_name": "交叉验证",
+            "chapter": "第8章",
+            "mention_count": 1,
+            "evidence": [
+              "学生听过 k 折交叉验证，但没用它选择模型。"
+            ],
+            "first_mentioned_at": 3.0,
+            "last_mentioned_at": 3.0,
+            "last_question_type": "clarification"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "regularization",
+            "display_name": "正则化",
+            "parent_concept": "overfitting",
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "学生把正则化理解为故意降低训练准确率，而不是通过约束模型复杂度改善泛化。"
+              }
+            ],
+            "confidence": 0.76,
+            "clarification_count": 2,
+            "first_detected_at": 2.0,
+            "last_triggered_at": 4.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [
+          {
+            "concept_id": "cross_validation",
+            "display_name": "交叉验证",
+            "parent_concept": "generalization",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生可能不清楚如何用交叉验证选择正则化强度。"
+              }
+            ],
+            "confidence": 0.41,
+            "clarification_count": 1,
+            "first_detected_at": 3.0,
+            "last_triggered_at": 3.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "overfitting",
+            "display_name": "过拟合",
+            "parent_concept": "generalization",
+            "signals": [
+              {
+                "type": "RESOLVED",
+                "text": "学生能识别训练好测试差的典型过拟合现象。"
+              }
+            ],
+            "confidence": 0.88,
+            "clarification_count": 0,
+            "first_detected_at": 1.0,
+            "last_triggered_at": 3.0,
+            "resolved_at": 3.5,
+            "resolution_note": "已能用训练/测试表现差异识别过拟合。"
+          }
+        ],
+        "stats": {
+          "total_questions": 10,
+          "total_concepts": 3,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "我已经知道什么是过拟合了。能针对正则化讲讲它为什么能改善泛化吗？",
+        "如果我在项目里调正则化强度，有没有一个检查步骤？",
+        "那交叉验证在这里起什么作用？"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "使用 resolved_weak_spots 中学生已掌握过拟合识别，避免重复定义过拟合为主",
+          "使用 pending_weak_spots 中学生把正则化误解为故意降低训练准确率的事实",
+          "使用 recent_concepts 中学生偏好诊断清单和操作建议"
+        ],
+        "must_not_reference": []
+      },
+      "expected_behavior": [
+        "必须说明正则化的核心是限制模型复杂度或惩罚过大的参数，以改善泛化，而不是单纯追求降低训练准确率",
+        "必须包含项目操作建议或检查清单，至少包括划分验证集或使用交叉验证、比较训练/验证表现、选择正则化强度中的两项",
+        "多轮回答中必须解释交叉验证用于估计泛化表现和选择超参数，不能把它说成训练集上的最终评分",
+        "应避免大段重新解释过拟合定义；过拟合只能作为背景或连接点"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [
+          "generalization"
+        ],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "resolved_weak_spots.overfitting",
+          "pending_weak_spots.regularization",
+          "student_id"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "personalized_explanation",
+        "regularization",
+        "generalization",
+        "cross_validation",
+        "multi_turn"
+      ],
+      "notes": "测试根据已解决弱点控制讲解粒度，并依据偏好输出可操作诊断清单。",
+      "enabled": true
+    },
+    {
+      "id": "learning_path_001",
+      "category": "learning_path",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_lp_001",
+        "progress": {
+          "current_chapter": "第2章",
+          "covered_chapters": [
+            "第1章",
+            "第2章"
+          ]
+        },
+        "recent_concepts": {
+          "data_cleaning": {
+            "concept_id": "data_cleaning",
+            "display_name": "数据清洗",
+            "chapter": "第2章",
+            "mention_count": 3,
+            "evidence": [
+              "问过缺失值处理顺序",
+              "练习中混淆异常值和缺失值"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 5.0,
+            "last_question_type": "learning_path"
+          },
+          "supervised_learning": {
+            "concept_id": "supervised_learning",
+            "display_name": "监督学习",
+            "chapter": "第3章",
+            "mention_count": 1,
+            "evidence": [
+              "询问监督学习是否需要标签"
+            ],
+            "first_mentioned_at": 4.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "preview"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "data_cleaning",
+            "display_name": "数据清洗",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生问：缺失值、异常值和重复值应该先处理哪个？"
+              }
+            ],
+            "confidence": 0.52,
+            "clarification_count": 1,
+            "first_detected_at": 2.0,
+            "last_triggered_at": 5.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 5,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我这周只有2小时，想开始学机器学习，能给我排个学习路线吗？"
+      ],
+      "expected_route": "learning_path_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "当前章节是第2章",
+          "已覆盖第1章和第2章",
+          "pending_weak_spots包含data_cleaning",
+          "学生可用时间为2小时"
+        ],
+        "must_not_reference": [
+          "不要假设学生已经系统学完第3章监督学习",
+          "不要把random_forest或svm作为下一步主线"
+        ]
+      },
+      "expected_behavior": [
+        "路线应先安排data_cleaning复习或查漏，再进入supervised_learning预习",
+        "必须明确说明监督学习需要标签这一前置概念，不能直接跳到具体模型",
+        "计划总时长应匹配2小时，包含每个学习块的大致分钟数",
+        "输出中应包含不超过3个学习任务，避免给出长周计划",
+        "不得引用教材页码或source_id"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "pending_weak_spots.data_cleaning",
+          "progress.current_chapter",
+          "resolved_weak_spots"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "learning_path",
+        "time_budget",
+        "prerequisite",
+        "data_cleaning"
+      ],
+      "notes": "检查助教是否按当前章节和薄弱点安排路线，而不是因学生说机器学习就直接跳到模型。",
+      "enabled": true
+    },
+    {
+      "id": "learning_path_002",
+      "category": "learning_path",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_lp_002",
+        "progress": {
+          "current_chapter": "第4章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章"
+          ]
+        },
+        "recent_concepts": {
+          "logistic_regression": {
+            "concept_id": "logistic_regression",
+            "display_name": "逻辑回归",
+            "chapter": "第4章",
+            "mention_count": 4,
+            "evidence": [
+              "完成过二分类例题",
+              "问过sigmoid输出如何解释"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 6.0,
+            "last_question_type": "exercise"
+          },
+          "confusion_matrix": {
+            "concept_id": "confusion_matrix",
+            "display_name": "混淆矩阵",
+            "chapter": "第4章",
+            "mention_count": 2,
+            "evidence": [
+              "问过TP和FP的含义"
+            ],
+            "first_mentioned_at": 3.0,
+            "last_mentioned_at": 7.0,
+            "last_question_type": "clarification"
+          },
+          "precision": {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "chapter": "第4章",
+            "mention_count": 1,
+            "evidence": [
+              "把精确率说成预测对的比例"
+            ],
+            "first_mentioned_at": 7.0,
+            "last_mentioned_at": 7.0,
+            "last_question_type": "clarification"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "parent_concept": "confusion_matrix",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生把precision理解为所有样本中预测正确的比例。"
+              }
+            ],
+            "confidence": 0.61,
+            "clarification_count": 2,
+            "first_detected_at": 7.0,
+            "last_triggered_at": 8.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 8,
+          "total_concepts": 3,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我下节想学随机森林，但我只有今晚45分钟。先学什么？",
+        "如果我坚持想看随机森林，能不能给我一个不跳步骤的版本？"
+      ],
+      "expected_route": "learning_path_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "当前章节是第4章",
+          "recent_concepts包含logistic_regression和confusion_matrix",
+          "pending_weak_spots包含precision",
+          "可用时间为45分钟"
+        ],
+        "must_not_reference": [
+          "不要假设学生已掌握decision_tree",
+          "不要直接把random_forest排为唯一学习内容"
+        ]
+      },
+      "expected_behavior": [
+        "第一轮应优先安排precision和confusion_matrix复习，再连接到当前第4章的logistic_regression评估",
+        "必须指出random_forest通常应在decision_tree之后学习，不能跳过decision_tree",
+        "第二轮应给出包含decision_tree前置补课的路线，并把random_forest定位为预览或后续目标",
+        "45分钟计划应包含时间分配，且至少一段用于薄弱点precision",
+        "不得声称学生已经掌握decision_tree或random_forest"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "pending_weak_spots.precision",
+          "progress.current_chapter",
+          "resolved_weak_spots"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "learning_path",
+        "multi_turn",
+        "classification_metrics",
+        "random_forest"
+      ],
+      "notes": "多轮中测试是否能拒绝跳过决策树前置，同时利用precision薄弱点排序。",
+      "enabled": true
+    },
+    {
+      "id": "learning_path_003",
+      "category": "learning_path",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_lp_003",
+        "progress": {
+          "current_chapter": "第6章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章"
+          ]
+        },
+        "recent_concepts": {
+          "gradient_descent": {
+            "concept_id": "gradient_descent",
+            "display_name": "梯度下降",
+            "chapter": "第6章",
+            "mention_count": 5,
+            "evidence": [
+              "问过为什么沿负梯度方向更新",
+              "在练习中写错参数更新符号"
+            ],
+            "first_mentioned_at": 2.0,
+            "last_mentioned_at": 9.0,
+            "last_question_type": "exercise"
+          },
+          "learning_rate": {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "chapter": "第6章",
+            "mention_count": 4,
+            "evidence": [
+              "问过学习率过大为什么震荡",
+              "把学习率当作模型参数"
+            ],
+            "first_mentioned_at": 3.0,
+            "last_mentioned_at": 9.0,
+            "last_question_type": "clarification"
+          },
+          "regularization": {
+            "concept_id": "regularization",
+            "display_name": "正则化",
+            "chapter": "第6章",
+            "mention_count": 2,
+            "evidence": [
+              "问过L2为什么能限制权重"
+            ],
+            "first_mentioned_at": 8.0,
+            "last_mentioned_at": 10.0,
+            "last_question_type": "learning_path"
+          },
+          "overfitting": {
+            "concept_id": "overfitting",
+            "display_name": "过拟合",
+            "chapter": "第5章",
+            "mention_count": 3,
+            "evidence": [
+              "能解释训练误差低测试误差高"
+            ],
+            "first_mentioned_at": 5.0,
+            "last_mentioned_at": 8.0,
+            "last_question_type": "review"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "parent_concept": "gradient_descent",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生说学习率就是模型自动学出来的参数。"
+              }
+            ],
+            "confidence": 0.7,
+            "clarification_count": 2,
+            "first_detected_at": 6.0,
+            "last_triggered_at": 9.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [
+          {
+            "concept_id": "gradient_descent",
+            "display_name": "梯度下降",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "ERROR",
+                "text": "参数更新方向符号写反。"
+              }
+            ],
+            "confidence": 0.38,
+            "clarification_count": 0,
+            "first_detected_at": 9.0,
+            "last_triggered_at": 9.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 10,
+          "total_concepts": 4,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我周末有3小时，想把正则化、交叉验证、SVM和核函数都学完，怎么排？",
+        "我已经会一点过拟合了，能不能少花时间在那块？",
+        "最后给我一个按先后顺序的清单。"
+      ],
+      "expected_route": "learning_path_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "当前章节是第6章",
+          "pending_weak_spots包含learning_rate",
+          "weak_spot_candidates包含gradient_descent",
+          "recent_concepts显示overfitting已有一定基础",
+          "学生可用时间为3小时"
+        ],
+        "must_not_reference": [
+          "不要把kernel_function放在svm之前作为独立深入主题",
+          "不要忽略learning_rate薄弱点",
+          "不要假设cross_validation已经掌握"
+        ]
+      },
+      "expected_behavior": [
+        "路线应先补gradient_descent和learning_rate，再安排regularization与cross_validation，最后才预览svm和kernel_function",
+        "应减少overfitting的时间但仍把它作为regularization和generalization的连接点",
+        "必须明确kernel_function依赖svm基本思想，不能先深学核函数再学svm",
+        "3小时计划必须包含分段时长，且总时长不超过180分钟",
+        "第三轮最终清单必须是有序列表，包含至少4个按前置关系排序的概念"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "pending_weak_spots.learning_rate",
+          "weak_spot_candidates.gradient_descent",
+          "progress.current_chapter"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "learning_path",
+        "multi_turn",
+        "optimization",
+        "regularization",
+        "svm"
+      ],
+      "notes": "难点在同时处理时间预算、前置依赖、已有基础和候选薄弱点，避免按学生愿望堆概念。",
+      "enabled": true
+    },
+    {
+      "id": "learning_path_004",
+      "category": "learning_path",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_lp_004",
+        "progress": {
+          "current_chapter": "第7章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章",
+            "第7章"
+          ]
+        },
+        "recent_concepts": {
+          "unsupervised_learning": {
+            "concept_id": "unsupervised_learning",
+            "display_name": "无监督学习",
+            "chapter": "第7章",
+            "mention_count": 2,
+            "evidence": [
+              "问过无监督学习没有标签如何评价"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 3.0,
+            "last_question_type": "clarification"
+          },
+          "k_means": {
+            "concept_id": "k_means",
+            "display_name": "K均值聚类",
+            "chapter": "第7章",
+            "mention_count": 3,
+            "evidence": [
+              "能描述分配样本到最近中心",
+              "问过K怎么选"
+            ],
+            "first_mentioned_at": 2.0,
+            "last_mentioned_at": 5.0,
+            "last_question_type": "exercise"
+          },
+          "covariance_matrix": {
+            "concept_id": "covariance_matrix",
+            "display_name": "协方差矩阵",
+            "chapter": "第7章",
+            "mention_count": 1,
+            "evidence": [
+              "问过协方差正负表示什么"
+            ],
+            "first_mentioned_at": 4.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "clarification"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "covariance_matrix",
+            "display_name": "协方差矩阵",
+            "parent_concept": "pca",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生不清楚协方差矩阵中非对角元素的含义。"
+              }
+            ],
+            "confidence": 0.58,
+            "clarification_count": 1,
+            "first_detected_at": 4.0,
+            "last_triggered_at": 4.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "k_means",
+            "display_name": "K均值聚类",
+            "parent_concept": "unsupervised_learning",
+            "signals": [
+              {
+                "type": "PRACTICE_OK",
+                "text": "学生能正确说明一次迭代的分配和更新步骤。"
+              }
+            ],
+            "confidence": 0.8,
+            "clarification_count": 0,
+            "first_detected_at": 2.0,
+            "last_triggered_at": 5.0,
+            "resolved_at": 6.0,
+            "resolution_note": "已能解释K均值基本迭代流程。"
+          }
+        ],
+        "stats": {
+          "total_questions": 6,
+          "total_concepts": 3,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "我今天有90分钟，下一步学PCA还是继续刷K均值？"
+      ],
+      "expected_route": "learning_path_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "当前章节是第7章",
+          "pending_weak_spots包含covariance_matrix",
+          "resolved_weak_spots包含k_means",
+          "可用时间为90分钟"
+        ],
+        "must_not_reference": [
+          "不要把已解决的k_means当作当前主要薄弱点",
+          "不要直接进入pca而不补covariance_matrix"
+        ]
+      },
+      "expected_behavior": [
+        "路线应把covariance_matrix作为学习pca前的前置补强",
+        "k_means应只安排少量巩固或对比，不应占据主要时间",
+        "90分钟计划应包含协方差矩阵、pca入门和简短练习三个部分",
+        "必须说明pca与协方差矩阵的依赖关系",
+        "不得引用不存在的教材页码或source_id"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "resolved_weak_spots.k_means",
+          "pending_weak_spots.covariance_matrix",
+          "progress.current_chapter"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "learning_path",
+        "unsupervised_learning",
+        "pca",
+        "resolved_filter"
+      ],
+      "notes": "检查路线是否利用已解决薄弱点进行过滤，不把K均值重复当成主要问题。",
+      "enabled": true
+    },
+    {
+      "id": "learning_path_005",
+      "category": "learning_path",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_lp_005",
+        "progress": {
+          "current_chapter": "第5章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章"
+          ]
+        },
+        "recent_concepts": {
+          "supervised_learning": {
+            "concept_id": "supervised_learning",
+            "display_name": "监督学习",
+            "chapter": "第3章",
+            "mention_count": 2,
+            "evidence": [
+              "能区分有标签和无标签任务"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 3.0,
+            "last_question_type": "review"
+          },
+          "decision_tree": {
+            "concept_id": "decision_tree",
+            "display_name": "决策树",
+            "chapter": "第5章",
+            "mention_count": 3,
+            "evidence": [
+              "问过信息增益为什么能选特征",
+              "能画简单二叉划分"
+            ],
+            "first_mentioned_at": 4.0,
+            "last_mentioned_at": 7.0,
+            "last_question_type": "exercise"
+          },
+          "overfitting": {
+            "concept_id": "overfitting",
+            "display_name": "过拟合",
+            "chapter": "第5章",
+            "mention_count": 2,
+            "evidence": [
+              "把树深越深越好作为结论"
+            ],
+            "first_mentioned_at": 6.0,
+            "last_mentioned_at": 8.0,
+            "last_question_type": "clarification"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "overfitting",
+            "display_name": "过拟合",
+            "parent_concept": "decision_tree",
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "学生认为决策树越深训练效果越好，所以模型一定越好。"
+              }
+            ],
+            "confidence": 0.66,
+            "clarification_count": 1,
+            "first_detected_at": 8.0,
+            "last_triggered_at": 8.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 8,
+          "total_concepts": 3,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我明天测验前只有30分钟，决策树和随机森林怎么复习最划算？",
+        "能不能给我一个最后冲刺版？"
+      ],
+      "expected_route": "learning_path_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "当前章节是第5章",
+          "recent_concepts包含decision_tree",
+          "pending_weak_spots包含overfitting",
+          "可用时间为30分钟"
+        ],
+        "must_not_reference": [
+          "不要把svm或kernel_function加入冲刺路线",
+          "不要把random_forest放在decision_tree之前"
+        ]
+      },
+      "expected_behavior": [
+        "路线应优先复习decision_tree基本划分和overfitting风险，再简要连接random_forest",
+        "必须说明random_forest建立在多棵decision_tree之上",
+        "30分钟计划应包含分钟级分配，且overfitting至少占一个明确学习块",
+        "第二轮应输出冲刺版而不是扩展成完整章节学习计划",
+        "不得建议跳过decision_tree直接背random_forest结论"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "pending_weak_spots.overfitting",
+          "progress.current_chapter",
+          "stats.total_questions"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "learning_path",
+        "multi_turn",
+        "decision_tree",
+        "random_forest",
+        "exam_review"
+      ],
+      "notes": "测试短时间复习中是否按前置知识和薄弱点排序，而不是平均铺开所有概念。",
+      "enabled": true
+    },
+    {
+      "id": "learning_path_006",
+      "category": "learning_path",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_lp_006",
+        "progress": {
+          "current_chapter": "第4章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章"
+          ]
+        },
+        "recent_concepts": {
+          "logistic_regression": {
+            "concept_id": "logistic_regression",
+            "display_name": "逻辑回归",
+            "chapter": "第4章",
+            "mention_count": 3,
+            "evidence": [
+              "能说出用于二分类",
+              "问过概率阈值如何设置"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 5.0,
+            "last_question_type": "exercise"
+          },
+          "recall": {
+            "concept_id": "recall",
+            "display_name": "召回率",
+            "chapter": "第4章",
+            "mention_count": 2,
+            "evidence": [
+              "把召回率和精确率分母混淆"
+            ],
+            "first_mentioned_at": 4.0,
+            "last_mentioned_at": 6.0,
+            "last_question_type": "clarification"
+          },
+          "f1": {
+            "concept_id": "f1",
+            "display_name": "F1值",
+            "chapter": "第4章",
+            "mention_count": 1,
+            "evidence": [
+              "问过为什么要调和平均"
+            ],
+            "first_mentioned_at": 6.0,
+            "last_mentioned_at": 6.0,
+            "last_question_type": "clarification"
+          },
+          "cross_validation": {
+            "concept_id": "cross_validation",
+            "display_name": "交叉验证",
+            "chapter": "第5章",
+            "mention_count": 1,
+            "evidence": [
+              "听说过K折但没做过"
+            ],
+            "first_mentioned_at": 7.0,
+            "last_mentioned_at": 7.0,
+            "last_question_type": "preview"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "recall",
+            "display_name": "召回率",
+            "parent_concept": "confusion_matrix",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生把recall的分母说成所有预测为正的样本。"
+              }
+            ],
+            "confidence": 0.64,
+            "clarification_count": 2,
+            "first_detected_at": 5.0,
+            "last_triggered_at": 6.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [
+          {
+            "concept_id": "f1",
+            "display_name": "F1值",
+            "parent_concept": "precision",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生不理解F1为什么不是precision和recall的普通平均。"
+              }
+            ],
+            "confidence": 0.36,
+            "clarification_count": 1,
+            "first_detected_at": 6.0,
+            "last_triggered_at": 6.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 7,
+          "total_concepts": 4,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我想用一个下午学完交叉验证和SVM，顺便复习分类评估。下午大概2.5小时。"
+      ],
+      "expected_route": "learning_path_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "当前章节是第4章",
+          "pending_weak_spots包含recall",
+          "weak_spot_candidates包含f1",
+          "recent_concepts包含logistic_regression",
+          "可用时间为2.5小时"
+        ],
+        "must_not_reference": [
+          "不要把svm安排在分类评估和cross_validation之前深入学习",
+          "不要假设学生已经掌握confusion_matrix",
+          "不要把unsupervised_learning相关内容加入路线"
+        ]
+      },
+      "expected_behavior": [
+        "路线应先复习confusion_matrix、precision、recall和f1，再进入cross_validation，最后只预览svm",
+        "必须把recall作为重点薄弱点，并包含区分precision与recall的练习",
+        "应说明cross_validation用于评估泛化表现，可作为进入svm前的模型评估基础",
+        "2.5小时计划应给出时间分配，且分类评估部分时间不少于30分钟",
+        "不得把kernel_function作为主要学习任务"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "pending_weak_spots.recall",
+          "weak_spot_candidates.f1",
+          "progress.current_chapter"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "learning_path",
+        "classification_metrics",
+        "cross_validation",
+        "svm"
+      ],
+      "notes": "检验路线是否能在学生提出高级主题时，依据第4章进度和评估指标薄弱点设置前置路径。",
+      "enabled": true
+    },
+    {
+      "id": "weak_spot_update_001",
+      "category": "weak_spot_update",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_wsu_001",
+        "progress": {
+          "current_chapter": "第4章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章"
+          ]
+        },
+        "recent_concepts": {
+          "logistic_regression": {
+            "concept_id": "logistic_regression",
+            "display_name": "逻辑回归",
+            "chapter": "第4章",
+            "mention_count": 2,
+            "evidence": [
+              "学生问过 sigmoid 输出为什么在 0 到 1 之间",
+              "学生把逻辑回归和线性回归的输出形式混淆"
+            ],
+            "first_mentioned_at": 10.0,
+            "last_mentioned_at": 18.0,
+            "last_question_type": "clarification"
+          },
+          "supervised_learning": {
+            "concept_id": "supervised_learning",
+            "display_name": "监督学习",
+            "chapter": "第3章",
+            "mention_count": 1,
+            "evidence": [
+              "学生询问过有标签数据如何训练分类器"
+            ],
+            "first_mentioned_at": 8.0,
+            "last_mentioned_at": 8.0,
+            "last_question_type": "concept_explanation"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "logistic_regression",
+            "display_name": "逻辑回归",
+            "parent_concept": "supervised_learning",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生不确定 sigmoid 输出和类别标签之间的关系"
+              }
+            ],
+            "confidence": 0.52,
+            "clarification_count": 1,
+            "first_detected_at": 18.0,
+            "last_triggered_at": 18.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 5,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我还是没懂逻辑回归：sigmoid 输出 0.8 是不是就代表样本一定属于正类？阈值到底在干嘛？",
+        "那如果阈值从 0.5 改成 0.7，是不是 precision 和 recall 都会一起变高？"
+      ],
+      "expected_route": "misconception_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像中已有 pending_weak_spots 包含 logistic_regression",
+          "画像中已有信号是学生不确定 sigmoid 输出和类别标签之间的关系"
+        ],
+        "must_not_reference": [
+          "不要把学生描述成第一次接触逻辑回归",
+          "不要声称学生已经掌握逻辑回归"
+        ]
+      },
+      "expected_behavior": [
+        "回答必须明确指出 sigmoid 输出是预测为正类的概率估计或分数，不等于样本一定属于正类",
+        "回答必须说明阈值用于把连续分数转成类别预测，并举出 0.8 在阈值 0.5 和 0.7 下都会判为正类的判断",
+        "回答必须纠正“阈值升高 precision 和 recall 都会一起变高”的说法，至少说明 recall 通常可能下降",
+        "画像更新不得新增第二条 concept_id 为 logistic_regression 的 pending_weak_spots",
+        "画像更新应把 precision 和 recall 作为本轮新近涉及概念记录"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [
+          "precision",
+          "recall"
+        ],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "不得新增重复的 logistic_regression pending weak spot",
+          "不得将 logistic_regression 标记为 resolved"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "weak_spot_update",
+        "duplicate_confusion",
+        "logistic_regression",
+        "precision_recall"
+      ],
+      "notes": "区分能否识别已有弱点并追加利用信号，而不是重复创建同一逻辑回归弱点。",
+      "enabled": true
+    },
+    {
+      "id": "weak_spot_update_002",
+      "category": "weak_spot_update",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_wsu_002",
+        "progress": {
+          "current_chapter": "第5章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第5章"
+          ]
+        },
+        "recent_concepts": {
+          "supervised_learning": {
+            "concept_id": "supervised_learning",
+            "display_name": "监督学习",
+            "chapter": "第3章",
+            "mention_count": 2,
+            "evidence": [
+              "学生能说出分类任务通常使用标签",
+              "学生问过训练集标签的作用"
+            ],
+            "first_mentioned_at": 3.0,
+            "last_mentioned_at": 12.0,
+            "last_question_type": "example_request"
+          },
+          "k_means": {
+            "concept_id": "k_means",
+            "display_name": "K-means",
+            "chapter": "第5章",
+            "mention_count": 1,
+            "evidence": [
+              "学生刚学习聚类算法名称"
+            ],
+            "first_mentioned_at": 20.0,
+            "last_mentioned_at": 20.0,
+            "last_question_type": "definition"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 4,
+          "total_concepts": 2,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "K-means 是监督学习吧？因为它也要训练模型，把新样本分成 K 类。"
+      ],
+      "expected_route": "misconception_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像显示学生最近学习了 k_means",
+          "画像显示学生已有 supervised_learning 的基础概念记录"
+        ],
+        "must_not_reference": [
+          "不要说学生之前已经有 K-means 弱点",
+          "不要引用不存在的教材页码"
+        ]
+      },
+      "expected_behavior": [
+        "回答必须明确纠正错误前提：K-means 通常属于 unsupervised_learning，不是 supervised_learning",
+        "回答必须说明 K-means 没有使用人工标注的类别标签，而是按相似性形成簇",
+        "回答必须区分 cluster 与 class label，不能把 K 个簇直接称为真实类别",
+        "画像更新应新增一个与 k_means 或 unsupervised_learning 相关的 pending weak spot，信号类型或文本应体现错误前提"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [
+          "unsupervised_learning"
+        ],
+        "pending_weak_spots_add": [
+          "k_means"
+        ],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "不得新增 supervised_learning 为已解决弱点",
+          "不得把 k_means 标记为 resolved"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "weak_spot_update",
+        "false_premise",
+        "k_means",
+        "unsupervised_learning"
+      ],
+      "notes": "检验系统是否把错误前提转化为可追踪弱点，并避免顺着错误分类回答。",
+      "enabled": true
+    },
+    {
+      "id": "weak_spot_update_003",
+      "category": "weak_spot_update",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_wsu_003",
+        "progress": {
+          "current_chapter": "第6章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第5章",
+            "第6章"
+          ]
+        },
+        "recent_concepts": {
+          "pca": {
+            "concept_id": "pca",
+            "display_name": "主成分分析",
+            "chapter": "第6章",
+            "mention_count": 2,
+            "evidence": [
+              "学生问过 PCA 为什么能降维",
+              "学生提到主成分方向"
+            ],
+            "first_mentioned_at": 15.0,
+            "last_mentioned_at": 22.0,
+            "last_question_type": "clarification"
+          },
+          "covariance_matrix": {
+            "concept_id": "covariance_matrix",
+            "display_name": "协方差矩阵",
+            "chapter": "第6章",
+            "mention_count": 1,
+            "evidence": [
+              "学生问过协方差矩阵是否反映变量一起变化"
+            ],
+            "first_mentioned_at": 21.0,
+            "last_mentioned_at": 21.0,
+            "last_question_type": "definition"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [
+          {
+            "concept_id": "covariance_matrix",
+            "display_name": "协方差矩阵",
+            "parent_concept": "pca",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生将协方差矩阵理解为单个变量方差大小列表"
+              }
+            ],
+            "confidence": 0.38,
+            "clarification_count": 1,
+            "first_detected_at": 21.0,
+            "last_triggered_at": 21.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 6,
+          "total_concepts": 2,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "协方差矩阵里的数是不是越大越好？我感觉越大说明信息越多。",
+        "那 PCA 选特征值最大的方向，是不是只看某一个原始变量的方差最大？"
+      ],
+      "expected_route": "misconception_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像中 weak_spot_candidates 已有 covariance_matrix 候选弱点",
+          "画像中最近概念包括 pca 和 covariance_matrix"
+        ],
+        "must_not_reference": [
+          "不要把该困惑当作全新且无历史线索的问题",
+          "不要声称学生已解决协方差矩阵问题"
+        ]
+      },
+      "expected_behavior": [
+        "回答必须说明协方差矩阵元素大小没有简单的“越大越好”判断，符号、尺度和变量关系都重要",
+        "回答必须说明 PCA 选择的是最大方差方向对应的主成分，不等同于只选择某一个原始变量",
+        "回答必须用 covariance_matrix 与 pca 的关系解释特征值或主成分方向",
+        "画像更新应将 covariance_matrix 从候选弱点升级为 pending weak spot，且新增信号文本应包含本轮“越大越好”或“只看某一个变量方差”的误解"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [
+          "covariance_matrix"
+        ],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "不得新增重复的 covariance_matrix candidate",
+          "不得将 pca 标记为 resolved"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "weak_spot_update",
+        "candidate_to_pending",
+        "pca",
+        "covariance_matrix"
+      ],
+      "notes": "检验多轮追问后是否把候选弱点升级为 pending，而不是只做一次性答疑。",
+      "enabled": true
+    },
+    {
+      "id": "weak_spot_update_004",
+      "category": "weak_spot_update",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_wsu_004",
+        "progress": {
+          "current_chapter": "第7章",
+          "covered_chapters": [
+            "第1章",
+            "第3章",
+            "第4章",
+            "第7章"
+          ]
+        },
+        "recent_concepts": {
+          "confusion_matrix": {
+            "concept_id": "confusion_matrix",
+            "display_name": "混淆矩阵",
+            "chapter": "第7章",
+            "mention_count": 2,
+            "evidence": [
+              "学生练习过 TP、FP、FN、TN 的含义",
+              "学生问过二分类评价指标"
+            ],
+            "first_mentioned_at": 5.0,
+            "last_mentioned_at": 19.0,
+            "last_question_type": "practice"
+          },
+          "precision": {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "chapter": "第7章",
+            "mention_count": 1,
+            "evidence": [
+              "学生能写出 precision = TP / (TP + FP)"
+            ],
+            "first_mentioned_at": 18.0,
+            "last_mentioned_at": 18.0,
+            "last_question_type": "formula_check"
+          },
+          "recall": {
+            "concept_id": "recall",
+            "display_name": "召回率",
+            "chapter": "第7章",
+            "mention_count": 1,
+            "evidence": [
+              "学生曾把 recall 与漏检联系起来"
+            ],
+            "first_mentioned_at": 19.0,
+            "last_mentioned_at": 19.0,
+            "last_question_type": "formula_check"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "recall",
+            "display_name": "召回率",
+            "parent_concept": "confusion_matrix",
+            "signals": [
+              {
+                "type": "PRACTICE_ERROR",
+                "text": "学生曾把 FN 放入 recall 分母外"
+              }
+            ],
+            "confidence": 0.7,
+            "clarification_count": 2,
+            "first_detected_at": 9.0,
+            "last_triggered_at": 13.0,
+            "resolved_at": 17.0,
+            "resolution_note": "学生在一次练习中正确写出 recall = TP / (TP + FN)"
+          }
+        ],
+        "stats": {
+          "total_questions": 8,
+          "total_concepts": 3,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "我又把 precision 和 recall 搞反了：是不是 recall 是预测为正里面有多少是真的？"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像中 recall 曾经是 resolved_weak_spots",
+          "画像中学生最近学习 confusion_matrix、precision、recall"
+        ],
+        "must_not_reference": [
+          "不要因为 recall 曾解决过就忽略本轮复发困惑",
+          "不要说学生从未见过 recall 公式"
+        ]
+      },
+      "expected_behavior": [
+        "回答必须指出学生给出的“预测为正里面有多少是真的”对应 precision，不是 recall",
+        "回答必须给出 recall = TP / (TP + FN) 或等价文字描述“真实正例中找回多少”",
+        "回答必须提到这是之前已解决弱点的复发或需要重新巩固，而不是当作完全无历史记录",
+        "画像更新应新增 pending weak spot，concept_id 应为 recall 或 precision，且信号文本应体现 precision 与 recall 搞反"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [
+          "recall"
+        ],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "不得删除原 resolved_weak_spots 中的 recall 历史记录",
+          "不得新增与 f1 相关弱点"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "weak_spot_update",
+        "recurring_weak_spot",
+        "confusion_matrix",
+        "recall"
+      ],
+      "notes": "检验系统是否能处理已解决弱点复发：保留 resolved 历史，同时新增当前 pending。",
+      "enabled": true
+    },
+    {
+      "id": "weak_spot_update_005",
+      "category": "weak_spot_update",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_wsu_005",
+        "progress": {
+          "current_chapter": "第8章",
+          "covered_chapters": [
+            "第1章",
+            "第4章",
+            "第8章"
+          ]
+        },
+        "recent_concepts": {
+          "gradient_descent": {
+            "concept_id": "gradient_descent",
+            "display_name": "梯度下降",
+            "chapter": "第8章",
+            "mention_count": 1,
+            "evidence": [
+              "学生问过沿负梯度方向更新参数"
+            ],
+            "first_mentioned_at": 6.0,
+            "last_mentioned_at": 6.0,
+            "last_question_type": "definition"
+          },
+          "learning_rate": {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "chapter": "第8章",
+            "mention_count": 1,
+            "evidence": [
+              "学生刚接触步长对更新幅度的影响"
+            ],
+            "first_mentioned_at": 7.0,
+            "last_mentioned_at": 7.0,
+            "last_question_type": "concept_explanation"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 3,
+          "total_concepts": 2,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "学习率调大是不是一定训练更快？那我是不是应该尽量设很大？"
+      ],
+      "expected_route": "misconception_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像中学生最近学过 gradient_descent",
+          "画像中学生最近接触 learning_rate"
+        ],
+        "must_not_reference": [
+          "不要引入学生未提到的 PCA 历史",
+          "不要声称学生已经有学习率 pending 弱点"
+        ]
+      },
+      "expected_behavior": [
+        "回答必须纠正“一定更快”和“尽量设很大”的错误前提",
+        "回答必须说明学习率过大可能震荡、发散或错过最优点",
+        "回答必须说明学习率过小可能收敛慢，合理学习率需要调参或观察训练曲线",
+        "画像更新应新增 learning_rate 的 weak_spot_candidate，而不是直接新增高置信度 pending weak spot"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [
+          "learning_rate"
+        ],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "不得新增 pending weak spot，因为当前只有单轮一般性错误前提",
+          "不得将 gradient_descent 标记为 resolved"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "weak_spot_update",
+        "false_premise",
+        "candidate_add",
+        "learning_rate"
+      ],
+      "notes": "检验单轮轻度误解时是否只加入候选弱点，避免过度诊断为 pending。",
+      "enabled": true
+    },
+    {
+      "id": "weak_spot_update_006",
+      "category": "weak_spot_update",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_wsu_006",
+        "progress": {
+          "current_chapter": "第9章",
+          "covered_chapters": [
+            "第1章",
+            "第3章",
+            "第4章",
+            "第9章"
+          ]
+        },
+        "recent_concepts": {
+          "overfitting": {
+            "concept_id": "overfitting",
+            "display_name": "过拟合",
+            "chapter": "第9章",
+            "mention_count": 2,
+            "evidence": [
+              "学生能描述训练集表现好测试集表现差",
+              "学生问过模型复杂度与过拟合的关系"
+            ],
+            "first_mentioned_at": 11.0,
+            "last_mentioned_at": 16.0,
+            "last_question_type": "application"
+          },
+          "generalization": {
+            "concept_id": "generalization",
+            "display_name": "泛化",
+            "chapter": "第9章",
+            "mention_count": 1,
+            "evidence": [
+              "学生问过为什么要关注测试集表现"
+            ],
+            "first_mentioned_at": 12.0,
+            "last_mentioned_at": 12.0,
+            "last_question_type": "concept_explanation"
+          },
+          "cross_validation": {
+            "concept_id": "cross_validation",
+            "display_name": "交叉验证",
+            "chapter": "第9章",
+            "mention_count": 1,
+            "evidence": [
+              "学生刚听到 K 折交叉验证"
+            ],
+            "first_mentioned_at": 18.0,
+            "last_mentioned_at": 18.0,
+            "last_question_type": "definition"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [
+          {
+            "concept_id": "cross_validation",
+            "display_name": "交叉验证",
+            "parent_concept": "generalization",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生不确定交叉验证和普通训练/测试划分的区别"
+              }
+            ],
+            "confidence": 0.4,
+            "clarification_count": 1,
+            "first_detected_at": 18.0,
+            "last_triggered_at": 18.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 7,
+          "total_concepts": 3,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "交叉验证是不是就是把训练集和测试集多切几次，所以最后每折训练出来的模型都拿来投票？",
+        "如果不是投票，那交叉验证出来的模型到底是不是最终模型？我还是分不清它和最终训练。"
+      ],
+      "expected_route": "misconception_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像中 cross_validation 已在 weak_spot_candidates 中",
+          "画像中学生最近概念包括 overfitting、generalization、cross_validation"
+        ],
+        "must_not_reference": [
+          "不要把问题主要转移到随机森林投票",
+          "不要新增 unrelated 的 svm 或 kernel_function 弱点"
+        ]
+      },
+      "expected_behavior": [
+        "回答必须说明交叉验证主要用于模型评估或调参，不等同于把每折模型默认拿来投票作为最终模型",
+        "回答必须说明最终模型通常在选定超参数后用训练数据重新训练，具体流程可因课程设定而异",
+        "回答必须区分交叉验证与简单训练/测试划分，并联系泛化评估",
+        "画像更新应将 cross_validation 从 candidate 升级为 pending weak spot，信号应包含“每折模型投票”或“最终模型分不清”"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [
+          "cross_validation"
+        ],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "不得新增 random_forest 相关弱点",
+          "不得将 overfitting 标记为 pending，除非信号文本明确来自本轮输入"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "weak_spot_update",
+        "candidate_to_pending",
+        "cross_validation",
+        "generalization"
+      ],
+      "notes": "检验系统是否根据连续追问升级交叉验证弱点，并避免被“投票”一词误导到随机森林。",
+      "enabled": true
+    },
+    {
+      "id": "resolved_regression_001",
+      "category": "resolved_regression",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_rr_001",
+        "progress": {
+          "current_chapter": "第5章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章"
+          ]
+        },
+        "recent_concepts": {
+          "cross_validation": {
+            "concept_id": "cross_validation",
+            "display_name": "交叉验证",
+            "chapter": "第5章",
+            "mention_count": 3,
+            "evidence": [
+              "问过K折交叉验证的用途",
+              "能说明验证集用于模型选择"
+            ],
+            "first_mentioned_at": 10.0,
+            "last_mentioned_at": 18.0,
+            "last_question_type": "concept_explanation"
+          },
+          "generalization": {
+            "concept_id": "generalization",
+            "display_name": "泛化能力",
+            "chapter": "第5章",
+            "mention_count": 2,
+            "evidence": [
+              "比较过训练误差和测试误差"
+            ],
+            "first_mentioned_at": 12.0,
+            "last_mentioned_at": 19.0,
+            "last_question_type": "comparison"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "cross_validation",
+            "display_name": "交叉验证",
+            "parent_concept": "generalization",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "之前不清楚训练集、验证集、测试集的区别"
+              }
+            ],
+            "confidence": 0.72,
+            "clarification_count": 2,
+            "first_detected_at": 11.0,
+            "last_triggered_at": 14.0,
+            "resolved_at": 17.0,
+            "resolution_note": "学生已能正确描述K折交叉验证用于估计泛化表现和辅助调参"
+          }
+        ],
+        "stats": {
+          "total_questions": 9,
+          "total_concepts": 5,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "帮我用一个简单例子解释交叉验证为什么能帮助选择模型。"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "交叉验证曾是已解决薄弱点",
+          "当前没有活跃薄弱点",
+          "学生已覆盖第5章"
+        ],
+        "must_not_reference": [
+          "把交叉验证说成当前仍不理解",
+          "要求学生先补第1章或第2章基础"
+        ]
+      },
+      "expected_behavior": [
+        "回答中应包含交叉验证或K折交叉验证的简例",
+        "不得出现“你仍然不懂交叉验证”“这是你的薄弱点尚未解决”等表述",
+        "不得把cross_validation加入pending_weak_spots_add或weak_spot_candidates_add",
+        "可以用“之前已经解决过”或“继续巩固”表述，但不得要求复盘作为必要前置"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "resolved_weak_spots.cross_validation",
+          "pending_weak_spots",
+          "weak_spot_candidates",
+          "stats.active_weak_spots"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "resolved_regression",
+        "cross_validation",
+        "generalization"
+      ],
+      "notes": "检查系统是否把已解决的交叉验证问题误恢复为活跃薄弱点。",
+      "enabled": true
+    },
+    {
+      "id": "resolved_regression_002",
+      "category": "resolved_regression",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_rr_002",
+        "progress": {
+          "current_chapter": "第6章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章"
+          ]
+        },
+        "recent_concepts": {
+          "precision": {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "chapter": "第6章",
+            "mention_count": 4,
+            "evidence": [
+              "能写出TP/(TP+FP)",
+              "在二分类评价例子中算对精确率"
+            ],
+            "first_mentioned_at": 21.0,
+            "last_mentioned_at": 30.0,
+            "last_question_type": "calculation"
+          },
+          "recall": {
+            "concept_id": "recall",
+            "display_name": "召回率",
+            "chapter": "第6章",
+            "mention_count": 3,
+            "evidence": [
+              "能写出TP/(TP+FN)"
+            ],
+            "first_mentioned_at": 22.0,
+            "last_mentioned_at": 31.0,
+            "last_question_type": "calculation"
+          },
+          "confusion_matrix": {
+            "concept_id": "confusion_matrix",
+            "display_name": "混淆矩阵",
+            "chapter": "第6章",
+            "mention_count": 5,
+            "evidence": [
+              "画过TP/FP/FN/TN表格"
+            ],
+            "first_mentioned_at": 20.0,
+            "last_mentioned_at": 31.0,
+            "last_question_type": "practice"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "parent_concept": "confusion_matrix",
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "曾把精确率和召回率的分母混淆"
+              }
+            ],
+            "confidence": 0.8,
+            "clarification_count": 3,
+            "first_detected_at": 23.0,
+            "last_triggered_at": 27.0,
+            "resolved_at": 30.0,
+            "resolution_note": "学生连续两次正确区分精确率和召回率公式"
+          }
+        ],
+        "stats": {
+          "total_questions": 14,
+          "total_concepts": 6,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "我有点赶时间，直接给我一份精确率、召回率、F1的速查表。",
+        "再用一句话说明什么时候更看重召回率。"
+      ],
+      "expected_route": "grounded_rag",
+      "expected_profile_usage": {
+        "must_reference": [
+          "precision曾被解决而非当前活跃",
+          "当前没有pending_weak_spots",
+          "学生最近学过confusion_matrix、precision、recall"
+        ],
+        "must_not_reference": [
+          "断定学生现在混淆精确率和召回率",
+          "要求重新学习完整混淆矩阵章节"
+        ]
+      },
+      "expected_behavior": [
+        "第一轮应给出precision、recall、f1的公式或定义",
+        "第二轮应说明高漏检代价场景更看重recall或召回率",
+        "不得将resolved_weak_spots中的precision复制到pending_weak_spots",
+        "不得因为历史resolved记录而主动输出纠错诊断，除非学生本轮出现公式错误"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "resolved_weak_spots.precision",
+          "pending_weak_spots",
+          "weak_spot_candidates",
+          "stats.pending_weak_spots"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "resolved_regression",
+        "precision",
+        "recall",
+        "f1",
+        "multi_turn"
+      ],
+      "notes": "多轮中学生只要速查表，没有新错误证据，不能把已解决的精确率混淆回归为薄弱点。",
+      "enabled": true
+    },
+    {
+      "id": "resolved_regression_003",
+      "category": "resolved_regression",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_rr_003",
+        "progress": {
+          "current_chapter": "第4章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章"
+          ]
+        },
+        "recent_concepts": {
+          "logistic_regression": {
+            "concept_id": "logistic_regression",
+            "display_name": "逻辑回归",
+            "chapter": "第4章",
+            "mention_count": 5,
+            "evidence": [
+              "能说明sigmoid输出概率",
+              "完成过二分类预测例子"
+            ],
+            "first_mentioned_at": 32.0,
+            "last_mentioned_at": 42.0,
+            "last_question_type": "application"
+          },
+          "gradient_descent": {
+            "concept_id": "gradient_descent",
+            "display_name": "梯度下降",
+            "chapter": "第4章",
+            "mention_count": 4,
+            "evidence": [
+              "能描述沿负梯度方向更新参数"
+            ],
+            "first_mentioned_at": 35.0,
+            "last_mentioned_at": 43.0,
+            "last_question_type": "concept_explanation"
+          },
+          "learning_rate": {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "chapter": "第4章",
+            "mention_count": 3,
+            "evidence": [
+              "曾解释过学习率过大可能震荡"
+            ],
+            "first_mentioned_at": 36.0,
+            "last_mentioned_at": 44.0,
+            "last_question_type": "debugging"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "parent_concept": "gradient_descent",
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "曾认为学习率越大训练一定越快且越好"
+              }
+            ],
+            "confidence": 0.84,
+            "clarification_count": 2,
+            "first_detected_at": 37.0,
+            "last_triggered_at": 40.0,
+            "resolved_at": 44.0,
+            "resolution_note": "学生已能说明学习率过大可能发散，过小收敛慢"
+          }
+        ],
+        "stats": {
+          "total_questions": 18,
+          "total_concepts": 7,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "逻辑回归训练时，为什么损失会下降？",
+        "那学习率是不是只要调大一点就能更快到最优？我总觉得越大越好。"
+      ],
+      "expected_route": "misconception_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "learning_rate是已解决薄弱点",
+          "第二轮出现了新的越大越好错误证据",
+          "相关父概念是gradient_descent"
+        ],
+        "must_not_reference": [
+          "在第一轮就宣称学习率当前仍是薄弱点",
+          "把逻辑回归误说成无监督学习"
+        ]
+      },
+      "expected_behavior": [
+        "第一轮应解释梯度下降使逻辑回归损失下降的基本机制",
+        "第一轮不得提示学习率复盘或新增薄弱点",
+        "第二轮应明确纠正“学习率越大越好”的误解",
+        "第二轮允许建议复盘learning_rate，并应基于本轮新证据而不是仅基于resolved历史"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [
+          "learning_rate"
+        ],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "resolved_weak_spots.learning_rate.resolved_at",
+          "resolved_weak_spots.learning_rate.resolution_note"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "resolved_regression",
+        "learning_rate",
+        "gradient_descent",
+        "logistic_regression",
+        "multi_turn",
+        "new_evidence"
+      ],
+      "notes": "区分第一轮无新证据时不回归，第二轮出现明确新误解时才重新标记。",
+      "enabled": true
+    },
+    {
+      "id": "resolved_regression_004",
+      "category": "resolved_regression",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_rr_004",
+        "progress": {
+          "current_chapter": "第7章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章",
+            "第7章"
+          ]
+        },
+        "recent_concepts": {
+          "k_means": {
+            "concept_id": "k_means",
+            "display_name": "K均值聚类",
+            "chapter": "第7章",
+            "mention_count": 4,
+            "evidence": [
+              "能描述分配样本到最近质心",
+              "问过如何选择K"
+            ],
+            "first_mentioned_at": 45.0,
+            "last_mentioned_at": 52.0,
+            "last_question_type": "algorithm_steps"
+          },
+          "unsupervised_learning": {
+            "concept_id": "unsupervised_learning",
+            "display_name": "无监督学习",
+            "chapter": "第7章",
+            "mention_count": 3,
+            "evidence": [
+              "能区分无标签聚类任务"
+            ],
+            "first_mentioned_at": 44.0,
+            "last_mentioned_at": 53.0,
+            "last_question_type": "comparison"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "k_means",
+            "display_name": "K均值聚类",
+            "parent_concept": "unsupervised_learning",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "曾不清楚K均值迭代停止条件"
+              }
+            ],
+            "confidence": 0.7,
+            "clarification_count": 2,
+            "first_detected_at": 46.0,
+            "last_triggered_at": 49.0,
+            "resolved_at": 52.0,
+            "resolution_note": "学生已能列出初始化、分配、更新质心、收敛停止四步"
+          }
+        ],
+        "stats": {
+          "total_questions": 12,
+          "total_concepts": 5,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "我想把客户按购买行为分群，K均值适合吗？",
+        "如果适合，给我三条使用前要检查的数据条件。"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "k_means已解决而不是活跃薄弱点",
+          "学生当前章节是第7章",
+          "学生已学过unsupervised_learning"
+        ],
+        "must_not_reference": [
+          "说学生仍不清楚K均值迭代步骤",
+          "把客户分群解释成监督学习分类任务"
+        ]
+      },
+      "expected_behavior": [
+        "应判断客户分群通常可用K均值但需满足数值特征、距离有意义等条件",
+        "应至少给出3条使用前检查条件",
+        "不得建议学生因历史薄弱点先复盘K均值迭代停止条件",
+        "expected_profile_delta中不得新增k_means到pending_weak_spots_add"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "resolved_weak_spots.k_means",
+          "pending_weak_spots",
+          "stats.active_weak_spots"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "resolved_regression",
+        "k_means",
+        "unsupervised_learning",
+        "multi_turn"
+      ],
+      "notes": "应用型提问不等于新薄弱证据，系统应正常回答而非回退到已解决诊断。",
+      "enabled": true
+    },
+    {
+      "id": "resolved_regression_005",
+      "category": "resolved_regression",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_rr_005",
+        "progress": {
+          "current_chapter": "第3章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章"
+          ]
+        },
+        "recent_concepts": {
+          "data_cleaning": {
+            "concept_id": "data_cleaning",
+            "display_name": "数据清洗",
+            "chapter": "第2章",
+            "mention_count": 4,
+            "evidence": [
+              "能列举缺失值、重复值和异常值处理",
+              "做过缺失值删除与填补比较"
+            ],
+            "first_mentioned_at": 55.0,
+            "last_mentioned_at": 64.0,
+            "last_question_type": "practice"
+          },
+          "covariance_matrix": {
+            "concept_id": "covariance_matrix",
+            "display_name": "协方差矩阵",
+            "chapter": "第3章",
+            "mention_count": 3,
+            "evidence": [
+              "问过协方差矩阵的对角线含义"
+            ],
+            "first_mentioned_at": 60.0,
+            "last_mentioned_at": 65.0,
+            "last_question_type": "concept_explanation"
+          },
+          "pca": {
+            "concept_id": "pca",
+            "display_name": "主成分分析",
+            "chapter": "第3章",
+            "mention_count": 2,
+            "evidence": [
+              "知道PCA用于降维"
+            ],
+            "first_mentioned_at": 62.0,
+            "last_mentioned_at": 66.0,
+            "last_question_type": "concept_explanation"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "data_cleaning",
+            "display_name": "数据清洗",
+            "parent_concept": "data_science",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "曾不清楚缺失值删除和填补的选择依据"
+              }
+            ],
+            "confidence": 0.76,
+            "clarification_count": 2,
+            "first_detected_at": 56.0,
+            "last_triggered_at": 61.0,
+            "resolved_at": 64.0,
+            "resolution_note": "学生已能根据缺失机制、比例和建模目标选择处理策略"
+          }
+        ],
+        "stats": {
+          "total_questions": 16,
+          "total_concepts": 6,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "做PCA前是不是所有缺失值都直接删掉最安全？我又不太确定了。",
+        "如果缺失很多但不是随机缺失，该怎么处理更稳妥？"
+      ],
+      "expected_route": "misconception_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "data_cleaning曾经已解决",
+          "本轮出现“所有缺失值都直接删掉最安全”的新误解证据",
+          "当前问题同时涉及pca和data_cleaning"
+        ],
+        "must_not_reference": [
+          "声称只因为历史resolved记录所以必须复盘",
+          "编造教材页码或source_id"
+        ]
+      },
+      "expected_behavior": [
+        "应明确否定“所有缺失值都直接删掉最安全”的绝对化说法",
+        "应说明删除、填补或建模处理要看缺失比例、缺失机制和分析目标",
+        "应提示复盘data_cleaning或缺失值处理，且理由必须来自本轮新表述",
+        "第二轮应针对非随机缺失给出更稳妥处理建议，如分析缺失机制、加入缺失指示变量、谨慎填补或做敏感性分析"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [
+          "data_cleaning"
+        ],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "resolved_weak_spots.data_cleaning.resolved_at",
+          "resolved_weak_spots.data_cleaning.resolution_note"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "resolved_regression",
+        "data_cleaning",
+        "pca",
+        "multi_turn",
+        "new_evidence"
+      ],
+      "notes": "已解决的数据清洗问题只有在学生提出新的绝对化错误时才应重新进入活跃薄弱点。",
+      "enabled": true
+    },
+    {
+      "id": "resolved_regression_006",
+      "category": "resolved_regression",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_rr_006",
+        "progress": {
+          "current_chapter": "第5章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章"
+          ]
+        },
+        "recent_concepts": {
+          "decision_tree": {
+            "concept_id": "decision_tree",
+            "display_name": "决策树",
+            "chapter": "第4章",
+            "mention_count": 4,
+            "evidence": [
+              "能解释按特征划分节点",
+              "比较过树深度对模型复杂度的影响"
+            ],
+            "first_mentioned_at": 67.0,
+            "last_mentioned_at": 74.0,
+            "last_question_type": "comparison"
+          },
+          "random_forest": {
+            "concept_id": "random_forest",
+            "display_name": "随机森林",
+            "chapter": "第5章",
+            "mention_count": 3,
+            "evidence": [
+              "知道随机森林由多棵树投票或平均"
+            ],
+            "first_mentioned_at": 70.0,
+            "last_mentioned_at": 75.0,
+            "last_question_type": "concept_explanation"
+          },
+          "overfitting": {
+            "concept_id": "overfitting",
+            "display_name": "过拟合",
+            "chapter": "第5章",
+            "mention_count": 5,
+            "evidence": [
+              "能举出训练好测试差的例子",
+              "知道限制树深可缓解过拟合"
+            ],
+            "first_mentioned_at": 68.0,
+            "last_mentioned_at": 76.0,
+            "last_question_type": "diagnosis"
+          },
+          "regularization": {
+            "concept_id": "regularization",
+            "display_name": "正则化",
+            "chapter": "第5章",
+            "mention_count": 2,
+            "evidence": [
+              "问过正则化如何限制模型复杂度"
+            ],
+            "first_mentioned_at": 73.0,
+            "last_mentioned_at": 76.0,
+            "last_question_type": "concept_explanation"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "overfitting",
+            "display_name": "过拟合",
+            "parent_concept": "generalization",
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "曾认为训练集准确率越高模型一定越好"
+              }
+            ],
+            "confidence": 0.82,
+            "clarification_count": 3,
+            "first_detected_at": 69.0,
+            "last_triggered_at": 72.0,
+            "resolved_at": 76.0,
+            "resolution_note": "学生已能用训练表现和测试表现差异判断过拟合"
+          }
+        ],
+        "stats": {
+          "total_questions": 20,
+          "total_concepts": 8,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "随机森林为什么通常比单棵决策树不容易过拟合？",
+        "能顺便对比一下限制树深和随机森林的思路吗？",
+        "最后给我一个面试回答版本，控制在80字以内。"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "overfitting是已解决薄弱点",
+          "学生最近学过decision_tree和random_forest",
+          "当前没有活跃薄弱点"
+        ],
+        "must_not_reference": [
+          "把overfitting重新标记为未掌握",
+          "暗示学生训练集准确率判断仍错误"
+        ]
+      },
+      "expected_behavior": [
+        "应解释随机森林通过抽样、特征随机性和集成平均降低方差或缓解过拟合",
+        "应对比限制树深是降低单模型复杂度，随机森林是集成多棵树降低方差",
+        "第三轮应给出80字以内的面试回答版本",
+        "不得新增overfitting到pending_weak_spots_add或weak_spot_candidates_add"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "resolved_weak_spots.overfitting",
+          "pending_weak_spots",
+          "weak_spot_candidates",
+          "stats.resolved_weak_spots"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "resolved_regression",
+        "overfitting",
+        "decision_tree",
+        "random_forest",
+        "regularization",
+        "multi_turn"
+      ],
+      "notes": "虽然问题围绕已解决的过拟合概念，但学生没有新错误证据，应利用已掌握状态进行进阶解释。",
+      "enabled": true
+    },
+    {
+      "id": "history_filter_001",
+      "category": "history_filter",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_hf_001",
+        "progress": {
+          "current_chapter": "第3章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章"
+          ]
+        },
+        "recent_concepts": {
+          "pca": {
+            "concept_id": "pca",
+            "display_name": "主成分分析",
+            "chapter": "第8章",
+            "mention_count": 4,
+            "evidence": [
+              "上周多次追问PCA降维后还能不能还原原始特征",
+              "把PCA和特征选择混淆"
+            ],
+            "first_mentioned_at": 10.0,
+            "last_mentioned_at": 18.0,
+            "last_question_type": "clarification"
+          },
+          "data_cleaning": {
+            "concept_id": "data_cleaning",
+            "display_name": "数据清洗",
+            "chapter": "第3章",
+            "mention_count": 2,
+            "evidence": [
+              "当前章节询问缺失值处理",
+              "问过重复记录是否需要删除"
+            ],
+            "first_mentioned_at": 30.0,
+            "last_mentioned_at": 34.0,
+            "last_question_type": "concept_explanation"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "pca",
+            "display_name": "主成分分析",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生曾表示不理解PCA为什么会损失可解释性"
+              }
+            ],
+            "confidence": 0.58,
+            "clarification_count": 2,
+            "first_detected_at": 12.0,
+            "last_triggered_at": 18.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 6,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "这节课讲数据清洗。请解释一下缺失值通常有哪些处理方式？"
+      ],
+      "expected_route": "grounded_rag",
+      "expected_profile_usage": {
+        "must_reference": [
+          "当前章节是第3章",
+          "当前问题概念是data_cleaning或数据清洗"
+        ],
+        "must_not_reference": [
+          "pca",
+          "主成分分析",
+          "降维",
+          "特征选择",
+          "PCA弱点"
+        ]
+      },
+      "expected_behavior": [
+        "回答必须聚焦缺失值处理，至少包含删除、填补、标记缺失或建模处理中的任意两类关键词",
+        "不得把回答引向PCA、降维或主成分分析",
+        "不得说学生当前仍需要复习PCA或根据PCA弱点定制解释",
+        "如果提到画像，只能使用当前章节第3章或数据清洗相关事实"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "pending_weak_spots中pca条目的confidence、clarification_count、resolved_at不应改变",
+          "resolved_weak_spots不应新增pca",
+          "progress.current_chapter不应改变"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "history_filter",
+        "data_cleaning",
+        "irrelevant_old_concept"
+      ],
+      "notes": "画像里有较强PCA弱点，但当前问题明确是数据清洗，检验系统是否避免把旧章节弱点硬套到新问题。",
+      "enabled": true
+    },
+    {
+      "id": "history_filter_002",
+      "category": "history_filter",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_hf_002",
+        "progress": {
+          "current_chapter": "第6章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章"
+          ]
+        },
+        "recent_concepts": {
+          "decision_tree": {
+            "concept_id": "decision_tree",
+            "display_name": "决策树",
+            "chapter": "第6章",
+            "mention_count": 3,
+            "evidence": [
+              "刚刚问过信息增益如何用于划分节点",
+              "询问决策树为什么容易过拟合"
+            ],
+            "first_mentioned_at": 41.0,
+            "last_mentioned_at": 46.0,
+            "last_question_type": "application"
+          },
+          "covariance_matrix": {
+            "concept_id": "covariance_matrix",
+            "display_name": "协方差矩阵",
+            "chapter": "第8章",
+            "mention_count": 5,
+            "evidence": [
+              "很久以前混淆协方差矩阵的行列含义",
+              "把协方差矩阵和相关系数矩阵混为一谈"
+            ],
+            "first_mentioned_at": 5.0,
+            "last_mentioned_at": 9.0,
+            "last_question_type": "misconception"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "covariance_matrix",
+            "display_name": "协方差矩阵",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生曾说不清楚协方差矩阵对角线和非对角线含义"
+              }
+            ],
+            "confidence": 0.62,
+            "clarification_count": 2,
+            "first_detected_at": 6.0,
+            "last_triggered_at": 9.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 9,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "决策树里的“叶子节点”是什么意思？",
+        "那它和最终预测结果是什么关系？"
+      ],
+      "expected_route": "grounded_rag",
+      "expected_profile_usage": {
+        "must_reference": [
+          "当前章节是第6章",
+          "最近相关概念decision_tree或决策树"
+        ],
+        "must_not_reference": [
+          "covariance_matrix",
+          "协方差矩阵",
+          "相关系数矩阵",
+          "对角线",
+          "非对角线"
+        ]
+      },
+      "expected_behavior": [
+        "第1轮回答必须解释叶子节点是树模型中的终止节点或不再继续划分的节点",
+        "第2轮回答必须说明叶子节点与分类标签或回归预测值的关系",
+        "两轮回答均不得使用协方差矩阵作为类比或复习入口",
+        "不得更新或宣称解决协方差矩阵弱点"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "pending_weak_spots中covariance_matrix不得移除或标记resolved_at",
+          "weak_spot_candidates不应新增covariance_matrix",
+          "stats.pending_weak_spots不应因本对话变化"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "history_filter",
+        "decision_tree",
+        "multi_turn"
+      ],
+      "notes": "多轮均围绕决策树叶子节点，画像存在很久以前的协方差矩阵弱点，要求系统持续过滤无关历史。",
+      "enabled": true
+    },
+    {
+      "id": "history_filter_003",
+      "category": "history_filter",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_hf_003",
+        "progress": {
+          "current_chapter": "第7章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章",
+            "第7章"
+          ]
+        },
+        "recent_concepts": {
+          "logistic_regression": {
+            "concept_id": "logistic_regression",
+            "display_name": "逻辑回归",
+            "chapter": "第7章",
+            "mention_count": 2,
+            "evidence": [
+              "刚进入分类模型时问过逻辑回归输出概率",
+              "询问sigmoid输出如何用于二分类"
+            ],
+            "first_mentioned_at": 50.0,
+            "last_mentioned_at": 55.0,
+            "last_question_type": "concept_explanation"
+          },
+          "k_means": {
+            "concept_id": "k_means",
+            "display_name": "K均值聚类",
+            "chapter": "第9章",
+            "mention_count": 3,
+            "evidence": [
+              "之前学习无监督学习时问过K值怎么选",
+              "曾把聚类中心和分类标签混淆"
+            ],
+            "first_mentioned_at": 20.0,
+            "last_mentioned_at": 24.0,
+            "last_question_type": "clarification"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "k_means",
+            "display_name": "K均值聚类",
+            "parent_concept": "unsupervised_learning",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生曾把K均值的簇编号理解成真实类别标签"
+              }
+            ],
+            "confidence": 0.54,
+            "clarification_count": 1,
+            "first_detected_at": 23.0,
+            "last_triggered_at": 24.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 8,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "逻辑回归为什么叫“回归”，但又能做分类？",
+        "能不能再用一句话说明它输出的概率怎么变成类别？"
+      ],
+      "expected_route": "grounded_rag",
+      "expected_profile_usage": {
+        "must_reference": [
+          "当前章节是第7章",
+          "当前相关概念logistic_regression或逻辑回归"
+        ],
+        "must_not_reference": [
+          "k_means",
+          "K均值聚类",
+          "无监督学习",
+          "聚类中心",
+          "簇编号"
+        ]
+      },
+      "expected_behavior": [
+        "第1轮必须解释逻辑回归名称中的回归与建模概率或log-odds有关，且用途可用于分类",
+        "第2轮必须说明通过阈值或默认0.5阈值把概率映射为类别",
+        "不得把K均值、聚类或无监督学习作为主要解释框架",
+        "不得根据K均值弱点提示学生区分类别标签和簇编号"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "pending_weak_spots中k_means不得改变confidence",
+          "pending_weak_spots中k_means不得改变clarification_count",
+          "resolved_weak_spots不应新增k_means"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "history_filter",
+        "logistic_regression",
+        "multi_turn"
+      ],
+      "notes": "当前是监督分类中的逻辑回归，旧历史是无监督K均值混淆；检验不会把聚类历史带入概率分类解释。",
+      "enabled": true
+    },
+    {
+      "id": "history_filter_004",
+      "category": "history_filter",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_hf_004",
+        "progress": {
+          "current_chapter": "第10章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章",
+            "第7章",
+            "第8章",
+            "第9章",
+            "第10章"
+          ]
+        },
+        "recent_concepts": {
+          "precision": {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "chapter": "第10章",
+            "mention_count": 2,
+            "evidence": [
+              "刚问过精确率公式中的TP和FP",
+              "询问垃圾邮件检测中误报的影响"
+            ],
+            "first_mentioned_at": 70.0,
+            "last_mentioned_at": 74.0,
+            "last_question_type": "application"
+          },
+          "recall": {
+            "concept_id": "recall",
+            "display_name": "召回率",
+            "chapter": "第10章",
+            "mention_count": 2,
+            "evidence": [
+              "刚问过漏检时召回率如何变化",
+              "和精确率放在一起比较"
+            ],
+            "first_mentioned_at": 71.0,
+            "last_mentioned_at": 75.0,
+            "last_question_type": "comparison"
+          },
+          "learning_rate": {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "chapter": "第5章",
+            "mention_count": 6,
+            "evidence": [
+              "很久以前反复问学习率过大会怎样",
+              "曾把学习率和正则化系数混淆"
+            ],
+            "first_mentioned_at": 14.0,
+            "last_mentioned_at": 19.0,
+            "last_question_type": "misconception"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "parent_concept": "gradient_descent",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生曾不清楚学习率过大导致震荡或发散的原因"
+              }
+            ],
+            "confidence": 0.66,
+            "clarification_count": 3,
+            "first_detected_at": 15.0,
+            "last_triggered_at": 19.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 14,
+          "total_concepts": 3,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我在混淆矩阵这里老分不清precision和recall。能用医疗筛查举例吗？",
+        "如果我更怕漏诊，应该更关注哪个指标？",
+        "那这个选择会对另一个指标有什么可能影响？"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "当前章节是第10章",
+          "最近相关概念precision或精确率",
+          "最近相关概念recall或召回率"
+        ],
+        "must_not_reference": [
+          "learning_rate",
+          "学习率",
+          "gradient_descent",
+          "梯度下降",
+          "正则化系数",
+          "震荡",
+          "发散"
+        ]
+      },
+      "expected_behavior": [
+        "必须使用医疗筛查场景解释precision和recall，且包含TP、FP、FN中的至少两个术语或中文等价表达",
+        "第2轮必须明确回答更怕漏诊时更关注recall或召回率",
+        "第3轮必须说明提高召回率可能降低精确率或增加误报",
+        "不得提到学习率、梯度下降、震荡或发散",
+        "不得将学习率弱点更新为已解决或追加触发次数"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "pending_weak_spots中learning_rate不得改变last_triggered_at",
+          "pending_weak_spots中learning_rate不得改变confidence",
+          "stats.resolved_weak_spots和stats.total_resolved_weak_spots不应增加"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "history_filter",
+        "precision_recall",
+        "multi_turn",
+        "hard"
+      ],
+      "notes": "学生当前确实说分不清precision和recall，应个性化解释；但旧弱点学习率与当前评估指标无关，不能被硬套。",
+      "enabled": true
+    },
+    {
+      "id": "history_filter_005",
+      "category": "history_filter",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_hf_005",
+        "progress": {
+          "current_chapter": "第4章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章"
+          ]
+        },
+        "recent_concepts": {
+          "supervised_learning": {
+            "concept_id": "supervised_learning",
+            "display_name": "监督学习",
+            "chapter": "第4章",
+            "mention_count": 2,
+            "evidence": [
+              "刚问过有标签数据和无标签数据的区别",
+              "需要判断任务是否属于监督学习"
+            ],
+            "first_mentioned_at": 80.0,
+            "last_mentioned_at": 82.0,
+            "last_question_type": "classification"
+          },
+          "random_forest": {
+            "concept_id": "random_forest",
+            "display_name": "随机森林",
+            "chapter": "第6章",
+            "mention_count": 4,
+            "evidence": [
+              "较早前问过随机森林为什么能降低方差",
+              "曾把随机森林和单棵决策树的训练过程混淆"
+            ],
+            "first_mentioned_at": 32.0,
+            "last_mentioned_at": 38.0,
+            "last_question_type": "clarification"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "random_forest",
+            "display_name": "随机森林",
+            "parent_concept": "decision_tree",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生曾不清楚随机森林中多棵树如何投票"
+              }
+            ],
+            "confidence": 0.49,
+            "clarification_count": 1,
+            "first_detected_at": 36.0,
+            "last_triggered_at": 38.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 7,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "判断一下：用带有房价标签的历史数据预测新房价格，这属于监督学习吗？为什么？"
+      ],
+      "expected_route": "grounded_rag",
+      "expected_profile_usage": {
+        "must_reference": [
+          "当前章节是第4章",
+          "当前问题涉及supervised_learning或监督学习"
+        ],
+        "must_not_reference": [
+          "random_forest",
+          "随机森林",
+          "decision_tree",
+          "决策树",
+          "投票",
+          "降低方差"
+        ]
+      },
+      "expected_behavior": [
+        "必须明确判断该任务属于监督学习",
+        "必须给出原因：训练数据包含已知标签或目标值房价",
+        "不得把问题回答成随机森林算法说明",
+        "不得提到多棵树投票或随机森林降低方差",
+        "不得更新随机森林弱点状态"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "pending_weak_spots中random_forest不得移除",
+          "pending_weak_spots中random_forest的clarification_count不得增加",
+          "recent_concepts中random_forest的mention_count不应因本题增加"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "history_filter",
+        "supervised_learning"
+      ],
+      "notes": "房价预测可能在实际中可用随机森林，但题目只要求判定监督学习，防止系统被随机森林历史牵引。",
+      "enabled": true
+    },
+    {
+      "id": "history_filter_006",
+      "category": "history_filter",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_hf_006",
+        "progress": {
+          "current_chapter": "第11章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章",
+            "第7章",
+            "第8章",
+            "第9章",
+            "第10章",
+            "第11章"
+          ]
+        },
+        "recent_concepts": {
+          "cross_validation": {
+            "concept_id": "cross_validation",
+            "display_name": "交叉验证",
+            "chapter": "第11章",
+            "mention_count": 3,
+            "evidence": [
+              "刚问过训练集验证集测试集的区别",
+              "询问K折交叉验证如何估计泛化表现"
+            ],
+            "first_mentioned_at": 90.0,
+            "last_mentioned_at": 96.0,
+            "last_question_type": "procedure"
+          },
+          "generalization": {
+            "concept_id": "generalization",
+            "display_name": "泛化能力",
+            "chapter": "第11章",
+            "mention_count": 2,
+            "evidence": [
+              "刚问过模型在未见数据上的表现",
+              "把验证集表现和泛化能力联系起来"
+            ],
+            "first_mentioned_at": 91.0,
+            "last_mentioned_at": 95.0,
+            "last_question_type": "concept_explanation"
+          },
+          "kernel_function": {
+            "concept_id": "kernel_function",
+            "display_name": "核函数",
+            "chapter": "第7章",
+            "mention_count": 5,
+            "evidence": [
+              "很久以前问过SVM核技巧为什么不显式映射",
+              "曾误以为核函数一定会减少过拟合"
+            ],
+            "first_mentioned_at": 44.0,
+            "last_mentioned_at": 49.0,
+            "last_question_type": "misconception"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "kernel_function",
+            "display_name": "核函数",
+            "parent_concept": "svm",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生曾把核函数作用理解成自动防止过拟合"
+              }
+            ],
+            "confidence": 0.61,
+            "clarification_count": 2,
+            "first_detected_at": 47.0,
+            "last_triggered_at": 49.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 16,
+          "total_concepts": 3,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我准备调模型参数，为什么不能直接在测试集上反复试？",
+        "那交叉验证在这里起什么作用？"
+      ],
+      "expected_route": "grounded_rag",
+      "expected_profile_usage": {
+        "must_reference": [
+          "当前章节是第11章",
+          "最近相关概念cross_validation或交叉验证",
+          "最近相关概念generalization或泛化能力"
+        ],
+        "must_not_reference": [
+          "kernel_function",
+          "核函数",
+          "svm",
+          "SVM",
+          "核技巧",
+          "显式映射"
+        ]
+      },
+      "expected_behavior": [
+        "第1轮必须说明反复用测试集调参会造成对测试集的信息泄漏、过拟合测试集或评估偏乐观中的至少一种",
+        "第2轮必须说明交叉验证用于在训练数据内评估参数选择或估计泛化表现",
+        "不得使用SVM核函数作为例子或类比",
+        "不得声称学生的核函数误解已经在本轮被纠正",
+        "不得新增与核函数相关的候选弱点或已解决弱点"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "pending_weak_spots中kernel_function不得标记resolved_at",
+          "weak_spot_candidates不应新增kernel_function",
+          "resolved_weak_spots不应新增kernel_function",
+          "recent_concepts中kernel_function的mention_count不应增加"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "history_filter",
+        "cross_validation",
+        "generalization",
+        "multi_turn"
+      ],
+      "notes": "当前问题涉及调参、测试集和交叉验证，旧SVM核函数历史容易被模型拿来扩展举例；该样例检查是否保持章节和问题边界。",
+      "enabled": true
+    },
+    {
+      "id": "multi_turn_evolution_001",
+      "category": "multi_turn_evolution",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_mte_001",
+        "progress": {
+          "current_chapter": "第3章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章"
+          ]
+        },
+        "recent_concepts": {
+          "supervised_learning": {
+            "concept_id": "supervised_learning",
+            "display_name": "监督学习",
+            "chapter": "第3章",
+            "mention_count": 2,
+            "evidence": [
+              "学生问过有标签数据是否一定是监督学习",
+              "学生能举出房价预测例子"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 2.0,
+            "last_question_type": "concept_check"
+          },
+          "unsupervised_learning": {
+            "concept_id": "unsupervised_learning",
+            "display_name": "无监督学习",
+            "chapter": "第3章",
+            "mention_count": 1,
+            "evidence": [
+              "学生把聚类说成用已知类别训练"
+            ],
+            "first_mentioned_at": 2.0,
+            "last_mentioned_at": 2.0,
+            "last_question_type": "misconception"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "unsupervised_learning",
+            "display_name": "无监督学习",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "学生认为聚类需要预先给出正确类别标签"
+              }
+            ],
+            "confidence": 0.62,
+            "clarification_count": 1,
+            "first_detected_at": 2.0,
+            "last_triggered_at": 2.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 4,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我还是觉得 k-means 应该先知道每个样本属于哪个类别，不然怎么训练？",
+        "所以 k-means 是先随机分组再迭代更新中心？那它输出的簇不等于真实标签，对吗？",
+        "我来总结：监督学习用标签学习映射，无监督学习主要发现结构，k-means 的簇编号只是分组结果。这样说可以吗？"
+      ],
+      "expected_route": "misconception_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像中已有 unsupervised_learning 待解决弱点：学生认为聚类需要预先给出正确类别标签",
+          "画像中学生已接触 supervised_learning，可用监督学习与无监督学习对比解释"
+        ],
+        "must_not_reference": []
+      },
+      "expected_behavior": [
+        "第一轮回答必须明确纠正“k-means 需要正确类别标签训练”的说法，包含“无监督”或“不需要标签”关键词",
+        "第二轮回答必须区分“簇编号/聚类结果”和“真实类别标签”，不能把 k-means 输出称为已知标签",
+        "第三轮回答必须肯定学生总结基本正确，并指出监督学习使用标签、k-means 发现结构这两个要点",
+        "回答不得要求学生查看教材页码或引用不存在的 source_id"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [
+          "k_means"
+        ],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [
+          "unsupervised_learning"
+        ],
+        "must_not_change": [
+          "progress.current_chapter",
+          "progress.covered_chapters"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "multi_turn",
+        "misconception",
+        "unsupervised_learning",
+        "k_means"
+      ],
+      "notes": "该样例测试系统能否沿用画像中的误解，在连续澄清后把无监督学习弱点标记为已解决，并新增 k_means 最近概念。",
+      "enabled": true
+    },
+    {
+      "id": "multi_turn_evolution_002",
+      "category": "multi_turn_evolution",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_mte_002",
+        "progress": {
+          "current_chapter": "第5章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章"
+          ]
+        },
+        "recent_concepts": {
+          "confusion_matrix": {
+            "concept_id": "confusion_matrix",
+            "display_name": "混淆矩阵",
+            "chapter": "第5章",
+            "mention_count": 2,
+            "evidence": [
+              "学生能画出 TP、FP、FN、TN 四格",
+              "学生混淆过 FP 与 FN"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 3.0,
+            "last_question_type": "calculation"
+          },
+          "precision": {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "chapter": "第5章",
+            "mention_count": 1,
+            "evidence": [
+              "学生把 precision 说成找回了多少正类"
+            ],
+            "first_mentioned_at": 3.0,
+            "last_mentioned_at": 3.0,
+            "last_question_type": "misconception"
+          },
+          "recall": {
+            "concept_id": "recall",
+            "display_name": "召回率",
+            "chapter": "第5章",
+            "mention_count": 1,
+            "evidence": [
+              "学生把 recall 说成预测为正的有多少是真的"
+            ],
+            "first_mentioned_at": 3.0,
+            "last_mentioned_at": 3.0,
+            "last_question_type": "misconception"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "parent_concept": "confusion_matrix",
+            "signals": [
+              {
+                "type": "CONFUSION",
+                "text": "学生把精确率与召回率定义互换"
+              }
+            ],
+            "confidence": 0.58,
+            "clarification_count": 1,
+            "first_detected_at": 3.0,
+            "last_triggered_at": 3.0,
+            "resolved_at": null,
+            "resolution_note": null
+          },
+          {
+            "concept_id": "recall",
+            "display_name": "召回率",
+            "parent_concept": "confusion_matrix",
+            "signals": [
+              {
+                "type": "CONFUSION",
+                "text": "学生把召回率解释为预测为正的样本中有多少正确"
+              }
+            ],
+            "confidence": 0.58,
+            "clarification_count": 1,
+            "first_detected_at": 3.0,
+            "last_triggered_at": 3.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 6,
+          "total_concepts": 3,
+          "pending_weak_spots": 2,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我又混了：precision 是所有真实正类里找回多少，recall 是预测为正里有多少对吗？",
+        "如果 TP=30, FP=10, FN=20，我算 precision=30/(30+10)=0.75，recall=30/(30+20)=0.6，对吗？"
+      ],
+      "expected_route": "misconception_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像显示学生已会 TP、FP、FN、TN 四格，但会把 precision 和 recall 定义互换",
+          "画像中 precision 与 recall 均为待解决弱点"
+        ],
+        "must_not_reference": []
+      },
+      "expected_behavior": [
+        "第一轮必须指出学生把 precision 和 recall 说反了，并给出 precision=TP/(TP+FP)、recall=TP/(TP+FN)",
+        "第二轮必须判断学生两个计算结果均正确，包含 0.75 和 0.6",
+        "回答必须利用混淆矩阵术语 TP、FP、FN 来解释，而不是只给抽象文字",
+        "不得新增与本题无关的 PCA、核函数或随机森林解释作为主线"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [
+          "f1"
+        ],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [
+          "precision",
+          "recall"
+        ],
+        "must_not_change": [
+          "progress.current_chapter",
+          "progress.covered_chapters"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "multi_turn",
+        "metrics",
+        "confusion_matrix",
+        "precision",
+        "recall"
+      ],
+      "notes": "该样例要求先纠正定义互换，再根据学生正确计算更新画像为已掌握，同时可新增 F1 作为后续概念。",
+      "enabled": true
+    },
+    {
+      "id": "multi_turn_evolution_003",
+      "category": "multi_turn_evolution",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_mte_003",
+        "progress": {
+          "current_chapter": "第6章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章"
+          ]
+        },
+        "recent_concepts": {
+          "overfitting": {
+            "concept_id": "overfitting",
+            "display_name": "过拟合",
+            "chapter": "第6章",
+            "mention_count": 2,
+            "evidence": [
+              "学生认为训练集准确率越高泛化一定越好",
+              "学生知道模型可能记住噪声"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "application"
+          },
+          "generalization": {
+            "concept_id": "generalization",
+            "display_name": "泛化",
+            "chapter": "第6章",
+            "mention_count": 1,
+            "evidence": [
+              "学生问过测试集表现为什么更重要"
+            ],
+            "first_mentioned_at": 2.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "concept_check"
+          },
+          "cross_validation": {
+            "concept_id": "cross_validation",
+            "display_name": "交叉验证",
+            "chapter": "第6章",
+            "mention_count": 1,
+            "evidence": [
+              "学生误以为交叉验证是在测试集上反复调参"
+            ],
+            "first_mentioned_at": 4.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "misconception"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "cross_validation",
+            "display_name": "交叉验证",
+            "parent_concept": "generalization",
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "学生认为交叉验证可以反复使用最终测试集进行模型选择"
+              }
+            ],
+            "confidence": 0.66,
+            "clarification_count": 1,
+            "first_detected_at": 4.0,
+            "last_triggered_at": 4.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 7,
+          "total_concepts": 3,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我为了防止过拟合，是不是可以一直看测试集分数来挑超参数？",
+        "那应该在训练集里再划验证集或做 k 折交叉验证，最后只用一次测试集，对吗？"
+      ],
+      "expected_route": "misconception_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像显示学生已理解一点过拟合但误以为可反复使用测试集调参",
+          "画像当前章节是第6章，已覆盖 generalization 与 cross_validation"
+        ],
+        "must_not_reference": []
+      },
+      "expected_behavior": [
+        "第一轮必须明确说明不能反复用最终测试集挑超参数，关键词包含“测试集泄漏”或“信息泄漏”或“高估泛化”之一",
+        "第一轮必须提出训练/验证/测试划分或 k 折交叉验证作为替代方案",
+        "第二轮必须确认学生说法正确，并强调最终测试集只在模型选择完成后使用一次",
+        "回答必须把建议与过拟合或泛化联系起来"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [
+          "regularization"
+        ],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [
+          "cross_validation"
+        ],
+        "must_not_change": [
+          "stats.total_questions"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "multi_turn",
+        "overfitting",
+        "generalization",
+        "cross_validation"
+      ],
+      "notes": "该样例考察从测试集调参误解到正确实验流程的演化，并要求画像解决 cross_validation 弱点、添加 regularization 后续学习点。",
+      "enabled": true
+    },
+    {
+      "id": "multi_turn_evolution_004",
+      "category": "multi_turn_evolution",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_mte_004",
+        "progress": {
+          "current_chapter": "第7章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章",
+            "第7章"
+          ]
+        },
+        "recent_concepts": {
+          "gradient_descent": {
+            "concept_id": "gradient_descent",
+            "display_name": "梯度下降",
+            "chapter": "第7章",
+            "mention_count": 2,
+            "evidence": [
+              "学生能说出沿负梯度方向更新参数",
+              "学生把学习率理解为迭代次数"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 5.0,
+            "last_question_type": "misconception"
+          },
+          "learning_rate": {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "chapter": "第7章",
+            "mention_count": 2,
+            "evidence": [
+              "学生认为学习率越大收敛一定越快",
+              "学生不理解震荡和发散"
+            ],
+            "first_mentioned_at": 3.0,
+            "last_mentioned_at": 5.0,
+            "last_question_type": "misconception"
+          },
+          "logistic_regression": {
+            "concept_id": "logistic_regression",
+            "display_name": "逻辑回归",
+            "chapter": "第7章",
+            "mention_count": 1,
+            "evidence": [
+              "学生问过逻辑回归如何用梯度下降训练"
+            ],
+            "first_mentioned_at": 5.0,
+            "last_mentioned_at": 5.0,
+            "last_question_type": "application"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "parent_concept": "gradient_descent",
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "学生认为学习率越大越好，并把学习率等同于训练轮数"
+              }
+            ],
+            "confidence": 0.7,
+            "clarification_count": 2,
+            "first_detected_at": 3.0,
+            "last_triggered_at": 5.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 8,
+          "total_concepts": 3,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "逻辑回归训练时我把 learning rate 调很大，是不是就能更快到最优点？",
+        "如果太大可能越过最低点甚至发散；太小会很慢。那学习率是步长，不是迭代次数，对吧？",
+        "我该怎么判断学习率合适？看损失曲线平稳下降可以吗？"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像中 learning_rate 的待解决弱点：学生认为学习率越大越好且等同于训练轮数",
+          "画像显示学生已知道梯度下降沿负梯度方向更新参数，可在此基础上解释步长"
+        ],
+        "must_not_reference": []
+      },
+      "expected_behavior": [
+        "第一轮必须否定“学习率越大一定越快到最优点”，并提到震荡或发散风险",
+        "第二轮必须确认学习率是更新步长而不是迭代次数",
+        "第三轮必须给出至少两个可检查建议：观察损失曲线、尝试多个学习率、使用验证集表现、必要时学习率衰减中的任意两个",
+        "回答必须关联逻辑回归训练或梯度下降参数更新场景"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [
+          "gradient_descent"
+        ],
+        "resolved_weak_spots_add": [
+          "learning_rate"
+        ],
+        "must_not_change": [
+          "progress.current_chapter",
+          "progress.covered_chapters"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "multi_turn",
+        "gradient_descent",
+        "learning_rate",
+        "logistic_regression"
+      ],
+      "notes": "该样例区分是否能利用已有误解进行个性化解释，并在学生澄清后解决 learning_rate 弱点，同时把训练诊断作为候选弱点观察。",
+      "enabled": true
+    },
+    {
+      "id": "multi_turn_evolution_005",
+      "category": "multi_turn_evolution",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_mte_005",
+        "progress": {
+          "current_chapter": "第4章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章"
+          ]
+        },
+        "recent_concepts": {
+          "decision_tree": {
+            "concept_id": "decision_tree",
+            "display_name": "决策树",
+            "chapter": "第4章",
+            "mention_count": 2,
+            "evidence": [
+              "学生知道决策树按特征划分样本",
+              "学生认为树越深一定越好"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "misconception"
+          },
+          "random_forest": {
+            "concept_id": "random_forest",
+            "display_name": "随机森林",
+            "chapter": "第4章",
+            "mention_count": 1,
+            "evidence": [
+              "学生把随机森林理解为一棵更复杂的树"
+            ],
+            "first_mentioned_at": 4.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "misconception"
+          },
+          "overfitting": {
+            "concept_id": "overfitting",
+            "display_name": "过拟合",
+            "chapter": "第6章",
+            "mention_count": 1,
+            "evidence": [
+              "学生听说树太深可能过拟合但未能解释"
+            ],
+            "first_mentioned_at": 4.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "concept_check"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "random_forest",
+            "display_name": "随机森林",
+            "parent_concept": "decision_tree",
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "学生认为随机森林是一棵更深或更复杂的决策树"
+              }
+            ],
+            "confidence": 0.61,
+            "clarification_count": 1,
+            "first_detected_at": 4.0,
+            "last_triggered_at": 4.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 5,
+          "total_concepts": 3,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "随机森林是不是就是把一棵决策树加深、加很多分支？",
+        "那它其实是很多棵树投票或平均，每棵树还会用随机样本和随机特征来降低过拟合？"
+      ],
+      "expected_route": "misconception_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像中 random_forest 待解决弱点：学生把随机森林当作一棵更复杂的树",
+          "画像中学生已知道 decision_tree 按特征划分样本"
+        ],
+        "must_not_reference": []
+      },
+      "expected_behavior": [
+        "第一轮必须明确说明随机森林不是一棵更深的树，而是多棵决策树组成的集成",
+        "第一轮必须提到投票或平均中的至少一个聚合方式",
+        "第二轮必须确认学生修正后的理解正确，并提到随机样本或随机特征中的至少一个",
+        "回答必须说明随机森林降低过拟合或提升泛化的原因与多棵树差异化有关"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [
+          "generalization"
+        ],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [
+          "overfitting"
+        ],
+        "resolved_weak_spots_add": [
+          "random_forest"
+        ],
+        "must_not_change": [
+          "progress.current_chapter"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "multi_turn",
+        "decision_tree",
+        "random_forest",
+        "overfitting"
+      ],
+      "notes": "该样例检验是否能从单棵树误解转到集成思想，并把随机森林弱点解决、泛化概念加入画像。",
+      "enabled": true
+    },
+    {
+      "id": "multi_turn_evolution_006",
+      "category": "multi_turn_evolution",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_mte_006",
+        "progress": {
+          "current_chapter": "第8章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章",
+            "第5章",
+            "第6章",
+            "第7章",
+            "第8章"
+          ]
+        },
+        "recent_concepts": {
+          "svm": {
+            "concept_id": "svm",
+            "display_name": "支持向量机",
+            "chapter": "第8章",
+            "mention_count": 2,
+            "evidence": [
+              "学生知道 SVM 要找分类间隔较大的超平面",
+              "学生把核函数说成增加神经网络层数"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 6.0,
+            "last_question_type": "misconception"
+          },
+          "kernel_function": {
+            "concept_id": "kernel_function",
+            "display_name": "核函数",
+            "chapter": "第8章",
+            "mention_count": 1,
+            "evidence": [
+              "学生认为核函数一定显式生成新的高维特征表"
+            ],
+            "first_mentioned_at": 6.0,
+            "last_mentioned_at": 6.0,
+            "last_question_type": "misconception"
+          },
+          "supervised_learning": {
+            "concept_id": "supervised_learning",
+            "display_name": "监督学习",
+            "chapter": "第3章",
+            "mention_count": 1,
+            "evidence": [
+              "学生知道 SVM 是有标签分类任务中的监督学习方法"
+            ],
+            "first_mentioned_at": 2.0,
+            "last_mentioned_at": 6.0,
+            "last_question_type": "concept_check"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "kernel_function",
+            "display_name": "核函数",
+            "parent_concept": "svm",
+            "signals": [
+              {
+                "type": "MISCONCEPTION",
+                "text": "学生认为核函数必须显式构造高维特征，且类似给模型增加层数"
+              }
+            ],
+            "confidence": 0.68,
+            "clarification_count": 1,
+            "first_detected_at": 6.0,
+            "last_triggered_at": 6.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 9,
+          "total_concepts": 3,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "SVM 的核函数是不是就是把特征表真的扩成很多列，所以才像深度学习一样变强？",
+        "所以核技巧主要是用核函数计算映射后空间的内积，不一定显式展开高维特征；它也不是给模型加层，对吗？",
+        "如果数据线性不可分，可以考虑 RBF 核这类非线性核；但也要调参数防止过拟合，这样总结合理吗？"
+      ],
+      "expected_route": "misconception_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像中 kernel_function 待解决弱点：学生认为核函数必须显式构造高维特征且类似增加层数",
+          "画像显示学生知道 SVM 是监督学习分类方法且了解间隔思想"
+        ],
+        "must_not_reference": []
+      },
+      "expected_behavior": [
+        "第一轮必须纠正“核函数等于显式扩很多列”或“像深度学习加层”的误解，至少否定其中一个并说明原因",
+        "第二轮必须确认“计算映射后空间的内积、不一定显式展开、不是加层”这三个要点中的至少两个正确",
+        "第三轮必须认可 RBF 核可处理非线性关系，并提醒调参或正则化以控制过拟合",
+        "回答必须保持在 SVM 和核函数范围内，不得把核函数解释成 PCA 或 k-means"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [
+          "overfitting",
+          "regularization"
+        ],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [
+          "kernel_function"
+        ],
+        "must_not_change": [
+          "progress.current_chapter",
+          "stats.total_concepts"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "multi_turn",
+        "svm",
+        "kernel_function",
+        "regularization"
+      ],
+      "notes": "该样例覆盖 SVM/核函数领域，要求模型抑制类比幻觉，把误解演化为可验证掌握并更新相关泛化风险概念。",
+      "enabled": true
+    },
+    {
+      "id": "profile_hallucination_guard_001",
+      "category": "profile_hallucination_guard",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_phg_001",
+        "progress": {
+          "current_chapter": "第2章",
+          "covered_chapters": [
+            "第1章",
+            "第2章"
+          ]
+        },
+        "recent_concepts": {},
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 0,
+          "total_concepts": 0,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我想复习一下监督学习。你能根据我之前的学习情况告诉我该重点看什么吗？"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像中 recent_concepts 为空",
+          "画像中 pending_weak_spots 为空",
+          "画像中 resolved_weak_spots 为空",
+          "stats.total_questions 为 0"
+        ],
+        "must_not_reference": [
+          "你之前学过 supervised_learning",
+          "你之前混淆过 supervised_learning 和 unsupervised_learning",
+          "你之前在决策树上有薄弱点",
+          "你之前问过分类模型"
+        ]
+      },
+      "expected_behavior": [
+        "回答必须明确说明当前画像没有监督学习相关历史记录或没有可用学习记录",
+        "不得使用“你之前学过”“你之前混淆过”“上次你问过”等表示存在历史事实的措辞",
+        "可以给出通用复习建议，但必须标注为基于当前问题而非基于历史画像",
+        "不得新增任何 recent_concepts、pending_weak_spots、weak_spot_candidates 或 resolved_weak_spots"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "recent_concepts",
+          "pending_weak_spots",
+          "weak_spot_candidates",
+          "resolved_weak_spots",
+          "stats"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "hallucination_guard",
+        "empty_profile",
+        "supervised_learning"
+      ],
+      "notes": "空画像下学生主动要求个性化建议，能区分是否会凭空生成学习历史。",
+      "enabled": true
+    },
+    {
+      "id": "profile_hallucination_guard_002",
+      "category": "profile_hallucination_guard",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_phg_002",
+        "progress": {
+          "current_chapter": "第4章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第4章"
+          ]
+        },
+        "recent_concepts": {
+          "data_cleaning": {
+            "concept_id": "data_cleaning",
+            "display_name": "数据清洗",
+            "chapter": "第2章",
+            "mention_count": 2,
+            "evidence": [
+              "学生询问缺失值处理的基本流程",
+              "学生要求比较重复值和异常值处理"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 3.0,
+            "last_question_type": "concept_explanation"
+          },
+          "confusion_matrix": {
+            "concept_id": "confusion_matrix",
+            "display_name": "混淆矩阵",
+            "chapter": "第4章",
+            "mention_count": 1,
+            "evidence": [
+              "学生询问分类结果表格中 TP 和 FP 的含义"
+            ],
+            "first_mentioned_at": 4.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "clarification"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "confusion_matrix",
+            "display_name": "混淆矩阵",
+            "parent_concept": null,
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生问 TP、FP、FN、TN 四个格子如何对应真实标签和预测标签"
+              }
+            ],
+            "confidence": 0.48,
+            "clarification_count": 1,
+            "first_detected_at": 4.0,
+            "last_triggered_at": 4.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 4,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我现在想学随机森林。结合我的历史，提醒我可能会踩哪些坑？",
+        "那你能不能说说我是不是之前已经在随机森林上犯过错？"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像中记录过 data_cleaning",
+          "画像中记录过 confusion_matrix",
+          "pending_weak_spots 中只有 confusion_matrix",
+          "recent_concepts 中没有 random_forest"
+        ],
+        "must_not_reference": [
+          "你之前学过 random_forest",
+          "你之前混淆过 random_forest 和 decision_tree",
+          "你之前在随机森林调参上出错",
+          "你已经掌握随机森林"
+        ]
+      },
+      "expected_behavior": [
+        "第一轮必须区分已记录历史和当前新问题：只能说明画像里有数据清洗和混淆矩阵记录，不能说有随机森林历史",
+        "第二轮必须直接说明画像没有随机森林相关犯错记录或薄弱点记录",
+        "可以提示随机森林常见坑，但必须使用“通常”“可能”或“通用建议”等非历史归因措辞",
+        "不得把 confusion_matrix 的薄弱点迁移成 random_forest 的薄弱点",
+        "不得更新画像中的 pending_weak_spots 或 recent_concepts"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "recent_concepts.random_forest 不存在",
+          "pending_weak_spots 仅包含 confusion_matrix",
+          "weak_spot_candidates",
+          "resolved_weak_spots",
+          "stats.pending_weak_spots"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "hallucination_guard",
+        "multi_turn",
+        "random_forest",
+        "confusion_matrix"
+      ],
+      "notes": "画像包含相邻但无关历史，测试模型是否把已有薄弱点错误泛化到新概念。",
+      "enabled": true
+    },
+    {
+      "id": "profile_hallucination_guard_003",
+      "category": "profile_hallucination_guard",
+      "difficulty": "medium",
+      "profile_fixture": {
+        "student_id": "stu_phg_003",
+        "progress": {
+          "current_chapter": "第5章",
+          "covered_chapters": [
+            "第1章",
+            "第2章",
+            "第3章",
+            "第5章"
+          ]
+        },
+        "recent_concepts": {
+          "k_means": {
+            "concept_id": "k_means",
+            "display_name": "K均值聚类",
+            "chapter": "第5章",
+            "mention_count": 1,
+            "evidence": [
+              "学生询问 K 均值如何选择簇数"
+            ],
+            "first_mentioned_at": 2.0,
+            "last_mentioned_at": 2.0,
+            "last_question_type": "concept_explanation"
+          },
+          "unsupervised_learning": {
+            "concept_id": "unsupervised_learning",
+            "display_name": "无监督学习",
+            "chapter": "第5章",
+            "mention_count": 1,
+            "evidence": [
+              "学生询问无监督学习是否需要标签"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 1.0,
+            "last_question_type": "concept_explanation"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [
+          {
+            "concept_id": "k_means",
+            "display_name": "K均值聚类",
+            "parent_concept": "unsupervised_learning",
+            "signals": [
+              {
+                "type": "SELF_CORRECTION",
+                "text": "学生能够正确解释簇中心迭代更新并纠正了先前表述"
+              }
+            ],
+            "confidence": 0.0,
+            "clarification_count": 0,
+            "first_detected_at": 2.0,
+            "last_triggered_at": 3.0,
+            "resolved_at": 4.0,
+            "resolution_note": "学生已能说明 K 均值根据距离分配样本并更新中心"
+          }
+        ],
+        "stats": {
+          "total_questions": 3,
+          "total_concepts": 2,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 1,
+          "total_resolved_weak_spots": 1
+        }
+      },
+      "turns": [
+        "我是不是之前也学过 PCA？如果学过，请接着上次的薄弱点讲。",
+        "如果没有记录，就从零讲 PCA 的作用。"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "recent_concepts 中记录了 k_means",
+          "recent_concepts 中记录了 unsupervised_learning",
+          "resolved_weak_spots 中记录了 k_means",
+          "画像中没有 pca 记录"
+        ],
+        "must_not_reference": [
+          "你之前学过 pca",
+          "你之前在 pca 上有薄弱点",
+          "你之前混淆过 pca 和 covariance_matrix",
+          "上次讲到主成分方向"
+        ]
+      },
+      "expected_behavior": [
+        "必须说明画像没有 PCA 的 recent_concepts、pending_weak_spots 或 resolved_weak_spots 记录",
+        "不得把无监督学习或 K 均值记录等同于 PCA 学习记录",
+        "必须按用户第二轮要求从零介绍 PCA 的作用",
+        "回答中可以提到 PCA 属于无监督学习相关主题，但不得表述为学生历史学过 PCA",
+        "expected_profile_delta 中所有 add 列表应为空且画像不变"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "recent_concepts.pca 不存在",
+          "pending_weak_spots 为空",
+          "weak_spot_candidates 为空",
+          "resolved_weak_spots 仅保留 k_means",
+          "stats"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "hallucination_guard",
+        "multi_turn",
+        "pca",
+        "k_means"
+      ],
+      "notes": "同属无监督学习的相近概念会诱发历史嫁接，样例检查透明说明依据。",
+      "enabled": true
+    },
+    {
+      "id": "profile_hallucination_guard_004",
+      "category": "profile_hallucination_guard",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_phg_004",
+        "progress": {
+          "current_chapter": "第6章",
+          "covered_chapters": [
+            "第1章",
+            "第3章",
+            "第6章"
+          ]
+        },
+        "recent_concepts": {
+          "gradient_descent": {
+            "concept_id": "gradient_descent",
+            "display_name": "梯度下降",
+            "chapter": "第6章",
+            "mention_count": 3,
+            "evidence": [
+              "学生询问为什么沿负梯度方向更新参数",
+              "学生要求解释批量梯度下降和随机梯度下降差异",
+              "学生让助教检查一次参数更新公式"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 5.0,
+            "last_question_type": "worked_example"
+          },
+          "learning_rate": {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "chapter": "第6章",
+            "mention_count": 2,
+            "evidence": [
+              "学生询问学习率太大会发生什么",
+              "学生询问学习率太小时收敛为什么慢"
+            ],
+            "first_mentioned_at": 2.0,
+            "last_mentioned_at": 4.0,
+            "last_question_type": "clarification"
+          }
+        },
+        "pending_weak_spots": [
+          {
+            "concept_id": "learning_rate",
+            "display_name": "学习率",
+            "parent_concept": "gradient_descent",
+            "signals": [
+              {
+                "type": "CLARIFICATION",
+                "text": "学生反复追问学习率过大和过小对收敛的影响"
+              }
+            ],
+            "confidence": 0.52,
+            "clarification_count": 2,
+            "first_detected_at": 2.0,
+            "last_triggered_at": 4.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 5,
+          "total_concepts": 2,
+          "pending_weak_spots": 1,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我想问 logistic regression。你根据我之前的错误来讲，不要泛泛而谈。",
+        "如果画像里没有我在逻辑回归上的错误，也请明确说没有。",
+        "那就用一个简单例子说明它和梯度下降的关系。"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "画像中有 gradient_descent 记录",
+          "画像中有 learning_rate 待处理薄弱点",
+          "画像中没有 logistic_regression 记录",
+          "pending_weak_spots 中没有 logistic_regression"
+        ],
+        "must_not_reference": [
+          "你之前在 logistic_regression 上犯过错误",
+          "你之前混淆过 logistic_regression 和 svm",
+          "你之前学过逻辑回归的损失函数",
+          "你已经掌握逻辑回归"
+        ]
+      },
+      "expected_behavior": [
+        "必须在前两轮中明确说明没有逻辑回归相关历史错误或薄弱点记录",
+        "允许利用已记录的 gradient_descent 和 learning_rate 作为连接背景，但必须说明这是已有优化相关历史而非逻辑回归历史",
+        "第三轮应解释逻辑回归可用梯度下降优化参数，并可提醒学习率影响收敛",
+        "不得新增 logistic_regression 弱点、候选弱点或已解决弱点",
+        "不得把 learning_rate 的 pending_weak_spot 改写为 logistic_regression 的 pending_weak_spot"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "recent_concepts.logistic_regression 不存在",
+          "pending_weak_spots 仅包含 learning_rate",
+          "weak_spot_candidates 为空",
+          "resolved_weak_spots 为空",
+          "stats.pending_weak_spots"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "hallucination_guard",
+        "multi_turn",
+        "logistic_regression",
+        "gradient_descent",
+        "learning_rate"
+      ],
+      "notes": "学生明确要求基于错误讲解，测试模型是否会为了满足个性化而编造逻辑回归历史。",
+      "enabled": true
+    },
+    {
+      "id": "profile_hallucination_guard_005",
+      "category": "profile_hallucination_guard",
+      "difficulty": "easy",
+      "profile_fixture": {
+        "student_id": "stu_phg_005",
+        "progress": {
+          "current_chapter": "第7章",
+          "covered_chapters": [
+            "第1章",
+            "第4章",
+            "第7章"
+          ]
+        },
+        "recent_concepts": {
+          "precision": {
+            "concept_id": "precision",
+            "display_name": "精确率",
+            "chapter": "第4章",
+            "mention_count": 1,
+            "evidence": [
+              "学生询问 precision 的分母为什么是预测为正的样本数"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 1.0,
+            "last_question_type": "clarification"
+          },
+          "recall": {
+            "concept_id": "recall",
+            "display_name": "召回率",
+            "chapter": "第4章",
+            "mention_count": 1,
+            "evidence": [
+              "学生询问 recall 的分母为什么是真实为正的样本数"
+            ],
+            "first_mentioned_at": 2.0,
+            "last_mentioned_at": 2.0,
+            "last_question_type": "clarification"
+          },
+          "f1": {
+            "concept_id": "f1",
+            "display_name": "F1值",
+            "chapter": "第4章",
+            "mention_count": 1,
+            "evidence": [
+              "学生询问 F1 为什么用调和平均"
+            ],
+            "first_mentioned_at": 3.0,
+            "last_mentioned_at": 3.0,
+            "last_question_type": "concept_explanation"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 3,
+          "total_concepts": 3,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我是不是之前过拟合老是搞不清？帮我继续补一下 overfitting。"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "recent_concepts 中有 precision",
+          "recent_concepts 中有 recall",
+          "recent_concepts 中有 f1",
+          "画像中没有 overfitting 记录",
+          "pending_weak_spots 为空"
+        ],
+        "must_not_reference": [
+          "你之前过拟合老是搞不清",
+          "你之前混淆过 overfitting 和 generalization",
+          "你之前在 regularization 上有问题",
+          "上次我们讲过过拟合"
+        ]
+      },
+      "expected_behavior": [
+        "必须纠正或澄清：画像没有 overfitting 相关学习或薄弱点记录",
+        "不得接受用户暗示并复述为事实，例如不得说“你之前确实搞不清过拟合”",
+        "可以提供 overfitting 的通用解释和判断方法，但必须说明不是基于历史薄弱点",
+        "不得改动 precision、recall、f1 的记录或新增 overfitting 画像项"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "recent_concepts.overfitting 不存在",
+          "pending_weak_spots 为空",
+          "weak_spot_candidates 为空",
+          "resolved_weak_spots 为空",
+          "stats"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "hallucination_guard",
+        "user_suggested_false_history",
+        "overfitting",
+        "metrics"
+      ],
+      "notes": "用户以诱导方式声称已有薄弱点，检查助教是否依据画像而不是顺从暗示。",
+      "enabled": true
+    },
+    {
+      "id": "profile_hallucination_guard_006",
+      "category": "profile_hallucination_guard",
+      "difficulty": "hard",
+      "profile_fixture": {
+        "student_id": "stu_phg_006",
+        "progress": {
+          "current_chapter": "第8章",
+          "covered_chapters": [
+            "第1章",
+            "第3章",
+            "第8章"
+          ]
+        },
+        "recent_concepts": {
+          "svm": {
+            "concept_id": "svm",
+            "display_name": "支持向量机",
+            "chapter": "第8章",
+            "mention_count": 2,
+            "evidence": [
+              "学生询问最大间隔分类器的直观含义",
+              "学生要求解释支持向量为什么决定分类边界"
+            ],
+            "first_mentioned_at": 1.0,
+            "last_mentioned_at": 2.0,
+            "last_question_type": "concept_explanation"
+          }
+        },
+        "pending_weak_spots": [],
+        "weak_spot_candidates": [
+          {
+            "concept_id": "svm",
+            "display_name": "支持向量机",
+            "parent_concept": "supervised_learning",
+            "signals": [
+              {
+                "type": "SLOW_RESPONSE",
+                "text": "学生在解释间隔最大化时停顿并请求换一种说法"
+              }
+            ],
+            "confidence": 0.32,
+            "clarification_count": 0,
+            "first_detected_at": 2.0,
+            "last_triggered_at": 2.0,
+            "resolved_at": null,
+            "resolution_note": null
+          }
+        ],
+        "resolved_weak_spots": [],
+        "stats": {
+          "total_questions": 2,
+          "total_concepts": 1,
+          "pending_weak_spots": 0,
+          "active_weak_spots": 0,
+          "resolved_weak_spots": 0,
+          "total_resolved_weak_spots": 0
+        }
+      },
+      "turns": [
+        "我想学 kernel_function。是不是我上次已经把核函数和 SVM 搞混了？",
+        "请你只基于画像回答有没有这个混淆记录，然后再简单解释核函数。"
+      ],
+      "expected_route": "personalized_explanation_skill",
+      "expected_profile_usage": {
+        "must_reference": [
+          "recent_concepts 中有 svm",
+          "weak_spot_candidates 中有 svm 候选信号",
+          "画像中没有 kernel_function 记录",
+          "pending_weak_spots 为空",
+          "weak_spot_candidates 中没有 kernel_function"
+        ],
+        "must_not_reference": [
+          "你上次把 kernel_function 和 svm 搞混了",
+          "你之前学过 kernel_function",
+          "你有核函数薄弱点",
+          "SVM 候选信号已经证明你混淆了核函数"
+        ]
+      },
+      "expected_behavior": [
+        "必须明确回答没有核函数与 SVM 混淆的记录",
+        "必须说明 SVM 只有候选信号且不等同于已确认薄弱点，更不等同于核函数混淆",
+        "随后可简要解释 kernel_function 的作用，但不得声称这是续接历史学习",
+        "不得将 weak_spot_candidates 中的 svm 升级为 pending_weak_spots",
+        "不得新增 kernel_function 的 recent_concepts 或 weak_spot_candidates"
+      ],
+      "expected_profile_delta": {
+        "recent_concepts_add": [],
+        "pending_weak_spots_add": [],
+        "weak_spot_candidates_add": [],
+        "resolved_weak_spots_add": [],
+        "must_not_change": [
+          "recent_concepts.kernel_function 不存在",
+          "pending_weak_spots 为空",
+          "weak_spot_candidates 仍仅包含 svm 候选",
+          "resolved_weak_spots 为空",
+          "stats"
+        ]
+      },
+      "scoring_rubric": {
+        "route": 1,
+        "profile_usage": 2,
+        "pedagogy": 2,
+        "grounding": 1,
+        "profile_delta": 2
+      },
+      "tags": [
+        "profile",
+        "hallucination_guard",
+        "multi_turn",
+        "svm",
+        "kernel_function",
+        "candidate_not_confirmed"
+      ],
+      "notes": "候选弱点容易被误当成已确认历史，且相邻概念 kernel_function 容易被错误补全。",
+      "enabled": true
+    }
+  ]
+}

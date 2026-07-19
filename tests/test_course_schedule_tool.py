@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from ds_course_agent.tools.course_schedule import _resolve_schedule_query_v2
+from ds_course_agent.tools.course_schedule import _resolve_schedule_query
 
 
 def _build_schedule(weeks_tuesday: str = "1-8", weeks_friday: str = "1-8"):
@@ -28,7 +28,7 @@ def _build_schedule(weeks_tuesday: str = "1-8", weeks_friday: str = "1-8"):
 def test_next_class_on_weekend_points_to_next_week():
     schedule = _build_schedule()
 
-    result = _resolve_schedule_query_v2(
+    result = _resolve_schedule_query(
         "下节课是什么时候？",
         schedule,
         now=datetime(2026, 4, 12, 10, 0, 0),
@@ -58,7 +58,7 @@ def test_next_class_is_sorted_by_real_datetime_not_input_order():
         ],
     }
 
-    result = _resolve_schedule_query_v2(
+    result = _resolve_schedule_query(
         "下节课是什么时候？",
         schedule,
         now=datetime(2026, 4, 12, 10, 0, 0),
@@ -70,7 +70,7 @@ def test_next_class_is_sorted_by_real_datetime_not_input_order():
 def test_next_class_respects_weeks_range():
     schedule = _build_schedule(weeks_tuesday="1-6", weeks_friday="1-8")
 
-    result = _resolve_schedule_query_v2(
+    result = _resolve_schedule_query(
         "下节课是什么时候？",
         schedule,
         now=datetime(2026, 4, 12, 10, 0, 0),
@@ -82,7 +82,7 @@ def test_next_class_respects_weeks_range():
 def test_today_has_class_returns_date_and_weekday():
     schedule = _build_schedule()
 
-    result = _resolve_schedule_query_v2(
+    result = _resolve_schedule_query(
         "今天有没有课？",
         schedule,
         now=datetime(2026, 4, 14, 9, 0, 0),
@@ -96,7 +96,7 @@ def test_today_has_class_returns_date_and_weekday():
 def test_today_no_class_returns_next_class():
     schedule = _build_schedule()
 
-    result = _resolve_schedule_query_v2(
+    result = _resolve_schedule_query(
         "今天有课吗？",
         schedule,
         now=datetime(2026, 4, 13, 9, 0, 0),
@@ -111,7 +111,7 @@ def test_semester_start_supports_slash_date_format():
     schedule = _build_schedule()
     schedule["semester_start"] = "2026/03/02"
 
-    result = _resolve_schedule_query_v2(
+    result = _resolve_schedule_query(
         "下节课是什么时候？",
         schedule,
         now=datetime(2026, 4, 12, 10, 0, 0),

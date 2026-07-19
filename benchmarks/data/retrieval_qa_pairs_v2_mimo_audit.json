@@ -1,0 +1,674 @@
+{
+  "schema_version": 1,
+  "dataset": "benchmarks/data/retrieval_qa_pairs_v2_mimo.json",
+  "source_draft": "var/artifacts/eval_generation/retrieval_qa_pairs_v2_mimo_draft.json",
+  "summary": {
+    "audited_at": "2026-07-19T09:52:10.217956+00:00",
+    "auditor": "codex_cli_manual_review",
+    "active_collection": "course_c37b7b78",
+    "active_chunk_count": 566,
+    "total_pairs": 64,
+    "enabled_pairs": 64,
+    "accepted_pairs": 63,
+    "revised_pairs": 1,
+    "disabled_pairs": 0,
+    "category_counts": {
+      "application": 17,
+      "code_abbr": 10,
+      "comparison": 9,
+      "formula": 6,
+      "semantic": 9,
+      "term": 13
+    },
+    "rules": [
+      "Every enabled pair must have non-empty query, ground_truth_ids, acceptable_ids, relevance_scores, and expected_keywords.",
+      "Every annotated chunk id must exist in the active Chroma collection.",
+      "Answer hints and expected keywords must be supported by the annotated source chunk snippet.",
+      "Questions should reflect realistic student retrieval needs rather than pure benchmark artifacts."
+    ]
+  },
+  "records": [
+    {
+      "id": "retv2_001",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_efc47a28"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_002",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_3c51a12f"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_003",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_7c81b60d"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_004",
+      "status": "accepted",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_16a11057"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_005",
+      "status": "accepted",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_3adb4224"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_006",
+      "status": "revised",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_7f01e3a0"
+      ],
+      "findings": [
+        "原题询问数据工程四阶段，但标注 chunk 仅含习题要求、不含标准答案；已改写为同一章节中可由标注 chunk 直接回答的网页数据采集题。"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "retv2_007",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_fcb07749"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_008",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f30d031b"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_009",
+      "status": "accepted",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_43da4470"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_010",
+      "status": "accepted",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_60d9a1cd"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_011",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_4df9a3d5"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_012",
+      "status": "accepted",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_0b93727e"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_013",
+      "status": "accepted",
+      "category": "comparison",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_4a302e77"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_014",
+      "status": "accepted",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_edbda804"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_015",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_2bec752f"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_016",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f382bb22"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_017",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_50e08594"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_018",
+      "status": "accepted",
+      "category": "comparison",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_b3e90c84"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_019",
+      "status": "accepted",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_c12108c5"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_020",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_a168373f"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_021",
+      "status": "accepted",
+      "category": "comparison",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_cc8e4d77"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_022",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_d70fe552"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_023",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_0c1d1bb3"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_024",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_a0712084"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_025",
+      "status": "accepted",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_6f206042"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_026",
+      "status": "accepted",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_bdc7b6dd"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_027",
+      "status": "accepted",
+      "category": "comparison",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_3756955a"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_028",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_bf7b1737"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_029",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_0a1e5644"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_030",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_b4f2a81c"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_031",
+      "status": "accepted",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_c3661cdb"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_032",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_86e49133"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_033",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_fe903e0a"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_034",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_1d3e4bea"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_035",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_630e43b3"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_036",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_da6a1f5e"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_037",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_cc9ff363"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_038",
+      "status": "accepted",
+      "category": "formula",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_679397ed"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_039",
+      "status": "accepted",
+      "category": "formula",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_85283241"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_040",
+      "status": "accepted",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_21a2c8b4"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_041",
+      "status": "accepted",
+      "category": "formula",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_b89eff87"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_042",
+      "status": "accepted",
+      "category": "comparison",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_9760bb90"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_043",
+      "status": "accepted",
+      "category": "comparison",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_b53b6061"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_044",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_008c327e"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_045",
+      "status": "accepted",
+      "category": "comparison",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_28a5e21d"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_046",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_9bdd4e2b"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_047",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_c4510662"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_048",
+      "status": "accepted",
+      "category": "formula",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_ec2fd6af"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_049",
+      "status": "accepted",
+      "category": "formula",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_bbfe3790"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_050",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_18f9207a"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_051",
+      "status": "accepted",
+      "category": "comparison",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_f5503b64"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_052",
+      "status": "accepted",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_817dfd42"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_053",
+      "status": "accepted",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_b51db99c"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_054",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_c7e4076d"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_055",
+      "status": "accepted",
+      "category": "term",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_275b63e9"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_056",
+      "status": "accepted",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_947a7e21"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_057",
+      "status": "accepted",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_3a0e3f27"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_058",
+      "status": "accepted",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_016bd11d"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_059",
+      "status": "accepted",
+      "category": "semantic",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_905b04f1"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_060",
+      "status": "accepted",
+      "category": "comparison",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_3bb9e155"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_061",
+      "status": "accepted",
+      "category": "application",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_31510147"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_062",
+      "status": "accepted",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_58ba6a3c"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_063",
+      "status": "accepted",
+      "category": "code_abbr",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_18b9fab2"
+      ],
+      "findings": [],
+      "enabled": true
+    },
+    {
+      "id": "retv2_064",
+      "status": "accepted",
+      "category": "formula",
+      "ground_truth_ids": [
+        "（已压缩）数据科学导论（案例版）洪文兴-0823.pdf_49bda7cb"
+      ],
+      "findings": [],
+      "enabled": true
+    }
+  ]
+}

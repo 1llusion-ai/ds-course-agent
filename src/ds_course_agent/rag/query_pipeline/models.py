@@ -48,6 +48,19 @@ class DetectedConcept:
 
 
 @dataclass
+class QueryRewriteTrace:
+    """Query rewrite result attached to the typed query context."""
+
+    original_query: str
+    rewritten_query: str
+    enriched_query: str
+    changed: bool
+    strategy: str
+    reason: str
+    confidence: float
+
+
+@dataclass
 class QueryContext:
     """
     查询上下文
@@ -65,9 +78,11 @@ class QueryContext:
     chat_history: list[Any]  # List[BaseMessage]
     recent_context: str = ""
 
-    # 面向 tool/RAG 的增强查询；默认等于 normalized_query，
-    # 调用方可根据 route 注入 schedule_tool_query / grounded_tool_query。
+    # 面向 tool/RAG 的增强查询；默认等于 normalized_query。
     enriched_query: str | None = None
+    grounded_tool_query: str | None = None
+    rewrite_trace: QueryRewriteTrace | None = None
+    fast_path: bool | None = None
 
     # 学生画像快照
     profile_snapshot: dict[str, Any] | None = None
@@ -174,20 +189,5 @@ class FinalResponse:
     route: RouteType = RouteType.GENERIC_AGENT
     trace: dict[str, Any] = field(default_factory=dict)
 
-    # 记忆事件（待写入）
-    memory_events: list[Any] = field(default_factory=list)
-
     # 元数据
     metadata: dict[str, Any] = field(default_factory=dict)
-    used_retrieval: bool = False
-
-    def to_dict(self) -> dict[str, Any]:
-        """转换为字典格式，用于 API 返回"""
-        return {
-            "content": self.content,
-            "sources": self.sources,
-            "route": self.route.value if isinstance(self.route, RouteType) else self.route,
-            "used_retrieval": self.used_retrieval,
-            "trace": self.trace,
-            "metadata": self.metadata,
-        }

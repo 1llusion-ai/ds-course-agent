@@ -742,13 +742,6 @@ class RAGService:
         return formatted_docs
 
 
-def print_prompt(prompt):
-    print("===== 传入模型的完整提示语 =====")
-    print(prompt.to_string())
-    print("===============================")
-    return prompt
-
-
 if __name__ == "__main__":
     service = RAGService()
 

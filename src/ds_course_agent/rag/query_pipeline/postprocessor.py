@@ -54,7 +54,6 @@ class QueryPostprocessor:
             route=decision.route,
             trace=trace,
             metadata=metadata,
-            used_retrieval=decision.retrieval_policy.value == "required",
         )
 
     def _scope_guard_override(self, question: str, decision: RouteDecision) -> str:

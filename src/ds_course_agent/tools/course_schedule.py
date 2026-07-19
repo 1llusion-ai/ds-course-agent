@@ -72,7 +72,7 @@ def _week_to_dates(semester_start: str, week: int) -> dict[str, datetime]:
     }
 
 
-def _schedule_parse_weeks_spec_v2(weeks: str) -> set[int]:
+def _schedule_parse_weeks_spec(weeks: str) -> set[int]:
     parsed: set[int] = set()
     if not weeks:
         return parsed
@@ -96,14 +96,14 @@ def _schedule_parse_weeks_spec_v2(weeks: str) -> set[int]:
     return parsed
 
 
-def _schedule_is_active_in_week_v2(item: dict, week: int) -> bool:
-    active_weeks = _schedule_parse_weeks_spec_v2(str(item.get("weeks", "")))
+def _schedule_is_active_in_week(item: dict, week: int) -> bool:
+    active_weeks = _schedule_parse_weeks_spec(str(item.get("weeks", "")))
     if not active_weeks:
         return True
     return week in active_weeks
 
 
-def _schedule_period_start_v2(period: str) -> tuple[int, int]:
+def _schedule_period_start(period: str) -> tuple[int, int]:
     match = re.search(r"第\s*(\d+)\s*节", period or "")
     if not match:
         return (8, 0)
@@ -124,7 +124,7 @@ def _schedule_period_start_v2(period: str) -> tuple[int, int]:
     return start_time_map.get(int(match.group(1)), (8, 0))
 
 
-def _schedule_resolve_day_v2(dates: dict[str, datetime], day: str) -> datetime | None:
+def _schedule_resolve_day(dates: dict[str, datetime], day: str) -> datetime | None:
     if day in dates:
         return dates[day]
 
@@ -144,20 +144,20 @@ def _schedule_resolve_day_v2(dates: dict[str, datetime], day: str) -> datetime |
     return None
 
 
-def _schedule_build_week_classes_v2(semester_start: str, weekly_schedule: list[dict], week: int) -> list[dict]:
+def _schedule_build_week_classes(semester_start: str, weekly_schedule: list[dict], week: int) -> list[dict]:
     dates = _week_to_dates(semester_start, week)
     classes: list[dict] = []
 
     for item in weekly_schedule:
-        if not _schedule_is_active_in_week_v2(item, week):
+        if not _schedule_is_active_in_week(item, week):
             continue
 
         day = str(item.get("day", ""))
-        class_date = _schedule_resolve_day_v2(dates, day)
+        class_date = _schedule_resolve_day(dates, day)
         if class_date is None:
             continue
 
-        start_hour, start_minute = _schedule_period_start_v2(str(item.get("period", "")))
+        start_hour, start_minute = _schedule_period_start(str(item.get("period", "")))
         classes.append(
             {
                 "week": week,
@@ -174,19 +174,19 @@ def _schedule_build_week_classes_v2(semester_start: str, weekly_schedule: list[d
     return classes
 
 
-def _schedule_build_all_classes_v2(
+def _schedule_build_all_classes(
     semester_start: str,
     weekly_schedule: list[dict],
     total_weeks: int,
 ) -> list[dict]:
     classes: list[dict] = []
     for week in range(1, total_weeks + 1):
-        classes.extend(_schedule_build_week_classes_v2(semester_start, weekly_schedule, week))
+        classes.extend(_schedule_build_week_classes(semester_start, weekly_schedule, week))
     classes.sort(key=lambda item: item["datetime"])
     return classes
 
 
-def _schedule_query_day_offset_v2(normalized_query: str) -> int | None:
+def _schedule_query_day_offset(normalized_query: str) -> int | None:
     if "今天" in normalized_query:
         return 0
     if "明天" in normalized_query:
@@ -196,8 +196,8 @@ def _schedule_query_day_offset_v2(normalized_query: str) -> int | None:
     return None
 
 
-def _schedule_is_day_query_v2(normalized_query: str) -> bool:
-    offset = _schedule_query_day_offset_v2(normalized_query)
+def _schedule_is_day_query(normalized_query: str) -> bool:
+    offset = _schedule_query_day_offset(normalized_query)
     if offset is None:
         return False
 
@@ -214,14 +214,14 @@ def _schedule_is_day_query_v2(normalized_query: str) -> bool:
     return any(cue in normalized_query for cue in day_intent_cues)
 
 
-def _format_next_class_v2(class_info: dict) -> str:
+def _format_next_class(class_info: dict) -> str:
     return (
         f"下节课是第{class_info['week']}周 {class_info['day']}（{class_info['date']}）"
         f"{class_info['period']}，教室：{class_info['room']}。"
     )
 
 
-def _resolve_schedule_query_v2(query: str, schedule: dict, now: datetime | None = None) -> str:
+def _resolve_schedule_query(query: str, schedule: dict, now: datetime | None = None) -> str:
     if not schedule:
         return "抱歉，课程安排信息暂未配置。"
 
@@ -243,7 +243,7 @@ def _resolve_schedule_query_v2(query: str, schedule: dict, now: datetime | None 
     semester_start_display = start_date.strftime("%Y-%m-%d")
     current_week = max(1, (today.date() - start_date.date()).days // 7 + 1)
     current_week = min(current_week, total_weeks) if total_weeks > 0 else current_week
-    all_classes = _schedule_build_all_classes_v2(semester_start, weekly_schedule, total_weeks)
+    all_classes = _schedule_build_all_classes(semester_start, weekly_schedule, total_weeks)
     upcoming = [item for item in all_classes if item["datetime"] >= today]
 
     q = re.sub(r"\s+", "", query.lower())
@@ -259,7 +259,7 @@ def _resolve_schedule_query_v2(query: str, schedule: dict, now: datetime | None 
         lines = [
             f"第{week}周（{dates['周一'].strftime('%m月%d日')} ~ {dates['周日'].strftime('%m月%d日')}）的课程安排："
         ]
-        classes = _schedule_build_week_classes_v2(semester_start, weekly_schedule, week)
+        classes = _schedule_build_week_classes(semester_start, weekly_schedule, week)
         if not classes:
             lines.append("- 本周没有排课")
         else:
@@ -287,8 +287,8 @@ def _resolve_schedule_query_v2(query: str, schedule: dict, now: datetime | None 
         "后天有没有课",
     ]
     if any(keyword in q for keyword in schedule_keywords):
-        if _schedule_is_day_query_v2(q):
-            day_offset = _schedule_query_day_offset_v2(q) or 0
+        if _schedule_is_day_query(q):
+            day_offset = _schedule_query_day_offset(q) or 0
             day_label = ("今天", "明天", "后天")[day_offset] if day_offset <= 2 else "当天"
             target_day = (today + timedelta(days=day_offset)).replace(
                 hour=0,
@@ -314,16 +314,16 @@ def _resolve_schedule_query_v2(query: str, schedule: dict, now: datetime | None 
                 None,
             )
             if next_after_target:
-                lines.append(_format_next_class_v2(next_after_target))
+                lines.append(_format_next_class(next_after_target))
             elif upcoming:
-                lines.append(_format_next_class_v2(upcoming[0]))
+                lines.append(_format_next_class(upcoming[0]))
             return "\n".join(lines)
 
         if not upcoming:
             return f"本学期课程已结束（共 {total_weeks} 周）。"
 
         if any(keyword in q for keyword in ["这周", "本周"]):
-            this_week_classes = _schedule_build_week_classes_v2(semester_start, weekly_schedule, current_week)
+            this_week_classes = _schedule_build_week_classes(semester_start, weekly_schedule, current_week)
             if not this_week_classes:
                 return f"本周（第{current_week}周）没有课程安排。"
 
@@ -334,7 +334,7 @@ def _resolve_schedule_query_v2(query: str, schedule: dict, now: datetime | None 
                 )
             return "\n".join(lines)
 
-        return _format_next_class_v2(upcoming[0])
+        return _format_next_class(upcoming[0])
 
     lines = [f"《{config.COURSE_NAME}》课程安排（共 {total_weeks} 周）："]
     for item in weekly_schedule:
@@ -342,11 +342,6 @@ def _resolve_schedule_query_v2(query: str, schedule: dict, now: datetime | None 
             f"- {item.get('day', '')} {item.get('period', '')}，教室：{item.get('room', '')}（{item.get('weeks', '')}）"
         )
     return "\n".join(lines)
-
-
-def _resolve_schedule_query(query: str, schedule: dict) -> str:
-    """Legacy alias kept for compatibility."""
-    return _resolve_schedule_query_v2(query, schedule)
 
 
 @tool
@@ -357,7 +352,7 @@ def course_schedule_tool(query: str) -> str:
     trace_step("tool.invoke", tool="course_schedule_tool", query=query)
     try:
         schedule = _load_course_schedule()
-        result = _resolve_schedule_query_v2(query, schedule)
+        result = _resolve_schedule_query(query, schedule)
         trace_step("tool.result", tool="course_schedule_tool", result_preview=result[:40])
         _warn_large_tool_result("course_schedule_tool", result, status="ok")
         return result
@@ -369,7 +364,6 @@ def course_schedule_tool(query: str) -> str:
 __all__ = [
     "course_schedule_tool",
     "_load_course_schedule",
-    "_resolve_schedule_query_v2",
     "_resolve_schedule_query",
     "_parse_schedule_date",
     "_format_weekday_cn",
