@@ -2,14 +2,14 @@
 Query Rewriter
 
 保守版查询改写器：不修改 original_query / normalized_query，只生成面向检索和
-follow-up 理解的 enriched_query，并把改写轨迹写入 context.metadata["rewrite"]。
+follow-up 理解的 enriched_query，并把改写轨迹写入类型化 QueryContext。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .models import QueryContext
+from .models import QueryContext, QueryRewriteTrace
 from .utils import (
     build_grounded_context_query,
     collect_recent_context,
@@ -125,15 +125,15 @@ class QueryRewriter:
 
     def _apply(self, context: QueryContext, result: RewriteResult) -> None:
         context.enriched_query = result.enriched_query
-        context.metadata["rewrite"] = {
-            "original_query": result.original_query,
-            "rewritten_query": result.rewritten_query,
-            "enriched_query": result.enriched_query,
-            "changed": result.changed,
-            "strategy": result.strategy,
-            "reason": result.reason,
-            "confidence": result.confidence,
-        }
+        context.rewrite_trace = QueryRewriteTrace(
+            original_query=result.original_query,
+            rewritten_query=result.rewritten_query,
+            enriched_query=result.enriched_query,
+            changed=result.changed,
+            strategy=result.strategy,
+            reason=result.reason,
+            confidence=result.confidence,
+        )
 
     def _should_skip(self, query: str) -> bool:
         normalized = normalize_query_text(query)

@@ -1,6 +1,6 @@
 """
 集中式日志配置模块
-在应用启动时调用 setup_logging() 初始化，各模块通过 get_logger(name) 获取 logger。
+在应用启动时调用 setup_logging() 初始化。
 
 日志级别可通过环境变量 LOG_LEVEL 控制（DEBUG / INFO / WARNING / ERROR），默认 INFO。
 """
@@ -42,9 +42,9 @@ def setup_logging(level: str | None = None) -> None:
 
     # 文件输出（可选）
     handlers: list[logging.Handler] = [console_handler]
-    log_dir = PROJECT_ROOT / "logs"
+    log_dir = PROJECT_ROOT / "var" / "logs"
     try:
-        log_dir.mkdir(exist_ok=True)
+        log_dir.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_dir / "app.log", encoding="utf-8", delay=True)
         file_handler.setFormatter(formatter)
         handlers.append(file_handler)
@@ -57,8 +57,3 @@ def setup_logging(level: str | None = None) -> None:
     # 降低第三方库的日志噪音
     for noisy in ("httpx", "httpcore", "openai", "urllib3", "chromadb", "sentence_transformers"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
-
-
-def get_logger(name: str) -> logging.Logger:
-    """获取指定名称的 logger，通常传 __name__。"""
-    return logging.getLogger(name)

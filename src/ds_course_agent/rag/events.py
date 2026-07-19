@@ -226,25 +226,6 @@ def build_clarification_event(
     )
 
 
-def build_follow_up_event(
-    session_id: str,
-    student_id: str,
-    concept_id: str,
-    parent_event_id: str,
-    follow_up_topic: str,
-) -> FollowUpEvent:
-    return FollowUpEvent(
-        event_id=create_event_id(),
-        session_id=session_id,
-        student_id=student_id,
-        payload={
-            "concept_id": concept_id,
-            "parent_event_id": parent_event_id,
-            "follow_up_topic": follow_up_topic,
-        },
-    )
-
-
 def build_mastery_signal_event(
     session_id: str,
     student_id: str,
@@ -293,16 +274,3 @@ def build_misconception_event(
             "turn_id": turn_id,
         },
     )
-
-
-LEARNING_RELATED_EVENT_TYPES = {
-    EventType.CONCEPT_MENTIONED,
-    EventType.CLARIFICATION,
-    EventType.FOLLOW_UP,
-    EventType.MASTERY_SIGNAL,
-    EventType.MISCONCEPTION,
-}
-
-
-def is_learning_related_event(event: BaseEvent) -> bool:
-    return event.event_type in LEARNING_RELATED_EVENT_TYPES

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from langchain_core.tools import tool
 
-from ds_course_agent.rag.code_executor import _python_error_hint as _python_exec_error_hint
 from ds_course_agent.tools._shared import _warn_large_tool_result
 
 
@@ -28,4 +27,4 @@ def python_exec_tool(code: str) -> str:
         return f"执行 Python 代码时出错：{exc}"
 
 
-__all__ = ["python_exec_tool", "_python_exec_error_hint"]
+__all__ = ["python_exec_tool"]

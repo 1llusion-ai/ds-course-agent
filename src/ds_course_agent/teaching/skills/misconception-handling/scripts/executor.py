@@ -385,8 +385,3 @@ def execute(
         target_bucket="weakness",
     )
     return answer
-
-
-def handle(user_question: str, student_id: str, session_id: str, turn_id: str = "0") -> str:
-    """Alias for execute."""
-    return execute(user_question, student_id, session_id, turn_id)

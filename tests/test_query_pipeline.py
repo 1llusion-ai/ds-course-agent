@@ -594,8 +594,8 @@ class TestAgentRouteSharing:
         # autonomous(p60) 在 explicit_misconception(p50, requires_skills) 之后命中：
         # 只跑了廉价 skill_select，未触发 concept_map/profile/rewrite。
         assert calls == {"profile": 0, "concept_map": 0}
-        assert "grounded_tool_query" not in state.context.metadata
-        assert state.context.metadata["fast_path"] is True
+        assert state.context.grounded_tool_query is None
+        assert state.context.fast_path is True
 
     def test_direct_code_example_route_skips_concept_map(self, monkeypatch):
         """代码示例(direct_llm)路由只触发廉价 skill_select，不跑 concept_map（恢复旧 prepass 快速路径）。"""
@@ -637,8 +637,8 @@ class TestAgentRouteSharing:
         assert state.decision.route == RouteType.GENERIC_AGENT
         assert state.decision.direct_llm_answer is True
         assert calls == {"profile": 0, "concept_map": 0}
-        assert "grounded_tool_query" not in state.context.metadata
-        assert state.context.metadata["fast_path"] is True
+        assert state.context.grounded_tool_query is None
+        assert state.context.fast_path is True
 
     def test_datetime_fast_path_skips_concept_map_and_profile(self, monkeypatch):
         """系统工具 fast path 不应触发概念映射或画像读取。"""
@@ -671,7 +671,7 @@ class TestAgentRouteSharing:
         )
 
         assert state.decision.route == RouteType.CURRENT_DATETIME
-        assert state.context.metadata["fast_path"] is True
+        assert state.context.fast_path is True
 
 
 class TestQueryRouterRegressions:
@@ -1145,7 +1145,7 @@ class TestAgentStreamPostprocessRegressions:
         result = service._execute_route(state, stream=False)
 
         assert result == "grounded answer"
-        assert captured["tool_query"] == state.context.metadata["grounded_tool_query"]
+        assert captured["tool_query"] == state.context.grounded_tool_query
         assert "当前问题：决策树过拟合怎么解决？" in captured["tool_query"]
 
 
@@ -1180,7 +1180,7 @@ class TestQueryRewriter:
         assert result.changed is True
         assert result.strategy == "svm_kernel_followup"
         assert result.rewritten_query in context.enriched_query
-        assert context.metadata["rewrite"]["changed"] is True
+        assert context.rewrite_trace.changed is True
 
     def test_svm_kernel_followup_rewrites_generic_pronoun_quality_question(self):
         from langchain_core.messages import AIMessage, HumanMessage
@@ -1286,8 +1286,8 @@ class TestQueryRewriter:
 
         state = service._prepare_query_route("线性可分时它还需要吗？", "session-1", "student-1")
 
-        assert state.context.metadata["rewrite"]["rewritten_query"] == "SVM 的核函数在线性可分时还需要吗？"
-        assert state.context.metadata["grounded_tool_query"] == state.context.enriched_query
+        assert state.context.rewrite_trace.rewritten_query == "SVM 的核函数在线性可分时还需要吗？"
+        assert state.context.grounded_tool_query == state.context.enriched_query
 
 
 class TestQueryPipelineUtils:

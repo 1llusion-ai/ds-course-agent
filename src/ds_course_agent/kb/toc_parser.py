@@ -170,13 +170,6 @@ class TOCParser:
         # 应该返回 "1.4.1"
         return max(matched_sections, key=lambda s: s.level)
 
-    def get_chapter_by_page(self, page: int) -> SectionInfo | None:
-        """根据页码查找对应章"""
-        for sec in self.sections:
-            if sec.page <= page <= sec.end_page:
-                return sec
-        return None
-
     def generate_section_regex(self) -> dict[str, re.Pattern]:
         """生成章节标题的正则表达式"""
         patterns = {}

@@ -760,45 +760,8 @@ class AgentService:
 
         return formatted
 
-    def _is_clarification_request(self, question: str) -> bool:
-        return self._get_clarification_detector().is_clarification_request(question)
-
-    def _is_mastery_signal(self, question: str) -> bool:
-        return self._get_clarification_detector().is_mastery_signal(question)
-
-    def _infer_clarification_type(self, question: str) -> str:
-        return self._get_clarification_detector().infer_clarification_type(question)
-
-    def _sanitize_distinction_fragment(self, fragment: str) -> str:
-        return self._get_clarification_detector().sanitize_distinction_fragment(fragment)
-
-    def _extract_distinction_labels(self, question: str, matched_concepts: list) -> list[str]:
-        return self._get_clarification_detector().extract_distinction_labels(question, matched_concepts)
-
     def _build_distinction_learning_concept(self, question: str, matched_concepts: list):
         return self._get_clarification_detector().build_distinction_learning_concept(question, matched_concepts)
-
-    def _get_recent_session_concept_event(
-        self,
-        student_id: str,
-        session_id: str,
-        concept_id: str | None = None,
-    ):
-        return self._get_learning_event_hook().get_recent_session_concept_event(
-            student_id,
-            session_id,
-            concept_id,
-            get_memory_core_fn=get_memory_core,
-        )
-
-    def _resolve_learning_concept(self, question: str, matched_concepts: list, student_id: str, session_id: str):
-        return self._get_learning_event_hook().resolve_learning_concept(
-            question,
-            matched_concepts,
-            student_id,
-            session_id,
-            get_memory_core_fn=get_memory_core,
-        )
 
     def _record_learning_events(
         self,
@@ -928,12 +891,8 @@ class AgentService:
         if decision.route != RouteType.GROUNDED_RAG:
             return context.original_query
 
-        metadata = context.metadata or {}
         return (
-            metadata.get("grounded_tool_query")
-            or context.enriched_query
-            or context.normalized_query
-            or context.original_query
+            context.grounded_tool_query or context.enriched_query or context.normalized_query or context.original_query
         )
 
     def _can_direct_stream_route(self, route_state: RouteState) -> bool:
@@ -1091,7 +1050,7 @@ class AgentService:
 
         由 QueryPipeline 富化器在求值到 requires_concepts 规则前调用（memoized）。
         原地设置 ``context.detected_concepts``/``profile_snapshot``/
-        ``metadata["grounded_tool_query"]``，返回
+        ``grounded_tool_query``，返回
         ``(profile, matched_concepts, rewrite_result)``。只有 explanation/
         rewritten_followup/grounded_rag 触发本方法，因此 autonomous/skill 路由
         不跑 concept_map（恢复旧 prepass 对 code/example/demo 的快速路径）。
@@ -1124,7 +1083,7 @@ class AgentService:
 
         with trace_span("prepare.rewrite"):
             rewrite_result = get_rewriter().rewrite(context)
-        context.metadata["grounded_tool_query"] = rewrite_result.enriched_query
+        context.grounded_tool_query = rewrite_result.enriched_query
 
         return profile, matched_concepts, rewrite_result
 
@@ -1498,19 +1457,6 @@ class AgentService:
         """Classify the lightweight learning-event question type."""
 
         return classify_question_type(question)
-
-    def end_session(self, student_id: str, session_id: str) -> None:
-        """Finalize a session and trigger profile aggregation."""
-        logger.info("Session ended; aggregating profile: %s", student_id)
-        self._get_hooks().on_session_end(
-            session_id,
-            student_id=student_id,
-            get_memory_core_fn=get_memory_core,
-        )
-
-    def get_student_profile(self, student_id: str):
-        """Return the student profile."""
-        return get_memory_core().get_profile(student_id)
 
 
 _agent_service: AgentService | None = None

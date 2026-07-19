@@ -52,10 +52,6 @@ class HookManager:
     def __init__(self, hooks: Iterable[Any] = ()) -> None:
         self._hooks = list(hooks)
 
-    @property
-    def hooks(self) -> list[Any]:
-        return list(self._hooks)
-
     def before_route(self, state: RouteState) -> None:
         for hook in self._hooks:
             callback = getattr(hook, "before_route", None)

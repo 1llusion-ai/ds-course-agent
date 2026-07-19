@@ -330,14 +330,6 @@ class CourseKnowledgeBase:
 
         return [{"content": doc.page_content, "score": score, "metadata": doc.metadata} for doc, score in results]
 
-    def search_by_chapter(self, query: str, chapter_no: int, k: int = 3) -> list[dict]:
-        """按章节检索"""
-        where_filter = {"$and": [{"course": self.course_name}, {"chapter_no": chapter_no}]}
-
-        results = self.vector_store.similarity_search_with_score(query, k=k, filter=where_filter)
-
-        return [{"content": doc.page_content, "score": score, "metadata": doc.metadata} for doc, score in results]
-
     def get_status(self) -> KBStatus:
         """获取知识库状态"""
         try:

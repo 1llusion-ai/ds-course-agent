@@ -104,15 +104,6 @@ def _get_marker_executable() -> str:
 MARKER_EXE = _get_marker_executable()
 
 
-def check_marker_available() -> bool:
-    """检查 Marker 是否可用"""
-    try:
-        result = subprocess.run([MARKER_EXE, "--help"], capture_output=True, timeout=10)
-        return result.returncode == 0
-    except Exception:
-        return False
-
-
 def parse_with_datalab(
     pdf_path: str, api_key: str | None = None, max_pages: int = 0, page_start: int = 1, mode: str = "balanced"
 ) -> tuple[bool, str, dict]:

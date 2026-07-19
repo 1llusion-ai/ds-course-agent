@@ -244,15 +244,15 @@ class QueryRouter:
         return bool(_has_strong_python_signal(query) or _assignment_counts_as_code(query, compact))
 
     def _route_rewritten_followup(self, context: QueryContext) -> RouteDecision | None:
-        rewrite = context.metadata.get("rewrite") if context.metadata else None
-        if not isinstance(rewrite, dict):
+        rewrite = context.rewrite_trace
+        if rewrite is None:
             return None
-        if not rewrite.get("changed"):
+        if not rewrite.changed:
             return None
 
-        confidence = float(rewrite.get("confidence") or 0.0)
-        strategy = rewrite.get("strategy") or "unknown"
-        rewritten_query = rewrite.get("rewritten_query") or context.enriched_query or context.normalized_query
+        confidence = float(rewrite.confidence or 0.0)
+        strategy = rewrite.strategy or "unknown"
+        rewritten_query = rewrite.rewritten_query or context.enriched_query or context.normalized_query
 
         # 只提升高置信、实体级补全；普通 contextual_followup 仍交给原路由。
         if confidence < 0.75 or strategy not in {"entity_followup", "svm_kernel_followup"}:

@@ -79,12 +79,6 @@ class StudentProfile:
         }
     )
 
-    def get_pending_weak_spot(self, concept_id: str) -> WeakSpotCandidate | None:
-        for spot in self.pending_weak_spots:
-            if spot.concept_id == concept_id:
-                return spot
-        return None
-
     def get_weak_spot(self, concept_id: str) -> WeakSpotCandidate | None:
         for spot in self.weak_spot_candidates:
             if spot.concept_id == concept_id:
@@ -148,7 +142,3 @@ class StudentProfile:
 
         profile.stats = {**profile.stats, **data.get("stats", {})}
         return profile
-
-
-def create_empty_profile(student_id: str) -> StudentProfile:
-    return StudentProfile(student_id=student_id)

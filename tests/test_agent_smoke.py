@@ -629,7 +629,7 @@ class TestChatWithHistory:
     @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
     @patch("ds_course_agent.rag.agent.get_memory_core")
     @patch("ds_course_agent.tools.course_schedule._load_course_schedule")
-    @patch("ds_course_agent.tools.course_schedule._resolve_schedule_query_v2")
+    @patch("ds_course_agent.tools.course_schedule._resolve_schedule_query")
     def test_chat_with_history_uses_schedule_tool_for_schedule_queries(
         self,
         mock_resolve_schedule,

@@ -249,23 +249,6 @@ def remove_garbage(text: str) -> str:
     return text
 
 
-def extract_titles(text: str) -> list[str]:
-    """提取标题"""
-    titles = []
-
-    for pattern in TITLE_PATTERNS:
-        matches = pattern.findall(text)
-        for match in matches:
-            if isinstance(match, tuple):
-                title = " ".join(str(p) for p in match if p).strip()
-            else:
-                title = match.strip()
-            if title and len(title) < 100:
-                titles.append(title)
-
-    return titles
-
-
 def clean_text(text: str) -> tuple[str, int]:
     """
     清洗文本（CLEAN-1 增强版）

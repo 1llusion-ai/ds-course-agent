@@ -459,5 +459,5 @@ def get_skill_registry() -> SkillRegistry:
 
 
 def get_skill_loader() -> SkillRegistry:
-    """Compatibility alias for older imports."""
+    """Return the shared skill registry used by agent and pipeline code."""
     return get_skill_registry()
