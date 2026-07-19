@@ -28,6 +28,34 @@ class TestAgentBenchmarkDataset:
             "edge": 6,
         }
 
+    def test_mimo_v2_benchmark_has_expanded_coverage(self):
+        metadata, tasks = load_agent_tasks("benchmarks/data/agent_tasks_v2_mimo.json")
+
+        counts = {}
+        for task in tasks:
+            counts[task.category] = counts.get(task.category, 0) + 1
+
+        assert metadata["version"] == "v2.0-mimo-audited"
+        assert metadata["generation"]["model"] == "xiaomi/mimo-v2.5-pro"
+        assert len(tasks) == 48
+        assert counts == {
+            "code_boundary": 8,
+            "grounded_course": 10,
+            "misconception": 8,
+            "multi_turn_context": 8,
+            "personalized": 8,
+            "safety_edge": 6,
+        }
+
+    def test_mimo_v2_benchmark_task_contracts(self):
+        _, tasks = load_agent_tasks("benchmarks/data/agent_tasks_v2_mimo.json")
+
+        assert all(task.turns for task in tasks)
+        assert all(task.required_keyword_groups or task.category == "safety_edge" for task in tasks)
+        assert all(task.seed_profile for task in tasks if task.must_personalize)
+        assert all(task.safety_keyword_groups for task in tasks if task.must_fail_safe)
+        assert all(task.must_use_tool is False for task in tasks if task.category == "safety_edge")
+
 
 class TestAgentBenchmarkScoring:
     def test_score_agent_task_success_when_required_dimensions_are_met(self):

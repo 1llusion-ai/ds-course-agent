@@ -36,6 +36,23 @@ class ScopeDecision:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class SafetyBoundaryRule:
+    """A table-driven course-scope safety boundary.
+
+    Each tuple in ``required_term_groups`` is an OR group; all groups must be
+    satisfied.  Keeping these boundaries in one table makes academic-integrity
+    and privacy routing a first-class scope decision instead of scattering
+    one-off route exceptions across the pipeline.
+    """
+
+    category: str
+    confidence: float
+    reason: str
+    required_term_groups: tuple[tuple[str, ...], ...]
+    response: str
+
+
 def _enabled() -> bool:
     value = getattr(config, "SCOPE_GUARD_ENABLED", True)
     if isinstance(value, bool):
@@ -49,6 +66,10 @@ def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
     return any(term in text for term in terms)
 
 
+def _contains_any_text(texts: tuple[str, ...], terms: tuple[str, ...]) -> bool:
+    return any(_contains_any(text, terms) for text in texts)
+
+
 def _matches_any(text: str, patterns: tuple[str, ...]) -> bool:
     return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
 
@@ -60,6 +81,72 @@ def _scope_response(*, category: str, bridge_hint: str = "") -> str:
         "所以本次不进行通用联网搜索，也不直接展开回答。\n\n"
         f"{redirect}"
     )
+
+
+_ACADEMIC_INTEGRITY_RESPONSE = (
+    "抱歉，我不能帮助伪造实验结果、代写作业答案或规避课程平台检测。"
+    "这些请求会破坏学术诚信，也不利于真正掌握数据科学方法。\n\n"
+    "我可以帮你把题目拆成分析步骤、设计真实实验方案、解释指标含义，"
+    "或根据你已有结果一起检查哪里需要改进。"
+)
+
+_PRIVACY_RESPONSE = (
+    "抱歉，我不能帮助获取、抓取或泄露同学的成绩、学号、手机号、联系方式等个人隐私数据。"
+    "这类数据必须在明确授权、合法合规和最小必要的前提下处理。\n\n"
+    "如果你是在学习数据采集或爬虫，我可以改用公开数据集、课程示例网页，"
+    "或者帮你设计匿名化的数据分析练习。"
+)
+
+_SAFETY_BOUNDARY_RULES = (
+    SafetyBoundaryRule(
+        category="academic_integrity_homework",
+        confidence=0.98,
+        reason="request asks for direct homework/exam answers or copying",
+        required_term_groups=(
+            ("标准答案", "直接给答案", "直接把", "照抄", "代写作业", "帮我写作业", "考试答案"),
+            ("作业", "考试", "测验", "题目", "答案"),
+        ),
+        response=_ACADEMIC_INTEGRITY_RESPONSE,
+    ),
+    SafetyBoundaryRule(
+        category="academic_integrity_fabrication",
+        confidence=0.97,
+        reason="request asks to fabricate experiment data/results",
+        required_term_groups=(
+            ("编一份", "编造", "伪造", "捏造", "虚构", "不用真的跑", "不用跑实验", "不需要真实"),
+            ("实验结果", "准确率", "指标", "报告", "分析", "结论", "实验数据", "结果"),
+        ),
+        response=_ACADEMIC_INTEGRITY_RESPONSE,
+    ),
+    SafetyBoundaryRule(
+        category="privacy_or_unauthorized_data_access",
+        confidence=0.98,
+        reason="request asks to access or scrape private student data",
+        required_term_groups=(
+            ("抓取", "爬取", "查询", "查一下", "获取", "导出", "收集"),
+            ("同学", "学生", "全班", "教务系统", "教务", "别人"),
+            ("成绩", "手机号", "联系方式", "学号", "身份证", "个人信息", "隐私"),
+        ),
+        response=_PRIVACY_RESPONSE,
+    ),
+    SafetyBoundaryRule(
+        category="platform_integrity_bypass",
+        confidence=0.96,
+        reason="request asks to bypass course platform checks",
+        required_term_groups=(
+            ("绕过", "绕开", "规避", "破解", "bypass"),
+            ("查重", "检测", "提交检测", "课程平台", "平台检测", "验证码", "登录验证"),
+        ),
+        response=_ACADEMIC_INTEGRITY_RESPONSE,
+    ),
+)
+
+
+def _match_safety_boundary(texts: tuple[str, ...]) -> SafetyBoundaryRule | None:
+    for rule in _SAFETY_BOUNDARY_RULES:
+        if all(_contains_any_text(texts, group) for group in rule.required_term_groups):
+            return rule
+    return None
 
 
 _GREETING_TERMS = ("你好", "您好", "hello", "hi", "早上好", "晚上好")
@@ -291,6 +378,16 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
             0.99,
             "thanks",
             "不客气。如果还有《数据科学导论》课程相关问题，可以继续问我。",
+        )
+
+    safety_rule = _match_safety_boundary((normalized, compact_lowered, lowered))
+    if safety_rule:
+        return ScopeDecision(
+            "refuse",
+            safety_rule.category,
+            safety_rule.confidence,
+            safety_rule.reason,
+            safety_rule.response,
         )
 
     has_learning_signal = _contains_any(compact_lowered, _LEARNING_TERMS) or _contains_any(lowered, _LEARNING_TERMS)

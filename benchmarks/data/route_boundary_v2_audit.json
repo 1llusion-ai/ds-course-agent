@@ -1,0 +1,1176 @@
+{
+  "schema_version": 1,
+  "summary": {
+    "audited_at": "2026-07-19T11:11:47.632485+00:00",
+    "auditor": "codex_cli_route_probe",
+    "source_cases": "benchmarks/data/route_boundary_v2.json",
+    "route_report": "var/artifacts/benchmarks/route_harness_v2_report.json",
+    "total_cases": 114,
+    "accepted_cases": 114,
+    "needs_fix_cases": 0,
+    "unexpected_rag_count": 0,
+    "category_counts": {
+      "code_review": 10,
+      "course_schedule": 8,
+      "current_datetime": 8,
+      "generic_agent": 10,
+      "grounded_rag": 20,
+      "grounded_rag_boundary": 1,
+      "learning_path": 10,
+      "misconception": 10,
+      "personalized_explanation": 9,
+      "python_exec": 10,
+      "special_direct": 12,
+      "web_search": 6
+    },
+    "rules": [
+      "Every case must have a current-router expected_route and expected_retrieval_policy.",
+      "Cases marked web_search must pass web_search=True into QueryPipeline preparation.",
+      "Boundary/direct cases that disallow grounded_rag must keep unexpected_rag_count at 0.",
+      "Academic-integrity and privacy direct cases contain course/data-science terms but must still route with retrieval disabled.",
+      "expected_direct_llm_answer is asserted when present."
+    ]
+  },
+  "records": [
+    {
+      "id": "schedule_001",
+      "category": "course_schedule",
+      "status": "accepted",
+      "expected_route": "course_schedule",
+      "actual_route": "course_schedule",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "schedule_002",
+      "category": "course_schedule",
+      "status": "accepted",
+      "expected_route": "course_schedule",
+      "actual_route": "course_schedule",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "schedule_003",
+      "category": "course_schedule",
+      "status": "accepted",
+      "expected_route": "course_schedule",
+      "actual_route": "course_schedule",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "schedule_004",
+      "category": "course_schedule",
+      "status": "accepted",
+      "expected_route": "course_schedule",
+      "actual_route": "course_schedule",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "schedule_005",
+      "category": "course_schedule",
+      "status": "accepted",
+      "expected_route": "course_schedule",
+      "actual_route": "course_schedule",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "schedule_006",
+      "category": "course_schedule",
+      "status": "accepted",
+      "expected_route": "course_schedule",
+      "actual_route": "course_schedule",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "schedule_007",
+      "category": "course_schedule",
+      "status": "accepted",
+      "expected_route": "course_schedule",
+      "actual_route": "course_schedule",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "schedule_008",
+      "category": "course_schedule",
+      "status": "accepted",
+      "expected_route": "course_schedule",
+      "actual_route": "course_schedule",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "datetime_001",
+      "category": "current_datetime",
+      "status": "accepted",
+      "expected_route": "current_datetime",
+      "actual_route": "current_datetime",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "datetime_002",
+      "category": "current_datetime",
+      "status": "accepted",
+      "expected_route": "current_datetime",
+      "actual_route": "current_datetime",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "datetime_003",
+      "category": "current_datetime",
+      "status": "accepted",
+      "expected_route": "current_datetime",
+      "actual_route": "current_datetime",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "datetime_004",
+      "category": "current_datetime",
+      "status": "accepted",
+      "expected_route": "current_datetime",
+      "actual_route": "current_datetime",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "datetime_005",
+      "category": "current_datetime",
+      "status": "accepted",
+      "expected_route": "current_datetime",
+      "actual_route": "current_datetime",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "datetime_006",
+      "category": "current_datetime",
+      "status": "accepted",
+      "expected_route": "current_datetime",
+      "actual_route": "current_datetime",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "datetime_007",
+      "category": "current_datetime",
+      "status": "accepted",
+      "expected_route": "current_datetime",
+      "actual_route": "current_datetime",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "datetime_008",
+      "category": "current_datetime",
+      "status": "accepted",
+      "expected_route": "current_datetime",
+      "actual_route": "current_datetime",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "code_review_001",
+      "category": "code_review",
+      "status": "accepted",
+      "expected_route": "code_review",
+      "actual_route": "code_review",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "code_review_002",
+      "category": "code_review",
+      "status": "accepted",
+      "expected_route": "code_review",
+      "actual_route": "code_review",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "code_review_003",
+      "category": "code_review",
+      "status": "accepted",
+      "expected_route": "code_review",
+      "actual_route": "code_review",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "code_review_004",
+      "category": "code_review",
+      "status": "accepted",
+      "expected_route": "code_review",
+      "actual_route": "code_review",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "code_review_005",
+      "category": "code_review",
+      "status": "accepted",
+      "expected_route": "code_review",
+      "actual_route": "code_review",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "code_review_006",
+      "category": "code_review",
+      "status": "accepted",
+      "expected_route": "code_review",
+      "actual_route": "code_review",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "code_review_007",
+      "category": "code_review",
+      "status": "accepted",
+      "expected_route": "code_review",
+      "actual_route": "code_review",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "code_review_008",
+      "category": "code_review",
+      "status": "accepted",
+      "expected_route": "code_review",
+      "actual_route": "code_review",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "code_review_009",
+      "category": "code_review",
+      "status": "accepted",
+      "expected_route": "code_review",
+      "actual_route": "code_review",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "code_review_010",
+      "category": "code_review",
+      "status": "accepted",
+      "expected_route": "code_review",
+      "actual_route": "code_review",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "python_exec_001",
+      "category": "python_exec",
+      "status": "accepted",
+      "expected_route": "python_exec",
+      "actual_route": "python_exec",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "python_exec_002",
+      "category": "python_exec",
+      "status": "accepted",
+      "expected_route": "python_exec",
+      "actual_route": "python_exec",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "python_exec_003",
+      "category": "python_exec",
+      "status": "accepted",
+      "expected_route": "python_exec",
+      "actual_route": "python_exec",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "python_exec_004",
+      "category": "python_exec",
+      "status": "accepted",
+      "expected_route": "python_exec",
+      "actual_route": "python_exec",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "python_exec_005",
+      "category": "python_exec",
+      "status": "accepted",
+      "expected_route": "python_exec",
+      "actual_route": "python_exec",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "python_exec_006",
+      "category": "python_exec",
+      "status": "accepted",
+      "expected_route": "python_exec",
+      "actual_route": "python_exec",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "python_exec_007",
+      "category": "python_exec",
+      "status": "accepted",
+      "expected_route": "python_exec",
+      "actual_route": "python_exec",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "python_exec_008",
+      "category": "python_exec",
+      "status": "accepted",
+      "expected_route": "python_exec",
+      "actual_route": "python_exec",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "python_exec_009",
+      "category": "python_exec",
+      "status": "accepted",
+      "expected_route": "python_exec",
+      "actual_route": "python_exec",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "python_exec_010",
+      "category": "python_exec",
+      "status": "accepted",
+      "expected_route": "python_exec",
+      "actual_route": "python_exec",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "generic_code_001",
+      "category": "generic_agent",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "generic_code_002",
+      "category": "generic_agent",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "generic_code_003",
+      "category": "generic_agent",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "generic_code_004",
+      "category": "generic_agent",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "generic_code_005",
+      "category": "generic_agent",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "generic_code_006",
+      "category": "generic_agent",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "generic_code_007",
+      "category": "generic_agent",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "generic_code_008",
+      "category": "generic_agent",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "generic_code_009",
+      "category": "generic_agent",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "generic_code_010",
+      "category": "generic_agent",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "learning_path_001",
+      "category": "learning_path",
+      "status": "accepted",
+      "expected_route": "learning_path_skill",
+      "actual_route": "learning_path_skill",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "learning_path_002",
+      "category": "learning_path",
+      "status": "accepted",
+      "expected_route": "learning_path_skill",
+      "actual_route": "learning_path_skill",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "learning_path_003",
+      "category": "learning_path",
+      "status": "accepted",
+      "expected_route": "learning_path_skill",
+      "actual_route": "learning_path_skill",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "learning_path_004",
+      "category": "learning_path",
+      "status": "accepted",
+      "expected_route": "learning_path_skill",
+      "actual_route": "learning_path_skill",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "learning_path_005",
+      "category": "learning_path",
+      "status": "accepted",
+      "expected_route": "learning_path_skill",
+      "actual_route": "learning_path_skill",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "learning_path_006",
+      "category": "learning_path",
+      "status": "accepted",
+      "expected_route": "learning_path_skill",
+      "actual_route": "learning_path_skill",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "learning_path_007",
+      "category": "learning_path",
+      "status": "accepted",
+      "expected_route": "learning_path_skill",
+      "actual_route": "learning_path_skill",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "learning_path_008",
+      "category": "learning_path",
+      "status": "accepted",
+      "expected_route": "learning_path_skill",
+      "actual_route": "learning_path_skill",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "learning_path_009",
+      "category": "learning_path",
+      "status": "accepted",
+      "expected_route": "learning_path_skill",
+      "actual_route": "learning_path_skill",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "learning_path_010",
+      "category": "learning_path",
+      "status": "accepted",
+      "expected_route": "learning_path_skill",
+      "actual_route": "learning_path_skill",
+      "expected_retrieval_policy": "optional",
+      "actual_retrieval_policy": "optional",
+      "failures": []
+    },
+    {
+      "id": "personalized_001",
+      "category": "personalized_explanation",
+      "status": "accepted",
+      "expected_route": "personalized_explanation_skill",
+      "actual_route": "personalized_explanation_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "personalized_002",
+      "category": "personalized_explanation",
+      "status": "accepted",
+      "expected_route": "personalized_explanation_skill",
+      "actual_route": "personalized_explanation_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "personalized_003",
+      "category": "grounded_rag_boundary",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "personalized_004",
+      "category": "personalized_explanation",
+      "status": "accepted",
+      "expected_route": "personalized_explanation_skill",
+      "actual_route": "personalized_explanation_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "personalized_005",
+      "category": "personalized_explanation",
+      "status": "accepted",
+      "expected_route": "personalized_explanation_skill",
+      "actual_route": "personalized_explanation_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "personalized_006",
+      "category": "personalized_explanation",
+      "status": "accepted",
+      "expected_route": "personalized_explanation_skill",
+      "actual_route": "personalized_explanation_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "personalized_007",
+      "category": "personalized_explanation",
+      "status": "accepted",
+      "expected_route": "personalized_explanation_skill",
+      "actual_route": "personalized_explanation_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "personalized_008",
+      "category": "personalized_explanation",
+      "status": "accepted",
+      "expected_route": "personalized_explanation_skill",
+      "actual_route": "personalized_explanation_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "personalized_009",
+      "category": "personalized_explanation",
+      "status": "accepted",
+      "expected_route": "personalized_explanation_skill",
+      "actual_route": "personalized_explanation_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "personalized_010",
+      "category": "personalized_explanation",
+      "status": "accepted",
+      "expected_route": "misconception_skill",
+      "actual_route": "misconception_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "misconception_001",
+      "category": "misconception",
+      "status": "accepted",
+      "expected_route": "misconception_skill",
+      "actual_route": "misconception_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "misconception_002",
+      "category": "misconception",
+      "status": "accepted",
+      "expected_route": "misconception_skill",
+      "actual_route": "misconception_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "misconception_003",
+      "category": "misconception",
+      "status": "accepted",
+      "expected_route": "misconception_skill",
+      "actual_route": "misconception_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "misconception_004",
+      "category": "misconception",
+      "status": "accepted",
+      "expected_route": "misconception_skill",
+      "actual_route": "misconception_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "misconception_005",
+      "category": "misconception",
+      "status": "accepted",
+      "expected_route": "misconception_skill",
+      "actual_route": "misconception_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "misconception_006",
+      "category": "misconception",
+      "status": "accepted",
+      "expected_route": "misconception_skill",
+      "actual_route": "misconception_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "misconception_007",
+      "category": "misconception",
+      "status": "accepted",
+      "expected_route": "misconception_skill",
+      "actual_route": "misconception_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "misconception_008",
+      "category": "misconception",
+      "status": "accepted",
+      "expected_route": "misconception_skill",
+      "actual_route": "misconception_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "misconception_009",
+      "category": "misconception",
+      "status": "accepted",
+      "expected_route": "misconception_skill",
+      "actual_route": "misconception_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "misconception_010",
+      "category": "misconception",
+      "status": "accepted",
+      "expected_route": "misconception_skill",
+      "actual_route": "misconception_skill",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_001",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_002",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_003",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_004",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_005",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_006",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_007",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_008",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_009",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_010",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_011",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_012",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_013",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_014",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_015",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_016",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_017",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_018",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_019",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "grounded_020",
+      "category": "grounded_rag",
+      "status": "accepted",
+      "expected_route": "grounded_rag",
+      "actual_route": "grounded_rag",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "special_direct_001",
+      "category": "special_direct",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "special_direct_002",
+      "category": "special_direct",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "special_direct_003",
+      "category": "special_direct",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "special_direct_004",
+      "category": "special_direct",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "special_direct_005",
+      "category": "special_direct",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "special_direct_006",
+      "category": "special_direct",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "special_direct_007",
+      "category": "special_direct",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "special_direct_008",
+      "category": "special_direct",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "special_direct_009",
+      "category": "special_direct",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "special_direct_010",
+      "category": "special_direct",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "special_direct_011",
+      "category": "special_direct",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "special_direct_012",
+      "category": "special_direct",
+      "status": "accepted",
+      "expected_route": "generic_agent",
+      "actual_route": "generic_agent",
+      "expected_retrieval_policy": "disabled",
+      "actual_retrieval_policy": "disabled",
+      "failures": []
+    },
+    {
+      "id": "web_search_001",
+      "category": "web_search",
+      "status": "accepted",
+      "expected_route": "web_search",
+      "actual_route": "web_search",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "web_search_002",
+      "category": "web_search",
+      "status": "accepted",
+      "expected_route": "web_search",
+      "actual_route": "web_search",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "web_search_003",
+      "category": "web_search",
+      "status": "accepted",
+      "expected_route": "web_search",
+      "actual_route": "web_search",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "web_search_004",
+      "category": "web_search",
+      "status": "accepted",
+      "expected_route": "web_search",
+      "actual_route": "web_search",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "web_search_005",
+      "category": "web_search",
+      "status": "accepted",
+      "expected_route": "web_search",
+      "actual_route": "web_search",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    },
+    {
+      "id": "web_search_006",
+      "category": "web_search",
+      "status": "accepted",
+      "expected_route": "web_search",
+      "actual_route": "web_search",
+      "expected_retrieval_policy": "required",
+      "actual_retrieval_policy": "required",
+      "failures": []
+    }
+  ]
+}

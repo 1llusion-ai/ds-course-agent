@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "suite_name": "ds_course_agent_eval_suite_v2",
+  "created_at": "2026-07-19",
+  "updated_at": "2026-07-19T11:11:47.639126+00:00",
+  "description": "Expanded evaluation suite for the Data Science course assistant, covering routing, retrieval, learning profiles, end-to-end agent behavior, code boundaries, and safety edges.",
+  "generation_model": "xiaomi/mimo-v2.5-pro",
+  "datasets": [
+    {
+      "name": "profile_eval_v2_mimo",
+      "path": "benchmarks/data/profile_eval_v2_mimo.json",
+      "audit_path": "benchmarks/data/profile_eval_v2_mimo_audit.json",
+      "case_count": 56,
+      "coverage": [
+        "profile_reading",
+        "personalized_explanation",
+        "learning_path",
+        "weak_spot_update",
+        "resolved_regression",
+        "history_filter",
+        "multi_turn_evolution",
+        "profile_hallucination_guard"
+      ],
+      "runner": "tests/test_profile_eval_dataset.py schema/coverage checks"
+    },
+    {
+      "name": "route_boundary_v2",
+      "path": "benchmarks/data/route_boundary_v2.json",
+      "audit_path": "benchmarks/data/route_boundary_v2_audit.json",
+      "case_count": 114,
+      "coverage": [
+        "course_schedule",
+        "current_datetime",
+        "code_review",
+        "python_exec",
+        "generic_agent",
+        "learning_path",
+        "personalized_explanation",
+        "misconception",
+        "grounded_rag",
+        "special_direct",
+        "web_search",
+        "safety_direct"
+      ],
+      "runner": "PYTHONPATH=src:. python benchmarks/route_harness.py --cases benchmarks/data/route_boundary_v2.json"
+    },
+    {
+      "name": "retrieval_qa_pairs_v2_mimo",
+      "path": "benchmarks/data/retrieval_qa_pairs_v2_mimo.json",
+      "audit_path": "benchmarks/data/retrieval_qa_pairs_v2_mimo_audit.json",
+      "case_count": 64,
+      "coverage": [
+        "semantic",
+        "term",
+        "code_abbr",
+        "application",
+        "comparison",
+        "formula"
+      ],
+      "runner": "PYTHONPATH=src:. python benchmarks/retrieval_benchmark.py --dataset benchmarks/data/retrieval_qa_pairs_v2_mimo.json --review-path does_not_exist.json"
+    },
+    {
+      "name": "agent_tasks_v2_mimo",
+      "path": "benchmarks/data/agent_tasks_v2_mimo.json",
+      "audit_path": "benchmarks/data/agent_tasks_v2_mimo_audit.json",
+      "case_count": 48,
+      "coverage": [
+        "grounded_course",
+        "multi_turn_context",
+        "personalized",
+        "misconception",
+        "code_boundary",
+        "safety_edge"
+      ],
+      "runner": "PYTHONPATH=src:. python benchmarks/agent_benchmark.py --benchmark benchmarks/data/agent_tasks_v2_mimo.json"
+    }
+  ],
+  "notes": [
+    "No API keys or secrets are stored in this manifest or datasets.",
+    "Generated artifacts and benchmark reports are written under var/artifacts/."
+  ]
+}

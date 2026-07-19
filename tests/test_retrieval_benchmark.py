@@ -209,6 +209,34 @@ class TestBenchmarkData:
         assert pair["review_status"] == "reviewed_manually"
         assert pair["review_notes"] == "metadata only"
 
+    def test_mimo_v2_qa_pairs_format_and_audit_metadata(self):
+        path = Path("benchmarks/data/retrieval_qa_pairs_v2_mimo.json")
+        audit_path = Path("benchmarks/data/retrieval_qa_pairs_v2_mimo_audit.json")
+
+        assert path.exists()
+        assert audit_path.exists()
+
+        data = json.loads(path.read_text(encoding="utf-8"))
+        pairs = data.get("qa_pairs", [])
+        categories = {pair["category"] for pair in pairs}
+
+        assert data["generation"]["final_model"] == "xiaomi/mimo-v2.5-pro"
+        assert data["audit"]["total_pairs"] == 64
+        assert data["audit"]["revised_pairs"] == 1
+        assert len(pairs) == 64
+        assert categories == {"application", "code_abbr", "comparison", "formula", "semantic", "term"}
+        assert all(pair["enabled"] for pair in pairs)
+        assert all(pair["review_status"] == "reviewed_manually" for pair in pairs)
+
+    def test_mimo_v2_loader_preserves_enabled_pairs(self):
+        dataset = load_retrieval_qa_dataset(
+            path="benchmarks/data/retrieval_qa_pairs_v2_mimo.json",
+            review_path="does_not_exist.json",
+        )
+
+        assert len(dataset["qa_pairs"]) == 64
+        assert dataset["disabled_pairs"] == []
+
 
 @pytest.mark.skip(reason="需要真实 ChromaDB 和 Embedding API 环境")
 class TestBenchmarkIntegration:

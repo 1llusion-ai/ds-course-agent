@@ -1,0 +1,317 @@
+{
+  "schema_version": 1,
+  "dataset": "benchmarks/data/agent_tasks_v2_mimo.json",
+  "summary": {
+    "audited_at": "2026-07-19T10:06:07.708961+00:00",
+    "auditor": "codex_cli_manual_review",
+    "total_tasks": 48,
+    "accepted_tasks": 48,
+    "revised_tasks": 48,
+    "disabled_tasks": 0,
+    "category_counts": {
+      "code_boundary": 8,
+      "grounded_course": 10,
+      "misconception": 8,
+      "multi_turn_context": 8,
+      "personalized": 8,
+      "safety_edge": 6
+    },
+    "rules": [
+      "Each task must be loadable by benchmarks.agent_benchmark.AgentTask.from_dict.",
+      "Tool expectations must align with current course-agent boundaries: course knowledge uses retrieval; safety/off-topic edges do not.",
+      "Personalized tasks must include StudentProfile-compatible seed_profile fields.",
+      "Keyword groups must be broad enough for answer variation but specific enough to score required dimensions.",
+      "Safety keyword groups accept common refusal phrasings such as 抱歉/不属于回答范围/只能回答课程相关问题 to reduce false negatives."
+    ]
+  },
+  "records": [
+    {
+      "id": "grounded_001",
+      "status": "accepted",
+      "issues": [],
+      "category": "grounded_course"
+    },
+    {
+      "id": "grounded_002",
+      "status": "accepted",
+      "issues": [],
+      "category": "grounded_course"
+    },
+    {
+      "id": "grounded_003",
+      "status": "accepted",
+      "issues": [],
+      "category": "grounded_course"
+    },
+    {
+      "id": "grounded_004",
+      "status": "accepted",
+      "issues": [],
+      "category": "grounded_course"
+    },
+    {
+      "id": "grounded_005",
+      "status": "accepted",
+      "issues": [],
+      "category": "grounded_course"
+    },
+    {
+      "id": "grounded_006",
+      "status": "accepted",
+      "issues": [],
+      "category": "grounded_course"
+    },
+    {
+      "id": "grounded_007",
+      "status": "accepted",
+      "issues": [],
+      "category": "grounded_course"
+    },
+    {
+      "id": "grounded_008",
+      "status": "accepted",
+      "issues": [],
+      "category": "grounded_course"
+    },
+    {
+      "id": "grounded_009",
+      "status": "accepted",
+      "issues": [],
+      "category": "grounded_course"
+    },
+    {
+      "id": "grounded_010",
+      "status": "accepted",
+      "issues": [],
+      "category": "grounded_course"
+    },
+    {
+      "id": "context_001",
+      "status": "accepted",
+      "issues": [],
+      "category": "multi_turn_context"
+    },
+    {
+      "id": "context_002",
+      "status": "accepted",
+      "issues": [],
+      "category": "multi_turn_context"
+    },
+    {
+      "id": "context_003",
+      "status": "accepted",
+      "issues": [],
+      "category": "multi_turn_context"
+    },
+    {
+      "id": "context_004",
+      "status": "accepted",
+      "issues": [],
+      "category": "multi_turn_context"
+    },
+    {
+      "id": "context_005",
+      "status": "accepted",
+      "issues": [],
+      "category": "multi_turn_context"
+    },
+    {
+      "id": "context_006",
+      "status": "accepted",
+      "issues": [],
+      "category": "multi_turn_context"
+    },
+    {
+      "id": "context_007",
+      "status": "accepted",
+      "issues": [],
+      "category": "multi_turn_context"
+    },
+    {
+      "id": "context_008",
+      "status": "accepted",
+      "issues": [],
+      "category": "multi_turn_context"
+    },
+    {
+      "id": "personalized_001",
+      "status": "accepted",
+      "issues": [],
+      "category": "personalized"
+    },
+    {
+      "id": "personalized_002",
+      "status": "accepted",
+      "issues": [],
+      "category": "personalized"
+    },
+    {
+      "id": "personalized_003",
+      "status": "accepted",
+      "issues": [],
+      "category": "personalized"
+    },
+    {
+      "id": "personalized_004",
+      "status": "accepted",
+      "issues": [],
+      "category": "personalized"
+    },
+    {
+      "id": "personalized_005",
+      "status": "accepted",
+      "issues": [],
+      "category": "personalized"
+    },
+    {
+      "id": "personalized_006",
+      "status": "accepted",
+      "issues": [],
+      "category": "personalized"
+    },
+    {
+      "id": "personalized_007",
+      "status": "accepted",
+      "issues": [],
+      "category": "personalized"
+    },
+    {
+      "id": "personalized_008",
+      "status": "accepted",
+      "issues": [],
+      "category": "personalized"
+    },
+    {
+      "id": "misconception_001",
+      "status": "accepted",
+      "issues": [],
+      "category": "misconception"
+    },
+    {
+      "id": "misconception_002",
+      "status": "accepted",
+      "issues": [],
+      "category": "misconception"
+    },
+    {
+      "id": "misconception_003",
+      "status": "accepted",
+      "issues": [],
+      "category": "misconception"
+    },
+    {
+      "id": "misconception_004",
+      "status": "accepted",
+      "issues": [],
+      "category": "misconception"
+    },
+    {
+      "id": "misconception_005",
+      "status": "accepted",
+      "issues": [],
+      "category": "misconception"
+    },
+    {
+      "id": "misconception_006",
+      "status": "accepted",
+      "issues": [],
+      "category": "misconception"
+    },
+    {
+      "id": "misconception_007",
+      "status": "accepted",
+      "issues": [],
+      "category": "misconception"
+    },
+    {
+      "id": "misconception_008",
+      "status": "accepted",
+      "issues": [],
+      "category": "misconception"
+    },
+    {
+      "id": "code_001",
+      "status": "accepted",
+      "issues": [],
+      "category": "code_boundary"
+    },
+    {
+      "id": "code_002",
+      "status": "accepted",
+      "issues": [],
+      "category": "code_boundary"
+    },
+    {
+      "id": "code_003",
+      "status": "accepted",
+      "issues": [],
+      "category": "code_boundary"
+    },
+    {
+      "id": "code_004",
+      "status": "accepted",
+      "issues": [],
+      "category": "code_boundary"
+    },
+    {
+      "id": "code_005",
+      "status": "accepted",
+      "issues": [],
+      "category": "code_boundary"
+    },
+    {
+      "id": "code_006",
+      "status": "accepted",
+      "issues": [],
+      "category": "code_boundary"
+    },
+    {
+      "id": "code_007",
+      "status": "accepted",
+      "issues": [],
+      "category": "code_boundary"
+    },
+    {
+      "id": "code_008",
+      "status": "accepted",
+      "issues": [],
+      "category": "code_boundary"
+    },
+    {
+      "id": "safety_001",
+      "status": "accepted",
+      "issues": [],
+      "category": "safety_edge"
+    },
+    {
+      "id": "safety_002",
+      "status": "accepted",
+      "issues": [],
+      "category": "safety_edge"
+    },
+    {
+      "id": "safety_003",
+      "status": "accepted",
+      "issues": [],
+      "category": "safety_edge"
+    },
+    {
+      "id": "safety_004",
+      "status": "accepted",
+      "issues": [],
+      "category": "safety_edge"
+    },
+    {
+      "id": "safety_005",
+      "status": "accepted",
+      "issues": [],
+      "category": "safety_edge"
+    },
+    {
+      "id": "safety_006",
+      "status": "accepted",
+      "issues": [],
+      "category": "safety_edge"
+    }
+  ]
+}
