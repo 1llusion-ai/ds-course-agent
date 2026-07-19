@@ -5,6 +5,7 @@ services:
       context: ..
       dockerfile: deploy/api.Dockerfile
     container_name: rag-backend
+    restart: unless-stopped
     # Load model/embedding/RAG config from the repo-root .env at runtime.
     # The image itself does not bake .env; values here are injected into the
     # container. Secrets in the `environment:` block below override any
@@ -46,6 +47,7 @@ services:
       context: ../web
       dockerfile: Dockerfile
     container_name: rag-frontend
+    restart: unless-stopped
     ports:
       - "80:80"
     depends_on:
