@@ -1,6 +1,7 @@
 name: ds-course-agent
 services:
   backend:
+    image: ds-course-agent-backend:latest
     build:
       context: ..
       dockerfile: deploy/api.Dockerfile
@@ -37,12 +38,20 @@ services:
     networks:
       - rag-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5); raise SystemExit(0 if response.status == 200 else 1)",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 45s
 
   frontend:
+    image: ds-course-agent-frontend:latest
     build:
       context: ../web
       dockerfile: Dockerfile
@@ -51,7 +60,8 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - rag-network
 
