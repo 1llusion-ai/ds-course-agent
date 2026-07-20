@@ -128,12 +128,15 @@ docker compose config --quiet
 
 tag_rollback_images
 
-log "building images while current containers remain online"
-docker compose build
+log "building backend image while current containers remain online"
+docker compose build backend
+
+log "building frontend image while current containers remain online"
+docker compose build frontend
 
 log "switching to the newly built images"
 switched=1
-docker compose up -d --no-build --remove-orphans
+docker compose up -d --no-build --force-recreate --remove-orphans
 
 wait_for_url "backend" "$BACKEND_URL"
 wait_for_url "frontend" "$FRONTEND_URL"
