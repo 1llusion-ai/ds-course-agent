@@ -51,7 +51,16 @@
 
       <div class="chat-content">
         <div ref="messagesContainer" class="messages-area" @scroll.passive="handleMessagesScroll">
-          <div v-if="chatStore.messages.length === 0" class="empty-state">
+          <div v-if="sessionLoading" class="session-loading-state" aria-live="polite">
+            <div class="session-loading-indicator" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <span>正在加载会话…</span>
+          </div>
+
+          <div v-else-if="chatStore.messages.length === 0" class="empty-state">
             <div class="empty-content">
               <div class="empty-kicker">DATA SCIENCE COURSE AGENT</div>
               <h1>今天想解决什么数据科学问题？</h1>
@@ -96,7 +105,7 @@
           </div>
         </div>
 
-        <div v-if="chatStore.messages.length > 0" class="input-area">
+        <div v-if="chatStore.messages.length > 0 && !sessionLoading" class="input-area">
           <ChatInput
             :loading="chatStore.loading"
             :web-search-enabled="webSearchEnabled"
@@ -189,6 +198,8 @@ const headerRenameInputRef = ref(null)
 const headerRenaming = ref(false)
 const headerRenameTitle = ref('')
 const headerRenameSaving = ref(false)
+const sessionLoading = ref(false)
+let sessionLoadToken = 0
 let scrollFrameId = null
 let messagesResizeObserver = null
 
@@ -239,6 +250,8 @@ watch(
       return
     }
 
+    sessionLoadToken += 1
+    sessionLoading.value = false
     sessionStore.setCurrentSession(null)
     chatStore.setActiveSession(null)
     setWebSearchEnabled(false)
@@ -258,12 +271,15 @@ watch(() => sessionStore.currentSessionId, (newId) => {
 })
 
 async function loadSession(sessionId) {
+  const loadToken = ++sessionLoadToken
+  sessionLoading.value = true
   sessionStore.setCurrentSession(sessionId)
   chatStore.setActiveSession(sessionId)
 
   try {
     await chatStore.fetchHistory(sessionId)
   } catch (error) {
+    if (loadToken !== sessionLoadToken) return
     console.error('加载会话历史失败:', error)
     const status = error?.response?.status
 
@@ -281,9 +297,12 @@ async function loadSession(sessionId) {
     } else {
       ElMessage.error('加载会话历史失败，请稍后重试。')
     }
+  } finally {
+    if (loadToken === sessionLoadToken) {
+      sessionLoading.value = false
+      scrollToBottom(true)
+    }
   }
-
-  scrollToBottom(true)
 }
 
 async function handleSend(message, sendOptions = {}) {
@@ -852,6 +871,51 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 1px;
   flex: 0 0 auto;
+}
+
+.session-loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 100%;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.session-loading-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-loading-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #94a3b8;
+  animation: session-loading-bounce 1.2s infinite ease-in-out;
+}
+
+.session-loading-indicator span:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.session-loading-indicator span:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+@keyframes session-loading-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.7);
+    opacity: 0.45;
+  }
+
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .empty-state {
