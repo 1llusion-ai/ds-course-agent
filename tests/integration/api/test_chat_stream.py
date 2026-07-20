@@ -4,6 +4,15 @@ from fastapi.testclient import TestClient
 from ds_course_agent.api.main import app
 
 
+@pytest.fixture(autouse=True)
+def clear_stream_jobs():
+    from ds_course_agent.api.stream_jobs import stream_job_registry
+
+    stream_job_registry.clear()
+    yield
+    stream_job_registry.clear()
+
+
 @pytest.fixture
 def client():
     return TestClient(app)
@@ -68,6 +77,7 @@ def test_stream_endpoint_returns_real_sse(fresh_client):
     )
 
     assert response.status_code == 200
+    assert '"type": "snapshot"' in response.text
     assert '"type": "progress"' in response.text
     assert '"tool": "course_rag_tool"' in response.text
     assert '"found_count": 2' in response.text
@@ -190,11 +200,12 @@ def test_web_search_turn_state_records_stream_search_error():
     assert fields["web_search_status"] == "error"
 
 
-def test_history_reports_pending_generation_and_cancel_sets_job_event():
+def test_history_exposes_active_stream_snapshot_and_cancel_sets_job_event():
     import threading
+    from datetime import datetime
 
-    from ds_course_agent.api.routers.chat import _register_active_stream_job, _unregister_active_stream_job
     from ds_course_agent.api.state import _chat_history, _sessions
+    from ds_course_agent.api.stream_jobs import stream_job_registry
 
     _sessions.clear()
     _chat_history.clear()
@@ -207,18 +218,225 @@ def test_history_reports_pending_generation_and_cancel_sets_job_event():
     assert session_resp.status_code == 200
     session_id = session_resp.json()["id"]
     cancel_event = threading.Event()
+    message_timestamp = datetime.now()
 
     try:
-        started_at = _register_active_stream_job(session_id, "test", cancel_event)
+        job = stream_job_registry.register(
+            session_id=session_id,
+            student_id="test",
+            cancel_event=cancel_event,
+            message_timestamp=message_timestamp,
+        )
+        job.publish(
+            {
+                "type": "progress",
+                "phase": "generation",
+                "message": "正在生成回答...",
+                "stream_id": "restore-1",
+            }
+        )
+        job.publish({"type": "delta", "delta": "已经生成的内容", "stream_id": "restore-1"})
+
         history_resp = client.get(f"/api/chat/history/{session_id}", headers={"x-test-student-id": "test"})
         assert history_resp.status_code == 200
         history = history_resp.json()
-        assert history["pending_generation"] is True
-        assert history["pending_started_at"].startswith(started_at.isoformat()[:19])
+        assert history["active_stream"]["content"] == "已经生成的内容"
+        assert history["active_stream"]["stream_id"] == "restore-1"
+        assert history["active_stream"]["last_event_id"] == 2
+        assert history["active_stream"]["progress"]["message"] == "正在生成回答..."
 
         cancel_resp = client.post(f"/api/chat/cancel/{session_id}", headers={"x-test-student-id": "test"})
         assert cancel_resp.status_code == 200
         assert cancel_resp.json()["cancelled"] is True
         assert cancel_event.is_set()
     finally:
-        _unregister_active_stream_job(session_id)
+        stream_job_registry.discard(session_id)
+
+
+def test_resume_endpoint_starts_with_full_snapshot_and_replays_terminal_event():
+    import threading
+    from datetime import datetime
+
+    from ds_course_agent.api.state import _chat_history, _sessions
+    from ds_course_agent.api.stream_jobs import stream_job_registry
+
+    _sessions.clear()
+    _chat_history.clear()
+    client = TestClient(app)
+    session_resp = client.post(
+        "/api/sessions",
+        headers={"x-test-student-id": "test"},
+        json={"title": "resume test"},
+    )
+    session_id = session_resp.json()["id"]
+    timestamp = datetime.now()
+    job = stream_job_registry.register(
+        session_id=session_id,
+        student_id="test",
+        cancel_event=threading.Event(),
+        message_timestamp=timestamp,
+    )
+    job.publish({"type": "delta", "delta": "刷新前", "stream_id": "resume-1"})
+    job.publish({"type": "delta", "delta": "已经生成", "stream_id": "resume-1"})
+    job.publish(
+        {
+            "type": "final",
+            "stream_id": "resume-1",
+            "message": {
+                "role": "assistant",
+                "content": "刷新前已经生成",
+                "timestamp": timestamp.isoformat(),
+                "generation_status": "completed",
+            },
+        }
+    )
+
+    response = client.get(f"/api/chat/resume/{session_id}", headers={"x-test-student-id": "test"})
+
+    assert response.status_code == 200
+    assert '"type": "snapshot"' in response.text
+    assert '"content": "刷新前已经生成"' in response.text
+    assert '"resuming": true' in response.text
+    assert '"type": "final"' in response.text
+
+
+def test_cancel_preserves_partial_answer_and_marks_it_stopped(monkeypatch):
+    import threading
+    import time
+
+    from ds_course_agent.api.state import _chat_history, _sessions
+
+    _sessions.clear()
+    _chat_history.clear()
+    first_delta_seen = threading.Event()
+    release_generator = threading.Event()
+
+    def fake_stream_chat_with_history(message: str, session_id: str, student_id: str):
+        yield {
+            "type": "progress",
+            "phase": "retrieval_sources",
+            "message": "已找到 1 个课程来源",
+            "route": "grounded_rag",
+            "tool": "course_rag_tool",
+            "stream_id": "cancel-1",
+            "details": {"sources": [{"reference": "《第1章》"}]},
+        }
+        yield {"type": "delta", "delta": "已经生成的部分", "stream_id": "cancel-1"}
+        first_delta_seen.set()
+        while not release_generator.is_set():
+            time.sleep(0.01)
+        yield {"type": "delta", "delta": "不应出现", "stream_id": "cancel-1"}
+
+    import ds_course_agent.api.routers.chat as chat_module
+
+    monkeypatch.setattr(chat_module, "stream_chat_with_history", fake_stream_chat_with_history)
+    session_client = TestClient(app)
+    session_resp = session_client.post(
+        "/api/sessions",
+        headers={"x-test-student-id": "test"},
+        json={"title": "cancel partial"},
+    )
+    session_id = session_resp.json()["id"]
+    response_holder = {}
+
+    def send_request():
+        response_holder["response"] = TestClient(app).post(
+            "/api/chat/send/stream",
+            headers={"x-test-student-id": "test"},
+            json={"session_id": session_id, "message": "hello"},
+        )
+
+    request_thread = threading.Thread(target=send_request)
+    request_thread.start()
+    assert first_delta_seen.wait(timeout=2)
+
+    cancel_resp = session_client.post(
+        f"/api/chat/cancel/{session_id}",
+        headers={"x-test-student-id": "test"},
+    )
+    assert cancel_resp.json()["cancelled"] is True
+    release_generator.set()
+    request_thread.join(timeout=3)
+    assert not request_thread.is_alive()
+
+    response = response_holder["response"]
+    assert '"generation_status": "stopped"' in response.text
+    history_resp = session_client.get(
+        f"/api/chat/history/{session_id}",
+        headers={"x-test-student-id": "test"},
+    )
+    assistant = history_resp.json()["messages"][-1]
+    assert assistant["content"] == "已经生成的部分"
+    assert assistant["route"] == "grounded_rag"
+    assert assistant["sources"] == [{"reference": "《第1章》"}]
+    assert assistant["metadata"]["used_retrieval"] is True
+    assert assistant["generation_status"] == "stopped"
+    assert assistant["generation_error"] is None
+
+
+def test_continue_stream_replaces_stopped_message_without_visible_user_turn(monkeypatch):
+    from datetime import datetime
+
+    from ds_course_agent.api.routers.chat import _append_message_locked
+    from ds_course_agent.api.schemas.chat import ChatMessage
+    from ds_course_agent.api.state import _chat_history, _sessions
+
+    _sessions.clear()
+    _chat_history.clear()
+    client = TestClient(app)
+    session_resp = client.post(
+        "/api/sessions",
+        headers={"x-test-student-id": "test"},
+        json={"title": "continue test"},
+    )
+    session_id = session_resp.json()["id"]
+    stopped_at = datetime.now()
+    _append_message_locked(session_id, ChatMessage(role="user", content="请详细解释"), save=False)
+    _append_message_locked(
+        session_id,
+        ChatMessage(
+            role="assistant",
+            content="已有内容",
+            timestamp=stopped_at,
+            route="grounded_rag",
+            sources=[{"reference": "《第1章》"}],
+            generation_status="stopped",
+            metadata={"route": "grounded_rag", "used_retrieval": True},
+        ),
+    )
+
+    def fake_continue(partial_content: str, session_id: str, student_id: str):
+        assert partial_content == "已有内容"
+        yield {"type": "progress", "phase": "generation", "message": "正在继续生成...", "stream_id": "continue-1"}
+        yield {"type": "delta", "delta": "，后续内容", "stream_id": "continue-1"}
+        yield {
+            "type": "final",
+            "content": "已有内容，后续内容",
+            "stream_id": "continue-1",
+            "used_retrieval": False,
+            "sources": [],
+        }
+
+    import ds_course_agent.api.routers.chat as chat_module
+
+    monkeypatch.setattr(chat_module, "stream_continue_with_history", fake_continue)
+    response = client.post(
+        "/api/chat/continue/stream",
+        headers={"x-test-student-id": "test"},
+        json={
+            "session_id": session_id,
+            "message_timestamp": stopped_at.isoformat(),
+        },
+    )
+
+    assert response.status_code == 200
+    assert '"type": "delta"' in response.text
+    assert '"generation_status": "completed"' in response.text
+    history_resp = client.get(f"/api/chat/history/{session_id}", headers={"x-test-student-id": "test"})
+    messages = history_resp.json()["messages"]
+    assert [message["role"] for message in messages] == ["user", "assistant"]
+    assert messages[-1]["content"] == "已有内容，后续内容"
+    assert messages[-1]["route"] == "grounded_rag"
+    assert messages[-1]["sources"] == [{"reference": "《第1章》"}]
+    assert messages[-1]["metadata"]["used_retrieval"] is True
+    assert messages[-1]["generation_status"] == "completed"

@@ -33,20 +33,18 @@
           </div>
         </div>
         <button
-          v-if="loading"
           type="button"
-          class="cancel-btn"
-          @click="handleCancel"
-        >
-          停止
-        </button>
-        <button
-          v-else
           class="send-btn"
-          :disabled="!inputText.trim()"
-          @click="handleSend"
+          :class="{ 'send-btn--stop': loading }"
+          :disabled="!loading && !inputText.trim()"
+          :aria-label="loading ? '停止生成' : '发送消息'"
+          :title="loading ? '停止生成' : '发送消息'"
+          @click="handlePrimaryAction"
         >
-          <svg class="send-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg v-if="loading" class="stop-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="7.5" y="7.5" width="9" height="9" rx="1.8" fill="currentColor" />
+          </svg>
+          <svg v-else class="send-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 12h14M12 5l7 7-7 7"/>
           </svg>
         </button>
@@ -106,6 +104,14 @@ function handleToggleWebSearch() {
 
 function handleCancel() {
   emit('cancel')
+}
+
+function handlePrimaryAction() {
+  if (props.loading) {
+    handleCancel()
+    return
+  }
+  handleSend()
 }
 
 function handleEnterKey(event) {
@@ -277,26 +283,13 @@ function handleEnterKey(event) {
   box-shadow: 0 18px 34px rgba(37, 99, 235, 0.32);
 }
 
-.cancel-btn {
-  height: 42px;
-  padding: 0 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(239, 68, 68, 0.28);
-  background: rgba(254, 242, 242, 0.92);
-  color: #b91c1c;
-  cursor: pointer;
-  flex-shrink: 0;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  box-shadow: 0 12px 24px rgba(185, 28, 28, 0.08);
-  transition: all 0.18s ease;
+.send-btn--stop {
+  background: linear-gradient(135deg, #64748b, #475569);
+  box-shadow: 0 12px 24px rgba(71, 85, 105, 0.22);
 }
 
-.cancel-btn:hover {
-  border-color: rgba(239, 68, 68, 0.42);
-  transform: translateY(-1px);
-  box-shadow: 0 16px 28px rgba(185, 28, 28, 0.13);
+.send-btn--stop:hover {
+  box-shadow: 0 16px 30px rgba(71, 85, 105, 0.30);
 }
 
 .send-btn:disabled {
@@ -305,6 +298,11 @@ function handleEnterKey(event) {
 }
 
 .send-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.stop-icon {
   width: 20px;
   height: 20px;
 }

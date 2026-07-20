@@ -4,6 +4,8 @@
 
 import logging
 import os
+import uuid
+from collections.abc import Iterator
 
 try:
     import certifi
@@ -171,4 +173,94 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
         final_event["error"] = stream_error
         if not final_content:
             final_event["content"] = f'关于"{message}"的问题，我需要查阅课程资料后才能回答。\n\n（{stream_error}）'
+    yield final_event
+
+
+def stream_continue_with_history(
+    partial_content: str,
+    session_id: str,
+    student_id: str,
+) -> Iterator[dict]:
+    """Continue an interrupted assistant answer without adding a visible user turn."""
+
+    from langchain_core.messages import AIMessage
+
+    from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
+    from ds_course_agent.shared.history import get_history
+
+    stream_id = uuid.uuid4().hex
+    continuation_parts: list[str] = []
+    stream_error: str | None = None
+    q_token = begin_query_trace(
+        meta={
+            "session_id": session_id,
+            "student_id": student_id,
+            "continuation": True,
+        }
+    )
+
+    yield {
+        "type": "progress",
+        "phase": "generation",
+        "message": "正在继续生成...",
+        "stream_id": stream_id,
+        "resuming": False,
+    }
+
+    try:
+        with trace_span("core_bridge.get_agent_service"):
+            service = get_agent_service()
+        history = get_history(session_id)
+        transient_history = list(history.messages)
+        if partial_content:
+            transient_history.append(AIMessage(content=partial_content))
+
+        turn_context = (
+            "你正在续写一条被用户主动停止的回答。对话历史中最后一条 assistant 内容"
+            "是用户已经看到的部分。只输出尚未输出的后续内容，与断点自然衔接；"
+            "不要重复已有内容，不要重新开头，也不要提及停止、续写或这些指令。"
+        )
+        with trace_span("core_bridge.agent_continue_stream"):
+            for chunk in service.direct_chat(
+                "继续完成上一条回答。",
+                transient_history,
+                stream=True,
+                turn_context=turn_context,
+            ):
+                text = str(chunk or "")
+                if not text:
+                    continue
+                continuation_parts.append(text)
+                yield {
+                    "type": "delta",
+                    "delta": text,
+                    "stream_id": stream_id,
+                    "resuming": False,
+                }
+    except Exception as exc:
+        logger.error("续写Agent调用出错: %s", exc, exc_info=True)
+        trace_error("core_bridge.continue_stream", exc)
+        stream_error = f"续写调用出错：{str(exc)[:100]}"
+
+    continuation = "".join(continuation_parts)
+    final_content = f"{partial_content}{continuation}"
+    if final_content:
+        try:
+            get_history(session_id).add_messages([AIMessage(content=final_content)])
+        except Exception as exc:
+            logger.error("续写结果写入历史失败: %s", exc, exc_info=True)
+            trace_error("core_bridge.continue_history", exc)
+            stream_error = stream_error or f"续写历史保存失败：{str(exc)[:100]}"
+
+    q_trace = end_query_trace(q_token, status="error" if stream_error else "ok")
+    final_event = {
+        "type": "final",
+        "content": final_content,
+        "used_retrieval": False,
+        "sources": [],
+        "query_trace": q_trace,
+        "stream_id": stream_id,
+    }
+    if stream_error:
+        final_event["error"] = stream_error
     yield final_event

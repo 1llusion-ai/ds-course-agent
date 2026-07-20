@@ -88,7 +88,9 @@
               v-for="(message, index) in chatStore.messages"
               :key="message.requestId || `${message.timestamp || index}-${index}`"
               :message="message"
+              :can-continue="canContinueMessage(message, index)"
               @open-sources="openSourcesPanel"
+              @continue="handleContinueGeneration"
             />
             <div ref="bottomAnchor" class="messages-bottom-anchor" aria-hidden="true"></div>
           </div>
@@ -336,6 +338,32 @@ function handleStarterPrompt(prompt) {
   if (chatStore.loading) return
   setWebSearchEnabled(false)
   handleSend(prompt, { webSearch: false })
+}
+
+function canContinueMessage(message, index) {
+  return (
+    message?.role !== 'user' &&
+    message?.generation_status === 'stopped' &&
+    !message?.isLoading &&
+    index === chatStore.messages.length - 1
+  )
+}
+
+async function handleContinueGeneration(message) {
+  const sessionId = sessionStore.currentSessionId
+  if (!sessionId || chatStore.loading) return
+
+  stickToBottom.value = true
+  try {
+    await chatStore.continueMessage(sessionId, message, { onProgress: scrollToBottom })
+  } catch (error) {
+    if (error?.code !== 'REQUEST_CANCELLED') {
+      console.error('继续生成失败:', error)
+      ElMessage.error('继续生成失败，请稍后重试。')
+    }
+  } finally {
+    scrollToBottom(true)
+  }
 }
 
 function focusHeaderRenameInput() {

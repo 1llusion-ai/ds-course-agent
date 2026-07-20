@@ -1223,7 +1223,7 @@ class AgentService:
             logger.error("agent.stream_generate failed: %s", exc, exc_info=True)
             raise
 
-    def _iter_grounded_rag_response(self, route_state: RouteState) -> Iterator[str]:
+    def _iter_grounded_rag_response(self, route_state: RouteState) -> Iterator[str | dict[str, Any]]:
         """Stream the common grounded-RAG route directly from the RAG model call."""
         from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
         from ds_course_agent.tools._shared import _track_retrieval
@@ -1247,6 +1247,14 @@ class AgentService:
 
             sources = build_sources_from_documents(result.documents)
             _track_retrieval(sources, used=True)
+            yield self._progress_event(
+                "retrieval_sources",
+                f"已找到 {len(sources)} 个课程来源",
+                stream_id=route_state.stream_id or "",
+                route=route_state.decision.route.value,
+                tool="course_rag_tool",
+                details={"sources": sources},
+            )
 
             if not result.has_results:
                 trace_step("tool.result", tool="course_rag_tool", status="no_results")
