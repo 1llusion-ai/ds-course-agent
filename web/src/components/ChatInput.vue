@@ -29,18 +29,26 @@
           </button>
           <div v-if="!hero" class="input-hint">
             <span>Enter 发送 · Shift+Enter 换行</span>
-            <span>{{ webSearchEnabled ? '将使用外部搜索结果' : '基于教材与学习画像回答' }}</span>
+            <span>{{ webSearchHintText }}</span>
           </div>
         </div>
         <button
+          v-if="loading"
+          type="button"
+          class="cancel-btn"
+          @click="handleCancel"
+        >
+          停止
+        </button>
+        <button
+          v-else
           class="send-btn"
-          :disabled="!inputText.trim() || loading"
+          :disabled="!inputText.trim()"
           @click="handleSend"
         >
-          <svg v-if="!loading" class="send-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="send-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 12h14M12 5l7 7-7 7"/>
           </svg>
-          <span v-else class="send-loader"></span>
         </button>
       </div>
     </div>
@@ -53,9 +61,13 @@ import { computed, ref, nextTick } from 'vue'
 const props = defineProps({
   loading: Boolean,
   hero: Boolean,
-  webSearchEnabled: Boolean
+  webSearchEnabled: Boolean,
+  webSearchHint: {
+    type: String,
+    default: ''
+  }
 })
-const emit = defineEmits(['send', 'toggle-web-search'])
+const emit = defineEmits(['send', 'toggle-web-search', 'cancel'])
 
 const inputText = ref('')
 const textareaRef = ref(null)
@@ -63,6 +75,9 @@ const placeholder = computed(() => props.hero
   ? '问一个数据科学问题、公式推导或代码练习...'
   : '问一个课程概念、公式推导或代码问题...'
 )
+const webSearchHintText = computed(() => (
+  props.webSearchHint || (props.webSearchEnabled ? '将使用外部搜索结果' : '基于教材与学习画像回答')
+))
 
 function autoResize() {
   nextTick(() => {
@@ -87,6 +102,10 @@ function handleSend() {
 function handleToggleWebSearch() {
   if (props.loading) return
   emit('toggle-web-search', !props.webSearchEnabled)
+}
+
+function handleCancel() {
+  emit('cancel')
 }
 
 function handleEnterKey(event) {
@@ -258,6 +277,28 @@ function handleEnterKey(event) {
   box-shadow: 0 18px 34px rgba(37, 99, 235, 0.32);
 }
 
+.cancel-btn {
+  height: 42px;
+  padding: 0 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  background: rgba(254, 242, 242, 0.92);
+  color: #b91c1c;
+  cursor: pointer;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 12px 24px rgba(185, 28, 28, 0.08);
+  transition: all 0.18s ease;
+}
+
+.cancel-btn:hover {
+  border-color: rgba(239, 68, 68, 0.42);
+  transform: translateY(-1px);
+  box-shadow: 0 16px 28px rgba(185, 28, 28, 0.13);
+}
+
 .send-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -266,15 +307,6 @@ function handleEnterKey(event) {
 .send-icon {
   width: 20px;
   height: 20px;
-}
-
-.send-loader {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.42);
-  border-top-color: #fff;
-  border-radius: 999px;
-  animation: input-spin 0.8s linear infinite;
 }
 
 .input-hint {
@@ -288,17 +320,6 @@ function handleEnterKey(event) {
   min-width: 0;
 }
 
-
-
-
-
-
-
-@keyframes input-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 
 @media (max-width: 560px) {
   .composer-toolbar {

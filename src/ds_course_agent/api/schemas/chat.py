@@ -12,6 +12,17 @@ class ChatMessage(BaseModel):
     route: str | None = None
     progress: dict[str, Any] | None = None
     progress_events: list[dict[str, Any]] | None = None
+    web_search_requested: bool = False
+    web_search_used: bool = False
+    web_search_status: Literal[
+        "not_requested",
+        "used",
+        "blocked_by_scope",
+        "no_results",
+        "error",
+        "not_used",
+    ] = "not_requested"
+    web_search_reason: str | None = None
     metadata: dict[str, Any] | None = None
 
 
@@ -37,3 +48,5 @@ class ChatHistoryResponse(BaseModel):
     session_id: str
     messages: list[ChatMessage]
     total: int
+    pending_generation: bool = False
+    pending_started_at: datetime | None = None

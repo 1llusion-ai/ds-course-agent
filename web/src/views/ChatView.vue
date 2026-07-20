@@ -1,6 +1,6 @@
 <template>
   <div class="chat-layout">
-    <ChatSidebar :collapsed="sidebarCollapsed" @toggle-collapse="toggleSidebar" />
+    <ChatSidebar :collapsed="sidebarCollapsed" @toggle-collapse="toggleSidebar" @new-chat="handleNewChat" />
 
     <div class="chat-main">
       <header class="chat-header">
@@ -63,9 +63,11 @@
                 hero
                 :loading="chatStore.loading"
                 :web-search-enabled="webSearchEnabled"
+                :web-search-hint="webSearchHint"
                 class="empty-composer"
                 @send="handleSend"
                 @toggle-web-search="toggleWebSearch"
+                @cancel="handleCancelGeneration"
               />
               <div class="prompt-grid">
                 <button
@@ -96,8 +98,10 @@
           <ChatInput
             :loading="chatStore.loading"
             :web-search-enabled="webSearchEnabled"
+            :web-search-hint="webSearchHint"
             @send="handleSend"
             @toggle-web-search="toggleWebSearch"
+            @cancel="handleCancelGeneration"
           />
         </div>
       </div>
@@ -175,6 +179,7 @@ const profileStore = useProfileStore()
 const sidebarCollapsed = ref(readSidebarCollapsedPreference())
 const theme = ref(readThemePreference())
 const webSearchEnabled = ref(readWebSearchPreference())
+const webSearchTurnNotice = ref('')
 const sourcesPanelOpen = ref(false)
 const sourcesPanelTitle = ref('搜索来源')
 const sourcesPanelSources = ref([])
@@ -188,6 +193,10 @@ let messagesResizeObserver = null
 const headerTitle = computed(() => sessionStore.currentSession?.title || '新对话')
 const canRenameCurrentSession = computed(() => Boolean(sessionStore.currentSessionId && sessionStore.currentSession))
 const isDarkTheme = computed(() => theme.value === 'dark')
+const webSearchHint = computed(() => (
+  webSearchTurnNotice.value ||
+  (webSearchEnabled.value ? '将使用外部搜索结果' : '基于教材与学习画像回答')
+))
 
 const starterPrompts = [
   '逻辑回归为什么能做分类？',
@@ -230,12 +239,14 @@ watch(
 
     sessionStore.setCurrentSession(null)
     chatStore.setActiveSession(null)
+    setWebSearchEnabled(false)
   },
   { immediate: true }
 )
 
 watch(() => sessionStore.currentSessionId, (newId) => {
   cancelHeaderRename()
+  clearWebSearchTurnNotice()
   if (!newId) return
   const exists = sessionStore.sessions.some(session => session.id === newId)
   if (!exists) return
@@ -279,7 +290,9 @@ async function handleSend(message, sendOptions = {}) {
   const currentSessionId = sessionStore.currentSessionId
   let targetSessionId = currentSessionId
   let shouldRefreshTitle = false
+  let sendPromise = null
   stickToBottom.value = true
+  clearWebSearchTurnNotice()
 
   if (!currentSessionId) {
     const newSession = await sessionStore.createSession()
@@ -287,35 +300,42 @@ async function handleSend(message, sendOptions = {}) {
     shouldRefreshTitle = true
     chatStore.setActiveSession(newSession.id)
     await router.push(`/chat/${newSession.id}`)
-    await chatStore.sendMessage(newSession.id, message, streamOptions)
+    sendPromise = chatStore.sendMessage(newSession.id, message, streamOptions)
   } else {
     shouldRefreshTitle = sessionStore.shouldAutoTitle(currentSessionId)
     chatStore.setActiveSession(currentSessionId)
-    await chatStore.sendMessage(currentSessionId, message, streamOptions)
+    sendPromise = chatStore.sendMessage(currentSessionId, message, streamOptions)
   }
 
-  if (shouldRefreshTitle) {
-    try {
-      await sessionStore.fetchSessions()
-      const stillOnTargetSession = (
-        targetSessionId &&
-        (route.params.sessionId === targetSessionId || sessionStore.currentSessionId === targetSessionId)
-      )
-      if (stillOnTargetSession) {
-        sessionStore.setCurrentSession(targetSessionId)
-      }
-    } catch (error) {
-      console.error('同步会话标题失败:', error)
+  if (shouldRefreshTitle && targetSessionId) {
+    scheduleSessionTitleRefresh(targetSessionId)
+  }
+
+  try {
+    const assistantMessage = await sendPromise
+    updateWebSearchTurnNotice(assistantMessage)
+  } catch (error) {
+    if (error?.code !== 'REQUEST_CANCELLED') {
+      console.error('发送消息失败:', error)
+      ElMessage.error('发送失败，请稍后重试。')
     }
+  } finally {
+    if (shouldRefreshTitle && targetSessionId) {
+      await refreshSessionTitle(targetSessionId)
+    }
+    try {
+      await profileStore.fetchSummary()
+    } catch (error) {
+      console.warn('同步学习画像失败:', error)
+    }
+    scrollToBottom(true)
   }
-
-  await profileStore.fetchSummary()
-  scrollToBottom(true)
 }
 
 function handleStarterPrompt(prompt) {
   if (chatStore.loading) return
-  handleSend(prompt)
+  setWebSearchEnabled(false)
+  handleSend(prompt, { webSearch: false })
 }
 
 function focusHeaderRenameInput() {
@@ -384,6 +404,58 @@ function readThemePreference() {
   return window.localStorage.getItem('ds-course-agent.theme') === 'dark' ? 'dark' : 'light'
 }
 
+function clearWebSearchTurnNotice() {
+  webSearchTurnNotice.value = ''
+}
+
+function setWebSearchEnabled(nextValue) {
+  webSearchEnabled.value = Boolean(nextValue)
+  clearWebSearchTurnNotice()
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(
+      'ds-course-agent.webSearchEnabled',
+      webSearchEnabled.value ? 'true' : 'false'
+    )
+  }
+}
+
+function updateWebSearchTurnNotice(message = {}) {
+  if (!message?.web_search_requested) {
+    clearWebSearchTurnNotice()
+    return
+  }
+
+  if (message.web_search_used || message.web_search_status === 'used') {
+    webSearchTurnNotice.value = '本轮已使用外部搜索结果'
+    return
+  }
+
+  const reason = message.web_search_reason || '后端判断本轮不需要联网搜索。'
+  webSearchTurnNotice.value = `本轮未使用联网搜索：${reason}`
+}
+
+async function refreshSessionTitle(sessionId) {
+  try {
+    await sessionStore.fetchSessions()
+    const stillOnTargetSession = (
+      sessionId &&
+      (route.params.sessionId === sessionId || sessionStore.currentSessionId === sessionId)
+    )
+    if (stillOnTargetSession) {
+      sessionStore.setCurrentSession(sessionId)
+    }
+  } catch (error) {
+    console.error('同步会话标题失败:', error)
+  }
+}
+
+function scheduleSessionTitleRefresh(sessionId) {
+  if (!sessionId || typeof window === 'undefined') return
+  window.setTimeout(() => {
+    refreshSessionTitle(sessionId)
+  }, 700)
+}
+
 function applyThemePreference(value) {
   if (typeof document === 'undefined') return
   document.documentElement.classList.toggle('theme-dark', value === 'dark')
@@ -400,12 +472,19 @@ function toggleTheme() {
 }
 
 function toggleWebSearch(nextValue) {
-  webSearchEnabled.value = Boolean(nextValue)
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(
-      'ds-course-agent.webSearchEnabled',
-      webSearchEnabled.value ? 'true' : 'false'
-    )
+  setWebSearchEnabled(nextValue)
+}
+
+function handleNewChat() {
+  setWebSearchEnabled(false)
+}
+
+async function handleCancelGeneration() {
+  try {
+    await chatStore.cancelActiveRequest()
+  } catch (error) {
+    console.error('停止生成失败:', error)
+    ElMessage.error('停止生成失败，请稍后重试。')
   }
 }
 

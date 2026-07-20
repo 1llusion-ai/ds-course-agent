@@ -566,6 +566,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         trace_step("agent.branch", branch="web_search")
         scope_response = self._web_search_scope_response(question)
         if scope_response:
+            trace_step("web_search.scope_blocked", status="blocked", reason="teaching_scope")
             return {"fallback": scope_response}
 
         try:
@@ -593,6 +594,12 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         response_error = getattr(web_response, "error", None)
         response_results = getattr(web_response, "results", []) or []
         if response_error and not response_results:
+            trace_step(
+                "web_search.no_results",
+                status="error",
+                provider=str(getattr(web_response, "provider", "") or "").strip(),
+                error=truncate_error(response_error),
+            )
             return {
                 "fallback": (
                     "联网搜索暂时不可用，未获得可用搜索结果。\n\n"
@@ -601,6 +608,11 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
                 )
             }
         if not response_results:
+            trace_step(
+                "web_search.no_results",
+                status="degraded",
+                provider=str(getattr(web_response, "provider", "") or "").strip(),
+            )
             return {"fallback": ("我已尝试联网搜索，但没有搜索到可用结果。你可以换一个更具体的关键词，或稍后再试。")}
 
         evidence_context = (
@@ -978,6 +990,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
 
         scope_response = self._web_search_scope_response(question)
         if scope_response:
+            trace_step("web_search.scope_blocked", status="blocked", reason="teaching_scope")
             event = self._stream_progress_event(
                 route_state,
                 "web_search_scope",

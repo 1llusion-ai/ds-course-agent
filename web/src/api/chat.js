@@ -30,10 +30,12 @@ function dispatchSseFrame(target, frame) {
 
 function createFetchSseStream(data) {
   const controller = new AbortController()
+  let closedByClient = false
   const stream = {
     onmessage: null,
     onerror: null,
     close() {
+      closedByClient = true
       controller.abort()
     }
   }
@@ -90,6 +92,9 @@ function createFetchSseStream(data) {
       if (buffer.trim()) {
         dispatchSseFrame(stream, buffer)
       }
+      if (!closedByClient) {
+        throw new Error('stream closed before final event')
+      }
     } catch (error) {
       if (controller.signal.aborted) {
         return
@@ -106,5 +111,6 @@ export const chatApi = {
   send: (data) => client.post('/chat/send', data, { timeout: 600000 }),
   getHistory: (sessionId) => client.get(`/chat/history/${sessionId}`),
   clearHistory: (sessionId) => client.delete(`/chat/history/${sessionId}`),
+  cancelStream: (sessionId) => client.post(`/chat/cancel/${sessionId}`),
   sendStream: (data) => createFetchSseStream(data)
 }

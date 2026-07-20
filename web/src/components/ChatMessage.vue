@@ -178,7 +178,8 @@ const PROGRESS_PHASE_LABELS = {
   web_fetch_start: '浏览网页',
   web_fetch_page_done: '已浏览',
   web_fetch_done: '浏览完成',
-  web_answer_start: '生成回答'
+  web_answer_start: '生成回答',
+  long_wait: '等待较久'
 }
 
 function extractRouteValue(route) {

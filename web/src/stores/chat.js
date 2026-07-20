@@ -4,6 +4,9 @@ import { defineStore } from 'pinia'
 import { chatApi } from '../api/chat'
 import { useSessionStore } from './session'
 
+const STREAM_LONG_WAIT_MS = 15_000
+const STREAM_IDLE_TIMEOUT_MS = 120_000
+
 function buildPendingMessage(requestId) {
   const startedAt = new Date().toISOString()
   return {
@@ -17,12 +20,36 @@ function buildPendingMessage(requestId) {
   }
 }
 
-function buildErrorMessage(content) {
+function buildBackendPendingMessage(sessionId, response = {}) {
+  const startedAt = response.pending_started_at || new Date().toISOString()
+  return {
+    role: 'assistant',
+    content: '',
+    timestamp: startedAt,
+    isLoading: true,
+    requestId: `backend_pending_${sessionId}`,
+    progress: {
+      phase: 'generation',
+      message: '刷新后继续生成中，请稍候…',
+      timestamp: startedAt
+    },
+    progressEvents: [
+      {
+        phase: 'generation',
+        message: '刷新后继续生成中，请稍候…',
+        timestamp: startedAt
+      }
+    ]
+  }
+}
+
+function buildErrorMessage(content, extra = {}) {
   return {
     role: 'assistant',
     content,
     timestamp: new Date().toISOString(),
-    isError: true
+    isError: true,
+    ...extra
   }
 }
 
@@ -126,6 +153,8 @@ export const useChatStore = defineStore('chat', () => {
   const activeSessionId = ref(null)
   const messagesBySession = ref({})
   const pendingCountsBySession = ref({})
+  const activeRequestsBySession = new Map()
+  const pendingHistoryPollTimers = new Map()
 
   const loading = computed(() => {
     const sessionId = activeSessionId.value
@@ -155,6 +184,50 @@ export const useChatStore = defineStore('chat', () => {
     pendingCountsBySession.value = {
       ...pendingCountsBySession.value,
       [sessionId]: next
+    }
+  }
+
+  function setPendingCount(sessionId, count) {
+    pendingCountsBySession.value = {
+      ...pendingCountsBySession.value,
+      [sessionId]: Math.max(0, count)
+    }
+  }
+
+  function ensureBackendPendingMessage(sessionId, nextMessages, response = {}) {
+    if (!response.pending_generation) return nextMessages
+    if (nextMessages.some(message => message.isLoading)) return nextMessages
+    return [...nextMessages, buildBackendPendingMessage(sessionId, response)]
+  }
+
+  function stopPendingHistoryPoll(sessionId) {
+    const timerId = pendingHistoryPollTimers.get(sessionId)
+    if (timerId) {
+      window.clearInterval(timerId)
+      pendingHistoryPollTimers.delete(sessionId)
+    }
+  }
+
+  function startPendingHistoryPoll(sessionId) {
+    if (!sessionId || pendingHistoryPollTimers.has(sessionId) || typeof window === 'undefined') return
+    const timerId = window.setInterval(() => {
+      fetchHistory(sessionId).catch(error => {
+        console.warn('轮询生成结果失败:', error)
+      })
+    }, 2_000)
+    pendingHistoryPollTimers.set(sessionId, timerId)
+  }
+
+  function syncBackendPendingState(sessionId, response = {}) {
+    if (response.pending_generation) {
+      setPendingCount(sessionId, Math.max(1, pendingCountsBySession.value[sessionId] || 0))
+      startPendingHistoryPoll(sessionId)
+      return
+    }
+
+    stopPendingHistoryPoll(sessionId)
+    if (!activeRequestsBySession.has(sessionId)) {
+      setPendingCount(sessionId, 0)
     }
   }
 
@@ -222,6 +295,13 @@ export const useChatStore = defineStore('chat', () => {
     return (messagesBySession.value[sessionId] || []).find(message => message.requestId === requestId) || null
   }
 
+  function clearActiveRequest(sessionId, requestId) {
+    const activeRequest = activeRequestsBySession.get(sessionId)
+    if (activeRequest?.requestId === requestId) {
+      activeRequestsBySession.delete(sessionId)
+    }
+  }
+
   function finalizeSessionMessage(sessionId, requestId, nextMessage) {
     const pendingMessage = getPendingMessage(sessionId, requestId)
     const progressEvents = pendingMessage?.progressEvents || nextMessage.progressEvents || []
@@ -266,15 +346,19 @@ export const useChatStore = defineStore('chat', () => {
     const response = await chatApi.getHistory(sessionId)
     const history = Array.isArray(response.messages) ? response.messages : []
     const localMessages = messagesBySession.value[sessionId] || []
+    const hasLocalLoading = localMessages.some(message => message.isLoading)
+    const hasActiveRequest = activeRequestsBySession.has(sessionId)
 
     const shouldKeepLocal =
-      localMessages.some(message => message.isLoading) ||
-      localMessages.length > history.length
+      ((response.pending_generation || hasActiveRequest) && hasLocalLoading) ||
+      (!hasLocalLoading && localMessages.length > history.length)
 
-    const nextMessages = shouldKeepLocal
+    const baseMessages = shouldKeepLocal
       ? localMessages
       : mergeHistoryWithLocalProgress(history, localMessages)
+    const nextMessages = ensureBackendPendingMessage(sessionId, baseMessages, response)
     setSessionMessages(sessionId, nextMessages)
+    syncBackendPendingState(sessionId, response)
     return response
   }
 
@@ -305,20 +389,76 @@ export const useChatStore = defineStore('chat', () => {
       })
 
       let settled = false
+      let longWaitTimer = null
+      let idleTimeoutTimer = null
 
-      const finishWithError = (content, error) => {
+      const clearStreamTimers = () => {
+        if (longWaitTimer !== null) {
+          window.clearTimeout(longWaitTimer)
+          longWaitTimer = null
+        }
+        if (idleTimeoutTimer !== null) {
+          window.clearTimeout(idleTimeoutTimer)
+          idleTimeoutTimer = null
+        }
+      }
+
+      const armStreamTimers = () => {
+        clearStreamTimers()
+        longWaitTimer = window.setTimeout(() => {
+          updatePendingMessageProgress(sessionId, requestId, {
+            phase: 'long_wait',
+            message: '生成时间较长，可继续等待或停止重试。'
+          })
+          options.onProgress?.()
+        }, STREAM_LONG_WAIT_MS)
+        idleTimeoutTimer = window.setTimeout(() => {
+          const timeoutError = new Error('stream generation timed out')
+          timeoutError.code = 'ECONNABORTED'
+          finishWithError(
+            '⚠️ 本次生成超时，请关闭联网搜索或重试。',
+            timeoutError,
+            {
+              web_search_requested: Boolean(options.webSearch),
+              web_search_used: false,
+              web_search_status: Boolean(options.webSearch) ? 'error' : 'not_requested',
+              web_search_reason: Boolean(options.webSearch) ? '本次流式生成超时。' : null
+            }
+          )
+        }, STREAM_IDLE_TIMEOUT_MS)
+      }
+
+      const finishWithError = (content, error, extra = {}) => {
         if (settled) return
         settled = true
+        clearStreamTimers()
+        clearActiveRequest(sessionId, requestId)
         source.close()
 
-        const errorMessage = buildErrorMessage(content)
+        const errorMessage = buildErrorMessage(content, extra)
         finalizeSessionMessage(sessionId, requestId, errorMessage)
         syncSessionAfterReply(sessionId, errorMessage)
         options.onProgress?.()
         reject(error)
       }
 
+      activeRequestsBySession.set(sessionId, {
+        requestId,
+        cancel: async () => {
+          try {
+            await chatApi.cancelStream(sessionId)
+          } catch (error) {
+            console.warn('通知后端停止生成失败:', error)
+          }
+          const cancelError = new Error('request cancelled')
+          cancelError.code = 'REQUEST_CANCELLED'
+          finishWithError('⚠️ 已停止本次回答。', cancelError)
+        }
+      })
+      armStreamTimers()
+
       source.onmessage = (event) => {
+        armStreamTimers()
         let payload = null
 
         try {
@@ -353,6 +493,8 @@ export const useChatStore = defineStore('chat', () => {
 
         if (payload.type === 'final') {
           settled = true
+          clearStreamTimers()
+          clearActiveRequest(sessionId, requestId)
           source.close()
 
           const nextMessage = {
@@ -450,7 +592,30 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
 
+    stopPendingHistoryPoll(sessionId)
     setSessionMessages(sessionId, [])
+    setPendingCount(sessionId, 0)
+  }
+
+  async function cancelActiveRequest(sessionId = activeSessionId.value) {
+    if (!sessionId) return false
+    const activeRequest = activeRequestsBySession.get(sessionId)
+    if (activeRequest) {
+      await activeRequest.cancel()
+      return true
+    }
+
+    if (pendingCountsBySession.value[sessionId]) {
+      await chatApi.cancelStream(sessionId)
+      stopPendingHistoryPoll(sessionId)
+      setPendingCount(sessionId, 0)
+      const pendingMessage = (messagesBySession.value[sessionId] || []).find(message => message.isLoading)
+      if (pendingMessage?.requestId) {
+        finalizeSessionMessage(sessionId, pendingMessage.requestId, buildErrorMessage('⚠️ 已停止本次回答。'))
+      }
+      return true
+    }
+    return false
   }
 
   return {
@@ -461,6 +626,7 @@ export const useChatStore = defineStore('chat', () => {
     fetchHistory,
     sendMessage,
     setActiveSession,
-    clearMessages
+    clearMessages,
+    cancelActiveRequest
   }
 })

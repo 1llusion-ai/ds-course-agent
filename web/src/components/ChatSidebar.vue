@@ -259,7 +259,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['toggle-collapse'])
+const emit = defineEmits(['toggle-collapse', 'new-chat'])
 
 const router = useRouter()
 const sessionStore = useSessionStore()
@@ -453,6 +453,7 @@ function handleSessionClick(id, event) {
 }
 
 function handleCreate() {
+  emit('new-chat')
   sessionStore.setCurrentSession(null)
   chatStore.setActiveSession(null)
   router.push('/chat')
