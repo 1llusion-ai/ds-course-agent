@@ -106,18 +106,22 @@ require_command docker
 require_command flock
 require_command git
 
+git_safe() {
+    git -c "safe.directory=$PROJECT_ROOT" "$@"
+}
+
 exec 9>"$LOCK_FILE"
 flock -n 9 || die "another deployment is already running"
 
 cd "$PROJECT_ROOT"
 
-current_branch="$(git branch --show-current)"
+current_branch="$(git_safe branch --show-current)"
 [[ "$current_branch" == "main" ]] || die "deployment must run from main, current branch: $current_branch"
-[[ -z "$(git status --porcelain --untracked-files=no)" ]] || die "tracked working tree changes detected"
+[[ -z "$(git_safe status --porcelain --untracked-files=no)" ]] || die "tracked working tree changes detected"
 
 log "fetching origin/main"
-git fetch origin main
-git merge --ff-only origin/main
+git_safe fetch origin main
+git_safe merge --ff-only origin/main
 
 cd "$COMPOSE_DIR"
 docker compose config --quiet
@@ -136,4 +140,4 @@ wait_for_url "frontend" "$FRONTEND_URL"
 switched=0
 
 docker compose ps
-log "deployment completed successfully at commit $(git -C "$PROJECT_ROOT" rev-parse --short HEAD)"
+log "deployment completed successfully at commit $(git_safe -C "$PROJECT_ROOT" rev-parse --short HEAD)"
