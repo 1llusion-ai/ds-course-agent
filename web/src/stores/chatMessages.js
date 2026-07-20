@@ -17,6 +17,7 @@ export function buildActiveStreamMessage(sessionId, snapshot = {}) {
   const progressEvents = Array.isArray(snapshot.progress_events)
     ? snapshot.progress_events.map(normalizeProgressEvent)
     : []
+  const progressSources = progressEvents.flatMap(item => sourcesFromProgressDetails(item.details))
 
   return {
     role: 'assistant',
@@ -26,10 +27,47 @@ export function buildActiveStreamMessage(sessionId, snapshot = {}) {
     requestId: `active_stream_${sessionId}`,
     progress: snapshot.progress ? normalizeProgressEvent(snapshot.progress) : (progressEvents.at(-1) || null),
     progressEvents,
+    sources: progressSources.length ? progressSources : undefined,
+    route: latestRouteFromProgress(progressEvents) || undefined,
     stream_id: snapshot.stream_id || '',
     streamEventId: Number(snapshot.last_event_id || 0),
     generation_status: 'generating'
   }
+}
+
+function sameMessageTimestamp(left, right) {
+  if (!left || !right) return false
+  const leftTime = Date.parse(left)
+  const rightTime = Date.parse(right)
+  return Number.isFinite(leftTime) && Number.isFinite(rightTime)
+    ? leftTime === rightTime
+    : left === right
+}
+
+export function mergeActiveStreamMessage(messages = [], sessionId, snapshot = {}) {
+  const activeMessage = buildActiveStreamMessage(sessionId, snapshot)
+  const targetIndex = messages.findIndex(message => (
+    message.role !== 'user' &&
+    sameMessageTimestamp(message.timestamp, activeMessage.timestamp)
+  ))
+
+  if (targetIndex < 0) {
+    return [...messages, activeMessage]
+  }
+
+  return messages.map((message, index) => {
+    if (index !== targetIndex) return message
+    return {
+      ...message,
+      ...activeMessage,
+      sources: activeMessage.sources || message.sources,
+      route: activeMessage.route || message.route,
+      metadata: {
+        ...(message.metadata || {}),
+        ...(activeMessage.metadata || {})
+      }
+    }
+  })
 }
 
 export function buildErrorMessage(content, extra = {}) {
@@ -73,6 +111,30 @@ export function normalizeProgressEvent(progress = {}) {
     resuming: Boolean(progress.resuming),
     details: progress.details || null,
     timestamp: progress.timestamp || new Date().toISOString()
+  }
+}
+
+export function mergeFinalMessage(pendingMessage = null, nextMessage = {}) {
+  const progressEvents = pendingMessage?.progressEvents || nextMessage.progressEvents || []
+  const normalizedMessage = normalizeHistoryMessage(nextMessage)
+  const latestRoute = nextMessage.route || pendingMessage?.route || latestRouteFromProgress(progressEvents)
+  const normalizedSources = Array.isArray(normalizedMessage.sources) && normalizedMessage.sources.length
+    ? normalizedMessage.sources
+    : (pendingMessage?.sources || normalizedMessage.sources || undefined)
+
+  return {
+    ...pendingMessage,
+    ...normalizedMessage,
+    requestId: pendingMessage?.requestId || normalizedMessage.requestId || undefined,
+    route: latestRoute || normalizedMessage.route,
+    sources: normalizedSources,
+    metadata: {
+      ...(pendingMessage?.metadata || {}),
+      ...(normalizedMessage.metadata || {}),
+      ...(latestRoute ? { route: latestRoute } : {})
+    },
+    progress: normalizedMessage.progress || pendingMessage?.progress || null,
+    progressEvents
   }
 }
 
@@ -145,14 +207,24 @@ export function mergeHistoryWithLocalProgress(history = [], localMessages = []) 
       usedLocalIndexes.add(localIndex)
     }
 
-    if (!localMessage || hasProgressDetails(remoteMessage) || !hasProgressDetails(localMessage)) {
+    if (!localMessage) {
       return remoteMessage
     }
 
     const localProgressEvents = progressEventList(localMessage)
+    const localSources = Array.isArray(localMessage.sources) && localMessage.sources.length
+      ? localMessage.sources
+      : null
+    const shouldMergeProgress = !hasProgressDetails(remoteMessage) && hasProgressDetails(localMessage)
+    const shouldMergeSources = !remoteMessage.sources?.length && localSources
+
+    if (!shouldMergeProgress && !shouldMergeSources) {
+      return remoteMessage
+    }
 
     return {
       ...remoteMessage,
+      ...(shouldMergeSources ? { sources: localSources } : {}),
       route: remoteMessage.route || localMessage.route,
       metadata: {
         ...(localMessage.metadata || {}),

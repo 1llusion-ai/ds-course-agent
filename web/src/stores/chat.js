@@ -3,11 +3,11 @@ import { defineStore } from 'pinia'
 
 import { chatApi } from '../api/chat'
 import {
-  buildActiveStreamMessage,
   buildErrorMessage,
   buildPendingMessage,
   buildStoppedMessage,
-  latestRouteFromProgress,
+  mergeActiveStreamMessage,
+  mergeFinalMessage,
   mergeHistoryWithLocalProgress,
   normalizeHistoryMessage,
   normalizeProgressEvent,
@@ -181,22 +181,7 @@ export const useChatStore = defineStore('chat', () => {
 
   function finalizeSessionMessage(sessionId, requestId, nextMessage) {
     const pendingMessage = getPendingMessage(sessionId, requestId)
-    const progressEvents = pendingMessage?.progressEvents || nextMessage.progressEvents || []
-    const latestRoute = nextMessage.route || pendingMessage?.route || latestRouteFromProgress(progressEvents)
-    const normalizedMessage = normalizeHistoryMessage(nextMessage)
-    const mergedMessage = {
-      ...pendingMessage,
-      ...normalizedMessage,
-      requestId: pendingMessage?.requestId || normalizedMessage.requestId || undefined,
-      route: latestRoute || normalizedMessage.route,
-      metadata: {
-        ...(pendingMessage?.metadata || {}),
-        ...(normalizedMessage.metadata || {}),
-        ...(latestRoute ? { route: latestRoute } : {})
-      },
-      progress: normalizedMessage.progress || pendingMessage?.progress || null,
-      progressEvents
-    }
+    const mergedMessage = mergeFinalMessage(pendingMessage, nextMessage)
     const nextMessages = replacePendingMessage(sessionId, requestId, mergedMessage)
     setSessionMessages(sessionId, nextMessages)
     return mergedMessage
@@ -417,7 +402,6 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function fetchHistory(sessionId) {
-    activeSessionId.value = sessionId
     const response = await chatApi.getHistory(sessionId)
     const history = Array.isArray(response.messages)
       ? response.messages.map(normalizeHistoryMessage)
@@ -433,10 +417,7 @@ export const useChatStore = defineStore('chat', () => {
     } else {
       nextMessages = mergeHistoryWithLocalProgress(history, localMessages)
       if (activeStream) {
-        nextMessages = [
-          ...nextMessages.filter(message => !message.isLoading),
-          buildActiveStreamMessage(sessionId, activeStream)
-        ]
+        nextMessages = mergeActiveStreamMessage(nextMessages, sessionId, activeStream)
       }
     }
 
