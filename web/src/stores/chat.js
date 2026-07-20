@@ -2,151 +2,22 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { chatApi } from '../api/chat'
+import {
+  buildActiveStreamMessage,
+  buildErrorMessage,
+  buildPendingMessage,
+  buildStoppedMessage,
+  latestRouteFromProgress,
+  mergeHistoryWithLocalProgress,
+  normalizeHistoryMessage,
+  normalizeProgressEvent,
+  sourcesFromProgressDetails
+} from './chatMessages'
 import { useSessionStore } from './session'
 
 const STREAM_LONG_WAIT_MS = 15_000
 const STREAM_IDLE_TIMEOUT_MS = 120_000
-
-function buildPendingMessage(requestId) {
-  const startedAt = new Date().toISOString()
-  return {
-    role: 'assistant',
-    content: '',
-    timestamp: startedAt,
-    isLoading: true,
-    requestId,
-    progress: null,
-    progressEvents: []
-  }
-}
-
-function buildBackendPendingMessage(sessionId, response = {}) {
-  const startedAt = response.pending_started_at || new Date().toISOString()
-  return {
-    role: 'assistant',
-    content: '',
-    timestamp: startedAt,
-    isLoading: true,
-    requestId: `backend_pending_${sessionId}`,
-    progress: {
-      phase: 'generation',
-      message: '刷新后继续生成中，请稍候…',
-      timestamp: startedAt
-    },
-    progressEvents: [
-      {
-        phase: 'generation',
-        message: '刷新后继续生成中，请稍候…',
-        timestamp: startedAt
-      }
-    ]
-  }
-}
-
-function buildErrorMessage(content, extra = {}) {
-  return {
-    role: 'assistant',
-    content,
-    timestamp: new Date().toISOString(),
-    isError: true,
-    ...extra
-  }
-}
-
-function normalizeProgressEvent(progress = {}) {
-  return {
-    phase: progress.phase || progress.status || progress.type || '',
-    message: progress.message || '',
-    route: progress.route || '',
-    tool: progress.tool || '',
-    stream_id: progress.stream_id || '',
-    resuming: Boolean(progress.resuming),
-    details: progress.details || null,
-    timestamp: progress.timestamp || new Date().toISOString()
-  }
-}
-
-function sourcesFromProgressDetails(details = {}) {
-  const results = Array.isArray(details?.results) ? details.results : []
-  return results
-    .map((item, index) => {
-      const sourceId = Number(item.source_id || item.sourceId || item.index || index + 1)
-      const safeSourceId = Number.isFinite(sourceId) && sourceId > 0 ? sourceId : index + 1
-      return {
-        source_id: safeSourceId,
-        reference: item.title ? `[${safeSourceId}] ${item.title}` : `联网来源 ${safeSourceId}`,
-        title: item.title || item.domain || item.url || `网页 ${safeSourceId}`,
-        snippet: item.snippet || item.summary || item.description || '',
-        domain: item.domain || '',
-        url: item.url || '',
-        provider: details.provider || item.provider || '',
-        published_at: item.published_at || null,
-        source: 'web'
-      }
-    })
-    .filter(item => item.url)
-}
-
-function latestRouteFromProgress(events = []) {
-  const reversed = [...events].reverse()
-  const event = reversed.find(item => item?.route)
-  return event?.route || ''
-}
-
-function progressEventList(message = {}) {
-  if (Array.isArray(message.progressEvents)) return message.progressEvents
-  if (Array.isArray(message.progress_events)) return message.progress_events
-  return []
-}
-
-function hasProgressDetails(message = {}) {
-  return Boolean(message.progress || progressEventList(message).length)
-}
-
-function isSameStoredMessage(left = {}, right = {}) {
-  return left.role === right.role && (left.content || '') === (right.content || '')
-}
-
-function mergeHistoryWithLocalProgress(history = [], localMessages = []) {
-  if (!history.length || !localMessages.length) return history
-
-  const usedLocalIndexes = new Set()
-
-  return history.map((remoteMessage, index) => {
-    let localMessage = localMessages[index]
-    let localIndex = index
-
-    if (!isSameStoredMessage(remoteMessage, localMessage)) {
-      localIndex = localMessages.findIndex((candidate, candidateIndex) => (
-        !usedLocalIndexes.has(candidateIndex) &&
-        isSameStoredMessage(remoteMessage, candidate)
-      ))
-      localMessage = localIndex >= 0 ? localMessages[localIndex] : null
-    }
-
-    if (localIndex >= 0) {
-      usedLocalIndexes.add(localIndex)
-    }
-
-    if (!localMessage || hasProgressDetails(remoteMessage) || !hasProgressDetails(localMessage)) {
-      return remoteMessage
-    }
-
-    const localProgressEvents = progressEventList(localMessage)
-
-    return {
-      ...remoteMessage,
-      route: remoteMessage.route || localMessage.route,
-      metadata: {
-        ...(localMessage.metadata || {}),
-        ...(remoteMessage.metadata || {})
-      },
-      progress: remoteMessage.progress || localMessage.progress || null,
-      progressEvents: remoteMessage.progressEvents || localMessage.progressEvents,
-      progress_events: remoteMessage.progress_events || localMessage.progress_events || localProgressEvents
-    }
-  })
-}
+const STREAM_RECONNECT_DELAY_MS = 1_000
 
 export const useChatStore = defineStore('chat', () => {
   const messages = ref([])
@@ -154,17 +25,15 @@ export const useChatStore = defineStore('chat', () => {
   const messagesBySession = ref({})
   const pendingCountsBySession = ref({})
   const activeRequestsBySession = new Map()
-  const pendingHistoryPollTimers = new Map()
+  const reconnectTimersBySession = new Map()
 
   const loading = computed(() => {
     const sessionId = activeSessionId.value
-    if (!sessionId) return false
-    return (pendingCountsBySession.value[sessionId] || 0) > 0
+    return Boolean(sessionId && (pendingCountsBySession.value[sessionId] || 0) > 0)
   })
 
   function isSessionPending(sessionId) {
-    if (!sessionId) return false
-    return (pendingCountsBySession.value[sessionId] || 0) > 0
+    return Boolean(sessionId && (pendingCountsBySession.value[sessionId] || 0) > 0)
   }
 
   function setSessionMessages(sessionId, nextMessages) {
@@ -172,18 +41,8 @@ export const useChatStore = defineStore('chat', () => {
       ...messagesBySession.value,
       [sessionId]: nextMessages
     }
-
     if (activeSessionId.value === sessionId) {
       messages.value = nextMessages
-    }
-  }
-
-  function updatePendingCount(sessionId, delta) {
-    const current = pendingCountsBySession.value[sessionId] || 0
-    const next = Math.max(0, current + delta)
-    pendingCountsBySession.value = {
-      ...pendingCountsBySession.value,
-      [sessionId]: next
     }
   }
 
@@ -194,83 +53,111 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  function ensureBackendPendingMessage(sessionId, nextMessages, response = {}) {
-    if (!response.pending_generation) return nextMessages
-    if (nextMessages.some(message => message.isLoading)) return nextMessages
-    return [...nextMessages, buildBackendPendingMessage(sessionId, response)]
+  function updatePendingCount(sessionId, delta) {
+    setPendingCount(sessionId, (pendingCountsBySession.value[sessionId] || 0) + delta)
   }
 
-  function stopPendingHistoryPoll(sessionId) {
-    const timerId = pendingHistoryPollTimers.get(sessionId)
-    if (timerId) {
-      window.clearInterval(timerId)
-      pendingHistoryPollTimers.delete(sessionId)
+  function clearReconnectTimer(sessionId) {
+    const timerId = reconnectTimersBySession.get(sessionId)
+    if (timerId && typeof window !== 'undefined') {
+      window.clearTimeout(timerId)
     }
+    reconnectTimersBySession.delete(sessionId)
   }
 
-  function startPendingHistoryPoll(sessionId) {
-    if (!sessionId || pendingHistoryPollTimers.has(sessionId) || typeof window === 'undefined') return
-    const timerId = window.setInterval(() => {
+  function scheduleHistoryReconnect(sessionId) {
+    if (!sessionId || reconnectTimersBySession.has(sessionId) || typeof window === 'undefined') return
+    const timerId = window.setTimeout(() => {
+      reconnectTimersBySession.delete(sessionId)
       fetchHistory(sessionId).catch(error => {
-        console.warn('轮询生成结果失败:', error)
+        console.warn('恢复生成流失败:', error)
+        scheduleHistoryReconnect(sessionId)
       })
-    }, 2_000)
-    pendingHistoryPollTimers.set(sessionId, timerId)
-  }
-
-  function syncBackendPendingState(sessionId, response = {}) {
-    if (response.pending_generation) {
-      setPendingCount(sessionId, Math.max(1, pendingCountsBySession.value[sessionId] || 0))
-      startPendingHistoryPoll(sessionId)
-      return
-    }
-
-    stopPendingHistoryPoll(sessionId)
-    if (!activeRequestsBySession.has(sessionId)) {
-      setPendingCount(sessionId, 0)
-    }
+    }, STREAM_RECONNECT_DELAY_MS)
+    reconnectTimersBySession.set(sessionId, timerId)
   }
 
   function replacePendingMessage(sessionId, requestId, nextMessage) {
     const currentMessages = messagesBySession.value[sessionId] || []
     let replaced = false
-
     const nextMessages = currentMessages.map(message => {
-      if (message.requestId === requestId) {
-        replaced = true
-        return nextMessage
-      }
-      return message
+      if (message.requestId !== requestId) return message
+      replaced = true
+      return nextMessage
     })
-
     return replaced ? nextMessages : [...currentMessages, nextMessage]
   }
 
-  function appendPendingMessageDelta(sessionId, requestId, delta) {
+  function getPendingMessage(sessionId, requestId) {
+    return (messagesBySession.value[sessionId] || []).find(message => message.requestId === requestId) || null
+  }
+
+  function getLoadingMessage(sessionId) {
+    return (messagesBySession.value[sessionId] || []).find(message => message.isLoading) || null
+  }
+
+  function clearActiveRequest(sessionId, requestId) {
+    const activeRequest = activeRequestsBySession.get(sessionId)
+    if (activeRequest?.requestId === requestId) {
+      activeRequestsBySession.delete(sessionId)
+    }
+  }
+
+  function replacePendingWithSnapshot(sessionId, requestId, snapshot = {}) {
     const currentMessages = messagesBySession.value[sessionId] || []
     const nextMessages = currentMessages.map(message => {
-      if (message.requestId !== requestId) {
-        return message
-      }
+      if (message.requestId !== requestId) return message
+
+      const progressEvents = Array.isArray(snapshot.progress_events)
+        ? snapshot.progress_events.map(normalizeProgressEvent)
+        : message.progressEvents || []
+      const progress = snapshot.progress
+        ? normalizeProgressEvent(snapshot.progress)
+        : (progressEvents.at(-1) || message.progress || null)
+      const progressSources = sourcesFromProgressDetails(progress?.details)
 
       return {
         ...message,
-        content: `${message.content || ''}${delta}`,
-        timestamp: new Date().toISOString(),
+        content: snapshot.content ?? message.content ?? '',
+        timestamp: snapshot.message_timestamp || message.timestamp,
+        sources: message.sources || (progressSources.length ? progressSources : undefined),
+        progress,
+        progressEvents,
+        stream_id: snapshot.stream_id || message.stream_id,
+        streamEventId: Number(snapshot.event_id || snapshot.last_event_id || message.streamEventId || 0),
+        generation_status: 'generating',
         isLoading: true
       }
     })
-
     setSessionMessages(sessionId, nextMessages)
   }
 
-  function updatePendingMessageProgress(sessionId, requestId, progress) {
+  function appendPendingMessageDelta(sessionId, requestId, payload = {}) {
     const currentMessages = messagesBySession.value[sessionId] || []
-    const nextProgress = normalizeProgressEvent(progress)
+    const eventId = Number(payload.event_id || 0)
     const nextMessages = currentMessages.map(message => {
-      if (message.requestId !== requestId) {
-        return message
+      if (message.requestId !== requestId) return message
+      if (eventId && eventId <= Number(message.streamEventId || 0)) return message
+
+      return {
+        ...message,
+        content: `${message.content || ''}${payload.delta || ''}`,
+        stream_id: payload.stream_id || message.stream_id,
+        streamEventId: eventId || message.streamEventId,
+        generation_status: 'generating',
+        isLoading: true
       }
+    })
+    setSessionMessages(sessionId, nextMessages)
+  }
+
+  function updatePendingMessageProgress(sessionId, requestId, payload = {}) {
+    const currentMessages = messagesBySession.value[sessionId] || []
+    const eventId = Number(payload.event_id || 0)
+    const nextProgress = normalizeProgressEvent(payload)
+    const nextMessages = currentMessages.map(message => {
+      if (message.requestId !== requestId) return message
+      if (eventId && eventId <= Number(message.streamEventId || 0)) return message
 
       const progressEvents = Array.isArray(message.progressEvents)
         ? [...message.progressEvents, nextProgress]
@@ -283,111 +170,69 @@ export const useChatStore = defineStore('chat', () => {
         progress: nextProgress,
         progressEvents,
         route: message.route || nextProgress.route || undefined,
-        timestamp: new Date().toISOString(),
+        stream_id: payload.stream_id || message.stream_id,
+        streamEventId: eventId || message.streamEventId,
+        generation_status: 'generating',
         isLoading: true
       }
     })
-
     setSessionMessages(sessionId, nextMessages)
-  }
-
-  function getPendingMessage(sessionId, requestId) {
-    return (messagesBySession.value[sessionId] || []).find(message => message.requestId === requestId) || null
-  }
-
-  function clearActiveRequest(sessionId, requestId) {
-    const activeRequest = activeRequestsBySession.get(sessionId)
-    if (activeRequest?.requestId === requestId) {
-      activeRequestsBySession.delete(sessionId)
-    }
   }
 
   function finalizeSessionMessage(sessionId, requestId, nextMessage) {
     const pendingMessage = getPendingMessage(sessionId, requestId)
     const progressEvents = pendingMessage?.progressEvents || nextMessage.progressEvents || []
     const latestRoute = nextMessage.route || pendingMessage?.route || latestRouteFromProgress(progressEvents)
+    const normalizedMessage = normalizeHistoryMessage(nextMessage)
     const mergedMessage = {
-      ...nextMessage,
-      // Preserve the pending message's requestId so the chat list can keep a
-      // stable v-for :key across the pending -> final transition. Without this,
-      // the timestamp-based key mutates on every streaming delta and Vue
-      // remounts the message component, collapsing the "查看执行过程" disclosure.
-      requestId: pendingMessage?.requestId || nextMessage.requestId || undefined,
-      route: latestRoute || nextMessage.route,
+      ...pendingMessage,
+      ...normalizedMessage,
+      requestId: pendingMessage?.requestId || normalizedMessage.requestId || undefined,
+      route: latestRoute || normalizedMessage.route,
       metadata: {
         ...(pendingMessage?.metadata || {}),
-        ...(nextMessage.metadata || {}),
+        ...(normalizedMessage.metadata || {}),
         ...(latestRoute ? { route: latestRoute } : {})
       },
-      progress: nextMessage.progress || pendingMessage?.progress || null,
+      progress: normalizedMessage.progress || pendingMessage?.progress || null,
       progressEvents
     }
     const nextMessages = replacePendingMessage(sessionId, requestId, mergedMessage)
     setSessionMessages(sessionId, nextMessages)
-    return nextMessages
+    return mergedMessage
   }
 
   function syncSessionAfterReply(sessionId, message) {
     const sessionStore = useSessionStore()
     const nextMessages = messagesBySession.value[sessionId] || []
-
     sessionStore.syncSession(sessionId, {
       message_count: nextMessages.filter(item => !item.isLoading).length,
       updated_at: message?.timestamp || new Date().toISOString()
     })
-
     if (activeSessionId.value !== sessionId) {
       sessionStore.incrementUnread(sessionId)
     }
   }
 
-  async function fetchHistory(sessionId) {
-    activeSessionId.value = sessionId
-    const response = await chatApi.getHistory(sessionId)
-    const history = Array.isArray(response.messages) ? response.messages : []
-    const localMessages = messagesBySession.value[sessionId] || []
-    const hasLocalLoading = localMessages.some(message => message.isLoading)
-    const hasActiveRequest = activeRequestsBySession.has(sessionId)
-
-    const shouldKeepLocal =
-      ((response.pending_generation || hasActiveRequest) && hasLocalLoading) ||
-      (!hasLocalLoading && localMessages.length > history.length)
-
-    const baseMessages = shouldKeepLocal
-      ? localMessages
-      : mergeHistoryWithLocalProgress(history, localMessages)
-    const nextMessages = ensureBackendPendingMessage(sessionId, baseMessages, response)
-    setSessionMessages(sessionId, nextMessages)
-    syncBackendPendingState(sessionId, response)
-    return response
-  }
-
-  async function sendMessageViaHttp(sessionId, message, requestId, options = {}) {
-    const response = await chatApi.send({
-      session_id: sessionId,
-      message,
-      web_search: Boolean(options.webSearch)
+  function markMessageAsGenerating(sessionId, targetMessage) {
+    const requestId = targetMessage.requestId || `continue_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const nextMessages = (messagesBySession.value[sessionId] || []).map(message => {
+      if (message !== targetMessage && message.timestamp !== targetMessage.timestamp) return message
+      return {
+        ...message,
+        requestId,
+        isLoading: true,
+        isError: false,
+        generation_status: 'generating',
+        generation_error: null
+      }
     })
-
-    const nextMessage = {
-      ...response.message,
-      isLoading: false
-    }
-
-    finalizeSessionMessage(sessionId, requestId, nextMessage)
-    syncSessionAfterReply(sessionId, nextMessage)
-    options.onProgress?.()
-    return nextMessage
+    setSessionMessages(sessionId, nextMessages)
+    return requestId
   }
 
-  function sendMessageViaStream(sessionId, message, requestId, options = {}) {
+  function consumeStream(sessionId, requestId, source, options = {}) {
     return new Promise((resolve, reject) => {
-      const source = chatApi.sendStream({
-        session_id: sessionId,
-        message,
-        web_search: Boolean(options.webSearch)
-      })
-
       let settled = false
       let longWaitTimer = null
       let idleTimeoutTimer = null
@@ -403,29 +248,21 @@ export const useChatStore = defineStore('chat', () => {
         }
       }
 
-      const armStreamTimers = () => {
+      const finishStopped = error => {
+        if (settled) return
+        settled = true
         clearStreamTimers()
-        longWaitTimer = window.setTimeout(() => {
-          updatePendingMessageProgress(sessionId, requestId, {
-            phase: 'long_wait',
-            message: '生成时间较长，可继续等待或停止重试。'
-          })
-          options.onProgress?.()
-        }, STREAM_LONG_WAIT_MS)
-        idleTimeoutTimer = window.setTimeout(() => {
-          const timeoutError = new Error('stream generation timed out')
-          timeoutError.code = 'ECONNABORTED'
-          finishWithError(
-            '⚠️ 本次生成超时，请关闭联网搜索或重试。',
-            timeoutError,
-            {
-              web_search_requested: Boolean(options.webSearch),
-              web_search_used: false,
-              web_search_status: Boolean(options.webSearch) ? 'error' : 'not_requested',
-              web_search_reason: Boolean(options.webSearch) ? '本次流式生成超时。' : null
-            }
-          )
-        }, STREAM_IDLE_TIMEOUT_MS)
+        clearActiveRequest(sessionId, requestId)
+        source.close()
+
+        const pendingMessage = getPendingMessage(sessionId, requestId)
+        if (pendingMessage) {
+          const stoppedMessage = buildStoppedMessage(pendingMessage)
+          finalizeSessionMessage(sessionId, requestId, stoppedMessage)
+          syncSessionAfterReply(sessionId, stoppedMessage)
+        }
+        options.onProgress?.()
+        reject(error)
       }
 
       const finishWithError = (content, error, extra = {}) => {
@@ -435,11 +272,42 @@ export const useChatStore = defineStore('chat', () => {
         clearActiveRequest(sessionId, requestId)
         source.close()
 
-        const errorMessage = buildErrorMessage(content, extra)
+        const pendingMessage = getPendingMessage(sessionId, requestId)
+        const errorMessage = buildErrorMessage(content, {
+          ...pendingMessage,
+          ...extra,
+          content,
+          isLoading: false,
+          isError: true,
+          generation_status: 'error'
+        })
         finalizeSessionMessage(sessionId, requestId, errorMessage)
         syncSessionAfterReply(sessionId, errorMessage)
         options.onProgress?.()
         reject(error)
+      }
+
+      const armStreamTimers = () => {
+        clearStreamTimers()
+        longWaitTimer = window.setTimeout(() => {
+          updatePendingMessageProgress(sessionId, requestId, {
+            phase: 'long_wait',
+            message: '生成时间较长，可继续等待或停止。'
+          })
+          options.onProgress?.()
+        }, STREAM_LONG_WAIT_MS)
+        idleTimeoutTimer = window.setTimeout(() => {
+          const timeoutError = new Error('stream generation timed out')
+          timeoutError.code = 'ECONNABORTED'
+          chatApi.cancelStream(sessionId).catch(() => {})
+          const partialContent = getPendingMessage(sessionId, requestId)?.content?.trim()
+          finishWithError(
+            partialContent
+              ? `${partialContent}\n\n⚠️ 本次生成超时，回答可能不完整。`
+              : '⚠️ 本次生成超时，请稍后重试。',
+            timeoutError
+          )
+        }, STREAM_IDLE_TIMEOUT_MS)
       }
 
       activeRequestsBySession.set(sessionId, {
@@ -452,15 +320,14 @@ export const useChatStore = defineStore('chat', () => {
           }
           const cancelError = new Error('request cancelled')
           cancelError.code = 'REQUEST_CANCELLED'
-          finishWithError('⚠️ 已停止本次回答。', cancelError)
+          finishStopped(cancelError)
         }
       })
       armStreamTimers()
 
-      source.onmessage = (event) => {
+      source.onmessage = event => {
         armStreamTimers()
-        let payload = null
-
+        let payload
         try {
           payload = JSON.parse(event.data)
         } catch (error) {
@@ -468,25 +335,22 @@ export const useChatStore = defineStore('chat', () => {
           return
         }
 
+        if (payload.type === 'snapshot') {
+          replacePendingWithSnapshot(sessionId, requestId, payload)
+          options.onProgress?.()
+          return
+        }
+
         if (payload.type === 'delta') {
           if (payload.delta) {
-            appendPendingMessageDelta(sessionId, requestId, payload.delta)
+            appendPendingMessageDelta(sessionId, requestId, payload)
             options.onProgress?.()
           }
           return
         }
 
         if (payload.type === 'progress') {
-          updatePendingMessageProgress(sessionId, requestId, {
-            phase: payload.phase,
-            message: payload.message,
-            route: payload.route,
-            tool: payload.tool,
-            stream_id: payload.stream_id,
-            resuming: Boolean(payload.resuming),
-            details: payload.details || null,
-            timestamp: payload.timestamp
-          })
+          updatePendingMessageProgress(sessionId, requestId, payload)
           options.onProgress?.()
           return
         }
@@ -502,28 +366,110 @@ export const useChatStore = defineStore('chat', () => {
             isLoading: false,
             stream_id: payload.stream_id
           }
-
-          finalizeSessionMessage(sessionId, requestId, nextMessage)
-          syncSessionAfterReply(sessionId, nextMessage)
+          const mergedMessage = finalizeSessionMessage(sessionId, requestId, nextMessage)
+          syncSessionAfterReply(sessionId, mergedMessage)
           options.onProgress?.()
-          resolve(nextMessage)
+          resolve(mergedMessage)
         }
       }
 
-      source.onerror = (error) => {
-        if (settled) {
+      source.onerror = error => {
+        if (settled) return
+
+        if (options.resuming) {
+          settled = true
+          clearStreamTimers()
+          clearActiveRequest(sessionId, requestId)
+          source.close()
+          scheduleHistoryReconnect(sessionId)
+          reject(error || new Error('resume stream connection interrupted'))
           return
         }
 
-        const pendingMessage = getPendingMessage(sessionId, requestId)
-        const partialContent = pendingMessage?.content?.trim()
-        const fallbackContent = partialContent
-          ? `${partialContent}\n\n⚠️ 流式连接中断，回答可能不完整。`
-          : '⚠️ 发送失败：流式连接已中断，请稍后重试。'
-
-        finishWithError(fallbackContent, error || new Error('stream connection interrupted'))
+        const partialContent = getPendingMessage(sessionId, requestId)?.content?.trim()
+        finishWithError(
+          partialContent
+            ? `${partialContent}\n\n⚠️ 流式连接中断，回答可能不完整。`
+            : '⚠️ 发送失败：流式连接已中断，请稍后重试。',
+          error || new Error('stream connection interrupted')
+        )
       }
     })
+  }
+
+  function resumeActiveStream(sessionId) {
+    if (!sessionId || activeRequestsBySession.has(sessionId)) return
+    const pendingMessage = getLoadingMessage(sessionId)
+    if (!pendingMessage?.requestId) return
+
+    clearReconnectTimer(sessionId)
+    setPendingCount(sessionId, 1)
+    const source = chatApi.resumeStream(sessionId)
+    consumeStream(sessionId, pendingMessage.requestId, source, { resuming: true })
+      .catch(error => {
+        console.warn('生成流重连中断:', error)
+      })
+      .finally(() => {
+        if (!activeRequestsBySession.has(sessionId) && !getLoadingMessage(sessionId)) {
+          setPendingCount(sessionId, 0)
+        }
+      })
+  }
+
+  async function fetchHistory(sessionId) {
+    activeSessionId.value = sessionId
+    const response = await chatApi.getHistory(sessionId)
+    const history = Array.isArray(response.messages)
+      ? response.messages.map(normalizeHistoryMessage)
+      : []
+    const localMessages = messagesBySession.value[sessionId] || []
+    const hasLocalLoading = localMessages.some(message => message.isLoading)
+    const hasActiveRequest = activeRequestsBySession.has(sessionId)
+    const activeStream = response.active_stream || null
+
+    let nextMessages
+    if (activeStream && hasActiveRequest && hasLocalLoading) {
+      nextMessages = localMessages
+    } else {
+      nextMessages = mergeHistoryWithLocalProgress(history, localMessages)
+      if (activeStream) {
+        nextMessages = [
+          ...nextMessages.filter(message => !message.isLoading),
+          buildActiveStreamMessage(sessionId, activeStream)
+        ]
+      }
+    }
+
+    setSessionMessages(sessionId, nextMessages)
+    if (activeStream) {
+      setPendingCount(sessionId, 1)
+      resumeActiveStream(sessionId)
+    } else if (!hasActiveRequest) {
+      clearReconnectTimer(sessionId)
+      setPendingCount(sessionId, 0)
+    }
+    return response
+  }
+
+  async function sendMessageViaHttp(sessionId, message, requestId, options = {}) {
+    const response = await chatApi.send({
+      session_id: sessionId,
+      message,
+      web_search: Boolean(options.webSearch)
+    })
+    const nextMessage = finalizeSessionMessage(sessionId, requestId, response.message)
+    syncSessionAfterReply(sessionId, nextMessage)
+    options.onProgress?.()
+    return nextMessage
+  }
+
+  function sendMessageViaStream(sessionId, message, requestId, options = {}) {
+    const source = chatApi.sendStream({
+      session_id: sessionId,
+      message,
+      web_search: Boolean(options.webSearch)
+    })
+    return consumeStream(sessionId, requestId, source, options)
   }
 
   async function sendMessage(sessionId, message, options = {}) {
@@ -546,23 +492,38 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       const supportsStream = typeof fetch !== 'undefined' && typeof window !== 'undefined' && 'ReadableStream' in window
-
       if (supportsStream) {
         return await sendMessageViaStream(sessionId, message, requestId, options)
       }
-
       return await sendMessageViaHttp(sessionId, message, requestId, options)
     } catch (error) {
       if (getPendingMessage(sessionId, requestId)?.isLoading) {
         const timeoutMessage = error?.code === 'ECONNABORTED'
-          ? '⚠️ 本次回答生成时间过长，前端等待超时，请稍后查看会话或重试。'
+          ? '⚠️ 本次回答生成时间过长，请稍后重试。'
           : `⚠️ 发送失败：${error.message || '网络错误'}`
         const errorMessage = buildErrorMessage(timeoutMessage)
         finalizeSessionMessage(sessionId, requestId, errorMessage)
         syncSessionAfterReply(sessionId, errorMessage)
       }
-
       throw error
+    } finally {
+      updatePendingCount(sessionId, -1)
+    }
+  }
+
+  async function continueMessage(sessionId, targetMessage, options = {}) {
+    if (!sessionId || !targetMessage?.timestamp || isSessionPending(sessionId)) return null
+
+    const requestId = markMessageAsGenerating(sessionId, targetMessage)
+    updatePendingCount(sessionId, 1)
+    options.onProgress?.()
+
+    try {
+      const source = chatApi.continueStream({
+        session_id: sessionId,
+        message_timestamp: targetMessage.timestamp
+      })
+      return await consumeStream(sessionId, requestId, source, options)
     } finally {
       updatePendingCount(sessionId, -1)
     }
@@ -570,20 +531,16 @@ export const useChatStore = defineStore('chat', () => {
 
   function setActiveSession(sessionId) {
     activeSessionId.value = sessionId
-
     if (!sessionId) {
       messages.value = []
       return
     }
-
     if (!messagesBySession.value[sessionId]) {
       setSessionMessages(sessionId, [])
     } else {
       messages.value = messagesBySession.value[sessionId]
     }
-
-    const sessionStore = useSessionStore()
-    sessionStore.markRead(sessionId)
+    useSessionStore().markRead(sessionId)
   }
 
   function clearMessages(sessionId = activeSessionId.value) {
@@ -591,8 +548,7 @@ export const useChatStore = defineStore('chat', () => {
       messages.value = []
       return
     }
-
-    stopPendingHistoryPoll(sessionId)
+    clearReconnectTimer(sessionId)
     setSessionMessages(sessionId, [])
     setPendingCount(sessionId, 0)
   }
@@ -605,17 +561,16 @@ export const useChatStore = defineStore('chat', () => {
       return true
     }
 
-    if (pendingCountsBySession.value[sessionId]) {
-      await chatApi.cancelStream(sessionId)
-      stopPendingHistoryPoll(sessionId)
-      setPendingCount(sessionId, 0)
-      const pendingMessage = (messagesBySession.value[sessionId] || []).find(message => message.isLoading)
-      if (pendingMessage?.requestId) {
-        finalizeSessionMessage(sessionId, pendingMessage.requestId, buildErrorMessage('⚠️ 已停止本次回答。'))
-      }
-      return true
-    }
-    return false
+    const pendingMessage = getLoadingMessage(sessionId)
+    if (!pendingMessage) return false
+
+    await chatApi.cancelStream(sessionId)
+    clearReconnectTimer(sessionId)
+    setPendingCount(sessionId, 0)
+    const stoppedMessage = buildStoppedMessage(pendingMessage)
+    finalizeSessionMessage(sessionId, pendingMessage.requestId, stoppedMessage)
+    syncSessionAfterReply(sessionId, stoppedMessage)
+    return true
   }
 
   return {
@@ -625,6 +580,7 @@ export const useChatStore = defineStore('chat', () => {
     isSessionPending,
     fetchHistory,
     sendMessage,
+    continueMessage,
     setActiveSession,
     clearMessages,
     cancelActiveRequest

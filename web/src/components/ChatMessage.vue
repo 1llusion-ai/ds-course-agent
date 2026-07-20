@@ -78,7 +78,10 @@
                 :key="source.key"
                 class="course-source-summary__icon"
               >
-                {{ source.icon }}
+                <svg class="course-source-icon-svg" viewBox="0 0 20 20" fill="none">
+                  <path d="M5.75 3.75h5.4l3.1 3.1v9.4H5.75z" />
+                  <path d="M11.15 3.75v3.1h3.1M8 10h4M8 12.75h4" />
+                </svg>
               </span>
             </span>
             <span class="course-source-summary__body">
@@ -98,7 +101,12 @@
               rel="noopener noreferrer"
               :title="source.title"
             >
-              <span class="source-chip__icon">{{ source.icon }}</span>
+              <span class="source-chip__icon" aria-hidden="true">
+                <svg class="course-source-icon-svg" viewBox="0 0 20 20" fill="none">
+                  <path d="M5.75 3.75h5.4l3.1 3.1v9.4H5.75z" />
+                  <path d="M11.15 3.75v3.1h3.1M8 10h4M8 12.75h4" />
+                </svg>
+              </span>
               <span class="source-chip__text">{{ source.label }}</span>
               <span v-if="source.detail" class="source-chip__detail">{{ source.detail }}</span>
             </component>
@@ -106,8 +114,12 @@
         </details>
       </div>
 
-      <div v-if="message.role !== 'user' && message.content && !message.isLoading" class="assistant-actions">
+      <div
+        v-if="message.role !== 'user' && !message.isLoading && (message.content || canContinue)"
+        class="assistant-actions"
+      >
         <button
+          v-if="message.content"
           type="button"
           class="assistant-action-button"
           :class="{
@@ -119,6 +131,23 @@
         >
           <span class="assistant-action-button__icon" aria-hidden="true">⧉</span>
           <span>{{ messageCopyLabel }}</span>
+        </button>
+        <button
+          v-if="canContinue"
+          type="button"
+          class="assistant-action-button assistant-action-button--continue"
+          aria-label="继续生成"
+          @click="emit('continue', message)"
+        >
+          <svg class="assistant-action-button__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path
+              d="M20 11a8 8 0 1 0-2.34 5.66M20 5v6h-6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.8"
+            />
+          </svg>
+          <span>继续生成</span>
         </button>
       </div>
     </div>
@@ -136,10 +165,11 @@ const props = defineProps({
   message: {
     type: Object,
     required: true
-  }
+  },
+  canContinue: Boolean
 })
 
-const emit = defineEmits(['open-sources'])
+const emit = defineEmits(['open-sources', 'continue'])
 
 const messageCopyState = ref('idle')
 let messageCopyTimer = null
@@ -245,11 +275,6 @@ function sourceDetail(source) {
     return [source.provider, source.published_at].filter(Boolean).join(' · ')
   }
   return source.section || source.page || source.metadata?.section || source.metadata?.page || ''
-}
-
-function sourceIcon(source) {
-  if (!source || typeof source === 'string') return '📚'
-  return source.source === 'web' || source.url ? '🌐' : '📚'
 }
 
 function sourceUrl(source) {
@@ -392,12 +417,11 @@ const sourceChips = computed(() => {
       const detail = sourceDetail(source)
       const key = `${label}-${url || detail || index}`
 
-	    return {
-	        key,
-	        sourceId: sourceIdFromSource(source, index),
-	        label,
-	        detail,
-	        icon: sourceIcon(source),
+      return {
+        key,
+        sourceId: sourceIdFromSource(source, index),
+        label,
+        detail,
         url,
         title: detail ? `${label} · ${detail}` : label,
         raw: source,
@@ -1145,14 +1169,22 @@ onBeforeUnmount(() => {
   height: 22px;
   border: 2px solid rgba(248, 250, 252, 0.98);
   border-radius: 999px;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
-  font-size: 12px;
-  line-height: 1;
+  color: #3b82f6;
+  background: linear-gradient(145deg, #eff6ff, #eef2ff);
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.10);
 }
 
 .course-source-summary__icon + .course-source-summary__icon {
   margin-left: -7px;
+}
+
+.course-source-icon-svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .web-source-block__favicon-fallback {
@@ -1241,6 +1273,21 @@ onBeforeUnmount(() => {
   border-radius: 999px;
 }
 
+.source-chip__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: #3b82f6;
+}
+
+.source-chip__icon .course-source-icon-svg {
+  width: 14px;
+  height: 14px;
+}
+
 .source-chips--compact .source-chip {
   max-width: min(100%, 280px);
   padding: 3px 7px;
@@ -1270,6 +1317,8 @@ onBeforeUnmount(() => {
 
 .assistant-actions {
   display: flex;
+  align-items: center;
+  gap: 4px;
   justify-content: flex-start;
   margin-top: 10px;
 }
@@ -1310,9 +1359,31 @@ onBeforeUnmount(() => {
   border-color: rgba(248, 113, 113, 0.34);
 }
 
+.assistant-action-button--continue {
+  min-height: 40px;
+  margin-left: auto;
+  padding-inline: 18px;
+  color: #334155;
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(203, 213, 225, 0.72);
+  font-size: 13px;
+  border-radius: 999px;
+}
+
+.assistant-action-button--continue:hover {
+  color: #1d4ed8;
+  background: rgba(239, 246, 255, 0.88);
+  border-color: rgba(147, 197, 253, 0.82);
+}
+
 .assistant-action-button__icon {
   font-size: 13px;
   line-height: 1;
+}
+
+.assistant-action-button__svg {
+  width: 14px;
+  height: 14px;
 }
 
 .user-bubble .source-panel {

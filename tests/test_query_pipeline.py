@@ -1391,6 +1391,69 @@ class TestQueryPipelineUtils:
         assert rest[-1]["content"] == "第一段第二段"
         assert history.added[-1].content == "第一段第二段"
 
+    def test_grounded_rag_stream_emits_sources_before_answer_completion(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from langchain_core.documents import Document
+
+        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteState, RouteType
+
+        service = object.__new__(AgentService)
+        context = QueryContext(
+            original_query="什么是机器学习？",
+            normalized_query="什么是机器学习？",
+            session_id="session-rag-sources",
+            student_id="student-1",
+            chat_history=[],
+            enriched_query="什么是机器学习？",
+        )
+        state = RouteState(
+            student_id="student-1",
+            session_id="session-rag-sources",
+            history=None,
+            chat_history=[],
+            profile=None,
+            special_case_response=None,
+            matched_concepts=[],
+            skill_candidate_keys=set(),
+            context=context,
+            decision=RouteDecision(
+                route=RouteType.GROUNDED_RAG,
+                confidence=0.8,
+                reasons=["课程相关知识问答"],
+                retrieval_policy="required",
+            ),
+            stream_id="stream-sources",
+        )
+
+        class FakeRagService:
+            def retrieve(self, question):
+                assert question == "什么是机器学习？"
+                return SimpleNamespace(
+                    documents=[
+                        Document(
+                            page_content="机器学习教材内容",
+                            metadata={"source": "course.pdf"},
+                        )
+                    ],
+                    formatted_context="机器学习教材内容",
+                    has_results=True,
+                )
+
+            def stream_answer_with_context(self, question, context):
+                yield "课程回答"
+
+        monkeypatch.setattr("ds_course_agent.tools.course_rag.get_rag_service", lambda: FakeRagService())
+
+        events = list(service._iter_grounded_rag_response(state))
+
+        assert events[0]["type"] == "progress"
+        assert events[0]["phase"] == "retrieval_sources"
+        assert events[0]["route"] == "grounded_rag"
+        assert events[0]["details"]["sources"] == [{"reference": "course.pdf"}]
+        assert events[1] == "课程回答"
+
     def test_public_system_query_predicates(self):
         from ds_course_agent.rag.query_pipeline.utils import is_datetime_request, is_schedule_request
 

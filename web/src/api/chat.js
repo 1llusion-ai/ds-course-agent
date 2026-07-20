@@ -28,7 +28,7 @@ function dispatchSseFrame(target, frame) {
   target.onmessage?.({ data })
 }
 
-function createFetchSseStream(data) {
+function createFetchSseStream(url, { method = 'GET', data } = {}) {
   const controller = new AbortController()
   let closedByClient = false
   const stream = {
@@ -42,16 +42,21 @@ function createFetchSseStream(data) {
 
   const consume = async () => {
     try {
-      const response = await fetch('/api/chat/send/stream', {
-        method: 'POST',
+      const headers = {
+        Accept: 'text/event-stream'
+      }
+      const request = {
+        method,
         credentials: 'include',
-        headers: {
-          Accept: 'text/event-stream',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data),
+        headers,
         signal: controller.signal
-      })
+      }
+      if (data !== undefined) {
+        headers['Content-Type'] = 'application/json'
+        request.body = JSON.stringify(data)
+      }
+
+      const response = await fetch(url, request)
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -112,5 +117,7 @@ export const chatApi = {
   getHistory: (sessionId) => client.get(`/chat/history/${sessionId}`),
   clearHistory: (sessionId) => client.delete(`/chat/history/${sessionId}`),
   cancelStream: (sessionId) => client.post(`/chat/cancel/${sessionId}`),
-  sendStream: (data) => createFetchSseStream(data)
+  sendStream: (data) => createFetchSseStream('/api/chat/send/stream', { method: 'POST', data }),
+  continueStream: (data) => createFetchSseStream('/api/chat/continue/stream', { method: 'POST', data }),
+  resumeStream: (sessionId) => createFetchSseStream(`/api/chat/resume/${sessionId}`)
 }

@@ -23,6 +23,8 @@ class ChatMessage(BaseModel):
         "not_used",
     ] = "not_requested"
     web_search_reason: str | None = None
+    generation_status: Literal["completed", "stopped", "error"] = "completed"
+    generation_error: str | None = None
     metadata: dict[str, Any] | None = None
 
 
@@ -39,14 +41,28 @@ class ChatStreamRequest(BaseModel):
     web_search: bool = False
 
 
+class ChatContinueRequest(BaseModel):
+    session_id: str
+    message_timestamp: datetime
+
+
 class ChatResponse(BaseModel):
     message: ChatMessage
     session_id: str
+
+
+class ActiveStreamSnapshot(BaseModel):
+    stream_id: str | None = None
+    started_at: datetime
+    message_timestamp: datetime
+    content: str = ""
+    progress: dict[str, Any] | None = None
+    progress_events: list[dict[str, Any]] = Field(default_factory=list)
+    last_event_id: int = 0
 
 
 class ChatHistoryResponse(BaseModel):
     session_id: str
     messages: list[ChatMessage]
     total: int
-    pending_generation: bool = False
-    pending_started_at: datetime | None = None
+    active_stream: ActiveStreamSnapshot | None = None

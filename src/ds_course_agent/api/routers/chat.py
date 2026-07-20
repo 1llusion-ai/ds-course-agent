@@ -12,7 +12,6 @@ import logging
 import threading
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,10 +19,18 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 
 from ..auth.deps import get_current_student_id
-from ..core_bridge import chat_with_history, stream_chat_with_history
-from ..schemas.chat import ChatHistoryResponse, ChatMessage, ChatRequest, ChatResponse, ChatStreamRequest
+from ..core_bridge import chat_with_history, stream_chat_with_history, stream_continue_with_history
+from ..schemas.chat import (
+    ChatContinueRequest,
+    ChatHistoryResponse,
+    ChatMessage,
+    ChatRequest,
+    ChatResponse,
+    ChatStreamRequest,
+)
 from ..state import DEFAULT_SESSION_TITLE, _chat_history, _sessions, state_lock
 from ..state import _save as _save_state
+from ..stream_jobs import ActiveStreamJob, stream_job_registry
 from ..title_generation import (
     SESSION_TITLE_MAX_CHARS,
     _clean_generated_title,
@@ -36,23 +43,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_STREAM_SENTINEL = object()
-_STREAM_QUEUE_MAXSIZE = 128
 _SESSION_LOCK_POLL_SECONDS = 0.01
 _PROGRESS_DETAIL_STRING_LIMIT = 500
 _PROGRESS_DETAIL_LIST_LIMIT = 5
 _PROGRESS_DETAIL_DICT_LIMIT = 24
 _PROGRESS_DETAIL_JSON_LIMIT = 6000
-_STREAM_IDLE_TIMEOUT_SECONDS = 120.0
-
-
-@dataclass(frozen=True)
-class ActiveStreamJob:
-    """In-process stream generation job visible to history/cancel endpoints."""
-
-    student_id: str
-    started_at: datetime
-    cancel_event: threading.Event
 
 
 _title_generation_pending: set[str] = set()
@@ -64,8 +59,6 @@ _history_locks: dict[str, threading.RLock] = {}
 _history_locks_guard = threading.Lock()
 _session_operation_locks: dict[str, threading.Lock] = {}
 _session_operation_locks_guard = threading.Lock()
-_active_stream_jobs: dict[str, ActiveStreamJob] = {}
-_active_stream_jobs_guard = threading.Lock()
 
 
 def _extract_response_text(response) -> str:
@@ -146,6 +139,34 @@ def _has_web_source(sources: list[dict] | None) -> bool:
     return False
 
 
+def _sources_from_progress_events(progress_events: list[dict] | None) -> list[dict]:
+    """Collect typed source snapshots emitted before stream completion."""
+
+    sources: list[dict] = []
+    seen: set[str] = set()
+    for event in progress_events or []:
+        details = event.get("details") if isinstance(event, dict) else None
+        event_sources = details.get("sources") if isinstance(details, dict) else None
+        for source in event_sources or []:
+            if not isinstance(source, dict):
+                continue
+            key = str(source.get("url") or source.get("href") or source.get("reference") or "")
+            if not key or key in seen:
+                continue
+            sources.append(dict(source))
+            seen.add(key)
+    return sources
+
+
+def _route_from_progress_events(progress_events: list[dict] | None) -> str | None:
+    """Return the latest route already established by the active stream."""
+
+    for event in reversed(progress_events or []):
+        if isinstance(event, dict) and event.get("route"):
+            return str(event["route"])
+    return None
+
+
 def _web_search_turn_fields(
     *,
     requested: bool,
@@ -206,38 +227,11 @@ def _web_search_turn_fields(
     }
 
 
-def _register_active_stream_job(session_id: str, student_id: str, cancel_event: threading.Event) -> datetime:
-    started_at = datetime.now()
-    with _active_stream_jobs_guard:
-        _active_stream_jobs[session_id] = ActiveStreamJob(
-            student_id=student_id,
-            started_at=started_at,
-            cancel_event=cancel_event,
-        )
-    return started_at
-
-
-def _unregister_active_stream_job(session_id: str) -> None:
-    with _active_stream_jobs_guard:
-        _active_stream_jobs.pop(session_id, None)
-
-
-def _active_stream_job_for(session_id: str, student_id: str) -> ActiveStreamJob | None:
-    with _active_stream_jobs_guard:
-        job = _active_stream_jobs.get(session_id)
-        if not job or job.student_id != student_id:
-            return None
-        return job
-
-
-def _active_stream_pending_fields(session_id: str, student_id: str) -> dict:
-    job = _active_stream_job_for(session_id, student_id)
+def _active_stream_snapshot(session_id: str, student_id: str) -> dict | None:
+    job = stream_job_registry.get_for_owner(session_id, student_id, active_only=True)
     if not job:
-        return {"pending_generation": False, "pending_started_at": None}
-    return {
-        "pending_generation": True,
-        "pending_started_at": job.started_at,
-    }
+        return None
+    return job.snapshot().to_dict()
 
 
 async def _generate_session_title_with_source(question: str) -> tuple[str, str]:
@@ -296,6 +290,8 @@ def _msg_to_dict(msg: ChatMessage) -> dict:
         "web_search_used": msg.web_search_used,
         "web_search_status": msg.web_search_status,
         "web_search_reason": msg.web_search_reason,
+        "generation_status": msg.generation_status,
+        "generation_error": msg.generation_error,
         "metadata": msg.metadata or None,
     }
 
@@ -324,6 +320,8 @@ def _msg_from_dict(data: dict) -> ChatMessage:
             else ("not_used" if web_search_requested else "not_requested"),
         ),
         web_search_reason=data.get("web_search_reason"),
+        generation_status=data.get("generation_status", "completed"),
+        generation_error=data.get("generation_error"),
         metadata=data.get("metadata"),
     )
 
@@ -412,6 +410,56 @@ def _remove_message_by_identity(session_id: str, message_item: dict, *, save: bo
                         _save_state()
                     return True
             return False
+
+
+def _replace_message_by_identity(
+    session_id: str,
+    message_item: dict,
+    message: ChatMessage,
+    *,
+    save: bool = True,
+) -> bool:
+    """Replace exactly one stored message while preserving turn order."""
+
+    with _history_lock(session_id):
+        with state_lock():
+            history = _chat_history.get(session_id)
+            if not history:
+                return False
+            for index, item in enumerate(history):
+                if item is message_item:
+                    history[index] = _msg_to_dict(message)
+                    if save:
+                        _save_state()
+                    return True
+            return False
+
+
+def _find_stopped_assistant_turn(session_id: str, message_timestamp: datetime) -> dict:
+    """Return the latest stopped assistant item for continuation."""
+
+    with _history_lock(session_id):
+        with state_lock():
+            history = _chat_history.get(session_id, [])
+            if not history:
+                raise HTTPException(status_code=409, detail="没有可继续生成的回答")
+
+            target_index = len(history) - 1
+            target = history[target_index]
+            target_timestamp = target.get("timestamp")
+            if isinstance(target_timestamp, str):
+                try:
+                    target_timestamp = datetime.fromisoformat(target_timestamp)
+                except ValueError:
+                    target_timestamp = None
+
+            if (
+                target.get("role") != "assistant"
+                or target.get("generation_status") != "stopped"
+                or target_timestamp != message_timestamp
+            ):
+                raise HTTPException(status_code=409, detail="只能继续当前会话最后一条已停止的回答")
+            return target
 
 
 def _update_session_metadata(session_id: str, timestamp: str | None = None, *, save: bool = True) -> None:
@@ -645,6 +693,287 @@ async def send_message(
         return ChatResponse(message=assistant_msg, session_id=data.session_id)
 
 
+async def _stream_job_events(
+    job: ActiveStreamJob,
+    *,
+    include_snapshot: bool,
+) -> AsyncGenerator[str, None]:
+    """Yield replayable SSE events without coupling generation to one client."""
+
+    cursor = 0
+    if include_snapshot:
+        snapshot = job.snapshot()
+        yield _sse(
+            {
+                "type": "snapshot",
+                **snapshot.to_dict(),
+                "event_id": snapshot.last_event_id,
+                "resuming": True,
+            }
+        )
+        cursor = snapshot.last_event_id
+        if snapshot.terminal:
+            terminal_events, _ = job.events_after(max(0, snapshot.last_event_id - 1))
+            for event in terminal_events:
+                if event.get("type") == "final":
+                    yield _sse(event)
+            return
+
+    while True:
+        events, terminal = job.events_after(cursor)
+        if events:
+            for event in events:
+                cursor = int(event.get("event_id") or cursor)
+                yield _sse(event)
+            continue
+        if terminal:
+            return
+        await asyncio.sleep(_SESSION_LOCK_POLL_SECONDS)
+
+
+def _streaming_response(generator: AsyncGenerator[str, None]) -> StreamingResponse:
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _launch_stream_worker(
+    *,
+    session_id: str,
+    student_id: str,
+    operation_lock: threading.Lock,
+    event_source,
+    message_timestamp: datetime,
+    web_search: bool,
+    initial_content: str = "",
+    initial_progress_events: list[dict] | None = None,
+    replace_message_item: dict | None = None,
+    base_message: ChatMessage | None = None,
+) -> ActiveStreamJob:
+    """Run one blocking agent stream independently from connected SSE clients."""
+
+    stop_event = threading.Event()
+    job = stream_job_registry.register(
+        session_id=session_id,
+        student_id=student_id,
+        cancel_event=stop_event,
+        message_timestamp=message_timestamp,
+        initial_content=initial_content,
+        initial_progress_events=initial_progress_events,
+    )
+    job.publish(
+        {
+            "type": "snapshot",
+            **job.snapshot().to_dict(),
+            "resuming": False,
+        }
+    )
+    persist_lock = threading.Lock()
+    persisted_final = threading.Event()
+
+    def _persist_message_once(message: ChatMessage) -> ChatMessage | None:
+        with persist_lock:
+            if persisted_final.is_set():
+                return None
+            if replace_message_item is None:
+                _append_message_locked(session_id, message, save=False)
+            elif not _replace_message_by_identity(
+                session_id,
+                replace_message_item,
+                message,
+                save=False,
+            ):
+                raise RuntimeError("被续写的回答已不存在")
+            _update_session_metadata(session_id, message.timestamp.isoformat(), save=False)
+            _save_state()
+            persisted_final.set()
+            return message
+
+    def _build_message(
+        event: dict,
+        *,
+        generation_status: str,
+        generation_error: str | None = None,
+    ) -> ChatMessage:
+        snapshot = job.snapshot()
+        content = str(event.get("content") or snapshot.content)
+        base_metadata = dict(base_message.metadata or {}) if base_message else {}
+        progress_sources = _sources_from_progress_events(snapshot.progress_events)
+        assistant_sources = (
+            event.get("sources") or (base_message.sources if base_message else None) or progress_sources or None
+        )
+        route = (
+            event.get("route")
+            or (base_message.route if base_message else None)
+            or _route_from_progress_events(snapshot.progress_events)
+        )
+        used_retrieval = bool(
+            event.get("used_retrieval")
+            or base_metadata.get("used_retrieval")
+            or progress_sources
+            or route == "grounded_rag"
+        )
+        metadata = {
+            **base_metadata,
+            "route": route,
+            "used_retrieval": used_retrieval,
+            "web_search": bool(web_search),
+        }
+
+        if base_message:
+            web_fields = {
+                "web_search_requested": base_message.web_search_requested,
+                "web_search_used": base_message.web_search_used,
+                "web_search_status": base_message.web_search_status,
+                "web_search_reason": base_message.web_search_reason,
+            }
+        else:
+            web_fields = _web_search_turn_fields(
+                requested=bool(web_search),
+                used_retrieval=used_retrieval,
+                progress_events=snapshot.progress_events,
+                query_trace=event.get("query_trace") if isinstance(event.get("query_trace"), dict) else None,
+                sources=assistant_sources,
+                error=generation_error,
+            )
+
+        return ChatMessage(
+            role="assistant",
+            content=content,
+            timestamp=message_timestamp,
+            sources=assistant_sources,
+            route=route,
+            progress=snapshot.progress,
+            progress_events=snapshot.progress_events or None,
+            generation_status=generation_status,
+            generation_error=generation_error,
+            metadata=metadata,
+            **web_fields,
+        )
+
+    def _publish_final(
+        event: dict,
+        *,
+        generation_status: str,
+        generation_error: str | None = None,
+    ) -> None:
+        assistant_message = _build_message(
+            event,
+            generation_status=generation_status,
+            generation_error=generation_error,
+        )
+        saved_message = _persist_message_once(assistant_message)
+        if saved_message is None:
+            return
+        snapshot = job.snapshot()
+        job.publish(
+            {
+                "type": "final",
+                "session_id": session_id,
+                "stream_id": event.get("stream_id") or snapshot.stream_id,
+                "route": saved_message.route,
+                "error": generation_error,
+                "message": _msg_to_dict(saved_message),
+            }
+        )
+
+    def worker() -> None:
+        try:
+            for event in event_source():
+                if not isinstance(event, dict):
+                    continue
+                if stop_event.is_set():
+                    break
+
+                event_type = event.get("type")
+                if event_type == "progress":
+                    details = event.get("details") or None
+                    base_progress_event = {
+                        "phase": event.get("phase"),
+                        "message": event.get("message", ""),
+                        "route": event.get("route"),
+                        "tool": event.get("tool"),
+                        "stream_id": event.get("stream_id"),
+                        "resuming": bool(event.get("resuming", False)),
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                    job.publish(
+                        {
+                            "type": "progress",
+                            **base_progress_event,
+                            "details": details,
+                        },
+                        snapshot_progress={
+                            **base_progress_event,
+                            "details": _compact_progress_details_for_history(details),
+                        },
+                    )
+                    continue
+
+                if event_type == "delta" and event.get("delta"):
+                    job.publish(
+                        {
+                            "type": "delta",
+                            "delta": str(event["delta"]),
+                            "stream_id": event.get("stream_id"),
+                            "resuming": bool(event.get("resuming", False)),
+                        }
+                    )
+                    continue
+
+                if event_type == "final":
+                    generation_error = str(event.get("error") or "") or None
+                    _publish_final(
+                        event,
+                        generation_status="error" if generation_error else "completed",
+                        generation_error=generation_error,
+                    )
+                    return
+
+                if event_type == "error":
+                    error_message = str(event.get("message") or event.get("error") or "发送失败")
+                    _publish_final(
+                        event,
+                        generation_status="error",
+                        generation_error=error_message,
+                    )
+                    return
+
+            if stop_event.is_set():
+                _publish_final({}, generation_status="stopped")
+            else:
+                _publish_final(
+                    {},
+                    generation_status="error",
+                    generation_error="流式连接已结束，但未收到完整回答。",
+                )
+        except Exception as exc:
+            logger.error("流式响应 worker 失败: %s", exc, exc_info=True)
+            try:
+                _publish_final(
+                    {},
+                    generation_status="error",
+                    generation_error=f"流式响应失败: {str(exc)}",
+                )
+            except Exception:
+                logger.error("流式失败状态保存失败", exc_info=True)
+        finally:
+            operation_lock.release()
+
+    threading.Thread(
+        target=worker,
+        name=f"chat-sse-{session_id[:16]}",
+        daemon=True,
+    ).start()
+    return job
+
+
 @router.post("/send/stream")
 async def send_message_stream(
     data: ChatStreamRequest,
@@ -658,342 +987,104 @@ async def send_message_stream(
     async def generate() -> AsyncGenerator[str, None]:
         operation_lock = _session_operation_lock(session_id)
         operation_lock_acquired = False
-        stop_event = threading.Event()
-        worker_thread: threading.Thread | None = None
         await _acquire_threading_lock(operation_lock)
         operation_lock_acquired = True
 
         try:
-            # 判断是否首次消息
             is_first_message = len(_chat_history.get(session_id, [])) == 0
-
-            user_msg = ChatMessage(role="user", content=message)
-            _append_message_locked(session_id, user_msg, save=False)
-
-            # 首次消息自动命名；如果之前只拿到了规则标题，后续消息会有限重试 LLM。
+            user_message = ChatMessage(role="user", content=message)
+            _append_message_locked(session_id, user_message, save=False)
             _schedule_title_generation(session_id, message, is_first_message=is_first_message)
 
-            loop = asyncio.get_running_loop()
-            queue_items: list[dict | object] = []
-            queue_lock = threading.Lock()
-            progress_events: list[dict] = []
-            progress_events_lock = threading.Lock()
-            worker_delta_parts: list[str] = []
-            worker_delta_lock = threading.Lock()
-            persist_lock = threading.Lock()
-            persisted_final = threading.Event()
-            _register_active_stream_job(session_id, student_id, stop_event)
-
-            def _event_type(item: dict | object) -> str | None:
-                return item.get("type") if isinstance(item, dict) else None
-
-            def _snapshot_worker_delta_text() -> str:
-                with worker_delta_lock:
-                    return "".join(worker_delta_parts)
-
-            def _drop_one_locked(preferred_types: tuple[str, ...]) -> bool:
-                for preferred_type in preferred_types:
-                    for index, queued_item in enumerate(queue_items):
-                        if _event_type(queued_item) == preferred_type:
-                            del queue_items[index]
-                            return True
-                return False
-
-            def _enqueue(item: dict | object) -> bool:
-                """Push one worker event into a bounded cross-thread buffer."""
-
-                if loop.is_closed():
-                    return False
-
-                item_type = _event_type(item)
-                is_terminal = item is _STREAM_SENTINEL or item_type in {"final", "error"}
-                with queue_lock:
-                    if len(queue_items) >= _STREAM_QUEUE_MAXSIZE:
-                        if is_terminal:
-                            if not _drop_one_locked(("progress", "delta")) and queue_items:
-                                del queue_items[0]
-                            if len(queue_items) >= _STREAM_QUEUE_MAXSIZE:
-                                return False
-                        elif item_type == "delta":
-                            if not _drop_one_locked(("progress",)):
-                                return False
-                        else:
-                            return False
-                    queue_items.append(item)
-
-                return True
-
-            async def _dequeue(timeout_seconds: float | None = None) -> dict | object:
-                deadline = asyncio.get_running_loop().time() + timeout_seconds if timeout_seconds is not None else None
-                while True:
-                    with queue_lock:
-                        if queue_items:
-                            return queue_items.pop(0)
-
-                    if deadline is not None and asyncio.get_running_loop().time() >= deadline:
-                        return {
-                            "type": "error",
-                            "message": "流式生成超时，请稍后重试。",
-                            "content": _snapshot_worker_delta_text(),
-                        }
-                    await asyncio.sleep(_SESSION_LOCK_POLL_SECONDS)
-
-            def _progress_snapshot() -> list[dict]:
-                with progress_events_lock:
-                    return list(progress_events)
-
-            def _record_progress_event(event: dict) -> dict:
-                details = event.get("details") or None
-                base_progress_event = {
-                    "phase": event.get("phase"),
-                    "message": event.get("message", ""),
-                    "route": event.get("route"),
-                    "tool": event.get("tool"),
-                    "stream_id": event.get("stream_id"),
-                    "resuming": bool(event.get("resuming", False)),
-                    "timestamp": datetime.now().isoformat(),
-                }
-                progress_event = {
-                    **base_progress_event,
-                    "details": _compact_progress_details_for_history(details),
-                }
-                with progress_events_lock:
-                    progress_events.append(progress_event)
-                return {
-                    "type": "progress",
-                    **base_progress_event,
-                    "details": details,
-                }
-
-            def _persist_assistant_message_once(assistant_msg: ChatMessage) -> ChatMessage | None:
-                with persist_lock:
-                    if persisted_final.is_set():
-                        return None
-                    with _history_lock(session_id):
-                        _append_message(session_id, assistant_msg, save=False)
-                        _update_session_metadata(session_id, assistant_msg.timestamp.isoformat(), save=False)
-                    _save_state()
-                    persisted_final.set()
-                    return assistant_msg
-
-            def _final_payload_from_event(event: dict) -> dict | None:
-                local_progress_events = _progress_snapshot()
-                final_content = event.get("content", "") or _snapshot_worker_delta_text()
-                assistant_sources = event.get("sources") or None
-                metadata = {
-                    "route": event.get("route"),
-                    "used_retrieval": event.get("used_retrieval"),
-                    "web_search": bool(web_search),
-                }
-                if event.get("error"):
-                    metadata["stream_error"] = event.get("error")
-                assistant_msg = ChatMessage(
-                    role="assistant",
-                    content=final_content,
-                    sources=assistant_sources,
-                    route=event.get("route"),
-                    progress=local_progress_events[-1] if local_progress_events else None,
-                    progress_events=local_progress_events or None,
-                    **_web_search_turn_fields(
-                        requested=bool(web_search),
-                        used_retrieval=event.get("used_retrieval"),
-                        progress_events=local_progress_events,
-                        query_trace=event.get("query_trace") if isinstance(event.get("query_trace"), dict) else None,
-                        sources=assistant_sources,
-                        error=event.get("error"),
-                    ),
-                    metadata=metadata,
-                )
-                saved_message = _persist_assistant_message_once(assistant_msg)
-                if saved_message is None:
-                    return None
-                return {
-                    "type": "final",
+            def event_source():
+                stream_kwargs = {
+                    "message": message,
                     "session_id": session_id,
-                    "stream_id": event.get("stream_id"),
-                    "route": event.get("route"),
-                    "error": event.get("error"),
-                    "message": _msg_to_dict(saved_message),
+                    "student_id": student_id,
                 }
+                if web_search:
+                    stream_kwargs["web_search"] = True
+                return stream_chat_with_history(**stream_kwargs)
 
-            def _error_final_payload(message_text: str, *, content: str = "", route: str | None = None) -> dict | None:
-                local_progress_events = _progress_snapshot()
-                metadata = {
-                    "web_search": bool(web_search),
-                    "stream_error": message_text,
-                }
-                if route:
-                    metadata["route"] = route
-                assistant_msg = ChatMessage(
-                    role="assistant",
-                    content=content or f"⚠️ {message_text}",
-                    route=route,
-                    progress=local_progress_events[-1] if local_progress_events else None,
-                    progress_events=local_progress_events or None,
-                    **_web_search_turn_fields(
-                        requested=bool(web_search),
-                        used_retrieval=False,
-                        progress_events=local_progress_events,
-                        error=message_text,
-                    ),
-                    metadata=metadata,
-                )
-                saved_message = _persist_assistant_message_once(assistant_msg)
-                if saved_message is None:
-                    return None
-                return {
-                    "type": "final",
-                    "session_id": session_id,
-                    "error": message_text,
-                    "message": _msg_to_dict(saved_message),
-                }
-
-            def _release_operation_lock_from_worker() -> None:
-                nonlocal operation_lock_acquired
-                if operation_lock_acquired:
-                    operation_lock.release()
-                    operation_lock_acquired = False
-
-            def worker() -> None:
-                try:
-                    stream_kwargs = {
-                        "message": message,
-                        "session_id": session_id,
-                        "student_id": student_id,
-                    }
-                    if web_search:
-                        stream_kwargs["web_search"] = True
-                    for event in stream_chat_with_history(**stream_kwargs):
-                        if not isinstance(event, dict):
-                            continue
-                        if stop_event.is_set():
-                            break
-                        event_type = event.get("type")
-                        if event_type == "progress":
-                            _enqueue(_record_progress_event(event))
-                            continue
-                        if event_type == "delta":
-                            delta = event.get("delta", "")
-                            if delta:
-                                with worker_delta_lock:
-                                    worker_delta_parts.append(str(delta))
-                                _enqueue(
-                                    {
-                                        "type": "delta",
-                                        "delta": delta,
-                                        "stream_id": event.get("stream_id"),
-                                        "resuming": bool(event.get("resuming", False)),
-                                    }
-                                )
-                            continue
-                        if event_type == "final":
-                            payload = _final_payload_from_event(event)
-                            if payload:
-                                _enqueue(payload)
-                            return
-                        if event_type == "error":
-                            error_message = event.get("message") or event.get("error") or "发送失败"
-                            payload = _error_final_payload(
-                                error_message,
-                                content=event.get("content") or _snapshot_worker_delta_text(),
-                                route=event.get("route"),
-                            )
-                            if payload:
-                                _enqueue(payload)
-                            return
-
-                    if stop_event.is_set():
-                        payload = _error_final_payload("已停止本次回答。", content="⚠️ 已停止本次回答。")
-                    else:
-                        payload = _error_final_payload(
-                            "流式连接已结束，但未收到完整回答。",
-                            content=_snapshot_worker_delta_text(),
-                        )
-                    if payload:
-                        _enqueue(payload)
-                except Exception as exc:
-                    logger.error("流式响应 worker 失败: %s", exc, exc_info=True)
-                    payload = _error_final_payload(
-                        f"流式响应失败: {str(exc)}",
-                        content=_snapshot_worker_delta_text(),
-                    )
-                    if payload:
-                        _enqueue(payload)
-                finally:
-                    _enqueue(_STREAM_SENTINEL)
-                    _unregister_active_stream_job(session_id)
-                    _release_operation_lock_from_worker()
-
-            # Keep the blocking sync generator off asyncio's default executor:
-            # ASGI test transports may wait for that executor during response
-            # shutdown, while a disconnected SSE client cannot force-stop the
-            # underlying worker.  A daemon thread plus stop_event avoids tying
-            # request cleanup to an uninterruptible worker.
-            worker_thread = threading.Thread(
-                target=worker,
-                name=f"chat-sse-{session_id[:16]}",
-                daemon=True,
+            job = _launch_stream_worker(
+                session_id=session_id,
+                student_id=student_id,
+                operation_lock=operation_lock,
+                event_source=event_source,
+                message_timestamp=datetime.now(),
+                web_search=bool(web_search),
             )
-            worker_thread.start()
-
-            final_sent = False
-
-            while True:
-                event = await _dequeue(_STREAM_IDLE_TIMEOUT_SECONDS)
-
-                if event is _STREAM_SENTINEL:
-                    break
-
-                event_type = event.get("type")
-                if event_type == "progress":
-                    yield _sse(event)
-                    continue
-
-                if event_type == "delta":
-                    if event.get("delta"):
-                        yield _sse(event)
-                    continue
-
-                if event_type == "final":
-                    final_sent = True
-                    yield _sse(event)
-                    break
-
-                if event_type == "error":
-                    error_message = event.get("message") or event.get("error") or "发送失败"
-                    stop_event.set()
-                    payload = _error_final_payload(
-                        error_message,
-                        content=event.get("content") or _snapshot_worker_delta_text(),
-                        route=event.get("route"),
-                    )
-                    if payload:
-                        final_sent = True
-                        yield _sse(payload)
-                    break
-
-            if not final_sent:
-                payload = _error_final_payload(
-                    "流式连接已结束，但未收到完整回答。",
-                    content=_snapshot_worker_delta_text(),
-                )
-                if payload:
-                    yield _sse(payload)
+            operation_lock_acquired = False
+            async for event in _stream_job_events(job, include_snapshot=False):
+                yield event
         except (asyncio.CancelledError, GeneratorExit):
             raise
         finally:
-            if worker_thread is None and operation_lock_acquired:
+            if operation_lock_acquired:
                 operation_lock.release()
 
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    return _streaming_response(generate())
+
+
+@router.post("/continue/stream")
+async def continue_message_stream(
+    data: ChatContinueRequest,
+    student_id: str = Depends(get_current_student_id),
+):
+    session_id = data.session_id
+    _ensure_session_owner(session_id, student_id)
+
+    async def generate() -> AsyncGenerator[str, None]:
+        operation_lock = _session_operation_lock(session_id)
+        operation_lock_acquired = False
+        await _acquire_threading_lock(operation_lock)
+        operation_lock_acquired = True
+
+        try:
+            target_item = _find_stopped_assistant_turn(session_id, data.message_timestamp)
+            base_message = _msg_from_dict(target_item)
+
+            def event_source():
+                return stream_continue_with_history(
+                    partial_content=base_message.content,
+                    session_id=session_id,
+                    student_id=student_id,
+                )
+
+            job = _launch_stream_worker(
+                session_id=session_id,
+                student_id=student_id,
+                operation_lock=operation_lock,
+                event_source=event_source,
+                message_timestamp=base_message.timestamp,
+                web_search=base_message.web_search_requested,
+                initial_content=base_message.content,
+                initial_progress_events=base_message.progress_events,
+                replace_message_item=target_item,
+                base_message=base_message,
+            )
+            operation_lock_acquired = False
+            async for event in _stream_job_events(job, include_snapshot=False):
+                yield event
+        except (asyncio.CancelledError, GeneratorExit):
+            raise
+        finally:
+            if operation_lock_acquired:
+                operation_lock.release()
+
+    return _streaming_response(generate())
+
+
+@router.get("/resume/{session_id}")
+async def resume_message_stream(
+    session_id: str,
+    student_id: str = Depends(get_current_student_id),
+):
+    _ensure_session_owner(session_id, student_id)
+    job = stream_job_registry.get_for_owner(session_id, student_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="当前会话没有可恢复的生成流")
+    return _streaming_response(_stream_job_events(job, include_snapshot=True))
 
 
 @router.post("/cancel/{session_id}")
@@ -1002,7 +1093,7 @@ async def cancel_chat_generation(
     student_id: str = Depends(get_current_student_id),
 ):
     _ensure_session_owner(session_id, student_id)
-    job = _active_stream_job_for(session_id, student_id)
+    job = stream_job_registry.get_for_owner(session_id, student_id, active_only=True)
     if not job:
         return {"cancelled": False, "session_id": session_id}
 
@@ -1023,7 +1114,7 @@ async def get_chat_history(
         session_id=session_id,
         messages=messages,
         total=len(messages),
-        **_active_stream_pending_fields(session_id, student_id),
+        active_stream=_active_stream_snapshot(session_id, student_id),
     )
 
 
