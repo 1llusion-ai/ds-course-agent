@@ -1,7 +1,7 @@
 # Knowledge-State Search Phase B Dataset-Construction Plan
 
 **Date:** 2026-07-23
-**Status:** P1 task design, P2-P5 source collection/verification, and P6a blind-packet generation are complete. The dataset owner designated the Codex subagent as the final source adjudicator over Doubao/MiMo: 141 sources passed dual-model consensus and the remaining 3 passed priority adjudication, for 144/144 final source verifications. This is explicitly model-only (`human_verified_count=0`). Fixed-seed A/B packets now cover all 1,440 target-source pairs, but no labels have been filled (`0/2,880` independent judgments). Annotation, adjudication, freeze, and Phase B method runs remain unstarted/unauthorized.
+**Status:** P1 task design and P2-P5 source collection/verification are complete. The human A/B packet draft was superseded before any labels were collected. The active exploratory track uses full independent Doubao/MiMo labels, sends every disagreement plus a deterministic 20% sample of agreements to the priority Codex subagent, and treats that subagent decision as terminal. Calibration progressed from v1 (`4/12`, kappa `0.127`) and v2 (`5/12`, kappa `0.152`) to a dev-only structural rubric with 72 claim specs and 174 atomic propositions. The best repeated v3.2 dev result was `22/30` (`0.733`), kappa `0.610`; its repeat was `21/30` (`0.700`), kappa `0.563`, with MiMo relation repeatability only `0.733`. v3.3 normalized verbatim evidence quotes remained `21/30`, kappa `0.564`; v3.4 added six synthetic boundary examples and still produced `21/30`, kappa `0.570`. Prompt-only calibration is therefore stopped. The frozen `0.80` agreement, `0.65` kappa, and `0.90` per-model repeatability gates still block the full 2,880-judgment run. All relation labels remain explicitly model-only proxy labels; the dataset is not frozen and Phase B methods remain unauthorized.
 **Scope:** construct the v3 Phase B confirmatory dataset. This document does not authorize Phase B method claims, closed-loop multi-hop, SFT, or learning-gain claims.
 
 ## 0. Inputs and non-negotiable constraints
@@ -208,6 +208,42 @@ Agreement gates:
 - For final `contradicted` labels, at least one annotator must have labeled the pair `contradicted` or the adjudication record must contain an explicit contradiction note.
 
 If agreement gates fail, do not lower thresholds. Clarify the guideline, repair ambiguous excerpts/claims, and re-annotate affected tasks from scratch.
+
+### 6.4 Exploratory model-proxy annotation amendment
+
+The dataset owner superseded the immediate human A/B execution plan for the
+current exploratory stage. This does not erase Sections 6.2-6.3 as the stronger
+paper-grade target; it creates a separate provisional label track:
+
+1. Doubao and MiMo independently label all 1,440 blind target-source pairs.
+2. Their packet orders and blind IDs are independently derived from fixed seed
+   `20260723`.
+3. A clean exact agreement requires the same five-way relation and
+   `needs_context=false` from both models.
+4. Every relation disagreement and every `needs_context=true` result is routed
+   to the priority Codex subagent.
+5. A deterministic stratified 20% sample of clean agreements is also routed to
+   the priority subagent as a spot check.
+6. The priority subagent receives a fresh blind packet without lower-priority
+   labels or notes. Its decision is terminal; no recursive model review follows.
+7. If the priority decision has `needs_context=true`, the pair remains
+   unresolved and enters repair rather than receiving a guessed label.
+
+Outputs must be described as `model_only_proxy` or
+`dual_model_consensus_plus_priority_subagent`. They are never described as
+human labels, human adjudication, or gold truth. A future paper-level release
+still requires an external validation plan or a clearly qualified
+model-constructed benchmark claim.
+
+Exploratory model-proxy acceptance before a full run:
+
+- both model endpoints complete a cross-task smoke with exact schema coverage;
+- the prompt version and label rubric are frozen after smoke;
+- systematic `partial` versus `distractor/unrelated` confusion is resolved or
+  explicitly accepted with a bounded priority-action budget;
+- all v1 smoke labels are discarded and regenerated under the frozen prompt;
+- method-run authorization remains false until proxy labels are complete,
+  checksummed, and separately frozen as a provisional benchmark.
 
 ## 7. Leakage controls
 
@@ -500,8 +536,10 @@ Even if G6a passes, Phase B M1/M2/M3 method claims remain blocked until:
 | P3 test source collection batch A | Collect `pb_t02`, `pb_t06`, `pb_t10`. | draft sources | G3 draft |
 | P4 test source collection batch B | Collect `pb_t03`, `pb_t07`, `pb_t11`. | draft sources | G3 draft |
 | P5 test source collection batch C | Collect `pb_t04`, `pb_t08`, `pb_t12`. | draft sources | G3 draft |
-| P6a blind packet generation | Generate fixed-seed independent A/B orders and data-lead-only ID maps without labels. | `phase_b_annotation_packets/` | G4 packet precheck |
-| P6b independent annotation | Annotator A and B label every blind item without sharing labels or order. | `annotation_raw/*.jsonl` | G4 pre-adjudication |
+| P6M0 model packet generation | Generate fixed-seed independent Doubao/MiMo orders and data-lead-only ID maps. | `phase_b_model_annotation_packets/` | exploratory packet precheck |
+| P6M1 dual-model annotation | Doubao and MiMo label every blind item independently. | reviewer judgment JSONL | exploratory proxy-label coverage |
+| P6M2 priority review | Priority subagent labels all disagreements/context items plus deterministic 20% agreement spot checks. | priority result JSONL | terminal model-only adjudication |
+| P6H optional paper-grade validation | Execute Sections 6.2-6.3 if human/external validation is later required. | `annotation_raw/*.jsonl` | G4 |
 | P7 adjudication | C resolves disagreements and audits agreement sample. | `adjudication_log.jsonl`, `agreement_report.json` | G4 |
 | P8 package and freeze | Write final schema files, compute checksums and manifest, load schema. | final dataset directory | G5 |
 | P9 deterministic data gate | Run Core-only vs Gold Gap with no prompt tuning or model calls. | data-gate artifact under `var/artifacts/...` | G6a |
@@ -726,33 +764,42 @@ decisions. It separately confirmed all four repaired sources. The typed report
 This is a transparent model-only source-verification protocol. It does not
 claim that a human performed the review.
 
-### Blind annotation-packet checkpoint (2026-07-23)
+### Model-proxy annotation checkpoint (2026-07-23)
 
-The P6a generator and validator are implemented in:
+The original human A/B packet draft was superseded before any labels were
+collected. The active generator, dual-model runner, consensus router, and
+priority finalizer are implemented in:
 
 - `benchmarks/knowledge_state_search/phase_b_annotation_packets.py`;
 - `benchmarks/knowledge_state_search/phase_b_annotation_packet_contract.py`;
-- `tests/test_phase_b_annotation_packets.py`.
+- `benchmarks/knowledge_state_search/phase_b_relation_annotation_contract.py`;
+- `benchmarks/knowledge_state_search/phase_b_relation_annotation_client.py`;
+- `benchmarks/knowledge_state_search/phase_b_relation_annotation_support.py`;
+- `benchmarks/knowledge_state_search/phase_b_relation_annotation.py`;
+- `benchmarks/knowledge_state_search/phase_b_relation_priority_adjudication.py`;
+- `tests/test_phase_b_annotation_packets.py`;
+- `tests/test_phase_b_relation_annotation.py`;
+- `tests/test_phase_b_relation_priority_adjudication.py`.
 
 The generated runtime artifact is:
 
 ```text
-var/artifacts/knowledge_state_search/phase_b_annotation_packets/
+var/artifacts/knowledge_state_search/phase_b_model_annotation_packets/
 ├── annotation_packet_manifest.json
 ├── packets/
 │   ├── ANNOTATION_INSTRUCTIONS.md
-│   ├── annotator_a.jsonl
-│   └── annotator_b.jsonl
+│   ├── doubao.jsonl
+│   └── mimo.jsonl
 └── data_lead_private/
-    ├── annotator_a_id_map.jsonl
-    └── annotator_b_id_map.jsonl
+    ├── doubao_id_map.jsonl
+    └── mimo_id_map.jsonl
 ```
 
 Packet contract:
 
 - fixed recorded seed: `20260723`;
-- protocol: `phase_b_blind_relation_annotation_v1`;
-- 1,440 rows for Annotator A and 1,440 rows for Annotator B;
+- protocol: `phase_b_blind_relation_dual_model_annotation_v1`;
+- 1,440 rows for Doubao and 1,440 rows for MiMo;
 - both packets cover the same 1,440 canonical target-source pairs in
   independently derived orders;
 - public rows contain exactly `blind_item_id`, task question, target text,
@@ -760,19 +807,43 @@ Packet contract:
 - public rows exclude canonical IDs, profile state, source role, candidate
   targets, discovery query/preview, oracle query, relation labels, and all
   Doubao/MiMo/subagent decisions or notes;
-- canonical maps and the full manifest are data-lead-only and must not be
-  distributed to annotators;
+- canonical maps and the full manifest are data-lead-only and are not supplied
+  to either lower-priority reviewer;
 - packet SHA-256 values are recorded in the manifest;
 - no empty or synthetic result rows were generated:
   `labels_populated=0`, `annotation_started=false`, `dataset_frozen=false`,
   and `method_runs_authorized=false`.
-- validation: 47 Phase B tests pass; full pytest reports 596 passed,
-  14 skipped, and one pre-existing offline-reranker warning; full ruff,
-  format, JSON, compile, and diff checks pass.
+- prompt v1 smoke selected one pair from each of the 12 tasks and completed
+  24/24 model judgments;
+- v1 exact agreement was `4/12` and Cohen's kappa was `0.127`;
+- 8 disagreements and 1 deterministic agreement spot check were independently
+  labeled by the priority subagent;
+- the priority run finalized all 12 selected proxy labels with zero
+  `needs_context`, but the low lower-model agreement invalidates v1 for the
+  full run;
+- v2 improved only to `5/12` agreement with kappa `0.152`;
+- v3 moved calibration to the three frozen dev tasks and added annotation-only
+  task scopes, 72 claim specifications, 174 atomic propositions, deterministic
+  five-way relation mapping, exact schema checks, and same-request semantic
+  drift rejection;
+- repeated v3.2 30-pair runs reached `22/30`, kappa `0.610`, then `21/30`,
+  kappa `0.563`; Doubao relation repeatability was `0.933`, while MiMo was
+  `0.733`;
+- v3.3 required a normalized verbatim evidence quote for every non-`absent`
+  proposition and achieved complete quote containment, but agreement remained
+  `21/30` with kappa `0.564`;
+- v3.4 added six synthetic, non-benchmark boundary examples for task scope,
+  instance-to-general inference, related predicates, composite claims, and
+  directed edges; it remained `21/30` with kappa `0.570`;
+- no version meets the frozen `0.80` agreement, `0.65` kappa, and `0.90`
+  per-model repeatability gates, so full annotation has not started and
+  prompt-only calibration is closed.
+- final engineering validation after structural calibration: 608 passed,
+  14 skipped, one pre-existing offline-reranker warning; full ruff, format,
+  compile, diff, JSON, packet, and target-spec invariant checks pass.
 
-P6a does not satisfy G4. The next step is to obtain 2,880 genuinely independent
-A/B judgments. Do not infer, prefill, or model-generate those labels and call
-them human annotation.
+The 12 v1 labels are retained only as protocol diagnostics. They are not merged
+into the future 1,440-row proxy label file and do not satisfy G4.
 
 Within each source-collection batch, process tasks in alternating type order to reduce curator drift: prerequisite, misconception, goal.
 

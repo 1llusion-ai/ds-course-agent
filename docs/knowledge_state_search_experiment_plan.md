@@ -101,35 +101,53 @@ methods must not run until selective-gate/neutralization ablations are complete,
 the dataset is frozen and independently adjudicated, and all methods use the
 repaired failure-adjusted metric and cost contract.
 
-## Phase B blind-packet amendment (2026-07-23)
+## Phase B exploratory model-proxy annotation amendment (2026-07-23)
 
 The source gate is complete under the explicitly model-only
 Doubao/MiMo-plus-priority-subagent protocol: 144/144 sources are accepted,
 while `human_verified_count` remains zero.
 
-P6a packet generation is also complete:
+The original human A/B packet draft was superseded before labels were
+collected. The active exploratory protocol is:
 
 - fixed seed `20260723`;
 - 1,440 canonical claim/edge-source pairs;
-- 1,440 independently ordered unlabeled rows for Annotator A;
-- 1,440 independently ordered unlabeled rows for Annotator B;
-- 2,880 required independent judgments;
+- 1,440 independently ordered blind rows for Doubao;
+- 1,440 independently ordered blind rows for MiMo;
+- all disagreements and any context-uncertain rows go to the priority Codex
+  subagent;
+- a deterministic stratified 20% of clean agreements also goes to the priority
+  subagent;
+- the priority decision is terminal and lower-priority labels are hidden from
+  that reviewer;
 - public packet fields are allowlisted and exclude canonical IDs, profile
   state, collection roles, discovery metadata, oracle queries, prior model
   reviews, and gold relations;
 - checksummed data-lead-only maps recover canonical IDs after annotation.
 
-This is packet preparation, not annotation. Current counts remain:
+These outputs are model-only proxy labels, not human annotations or final gold
+truth. Calibration evidence currently is:
 
 ```text
-final relation labels:       0 / 1,440
-independent A/B judgments:   0 / 2,880
+v1 cross-task agreement:     4 / 12; kappa 0.127
+v2 cross-task agreement:     5 / 12; kappa 0.152
+v3.2 dev run 1:             22 / 30; kappa 0.610
+v3.2 dev run 2:             21 / 30; kappa 0.563
+v3.2 repeatability:          Doubao 0.933; MiMo 0.733
+v3.3 dev + quote anchors:    21 / 30; kappa 0.564
+v3.4 + synthetic examples:   21 / 30; kappa 0.570
+full proxy labels:           0 / 1,440
 dataset frozen:              false
 Phase B methods authorized:  false
 ```
 
-The next authorized block is genuine independent A/B labeling, followed by
-adjudication and freeze. Closed-loop multi-hop remains blocked.
+The structural rubric uses 72 annotation-only claim specifications, 174 atomic
+propositions, deterministic relation mapping, retry-drift rejection, and
+normalized verbatim evidence quotes. It is not authorized for the full run:
+no repeated dev smoke meets agreement `>=0.80`, kappa `>=0.65`, and per-model
+relation repeatability `>=0.90`. A final synthetic-boundary-example prompt did
+not improve the result, so prompt-only iteration is stopped. Closed-loop
+multi-hop remains blocked.
 
 ## Claim Map
 

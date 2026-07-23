@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-PROTOCOL_VERSION = "phase_b_blind_relation_annotation_v1"
-ANNOTATORS = ("annotator_a", "annotator_b")
+PROTOCOL_VERSION = "phase_b_blind_relation_dual_model_annotation_v1"
+REVIEWERS = ("doubao", "mimo")
 PACKET_FIELDS = (
     "blind_item_id",
     "task_question",
@@ -18,7 +18,7 @@ PACKET_FIELDS = (
     "source_excerpt",
 )
 PRIVATE_MAP_FIELDS = (
-    "annotator_id",
+    "reviewer_id",
     "blind_item_id",
     "task_id",
     "target_type",
@@ -58,21 +58,21 @@ _EXPECTED_COUNTS = {
     "targets": 120,
     "canonical_pairs": 1440,
     "targets_per_task": 10,
-    "pairs_per_annotator": 1440,
+    "pairs_per_reviewer": 1440,
     "independent_judgments_required": 2880,
     "labels_populated": 0,
 }
 
 
-def validate_blind_annotation_packets(output_directory: Path) -> dict[str, object]:
-    """Validate packet blinding, checksums, coverage, and authorization state."""
+def validate_blind_model_annotation_packets(output_directory: Path) -> dict[str, object]:
+    """Validate dual-model packet blinding, checksums, coverage, and embargo."""
 
     manifest_path = output_directory / "annotation_packet_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("protocol_version") != PROTOCOL_VERSION:
         raise ValueError("annotation packet protocol version is invalid")
     validate_blocked_state(manifest)
-    if manifest.get("status") != "ready_for_independent_annotation":
+    if manifest.get("status") != "ready_for_dual_model_annotation":
         raise ValueError("annotation packet status is invalid")
     random_seed = manifest.get("random_seed")
     if not isinstance(random_seed, int):
@@ -88,49 +88,49 @@ def validate_blind_annotation_packets(output_directory: Path) -> dict[str, objec
 
     instructions = _required_mapping(manifest, "instructions")
     _validate_relative_file(output_directory, instructions, "annotation instructions")
-    annotators = _required_mapping(manifest, "annotators")
+    reviewers = _required_mapping(manifest, "reviewers")
     canonical_orders: dict[str, list[tuple[str, str, str, str]]] = {}
     item_counts: dict[str, int] = {}
-    for annotator_id in ANNOTATORS:
-        record = annotators.get(annotator_id)
+    for reviewer_id in REVIEWERS:
+        record = reviewers.get(reviewer_id)
         if not isinstance(record, dict):
-            raise ValueError(f"annotation manifest lacks {annotator_id}")
+            raise ValueError(f"annotation manifest lacks {reviewer_id}")
         packet_path = _validate_relative_file(
             output_directory,
             {"path": record.get("packet_path"), "sha256": record.get("packet_sha256")},
-            f"{annotator_id} packet",
+            f"{reviewer_id} packet",
         )
         private_path = _validate_relative_file(
             output_directory,
             {"path": record.get("private_map_path"), "sha256": record.get("private_map_sha256")},
-            f"{annotator_id} private map",
+            f"{reviewer_id} private map",
         )
         packet_rows = _read_jsonl(packet_path)
         private_rows = _read_jsonl(private_path)
-        canonical_orders[annotator_id] = _validate_annotator_rows(
-            annotator_id,
+        canonical_orders[reviewer_id] = _validate_reviewer_rows(
+            reviewer_id,
             packet_rows,
             private_rows,
         )
-        item_counts[annotator_id] = len(packet_rows)
+        item_counts[reviewer_id] = len(packet_rows)
         if int(record.get("item_count", -1)) != len(packet_rows):
-            raise ValueError(f"{annotator_id} item_count does not match packet rows")
-        if int(record.get("ordering_seed", -1)) != derive_ordering_seed(random_seed, annotator_id):
-            raise ValueError(f"{annotator_id} ordering seed does not match the recorded master seed")
+            raise ValueError(f"{reviewer_id} item_count does not match packet rows")
+        if int(record.get("ordering_seed", -1)) != derive_ordering_seed(random_seed, reviewer_id):
+            raise ValueError(f"{reviewer_id} ordering seed does not match the recorded master seed")
 
-    if set(canonical_orders["annotator_a"]) != set(canonical_orders["annotator_b"]):
-        raise ValueError("annotator A/B packets do not cover the same canonical pairs")
-    if canonical_orders["annotator_a"] == canonical_orders["annotator_b"]:
-        raise ValueError("annotator A/B packet orders are not independent")
+    if set(canonical_orders["doubao"]) != set(canonical_orders["mimo"]):
+        raise ValueError("Doubao/MiMo packets do not cover the same canonical pairs")
+    if canonical_orders["doubao"] == canonical_orders["mimo"]:
+        raise ValueError("Doubao/MiMo packet orders are not independent")
 
     counts = _required_mapping(manifest, "counts")
     observed_counts = {field: int(counts.get(field, -1)) for field in _EXPECTED_COUNTS}
     if observed_counts != _EXPECTED_COUNTS:
         raise ValueError(f"annotation packet count contract is invalid: {observed_counts}")
-    expected_pairs = int(counts.get("pairs_per_annotator", -1))
+    expected_pairs = int(counts.get("pairs_per_reviewer", -1))
     if any(count != expected_pairs for count in item_counts.values()):
-        raise ValueError("manifest pair count does not match annotator packets")
-    if int(counts.get("independent_judgments_required", -1)) != expected_pairs * len(ANNOTATORS):
+        raise ValueError("manifest pair count does not match reviewer packets")
+    if int(counts.get("independent_judgments_required", -1)) != expected_pairs * len(REVIEWERS):
         raise ValueError("manifest independent-judgment count is invalid")
     if int(counts.get("labels_populated", -1)) != 0 or manifest.get("labels_populated") is not False:
         raise ValueError("blind packet generation must not populate annotation labels")
@@ -155,9 +155,9 @@ def validate_blind_annotation_packets(output_directory: Path) -> dict[str, objec
 
     return {
         "status": "pass",
-        "annotator_count": len(ANNOTATORS),
-        "pairs_per_annotator": expected_pairs,
-        "independent_judgments_required": expected_pairs * len(ANNOTATORS),
+        "reviewer_count": len(REVIEWERS),
+        "pairs_per_reviewer": expected_pairs,
+        "independent_judgments_required": expected_pairs * len(REVIEWERS),
         "labels_populated": 0,
         "annotation_started": False,
         "dataset_frozen": False,
@@ -182,27 +182,27 @@ def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def derive_ordering_seed(random_seed: int, annotator_id: str) -> int:
-    """Derive one deterministic annotator-specific shuffle seed."""
+def derive_ordering_seed(random_seed: int, reviewer_id: str) -> int:
+    """Derive one deterministic reviewer-specific shuffle seed."""
 
-    digest = hashlib.sha256(f"{random_seed}:{annotator_id}".encode()).digest()
+    digest = hashlib.sha256(f"{random_seed}:{reviewer_id}".encode()).digest()
     return int.from_bytes(digest[:8], byteorder="big", signed=False)
 
 
-def _validate_annotator_rows(
-    annotator_id: str,
+def _validate_reviewer_rows(
+    reviewer_id: str,
     packet_rows: list[dict[str, Any]],
     private_rows: list[dict[str, Any]],
 ) -> list[tuple[str, str, str, str]]:
     if len(packet_rows) != len(private_rows):
-        raise ValueError(f"{annotator_id} packet/private-map row counts differ")
+        raise ValueError(f"{reviewer_id} packet/private-map row counts differ")
     packet_by_id: dict[str, dict[str, Any]] = {}
     for row in packet_rows:
         if tuple(row) != PACKET_FIELDS or set(row).intersection(FORBIDDEN_PACKET_FIELDS):
-            raise ValueError(f"{annotator_id} packet exposes a forbidden or unexpected field")
+            raise ValueError(f"{reviewer_id} packet exposes a forbidden or unexpected field")
         blind_item_id = _required_string(row, "blind_item_id")
         if blind_item_id in packet_by_id:
-            raise ValueError(f"{annotator_id} contains duplicate blind item IDs")
+            raise ValueError(f"{reviewer_id} contains duplicate blind item IDs")
         for field in PACKET_FIELDS[1:]:
             _required_string(row, field)
         packet_by_id[blind_item_id] = row
@@ -212,16 +212,16 @@ def _validate_annotator_rows(
     canonical_by_blind_id: dict[str, tuple[str, str, str, str]] = {}
     for row in private_rows:
         if tuple(row) != PRIVATE_MAP_FIELDS:
-            raise ValueError(f"{annotator_id} private map field contract is invalid")
-        if row.get("annotator_id") != annotator_id:
-            raise ValueError(f"{annotator_id} private map has an incorrect annotator_id")
+            raise ValueError(f"{reviewer_id} private map field contract is invalid")
+        if row.get("reviewer_id") != reviewer_id:
+            raise ValueError(f"{reviewer_id} private map has an incorrect reviewer_id")
         blind_item_id = _required_string(row, "blind_item_id")
         if blind_item_id not in packet_by_id or blind_item_id in private_ids:
-            raise ValueError(f"{annotator_id} private map blind IDs are invalid")
+            raise ValueError(f"{reviewer_id} private map blind IDs are invalid")
         private_ids.add(blind_item_id)
         target_type = _required_string(row, "target_type")
         if target_type not in {"claim", "edge"}:
-            raise ValueError(f"{annotator_id} private map target_type is invalid")
+            raise ValueError(f"{reviewer_id} private map target_type is invalid")
         canonical_key = (
             _required_string(row, "task_id"),
             target_type,
@@ -229,11 +229,11 @@ def _validate_annotator_rows(
             _required_string(row, "source_id"),
         )
         if canonical_key in canonical_keys:
-            raise ValueError(f"{annotator_id} private map duplicates a canonical pair")
+            raise ValueError(f"{reviewer_id} private map duplicates a canonical pair")
         canonical_keys.add(canonical_key)
         canonical_by_blind_id[blind_item_id] = canonical_key
     if set(packet_by_id) != private_ids:
-        raise ValueError(f"{annotator_id} packet/private-map ID coverage differs")
+        raise ValueError(f"{reviewer_id} packet/private-map ID coverage differs")
     return [canonical_by_blind_id[_required_string(row, "blind_item_id")] for row in packet_rows]
 
 

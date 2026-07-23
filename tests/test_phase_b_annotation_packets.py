@@ -10,11 +10,11 @@ import pytest
 
 from benchmarks.knowledge_state_search.evidence import SnapshotSource
 from benchmarks.knowledge_state_search.phase_b_annotation_packet_contract import (
-    validate_blind_annotation_packets,
+    validate_blind_model_annotation_packets,
 )
 from benchmarks.knowledge_state_search.phase_b_annotation_packets import (
     DEFAULT_RANDOM_SEED,
-    write_blind_annotation_packets,
+    write_blind_model_annotation_packets,
 )
 from benchmarks.knowledge_state_search.phase_b_design import write_phase_b_design
 
@@ -28,45 +28,48 @@ _PACKET_FIELDS = {
 }
 
 
-def test_blind_packets_cover_all_pairs_without_labels_or_private_metadata(tmp_path: Path):
+def test_blind_model_packets_cover_all_pairs_without_labels_or_private_metadata(tmp_path: Path):
     paths = _fixture(tmp_path)
 
-    manifest = write_blind_annotation_packets(
+    manifest = write_blind_model_annotation_packets(
         design_directory=paths["design"],
         sources_path=paths["sources"],
         source_gate_path=paths["gate"],
         output_directory=paths["output"],
     )
 
-    packet_a = _read_jsonl(paths["output"] / "packets/annotator_a.jsonl")
-    packet_b = _read_jsonl(paths["output"] / "packets/annotator_b.jsonl")
-    map_a = _read_jsonl(paths["output"] / "data_lead_private/annotator_a_id_map.jsonl")
-    map_b = _read_jsonl(paths["output"] / "data_lead_private/annotator_b_id_map.jsonl")
+    doubao_packet = _read_jsonl(paths["output"] / "packets/doubao.jsonl")
+    mimo_packet = _read_jsonl(paths["output"] / "packets/mimo.jsonl")
+    doubao_map = _read_jsonl(paths["output"] / "data_lead_private/doubao_id_map.jsonl")
+    mimo_map = _read_jsonl(paths["output"] / "data_lead_private/mimo_id_map.jsonl")
 
     assert manifest["random_seed"] == DEFAULT_RANDOM_SEED
     assert manifest["counts"]["canonical_pairs"] == 1440
+    assert manifest["counts"]["pairs_per_reviewer"] == 1440
     assert manifest["counts"]["independent_judgments_required"] == 2880
     assert manifest["counts"]["labels_populated"] == 0
-    assert len(packet_a) == len(packet_b) == len(map_a) == len(map_b) == 1440
-    assert all(set(row) == _PACKET_FIELDS for row in packet_a + packet_b)
-    assert all("relation" not in row and "source_id" not in row and "task_id" not in row for row in packet_a + packet_b)
-    assert all("oracle evidence query" not in row["target_text"] for row in packet_a + packet_b)
-    assert [row["blind_item_id"] for row in packet_a] != [row["blind_item_id"] for row in packet_b]
+    assert len(doubao_packet) == len(mimo_packet) == len(doubao_map) == len(mimo_map) == 1440
+    assert all(set(row) == _PACKET_FIELDS for row in doubao_packet + mimo_packet)
+    assert all(
+        "relation" not in row and "source_id" not in row and "task_id" not in row for row in doubao_packet + mimo_packet
+    )
+    assert all("oracle evidence query" not in row["target_text"] for row in doubao_packet + mimo_packet)
+    assert [row["blind_item_id"] for row in doubao_packet] != [row["blind_item_id"] for row in mimo_packet]
 
-    order_a = [_canonical_key(row) for row in map_a]
-    order_b = [_canonical_key(row) for row in map_b]
-    assert order_a != order_b
-    assert set(order_a) == set(order_b)
+    doubao_order = [_canonical_key(row) for row in doubao_map]
+    mimo_order = [_canonical_key(row) for row in mimo_map]
+    assert doubao_order != mimo_order
+    assert set(doubao_order) == set(mimo_order)
     assert manifest["annotation_started"] is False
     assert manifest["dataset_frozen"] is False
     assert manifest["method_runs_authorized"] is False
     assert manifest["source_verification"]["human_verified_count"] == 0
 
-    report = validate_blind_annotation_packets(paths["output"])
+    report = validate_blind_model_annotation_packets(paths["output"])
     assert report == {
         "status": "pass",
-        "annotator_count": 2,
-        "pairs_per_annotator": 1440,
+        "reviewer_count": 2,
+        "pairs_per_reviewer": 1440,
         "independent_judgments_required": 2880,
         "labels_populated": 0,
         "annotation_started": False,
@@ -75,19 +78,19 @@ def test_blind_packets_cover_all_pairs_without_labels_or_private_metadata(tmp_pa
     }
 
 
-def test_blind_packet_generation_is_reproducible_for_the_recorded_seed(tmp_path: Path):
+def test_blind_model_packet_generation_is_reproducible_for_the_recorded_seed(tmp_path: Path):
     paths = _fixture(tmp_path)
     first_output = tmp_path / "first"
     second_output = tmp_path / "second"
 
-    first = write_blind_annotation_packets(
+    first = write_blind_model_annotation_packets(
         design_directory=paths["design"],
         sources_path=paths["sources"],
         source_gate_path=paths["gate"],
         output_directory=first_output,
         random_seed=71,
     )
-    second = write_blind_annotation_packets(
+    second = write_blind_model_annotation_packets(
         design_directory=paths["design"],
         sources_path=paths["sources"],
         source_gate_path=paths["gate"],
@@ -97,10 +100,10 @@ def test_blind_packet_generation_is_reproducible_for_the_recorded_seed(tmp_path:
 
     assert first == second
     for relative_path in (
-        "packets/annotator_a.jsonl",
-        "packets/annotator_b.jsonl",
-        "data_lead_private/annotator_a_id_map.jsonl",
-        "data_lead_private/annotator_b_id_map.jsonl",
+        "packets/doubao.jsonl",
+        "packets/mimo.jsonl",
+        "data_lead_private/doubao_id_map.jsonl",
+        "data_lead_private/mimo_id_map.jsonl",
         "annotation_packet_manifest.json",
     ):
         assert (first_output / relative_path).read_bytes() == (second_output / relative_path).read_bytes()
@@ -108,23 +111,23 @@ def test_blind_packet_generation_is_reproducible_for_the_recorded_seed(tmp_path:
 
 def test_packet_validator_rejects_hidden_collection_metadata_even_with_updated_checksum(tmp_path: Path):
     paths = _fixture(tmp_path)
-    write_blind_annotation_packets(
+    write_blind_model_annotation_packets(
         design_directory=paths["design"],
         sources_path=paths["sources"],
         source_gate_path=paths["gate"],
         output_directory=paths["output"],
     )
-    packet_path = paths["output"] / "packets/annotator_a.jsonl"
+    packet_path = paths["output"] / "packets/doubao.jsonl"
     rows = _read_jsonl(packet_path)
     rows[0]["candidate_role"] = "support-primary"
     _write_jsonl(packet_path, rows)
     manifest_path = paths["output"] / "annotation_packet_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["annotators"]["annotator_a"]["packet_sha256"] = _file_sha256(packet_path)
+    manifest["reviewers"]["doubao"]["packet_sha256"] = _file_sha256(packet_path)
     manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="forbidden or unexpected field"):
-        validate_blind_annotation_packets(paths["output"])
+        validate_blind_model_annotation_packets(paths["output"])
 
 
 def test_packet_generation_rejects_source_gate_that_authorizes_methods(tmp_path: Path):
@@ -134,7 +137,7 @@ def test_packet_generation_rejects_source_gate_that_authorizes_methods(tmp_path:
     paths["gate"].write_text(json.dumps(gate) + "\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="method runs must remain unauthorized"):
-        write_blind_annotation_packets(
+        write_blind_model_annotation_packets(
             design_directory=paths["design"],
             sources_path=paths["sources"],
             source_gate_path=paths["gate"],

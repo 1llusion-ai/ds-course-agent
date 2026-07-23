@@ -177,19 +177,34 @@ are not presented as final benchmark evidence.
 ## Post-audit construction progress (2026-07-23; not a new independent audit)
 
 Since the read-only audit above, source construction and the source gate have
-completed with 144/144 model-only verifications. Fixed-seed blind annotation
-packets now cover all 1,440 canonical target-source pairs in independent A/B
-orders, but contain no labels.
+completed with 144/144 model-only verifications. The human A/B packet draft was
+superseded before labels were collected. The active exploratory protocol uses
+independent Doubao/MiMo labels plus terminal priority-subagent review of all
+disagreements and a deterministic 20% agreement sample.
+
+Calibration did not stop at the first 12-pair smoke. v1 produced `4/12`
+agreement with Cohen's kappa `0.127`, and v2 produced `5/12`, kappa `0.152`.
+A dev-only structural track then introduced 72 annotation-only claim
+specifications, 174 atomic propositions, deterministic five-way mapping,
+same-request semantic-drift rejection, and normalized verbatim evidence
+quotes. Repeated v3.2 30-pair runs produced `22/30`, kappa `0.610`, then
+`21/30`, kappa `0.563`; Doubao relation repeatability was `0.933`, but MiMo
+was `0.733`. v3.3 quote containment passed but remained `21/30`, kappa
+`0.564`. A final v3.4 prompt with six synthetic non-benchmark boundary examples
+also remained `21/30`, kappa `0.570`. Prompt-only calibration is stopped.
+These diagnostics remain model-only and do not authorize the full run.
 
 This progress does not change the audit verdict or method boundary:
 
 ```text
-independent A/B judgments:   0 / 2,880
-final relation labels:       0 / 1,440
+full dual-model judgments:   0 / 2,880
+full proxy relation labels:  0 / 1,440
 dataset frozen:              false
 Phase B methods authorized:  false
 ```
 
-The next integrity-relevant checkpoint is real independent annotation and
-adjudication. No packet-generation artifact is evidence of annotation quality
-or method performance.
+The next integrity-relevant checkpoint is a passing repeated dev calibration:
+agreement at least `0.80`, kappa at least `0.65`, and per-model relation
+repeatability at least `0.90`.
+Even after full completion, these labels must be described as model-only proxy
+annotations unless a separate external validation stage is completed.

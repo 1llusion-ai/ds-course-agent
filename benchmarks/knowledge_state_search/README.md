@@ -43,10 +43,10 @@ profile-specific and obligation-aligned way. A second-stage experiment should
 execute the generated queries through the existing web search/fetch tools and
 measure actual evidence support, citation precision, and search cost.
 
-## Phase B blind annotation packets
+## Phase B model-proxy relation annotation
 
 After the model-only source-verification gate passes, generate the unlabeled
-independent A/B relation packets with:
+independent Doubao/MiMo relation packets with:
 
 ```bash
 PYTHONPATH=src:. \
@@ -54,7 +54,32 @@ python -m benchmarks.knowledge_state_search.phase_b_annotation_packets
 ```
 
 The runtime artifact is written under
-`var/artifacts/knowledge_state_search/phase_b_annotation_packets/`. The command
+`var/artifacts/knowledge_state_search/phase_b_model_annotation_packets/`. The command
 creates checksummed public packets and separate data-lead-only canonical ID
 maps. It does not create annotation labels, freeze the dataset, or authorize
 Phase B method runs.
+
+Run the current 30-pair dev-only structural calibration:
+
+```bash
+PYTHONPATH=src:. \
+python -m benchmarks.knowledge_state_search.phase_b_relation_annotation \
+  --task-split phase_b_dev \
+  --limit-pairs 30 \
+  --batch-size 4 \
+  --output var/artifacts/knowledge_state_search/relation_annotation_dev_smoke
+```
+
+Doubao and MiMo label all selected pairs independently. Every disagreement,
+every context-uncertain row, and a deterministic stratified 20% sample of clean
+agreements is written to a fresh blind priority-subagent packet. The priority
+decision is terminal. The structural prompt derives five-way labels from
+annotation-only atomic propositions and requires normalized verbatim excerpt
+quotes for every non-`absent` proposition. Resulting labels are explicitly
+model-only proxies.
+
+The best repeated dev calibration is currently below the frozen release gates:
+v3.2 reached `22/30` agreement with kappa `0.610`, then `21/30` with kappa
+`0.563`; v3.3 remained `21/30`, kappa `0.564`; v3.4 synthetic boundary
+examples remained `21/30`, kappa `0.570`. Prompt-only calibration is stopped,
+and full annotation is not authorized.

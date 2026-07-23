@@ -85,14 +85,83 @@
       "verification_basis": "dual_model_plus_priority_subagent"
     },
     "blind_annotation_packets": {
-      "protocol": "phase_b_blind_relation_annotation_v1",
+      "protocol": "phase_b_blind_relation_dual_model_annotation_v1",
       "random_seed": 20260723,
       "canonical_pairs": 1440,
-      "pairs_per_annotator": 1440,
+      "pairs_per_reviewer": 1440,
       "independent_judgments_required": 2880,
       "labels_populated": 0
     },
-    "annotation_started": false,
+    "active_annotation_basis": "model_only_proxy",
+    "human_packet_status": "superseded_before_labels",
+    "dual_model_smoke_v1": {
+      "selected_pairs": 12,
+      "review_count": 24,
+      "exact_relation_agreement_count": 4,
+      "exact_relation_agreement_rate": 0.3333333333333333,
+      "cohen_kappa": 0.12727272727272726,
+      "priority_adjudication_count": 8,
+      "priority_spot_check_count": 1,
+      "priority_finalized_count": 12,
+      "unresolved_context_count": 0,
+      "accepted_for_full_run": false,
+      "reason": "superseded_by_dev_only_structural_rubric_calibration"
+    },
+    "relation_rubric_calibration": {
+      "artifact": "var/artifacts/knowledge_state_search/phase_b_relation_calibration_report.json",
+      "annotation_only_claim_specs": 72,
+      "atomic_propositions": 174,
+      "acceptance_gates": {
+        "exact_relation_agreement_rate_min": 0.8,
+        "cohen_kappa_min": 0.65,
+        "per_model_relation_repeatability_min": 0.9
+      },
+      "v2_cross_task": {
+        "selected_pairs": 12,
+        "exact_relation_agreement_count": 5,
+        "exact_relation_agreement_rate": 0.4166666666666667,
+        "cohen_kappa": 0.15151515151515146
+      },
+      "v3_2_dev_run_1": {
+        "selected_pairs": 30,
+        "exact_relation_agreement_count": 22,
+        "exact_relation_agreement_rate": 0.7333333333333333,
+        "cohen_kappa": 0.6103896103896104,
+        "priority_action_count": 13
+      },
+      "v3_2_dev_run_2": {
+        "selected_pairs": 30,
+        "exact_relation_agreement_count": 21,
+        "exact_relation_agreement_rate": 0.7,
+        "cohen_kappa": 0.5631067961165048,
+        "priority_action_count": 14
+      },
+      "v3_2_repeatability": {
+        "doubao_relation_repeatability": 0.9333333333333333,
+        "mimo_relation_repeatability": 0.7333333333333333
+      },
+      "v3_3_dev_quote_anchored": {
+        "selected_pairs": 30,
+        "exact_relation_agreement_count": 21,
+        "exact_relation_agreement_rate": 0.7,
+        "cohen_kappa": 0.5638126009693053,
+        "priority_action_count": 14,
+        "quote_containment_complete": true
+      },
+      "v3_4_dev_synthetic_examples": {
+        "selected_pairs": 30,
+        "exact_relation_agreement_count": 21,
+        "exact_relation_agreement_rate": 0.7,
+        "cohen_kappa": 0.5700636942675159,
+        "priority_action_count": 14,
+        "synthetic_boundary_example_count": 6
+      },
+      "accepted_for_full_run": false,
+      "full_lower_model_judgments_started": 0,
+      "prompt_only_calibration_closed": true,
+      "reason": "no_repeated_dev_calibration_meets_frozen_agreement_kappa_and_repeatability_gates"
+    },
+    "annotation_started": true,
     "dataset_frozen": false,
     "method_runs_authorized": false,
     "verdict_changed": false
