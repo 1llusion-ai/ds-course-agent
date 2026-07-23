@@ -1,0 +1,12 @@
+{"task_id":"pb_t01_cv_variance","question":"为什么 k 折交叉验证通常比一次训练/测试划分更能稳定估计模型性能？","target_concepts":["k 折交叉验证","抽样变异","模型评估"]}
+{"task_id":"pb_t02_logistic_log_odds","question":"为什么逻辑回归把线性预测值通过 sigmoid 转成类别概率，而不是直接输出任意实数？","target_concepts":["逻辑回归","sigmoid","概率与对数几率"]}
+{"task_id":"pb_t03_standard_error_ci","question":"为什么样本均值的置信区间会随样本量增大而变窄？","target_concepts":["样本均值","抽样分布","标准误","置信区间"]}
+{"task_id":"pb_t04_confounding_correlation","question":"为什么观察数据里的相关关系不能直接解释成因果关系？","target_concepts":["相关关系","因果关系","混杂变量","观察数据"]}
+{"task_id":"pb_t05_p_value_meaning","question":"为什么 p 值很小并不表示“原假设为真的概率很小”？","target_concepts":["p 值","原假设","统计推断"]}
+{"task_id":"pb_t06_r2_feature_addition","question":"为什么在线性回归中加入更多特征可能提高训练 R²，却不一定让模型更好？","target_concepts":["线性回归","训练 R²","泛化","模型选择"]}
+{"task_id":"pb_t07_outlier_removal","question":"为什么不能只因为观测值极端就自动删除异常值？","target_concepts":["异常值","数据质量","稳健统计","敏感性分析"]}
+{"task_id":"pb_t08_label_encoding_order","question":"为什么对无序类别变量直接使用 1、2、3 编码可能误导某些模型？","target_concepts":["类别变量","标签编码","虚假顺序","独热编码"]}
+{"task_id":"pb_t09_skewed_summary","question":"面对偏态收入数据，为什么报告中位数和四分位距通常比只报告均值更稳健？","target_concepts":["偏态分布","中位数","四分位距","稳健摘要"]}
+{"task_id":"pb_t10_residual_diagnostics","question":"如何用残差图判断线性回归模型是否可能违反线性、等方差或独立性假设？","target_concepts":["线性回归","残差","模型诊断","等方差"]}
+{"task_id":"pb_t11_missing_data_strategy","question":"如何根据缺失机制选择删除、均值填补或模型化填补策略？","target_concepts":["缺失数据","MCAR/MAR/MNAR","填补","敏感性分析"]}
+{"task_id":"pb_t12_ab_test_design","question":"如何设计一个简单 A/B 测试来估计改版是否提升转化率？","target_concepts":["A/B 测试","随机分配","转化率","实验设计"]}

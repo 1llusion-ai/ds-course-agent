@@ -1,0 +1,6 @@
+{"learning_goal": "理解算法原理", "level": "intermediate", "mastered_concepts": ["导数与斜率"], "misconceptions": [], "profile_id": "gd_profile_nogap", "task_id": "gd_learning_rate", "weak_concepts": []}
+{"learning_goal": "理解算法原理", "level": "intermediate", "mastered_concepts": [], "misconceptions": [], "profile_id": "gd_profile_prerequisite", "task_id": "gd_learning_rate", "weak_concepts": ["导数与斜率"]}
+{"learning_goal": "理解算法原理", "level": "intermediate", "mastered_concepts": ["无监督预处理泄漏"], "misconceptions": [], "profile_id": "leak_profile_nogap", "task_id": "standardization_leakage", "weak_concepts": []}
+{"learning_goal": "理解算法原理", "level": "intermediate", "mastered_concepts": [], "misconceptions": ["标准化不使用标签，所以在划分前做不会泄漏"], "profile_id": "leak_profile_misconception", "task_id": "standardization_leakage", "weak_concepts": []}
+{"learning_goal": "理解评估曲线", "level": "intermediate", "mastered_concepts": [], "misconceptions": [], "profile_id": "pr_profile_nogap", "task_id": "pr_vs_roc_imbalance", "weak_concepts": []}
+{"learning_goal": "比较阈值并选择业务操作点", "level": "intermediate", "mastered_concepts": [], "misconceptions": [], "profile_id": "pr_profile_goal", "task_id": "pr_vs_roc_imbalance", "weak_concepts": []}

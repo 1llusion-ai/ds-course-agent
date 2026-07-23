@@ -1,0 +1,9 @@
+{
+  "splits": {
+    "pilot": [
+      "gd_learning_rate",
+      "standardization_leakage",
+      "pr_vs_roc_imbalance"
+    ]
+  }
+}

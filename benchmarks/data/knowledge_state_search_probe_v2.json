@@ -1,0 +1,500 @@
+{
+  "schema_version": 2,
+  "experiment": "knowledge_state_search_confirmatory_v2",
+  "description": "Expanded paired profiles for confirmatory testing of learner-conditioned evidence acquisition. v2 adds controlled gap types and multi-gap cases.",
+  "tasks": [
+    {
+      "task_id": "kmeans_initialization",
+      "question": "为什么 K-means 对初始中心敏感？",
+      "target_concepts": [
+        "K-means聚类",
+        "局部最优",
+        "初始化"
+      ],
+      "evidence_requirements": [
+        {
+          "requirement_id": "core_objective_update",
+          "kind": "core",
+          "concept": "目标函数与迭代更新",
+          "description": "解释 K-means 如何交替分配样本和更新中心，并优化簇内平方误差。",
+          "search_terms": [
+            "目标函数",
+            "迭代更新",
+            "簇内平方误差"
+          ],
+          "hard": true,
+          "priority": 3
+        },
+        {
+          "requirement_id": "core_local_minimum",
+          "kind": "core",
+          "concept": "局部最优",
+          "description": "说明算法可能停在局部最优，不保证全局最优。",
+          "search_terms": [
+            "局部最优",
+            "全局最优"
+          ],
+          "hard": true,
+          "priority": 3
+        },
+        {
+          "requirement_id": "prereq_initialization",
+          "kind": "prerequisite",
+          "concept": "初始化",
+          "description": "解释不同初始中心如何让迭代进入不同的收敛结果。",
+          "search_terms": [
+            "初始中心",
+            "初始化",
+            "收敛"
+          ],
+          "hard": false,
+          "priority": 3
+        },
+        {
+          "requirement_id": "misconception_global_optimum",
+          "kind": "misconception",
+          "concept": "全局最优误解",
+          "description": "用反例或对比纠正“K-means 一定找到全局最优”的错误认知。",
+          "search_terms": [
+            "反例",
+            "不保证全局最优",
+            "不同初始化"
+          ],
+          "hard": false,
+          "priority": 3
+        },
+        {
+          "requirement_id": "goal_intuition",
+          "kind": "goal",
+          "concept": "example",
+          "description": "提供一个直观的小例子帮助理解不同初始化的影响。",
+          "search_terms": [
+            "例子",
+            "直观",
+            "小数据集"
+          ],
+          "hard": false,
+          "priority": 2
+        }
+      ],
+      "profiles": [
+        {
+          "student_id": "kmeans_initialization_nogap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "K-means聚类",
+            "局部最优",
+            "初始化"
+          ],
+          "weak_concepts": [],
+          "misconceptions": [],
+          "learning_goal": "理解算法原理"
+        },
+        {
+          "student_id": "kmeans_initialization_prereq_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "K-means聚类",
+            "局部最优"
+          ],
+          "weak_concepts": [
+            "初始化"
+          ],
+          "misconceptions": [],
+          "learning_goal": "理解算法原理"
+        },
+        {
+          "student_id": "kmeans_initialization_misconception_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "K-means聚类",
+            "局部最优",
+            "初始化"
+          ],
+          "weak_concepts": [],
+          "misconceptions": [
+            "全局最优误解"
+          ],
+          "learning_goal": "纠正错误理解"
+        },
+        {
+          "student_id": "kmeans_initialization_goal_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "K-means聚类",
+            "局部最优",
+            "初始化"
+          ],
+          "weak_concepts": [],
+          "misconceptions": [],
+          "learning_goal": "比较方法和应用"
+        },
+        {
+          "student_id": "kmeans_initialization_multi_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "K-means聚类",
+            "局部最优"
+          ],
+          "weak_concepts": [
+            "初始化"
+          ],
+          "misconceptions": [],
+          "learning_goal": "比较方法和应用"
+        }
+      ]
+    },
+    {
+      "task_id": "overfitting_generalization",
+      "question": "为什么模型在训练集上准确率很高，但在没见过的数据上表现很差？",
+      "target_concepts": [
+        "过拟合",
+        "泛化能力",
+        "正则化"
+      ],
+      "evidence_requirements": [
+        {
+          "requirement_id": "core_fit_generalization",
+          "kind": "core",
+          "concept": "过拟合与泛化",
+          "description": "区分训练误差、测试误差和泛化能力，并解释过拟合现象。",
+          "search_terms": [
+            "过拟合",
+            "泛化能力",
+            "测试误差"
+          ],
+          "hard": true,
+          "priority": 3
+        },
+        {
+          "requirement_id": "core_mechanism",
+          "kind": "core",
+          "concept": "记忆训练数据",
+          "description": "说明模型复杂度过高时可能记住训练样本中的噪声。",
+          "search_terms": [
+            "记住训练数据",
+            "噪声",
+            "模型复杂度"
+          ],
+          "hard": true,
+          "priority": 3
+        },
+        {
+          "requirement_id": "prereq_regularization",
+          "kind": "prerequisite",
+          "concept": "正则化",
+          "description": "说明正则化如何限制模型复杂度并缓解过拟合。",
+          "search_terms": [
+            "正则化",
+            "限制模型复杂度",
+            "L1",
+            "L2"
+          ],
+          "hard": false,
+          "priority": 2
+        },
+        {
+          "requirement_id": "misconception_train_accuracy",
+          "kind": "misconception",
+          "concept": "训练准确率等于泛化能力",
+          "description": "纠正训练集准确率高就代表模型泛化好的错误认知。",
+          "search_terms": [
+            "训练集准确率",
+            "不能代表泛化",
+            "测试集"
+          ],
+          "hard": false,
+          "priority": 3
+        }
+      ],
+      "profiles": [
+        {
+          "student_id": "overfitting_generalization_nogap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "过拟合",
+            "泛化能力",
+            "正则化"
+          ],
+          "weak_concepts": [],
+          "misconceptions": [],
+          "learning_goal": "理解算法原理"
+        },
+        {
+          "student_id": "overfitting_generalization_prereq_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "过拟合",
+            "泛化能力"
+          ],
+          "weak_concepts": [
+            "正则化"
+          ],
+          "misconceptions": [],
+          "learning_goal": "理解算法原理"
+        },
+        {
+          "student_id": "overfitting_generalization_misconception_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "过拟合",
+            "泛化能力",
+            "正则化"
+          ],
+          "weak_concepts": [],
+          "misconceptions": [
+            "训练准确率等于泛化能力"
+          ],
+          "learning_goal": "纠正错误理解"
+        },
+        {
+          "student_id": "overfitting_generalization_multi_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "过拟合",
+            "泛化能力"
+          ],
+          "weak_concepts": [
+            "正则化"
+          ],
+          "misconceptions": [
+            "训练准确率等于泛化能力"
+          ],
+          "learning_goal": "纠正错误理解"
+        }
+      ]
+    },
+    {
+      "task_id": "pca_covariance",
+      "question": "PCA 中协方差矩阵和特征向量分别起什么作用？",
+      "target_concepts": [
+        "主成分分析",
+        "协方差矩阵",
+        "特征向量"
+      ],
+      "evidence_requirements": [
+        {
+          "requirement_id": "core_variance_direction",
+          "kind": "core",
+          "concept": "方差方向",
+          "description": "解释 PCA 寻找数据方差最大的方向。",
+          "search_terms": [
+            "方差最大",
+            "方向",
+            "主成分"
+          ],
+          "hard": true,
+          "priority": 3
+        },
+        {
+          "requirement_id": "core_covariance_role",
+          "kind": "core",
+          "concept": "协方差矩阵",
+          "description": "说明协方差矩阵编码特征之间的联合变化关系。",
+          "search_terms": [
+            "协方差矩阵",
+            "联合变化",
+            "特征相关性"
+          ],
+          "hard": true,
+          "priority": 3
+        },
+        {
+          "requirement_id": "prereq_eigenvector",
+          "kind": "prerequisite",
+          "concept": "特征向量",
+          "description": "解释特征向量代表新的主成分方向，特征值反映方向上的方差大小。",
+          "search_terms": [
+            "特征向量",
+            "主成分方向",
+            "特征值"
+          ],
+          "hard": false,
+          "priority": 3
+        },
+        {
+          "requirement_id": "goal_formalism",
+          "kind": "goal",
+          "concept": "formalism",
+          "description": "如果学生想理解公式，补充协方差矩阵特征分解与投影关系。",
+          "search_terms": [
+            "特征分解",
+            "投影",
+            "公式"
+          ],
+          "hard": false,
+          "priority": 2
+        }
+      ],
+      "profiles": [
+        {
+          "student_id": "pca_covariance_nogap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "主成分分析",
+            "协方差矩阵",
+            "特征向量"
+          ],
+          "weak_concepts": [],
+          "misconceptions": [],
+          "learning_goal": "理解算法原理"
+        },
+        {
+          "student_id": "pca_covariance_prereq_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "主成分分析",
+            "协方差矩阵"
+          ],
+          "weak_concepts": [
+            "特征向量"
+          ],
+          "misconceptions": [],
+          "learning_goal": "理解算法原理"
+        },
+        {
+          "student_id": "pca_covariance_goal_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "主成分分析",
+            "协方差矩阵",
+            "特征向量"
+          ],
+          "weak_concepts": [],
+          "misconceptions": [],
+          "learning_goal": "理解公式和推导"
+        },
+        {
+          "student_id": "pca_covariance_multi_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "主成分分析",
+            "协方差矩阵"
+          ],
+          "weak_concepts": [
+            "特征向量"
+          ],
+          "misconceptions": [],
+          "learning_goal": "理解公式和推导"
+        }
+      ]
+    },
+    {
+      "task_id": "svm_kernel",
+      "question": "SVM 中核函数为什么可以处理线性不可分问题？",
+      "target_concepts": [
+        "支持向量机",
+        "核函数",
+        "特征空间"
+      ],
+      "evidence_requirements": [
+        {
+          "requirement_id": "core_margin",
+          "kind": "core",
+          "concept": "最大间隔",
+          "description": "说明 SVM 通过最大化分类间隔寻找决策边界。",
+          "search_terms": [
+            "最大间隔",
+            "决策边界",
+            "支持向量"
+          ],
+          "hard": true,
+          "priority": 3
+        },
+        {
+          "requirement_id": "core_kernel_trick",
+          "kind": "core",
+          "concept": "核技巧",
+          "description": "说明核函数隐式计算高维特征空间中的内积，而不必显式构造映射。",
+          "search_terms": [
+            "核技巧",
+            "高维特征空间",
+            "隐式映射",
+            "内积"
+          ],
+          "hard": true,
+          "priority": 3
+        },
+        {
+          "requirement_id": "prereq_feature_space",
+          "kind": "prerequisite",
+          "concept": "特征空间",
+          "description": "补充原始空间与高维特征空间中线性可分性的关系。",
+          "search_terms": [
+            "特征空间",
+            "线性可分",
+            "高维映射"
+          ],
+          "hard": false,
+          "priority": 3
+        },
+        {
+          "requirement_id": "goal_compare",
+          "kind": "goal",
+          "concept": "example",
+          "description": "如果学习目标是比较方法，补充线性核、RBF 核的适用场景对比。",
+          "search_terms": [
+            "线性核",
+            "RBF",
+            "适用场景",
+            "比较"
+          ],
+          "hard": false,
+          "priority": 2
+        }
+      ],
+      "profiles": [
+        {
+          "student_id": "svm_kernel_nogap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "支持向量机",
+            "核函数",
+            "特征空间"
+          ],
+          "weak_concepts": [],
+          "misconceptions": [],
+          "learning_goal": "理解算法原理"
+        },
+        {
+          "student_id": "svm_kernel_prereq_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "支持向量机",
+            "核函数"
+          ],
+          "weak_concepts": [
+            "特征空间"
+          ],
+          "misconceptions": [],
+          "learning_goal": "理解算法原理"
+        },
+        {
+          "student_id": "svm_kernel_goal_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "支持向量机",
+            "核函数",
+            "特征空间"
+          ],
+          "weak_concepts": [],
+          "misconceptions": [],
+          "learning_goal": "比较方法和应用"
+        },
+        {
+          "student_id": "svm_kernel_multi_gap",
+          "level": "intermediate",
+          "mastered_concepts": [
+            "支持向量机",
+            "核函数"
+          ],
+          "weak_concepts": [
+            "特征空间"
+          ],
+          "misconceptions": [],
+          "learning_goal": "比较方法和应用"
+        }
+      ]
+    }
+  ]
+}

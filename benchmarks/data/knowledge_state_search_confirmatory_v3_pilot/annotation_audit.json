@@ -1,0 +1,9 @@
+{
+  "status": "single_curator_pilot",
+  "annotators": [
+    "codex-curator"
+  ],
+  "adjudicated": false,
+  "independently_judged_pairs": 0,
+  "notes": "Relations are explicit and exhaustive, but require independent review before any paper-level claim."
+}

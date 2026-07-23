@@ -1,0 +1,20 @@
+{
+  "splits": {
+    "phase_b_dev": [
+      "pb_t01_cv_variance",
+      "pb_t05_p_value_meaning",
+      "pb_t09_skewed_summary"
+    ],
+    "phase_b_test": [
+      "pb_t02_logistic_log_odds",
+      "pb_t03_standard_error_ci",
+      "pb_t04_confounding_correlation",
+      "pb_t06_r2_feature_addition",
+      "pb_t07_outlier_removal",
+      "pb_t08_label_encoding_order",
+      "pb_t10_residual_diagnostics",
+      "pb_t11_missing_data_strategy",
+      "pb_t12_ab_test_design"
+    ]
+  }
+}

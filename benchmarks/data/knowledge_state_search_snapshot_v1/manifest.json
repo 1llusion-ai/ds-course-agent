@@ -1,0 +1,16 @@
+{
+  "snapshot_id": "knowledge-state-search-v1",
+  "schema_version": 1,
+  "captured_at": "2026-07-21T05:07:38.479342+00:00",
+  "task_ids": [
+    "kmeans_initialization",
+    "overfitting_generalization",
+    "pca_covariance",
+    "svm_kernel"
+  ],
+  "source_count": 16,
+  "annotation_count": 30,
+  "capture_method": "project web_search + web_fetch; curated page excerpts and university course search snippets",
+  "annotation_protocol": "Initial manual labels independently reviewed by a read-only annotation audit; unsupported labels were removed and borderline labels downgraded to partial.",
+  "provenance_note": "Queries and planner metadata are not stored in source records."
+}

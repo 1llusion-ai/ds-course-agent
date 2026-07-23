@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "description": "Hand-authored English requirement queries for deterministic benchmark discriminability audits. These queries use requirement semantics, not claim-source annotations.",
+  "queries": {
+    "kmeans_initialization": {
+      "core_objective_update": "K-means objective within-cluster sum of squares alternating assignment centroid update",
+      "core_local_minimum": "K-means local minima not guaranteed global optimum multiple restarts",
+      "prereq_initialization": "K-means different initial centroids convergence different clustering results",
+      "misconception_global_optimum": "K-means counterexample not guaranteed global optimum initialization",
+      "goal_intuition": "K-means small toy example different initial centroids different clustering"
+    },
+    "overfitting_generalization": {
+      "core_fit_generalization": "overfitting high training accuracy poor unseen test data generalization",
+      "core_mechanism": "complex model memorizes training noise instead of generalizable patterns",
+      "prereq_regularization": "regularization limits model complexity reduces overfitting L1 L2",
+      "misconception_train_accuracy": "high training accuracy does not imply good test generalization"
+    },
+    "pca_covariance": {
+      "core_variance_direction": "PCA principal components directions maximum variance",
+      "core_covariance_role": "PCA covariance matrix feature joint variation correlation principal directions",
+      "prereq_eigenvector": "covariance matrix eigenvectors principal component directions eigenvalues variance",
+      "goal_formalism": "PCA covariance eigendecomposition projection formula principal components"
+    },
+    "svm_kernel": {
+      "core_margin": "support vector machine maximize margin decision boundary support vectors",
+      "core_kernel_trick": "SVM kernel trick implicit high dimensional feature space inner product",
+      "prereq_feature_space": "nonlinear data linearly separable after mapping to higher dimensional feature space",
+      "goal_compare": "compare linear kernel and RBF kernel suitable use cases"
+    }
+  }
+}

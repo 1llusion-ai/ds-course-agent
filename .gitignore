@@ -8,6 +8,7 @@
 .vscode/
 .idea/
 .agents/
+.aris/
 # NOTE: CLAUDE.md and AGENTS.md are intentionally TRACKED (shared engineering
 # constitution). Do not re-add CLAUDE.md here.
 

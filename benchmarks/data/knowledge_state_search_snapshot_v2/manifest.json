@@ -1,0 +1,16 @@
+{
+  "snapshot_id": "knowledge-state-search-v2",
+  "schema_version": 1,
+  "captured_at": "2026-07-21T00:00:00+00:00",
+  "task_ids": [
+    "kmeans_initialization",
+    "overfitting_generalization",
+    "pca_covariance",
+    "svm_kernel"
+  ],
+  "source_count": 27,
+  "annotation_count": 40,
+  "capture_method": "v1 audited snapshot plus explicit benchmark controls",
+  "annotation_protocol": "v1 labels retained; v2 distractor and contradiction controls are explicitly marked as benchmark-only annotations.",
+  "provenance_note": "Queries and planner metadata are not stored in source records. Sources with provider benchmark_*_control are not web evidence."
+}

@@ -1,0 +1,100 @@
+{
+  "date": "2026-07-22",
+  "auditor": "independent-gpt-5.5-xhigh-fallback",
+  "reviewer_backend": "multi_agent_fallback",
+  "codex_mcp_available": false,
+  "overall_verdict": "warn",
+  "integrity_status": "warn",
+  "checks": {
+    "gt_provenance": {
+      "status": "warn",
+      "details": "Frozen dataset annotations are used as ground truth, but the v3 pilot is single-curator and paraphrase-based."
+    },
+    "score_normalization": {
+      "status": "pass",
+      "details": "No model-owned normalization found. Metrics use fixed dataset targets or selected-source counts and retain raw counts alongside ratios."
+    },
+    "result_existence": {
+      "status": "warn",
+      "details": "Main numbers match existing artifacts. The repaired runner emits the cost-adjusted fields, but historical artifacts must be rerun before method claims."
+    },
+    "dead_code": {
+      "status": "pass",
+      "details": "The unused controlled_profiles.expected_single_gap_requirement helper was removed; preregistered v3 method metrics are emitted."
+    },
+    "scope": {
+      "status": "warn",
+      "details": "Three-task Phase A pilot has single-curator paraphrased sources; current Phase B has only a 12-task design draft with zero sources and zero annotations."
+    },
+    "eval_type": {
+      "status": "warn",
+      "classifications": {
+        "v3_oracle_gate": "real_gt_diagnostic_upper_bound",
+        "v3_method_matrix": "real_gt_pilot_annotations",
+        "v3_residual_replay": "real_gt_deterministic_replay",
+        "v1_v2_controls": "mixed_real_gt_and_synthetic_proxy",
+        "prompt_probes": "self_supervised_proxy",
+        "predictor_diagnostics": "synthetic_proxy"
+      }
+    }
+  },
+  "leakage": {
+    "gold_learner_ids_in_v3_planner": "not_found",
+    "annotations_in_v3_retrieval": "not_found",
+    "provider_relation_correlation_risk": "possible_in_v1_v2_prior"
+  },
+  "cost_accounting": {
+    "m3r_shared_core_plan_allocation": "fixed",
+    "failed_case_in_summary": "fixed",
+    "tokens_latency_cost_adjusted_coverage": "implemented_for_future_runs"
+  },
+  "claims": [
+    {
+      "id": "v3_schema_and_oracle_gate",
+      "impact": "supported_with_pilot_qualifier"
+    },
+    {
+      "id": "repaired_m3_positive_pilot_delta",
+      "impact": "supported_with_pilot_qualifier"
+    },
+    {
+      "id": "stable_general_m3_superiority",
+      "impact": "unsupported"
+    },
+    {
+      "id": "closed_loop_multihop",
+      "impact": "unsupported"
+    }
+  ],
+  "go_no_go": {
+    "phase_b_dataset_construction": "go",
+    "phase_b_method_claims": "no_go",
+    "closed_loop_multihop": "no_go"
+  },
+  "required_actions": [
+    "Freeze Phase B dataset with verbatim excerpts and independent adjudication.",
+    "Complete selective-gate and neutralization ablations before selecting a Phase B method candidate.",
+    "Rerun methods under the repaired metric and cost contract before Phase B method claims."
+  ],
+  "post_audit_progress": {
+    "date": "2026-07-23",
+    "independently_reaudited": false,
+    "source_gate": {
+      "final_source_verified_count": 144,
+      "human_verified_count": 0,
+      "verification_basis": "dual_model_plus_priority_subagent"
+    },
+    "blind_annotation_packets": {
+      "protocol": "phase_b_blind_relation_annotation_v1",
+      "random_seed": 20260723,
+      "canonical_pairs": 1440,
+      "pairs_per_annotator": 1440,
+      "independent_judgments_required": 2880,
+      "labels_populated": 0
+    },
+    "annotation_started": false,
+    "dataset_frozen": false,
+    "method_runs_authorized": false,
+    "verdict_changed": false
+  }
+}
