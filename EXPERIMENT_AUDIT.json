@@ -241,7 +241,7 @@
         "decision": "terminal_no_go"
       },
       "v3_doubao_gemini_preregistration": {
-        "status": "preregistered_before_frozen_runs",
+        "status": "calibration_accepted_full_run_started",
         "run_contract_version": "phase_b_relation_run_contract_v3",
         "prompt_version": "phase_b_relation_sentence_judge_v5",
         "packet_protocol": "phase_b_blind_relation_dual_model_annotation_v2",
@@ -294,9 +294,31 @@
           "source_scope_conflicts_max": 0,
           "semantic_drift_errors_max": 0
         },
-        "calibration_runs_completed": 0,
-        "authorization_manifest_created": false,
-        "full_annotation_started": false
+        "calibration_runs_completed": 2,
+        "authorization_manifest_created": true,
+        "full_annotation_started": true,
+        "calibration_runs": [
+          {
+            "run_directory": "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v3_sentence_dev_run1",
+            "agreement_rate": 0.8,
+            "kappa": 0.695945945945946,
+            "source_scope_conflict_count": 0,
+            "semantic_drift_error_count": 0
+          },
+          {
+            "run_directory": "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v3_sentence_dev_run2",
+            "agreement_rate": 0.8666666666666667,
+            "kappa": 0.797979797979798,
+            "source_scope_conflict_count": 0,
+            "semantic_drift_error_count": 0
+          }
+        ],
+        "repeatability": {
+          "doubao": 0.9666666666666667,
+          "gemini": 0.9333333333333333
+        },
+        "authorization_manifest": "var/artifacts/knowledge_state_search/phase_b_relation_calibration_authorization.json",
+        "full_annotation_output": "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v3_sentence_full"
       }
     },
     "annotation_started": true,

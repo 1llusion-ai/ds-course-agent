@@ -938,16 +938,27 @@ Proposition-status repeatability and derived-relation repeatability were both
 not fabricate one; freshness instead requires disjoint nonce, request
 fingerprint, and exact response-body hash sets across the two runs.
 
-The diagnostic does not authorize the full run. At preregistration time:
+The diagnostic alone did not authorize the full run. The two predetermined v3
+calibrations then completed:
 
 ```text
-v3 calibration runs complete: 0 / 2
-authorization manifest:       absent
-full judgments:               0 / 2,880
+run 1 agreement / kappa:      0.800 / 0.696
+run 2 agreement / kappa:      0.867 / 0.798
+Doubao repeatability:         0.967
+Gemini repeatability:         0.933
+scope conflicts / drift:      0 / 0 in both runs
+v3 calibration runs complete: 2 / 2
+authorization manifest:       accepted
+full annotation:              started 2026-07-24
 full relation labels:          0 / 1,440
 dataset frozen:                false
 Phase B methods authorized:    false
 ```
+
+The full run uses the preregistered output directory
+`phase_b_relation_dual_model_annotation_v3_sentence_full`. It may proceed only
+under the accepted authorization manifest. Priority-subagent adjudication,
+final proxy labels, dataset freeze, and method runs remain pending.
 
 The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future
 human A/B protocol. The active exploratory model-proxy authorization gate was

@@ -289,12 +289,21 @@ valid requests. Proposition-status and derived-relation repeatability were both
 supported reasoning setting. This diagnostic only justified preregistration;
 it did not authorize the full run.
 
-The integrity boundary before the two v3 runs is:
+The two predetermined v3 runs then passed the frozen machine gate:
 
 ```text
-v3 calibration authorization: absent
-full dual-model judgments:     0 / 2,880
+run 1 agreement / kappa:       0.800 / 0.696
+run 2 agreement / kappa:       0.867 / 0.798
+Doubao / Gemini repeatability: 0.967 / 0.933
+scope conflicts / drift:       0 / 0 in both runs
+v3 calibration authorization:  accepted
+full dual-model annotation:    started 2026-07-24
 full proxy relation labels:    0 / 1,440
 dataset frozen:                false
 Phase B methods authorized:    false
 ```
+
+This changes the relation-data construction boundary from blocked to
+authorized-and-running. It does not change the audit verdict for dataset
+freeze, paper claims, or closed-loop multi-hop: those remain blocked until the
+full lower-model run and terminal priority-subagent finalization complete.

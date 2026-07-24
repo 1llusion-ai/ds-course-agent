@@ -117,3 +117,16 @@ repeatability both `1.0`. Gemini does not provide a response ID through the
 current gateway, so v3 freshness is established by unique nonce echo,
 request fingerprint, exact response-body SHA-256, and timezone-aware request
 timestamps rather than by inventing a provider ID.
+
+The two predetermined v3 calibration runs subsequently passed:
+
+```text
+run 1: agreement 0.800; kappa 0.696; conflicts 0; drift 0
+run 2: agreement 0.867; kappa 0.798; conflicts 0; drift 0
+repeatability: Doubao 0.967; Gemini 0.933
+```
+
+The machine authorization manifest was created, and the 1,440-pair full
+Doubao/Gemini annotation started on July 24, 2026. Dataset freeze and Phase B
+method runs remain blocked until all lower-model judgments and terminal
+priority-subagent actions are finalized with zero unresolved repair rows.

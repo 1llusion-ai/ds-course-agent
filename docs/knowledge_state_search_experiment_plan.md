@@ -246,22 +246,33 @@ were both `1.0`. Gemini reported a mean of `848` reasoning tokens per request
 under the minimum supported setting; therefore v3 keeps the 2,048-token cap
 and records reasoning-token usage separately.
 
-The release gates are unchanged: each run must reach agreement `>=0.80` and
+The release gates were unchanged: each run had to reach agreement `>=0.80` and
 kappa `>=0.65`; each model must reach repeatability `>=0.90`; scope conflicts
 and semantic drift must both be zero. Failed or pending batch artifacts cannot
 be resumed or overwritten. No replacement v3 calibration is permitted.
 
-Current boundary before the two v3 runs:
+Both predetermined v3 runs passed:
 
 ```text
-v3 calibration runs complete: 0 / 2
-full-run authorization:      absent
-full dual-model judgments:   0 / 2,880
+run 1 agreement / kappa:     0.800 / 0.696
+run 2 agreement / kappa:     0.867 / 0.798
+Doubao repeatability:        0.967
+Gemini repeatability:        0.933
+source-scope conflicts:      0 in both runs
+semantic drift errors:       0 in both runs
+v3 calibration runs:         2 / 2 complete
+full-run authorization:      accepted
+full dual-model annotation:  started 2026-07-24
 full proxy relation labels:  0 / 1,440
 dataset frozen:              false
 Phase B methods authorized:  false
 closed-loop multi-hop:       blocked
 ```
+
+The full run started automatically only after the machine authorization was
+created. Its lower-model judgments, terminal priority actions, and final proxy
+labels are still pending; therefore no dataset-freeze or method claim is
+authorized yet.
 
 ## Claim Map
 
