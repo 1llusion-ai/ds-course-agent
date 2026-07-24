@@ -360,7 +360,7 @@
         ]
       },
       "v5_provider_attempt_path_preregistration": {
-        "status": "preregistering_before_model_calls",
+        "status": "invalidated_before_model_calls_by_priority_subagent",
         "run_contract_version": "phase_b_relation_run_contract_v5",
         "tracked_preregistration": "benchmarks/data/knowledge_state_search_confirmatory_v3_phase_b_design/relation_calibration_v5_preregistration.json",
         "provider_response_models": {
@@ -374,6 +374,35 @@
           "cross_retry_semantic_drift_reconstructed",
           "preregistered_symlink_alias_rejected"
         ],
+        "audit_failures": [
+          "preregistration_and_selection_seed_not_frozen_before_contract_build",
+          "earlier_attempt_deletion_then_rehash",
+          "ordered_run_and_subartifact_aliases_not_bound",
+          "provider_and_local_timestamps_shiftable_together"
+        ],
+        "calibration_runs_completed": 0,
+        "authorization_manifest_created": false,
+        "full_annotation_started": false
+      },
+      "v6_sealed_run_preregistration": {
+        "status": "preregistering_before_model_calls",
+        "run_contract_version": "phase_b_relation_run_contract_v6",
+        "tracked_preregistration": "benchmarks/data/knowledge_state_search_confirmatory_v3_phase_b_design/relation_calibration_v6_preregistration.json",
+        "tracked_preregistration_sha256": "313aa78e353bd8ef5e082565a33897ac0e0893b28a6f6221b3a16d586809cf8b",
+        "repairs": [
+          "compiled_exact_preregistration_hash_and_frozen_selection_seed",
+          "requested_provider_model_endpoint_and_thinking_bindings",
+          "ordered_run_ids_output_directories_and_attempt_journal_directories",
+          "write_once_independent_pass_execution_seal_bound_to_clean_git_commit",
+          "separate_write_protected_per_batch_attempt_journals",
+          "raw_and_journal_byte_binding",
+          "run_identity_and_order_binding",
+          "symlink_path_alias_and_hardlink_rejection",
+          "future_provider_and_local_timestamp_rejection"
+        ],
+        "targeted_tests_passed": 56,
+        "independent_audit_passed": false,
+        "execution_seal_created": false,
         "calibration_runs_completed": 0,
         "authorization_manifest_created": false,
         "full_annotation_started": false

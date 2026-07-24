@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -48,9 +49,14 @@ from benchmarks.knowledge_state_search.phase_b_relation_calibration import (
     CALIBRATION_TIMEOUT_SECONDS,
     FROZEN_DEV_SPLIT,
     RUN_CONTRACT_FILENAME,
+    RUN_IDENTITY_FILENAME,
     build_current_run_contract,
-    derive_calibration_contract,
+    derive_calibration_contracts,
+)
+from benchmarks.knowledge_state_search.phase_b_relation_calibration_authorization import (
     validate_calibration_authorization,
+)
+from benchmarks.knowledge_state_search.phase_b_relation_calibration_provenance import (
     validate_preregistered_path,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_target_specs import (
@@ -59,7 +65,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_target_specs import (
 )
 
 DEFAULT_OUTPUT_DIRECTORY = Path(
-    "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v4_bound_full"
+    "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v6_bound_full"
 )
 DEFAULT_CALIBRATION_AUTHORIZATION_PATH = Path(
     "var/artifacts/knowledge_state_search/phase_b_relation_calibration_authorization.json"
@@ -120,6 +126,7 @@ def run_dual_model_relation_annotation(
         selected_pair_limit=limit_pairs,
         timeout_seconds=timeout,
         max_retries=max_retries,
+        output_directory=output_directory,
         packet_manifest_path=packet_directory / "annotation_packet_manifest.json",
         target_specs_path=DEFAULT_TARGET_SPECS_PATH,
         source_scope_labels_path=source_scope_labels_path,
@@ -141,10 +148,10 @@ def run_dual_model_relation_annotation(
     authorization_required = full_annotation
     calibration_authorization: dict[str, object] | None = None
     if authorization_required:
-        calibration_contract = derive_calibration_contract(run_contract)
+        calibration_contracts = derive_calibration_contracts(run_contract)
         calibration_authorization = validate_calibration_authorization(
             calibration_authorization_path,
-            calibration_contract,
+            calibration_contracts,
         )
     selected_key_set = set(selected_keys)
     reviewer_inputs = {
@@ -155,10 +162,35 @@ def run_dual_model_relation_annotation(
         )
         for reviewer_id in REVIEWERS
     }
-    output_directory.mkdir(parents=True, exist_ok=True)
+    output_directory.parent.mkdir(parents=True, exist_ok=True)
+    output_directory.mkdir()
+    attempt_journal_directory = Path(run_contract.attempt_journal_directory)
+    validate_preregistered_path(attempt_journal_directory)
+    attempt_journal_directory.parent.mkdir(parents=True, exist_ok=True)
+    attempt_journal_directory.mkdir()
     run_contract_path = output_directory / RUN_CONTRACT_FILENAME
     run_contract_path.write_text(
         json.dumps(run_contract.to_dict(), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    run_identity_path = output_directory / RUN_IDENTITY_FILENAME
+    run_identity_path.write_text(
+        json.dumps(
+            {
+                "status": "started_from_execution_seal",
+                "protocol": "phase_b_relation_run_identity_v1",
+                "run_id": run_contract.run_id,
+                "run_index": run_contract.run_index,
+                "output_directory": run_contract.output_directory,
+                "attempt_journal_directory": run_contract.attempt_journal_directory,
+                "run_contract_sha256": file_sha256(run_contract_path),
+                "execution_seal_sha256": run_contract.execution_seal_sha256,
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
     _write_jsonl(
@@ -175,10 +207,12 @@ def run_dual_model_relation_annotation(
                 batch_size=batch_size,
                 timeout=timeout,
                 max_retries=max_retries,
+                attempt_journal_directory=attempt_journal_directory,
             )
             for reviewer in reviewers
         }
         judgments_by_reviewer = {reviewer_id: future.result() for reviewer_id, future in futures.items()}
+    attempt_journal_directory.chmod(0o555)
 
     consensus = resolve_relation_consensus(
         selected_keys,
@@ -297,6 +331,10 @@ def run_dual_model_relation_annotation(
         "run_contract": {
             "path": str(run_contract_path),
             "sha256": file_sha256(run_contract_path),
+        },
+        "run_identity": {
+            "path": str(run_identity_path),
+            "sha256": file_sha256(run_identity_path),
         },
         "calibration_authorization": (
             {

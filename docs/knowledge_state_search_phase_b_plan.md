@@ -1018,7 +1018,23 @@ strings could resolve through symlinks. Run contract v5 adds provider-model
 binding, full ordered attempt-chain validation, mandatory 2xx final status,
 cross-retry semantic-drift reconstruction, and symlink/path-alias rejection.
 The exact v5 run directories are tracked in
-`relation_calibration_v5_preregistration.json`; no v5 call has started.
+`relation_calibration_v5_preregistration.json`.
+
+A new independent priority-subagent audit returned FAIL for v5 before any
+model call. It reproduced preregistration/seed mutation before contract
+construction, deletion of earlier attempts followed by rehashing, swapping or
+aliasing run contents and authorization/sub-artifacts, and shifting all
+provider/local timestamps together into the future.
+
+Run contract v6 is preregistered in
+`relation_calibration_v6_preregistration.json`. It freezes the exact
+preregistration hash, selection seed, requested/provider models, endpoints,
+thinking modes, ordered run IDs/directories, and separate attempt-journal
+paths. A write-once execution seal must bind an independent PASS to one clean
+git commit before calls begin. Complete per-batch attempt histories are copied
+into separate write-protected journals, and authorization rejects mismatched
+raw/journal evidence, unordered run identities, symlink/path/hard-link
+substitution, and future timestamps. No v5 or v6 call has occurred.
 
 The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future
 human A/B protocol. The active exploratory model-proxy authorization gate was

@@ -56,12 +56,15 @@ def run_relation_reviewer(
     batch_size: int,
     timeout: float,
     max_retries: int,
+    attempt_journal_directory: Path,
 ) -> tuple[ModelRelationJudgment, ...]:
     """Run or resume every blind relation batch for one reviewer."""
 
     all_judgments: list[ModelRelationJudgment] = []
     raw_directory = output_directory / "raw_responses" / reviewer.reviewer_id
     raw_directory.mkdir(parents=True, exist_ok=True)
+    journal_directory = attempt_journal_directory / reviewer.reviewer_id
+    journal_directory.mkdir(parents=True, exist_ok=True)
     for offset in range(0, len(inputs), batch_size):
         batch = inputs[offset : offset + batch_size]
         batch_id = f"batch_{offset // batch_size + 1:03d}"
@@ -113,15 +116,27 @@ def run_relation_reviewer(
                 request_payload=request_payload,
             )
         except RuntimeError as exc:
-            _write_json(raw_path, _runtime_error_audit(exc))
+            failed_audit = _runtime_error_audit(exc)
+            _write_json(raw_path, failed_audit)
+            _write_attempt_journal(
+                journal_directory / f"{batch_id}.json",
+                raw_path=raw_path,
+                payload=failed_audit,
+            )
             raise
         _write_json(raw_path, audit)
+        _write_attempt_journal(
+            journal_directory / f"{batch_id}.json",
+            raw_path=raw_path,
+            payload=audit,
+        )
         all_judgments.extend(judgments)
     ordered = tuple(sorted(all_judgments, key=lambda item: item.blind_item_id))
     _write_jsonl(
         output_directory / f"{reviewer.reviewer_id}_judgments.jsonl",
         [judgment.to_dict() for judgment in ordered],
     )
+    journal_directory.chmod(0o555)
     return ordered
 
 
@@ -451,6 +466,9 @@ def validate_provider_response_timing(
         raise ValueError("response timestamps are out of order")
     provider_created = datetime.fromtimestamp(body.created, tz=timezone.utc)
     tolerance = timedelta(minutes=5)
+    now = datetime.now(timezone.utc)
+    if started > now + tolerance or received > now + tolerance or provider_created > now + tolerance:
+        raise ValueError("response timestamps are in the future")
     if not started - tolerance <= provider_created <= received + tolerance:
         raise ValueError("provider response created timestamp is outside the request window")
 
@@ -699,6 +717,32 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
         encoding="utf-8",
     )
     temporary_path.replace(path)
+
+
+def _write_attempt_journal(
+    path: Path,
+    *,
+    raw_path: Path,
+    payload: dict[str, object],
+) -> None:
+    """Seal the complete attempt history outside the replaceable run directory."""
+
+    journal = {
+        "status": "attempt_chain_sealed",
+        "protocol": "phase_b_relation_attempt_journal_v1",
+        "reviewer_id": payload.get("reviewer_id"),
+        "batch_id": payload.get("batch_id"),
+        "raw_response_path": str(raw_path),
+        "raw_response_sha256": hashlib.sha256(raw_path.read_bytes()).hexdigest(),
+        "request_nonce": payload.get("request_nonce"),
+        "request_fingerprint": payload.get("request_fingerprint"),
+        "attempt_chain_sha256": payload.get("attempt_chain_sha256"),
+        "attempts": payload.get("attempts"),
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    with path.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(journal, ensure_ascii=False, indent=2) + "\n")
+    path.chmod(0o444)
 
 
 def _attempt_envelope_sha256(

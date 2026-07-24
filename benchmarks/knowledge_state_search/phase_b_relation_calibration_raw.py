@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import stat
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from benchmarks.knowledge_state_search.phase_b_annotation_packet_contract import (
@@ -31,10 +32,15 @@ from benchmarks.knowledge_state_search.phase_b_relation_calibration import (
     CALIBRATION_PAIR_COUNT,
     RelationRunContract,
 )
+from benchmarks.knowledge_state_search.phase_b_relation_calibration_provenance import (
+    validate_preregistered_path,
+)
 from benchmarks.knowledge_state_search.phase_b_relation_calibration_support import (
     CalibrationRequestBundle,
     CanonicalKey,
+    file_sha256,
     read_json_object,
+    validate_artifact_tree,
 )
 
 
@@ -60,9 +66,19 @@ def validate_raw_responses(
 
     if not raw_directory.is_dir():
         raise ValueError(f"raw response directory is missing: {raw_directory}")
+    journal_root = Path(contract.attempt_journal_directory)
+    validate_preregistered_path(journal_root)
+    if not journal_root.is_dir():
+        raise ValueError("attempt journal directory is missing")
+    if journal_root.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH):
+        raise ValueError("attempt journal directory must be write-protected")
+    validate_artifact_tree(journal_root)
     directories = {path.name for path in raw_directory.iterdir() if path.is_dir()}
     if directories != set(REVIEWERS):
         raise ValueError("raw response reviewer directories are invalid")
+    journal_directories = {path.name for path in journal_root.iterdir() if path.is_dir()}
+    if journal_directories != set(REVIEWERS):
+        raise ValueError("attempt journal reviewer directories are invalid")
     files = [path for path in raw_directory.rglob("*") if path.is_file()]
     if any(path.suffix != ".json" or path.parent.name not in REVIEWERS for path in files):
         raise ValueError("raw response directory contains unexpected files")
@@ -78,13 +94,27 @@ def validate_raw_responses(
     }
     selected_pair_set = set(selected_pairs)
     for reviewer_id in REVIEWERS:
+        reviewer_journal_directory = journal_root / reviewer_id
+        if reviewer_journal_directory.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH):
+            raise ValueError("attempt reviewer journal directory must be write-protected")
         paths = sorted((raw_directory / reviewer_id).glob("*.json"))
+        journal_paths = sorted(reviewer_journal_directory.glob("*.json"))
         if len(paths) != len(expected_sizes):
             raise ValueError("raw response batch count does not match run contract")
+        if len(journal_paths) != len(expected_sizes):
+            raise ValueError("attempt journal batch count does not match run contract")
         seen: set[str] = set()
         seen_canonical_keys: set[CanonicalKey] = set()
-        for path, expected_size in zip(paths, expected_sizes, strict=True):
+        for path, journal_path, expected_size in zip(
+            paths,
+            journal_paths,
+            expected_sizes,
+            strict=True,
+        ):
+            if path.name != journal_path.name:
+                raise ValueError("attempt journal batch ordering is invalid")
             payload = read_json_object(path, "raw response")
+            _validate_attempt_journal(journal_path, path, payload)
             binding = bindings[reviewer_id]
             attempts = payload.get("attempts")
             if not isinstance(attempts, list) or not attempts:
@@ -332,6 +362,47 @@ def _contains_semantic_drift_error(payload: object) -> bool:
         "semantic judgments changed across retries" in value.casefold() or "semantic drift" in value.casefold()
         for value in _iter_strings(payload)
     )
+
+
+def _validate_attempt_journal(
+    journal_path: Path,
+    raw_path: Path,
+    payload: dict[str, object],
+) -> None:
+    if journal_path.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH):
+        raise ValueError("attempt journal must be write-protected")
+    journal = read_json_object(journal_path, "attempt journal")
+    expected_fields = (
+        "status",
+        "protocol",
+        "reviewer_id",
+        "batch_id",
+        "raw_response_path",
+        "raw_response_sha256",
+        "request_nonce",
+        "request_fingerprint",
+        "attempt_chain_sha256",
+        "attempts",
+        "recorded_at",
+    )
+    if tuple(journal) != expected_fields:
+        raise ValueError("attempt journal fields are invalid")
+    if (
+        journal.get("status") != "attempt_chain_sealed"
+        or journal.get("protocol") != "phase_b_relation_attempt_journal_v1"
+        or journal.get("reviewer_id") != payload.get("reviewer_id")
+        or journal.get("batch_id") != payload.get("batch_id")
+        or journal.get("raw_response_path") != str(raw_path)
+        or journal.get("raw_response_sha256") != file_sha256(raw_path)
+        or journal.get("request_nonce") != payload.get("request_nonce")
+        or journal.get("request_fingerprint") != payload.get("request_fingerprint")
+        or journal.get("attempt_chain_sha256") != payload.get("attempt_chain_sha256")
+        or journal.get("attempts") != payload.get("attempts")
+    ):
+        raise ValueError("attempt journal does not match the sealed raw response")
+    recorded_at = _required_datetime(journal, "recorded_at")
+    if recorded_at > datetime.now(recorded_at.tzinfo) + timedelta(minutes=5):
+        raise ValueError("attempt journal timestamp is in the future")
 
 
 def _iter_strings(payload: object) -> Iterator[str]:

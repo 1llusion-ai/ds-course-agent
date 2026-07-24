@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -55,8 +56,11 @@ from benchmarks.knowledge_state_search.phase_b_relation_calibration import (
     RUN_CONTRACT_FIELDS,
     RUN_CONTRACT_FILENAME,
     RUN_CONTRACT_VERSION,
+    RUN_IDENTITY_FILENAME,
     SELECTED_PAIRS_FILENAME,
     RelationRunContract,
+)
+from benchmarks.knowledge_state_search.phase_b_relation_calibration_provenance import (
     validate_preregistered_path,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_target_specs import load_relation_target_specs
@@ -78,8 +82,7 @@ class CalibrationRequestBundle:
 def file_sha256(path: Path) -> str:
     """Hash one required contract artifact."""
 
-    if not path.is_file():
-        raise ValueError(f"required contract file is missing: {path}")
+    validate_regular_artifact_file(path, "required contract")
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -129,6 +132,53 @@ def validate_run_contract(contract: RelationRunContract) -> None:
         binding.reviewer_id: binding.provider_model_id for binding in contract.reviewer_models
     }:
         raise ValueError("relation calibration provider response models mismatch")
+    if preregistration.get("requested_models") != {
+        binding.reviewer_id: binding.model_id for binding in contract.reviewer_models
+    }:
+        raise ValueError("relation calibration requested models mismatch")
+    if preregistration.get("base_urls") != {
+        binding.reviewer_id: binding.base_url for binding in contract.reviewer_models
+    }:
+        raise ValueError("relation calibration base URLs mismatch")
+    if preregistration.get("thinking_modes") != {
+        binding.reviewer_id: binding.thinking_mode for binding in contract.reviewer_models
+    }:
+        raise ValueError("relation calibration thinking modes mismatch")
+    if contract.selection_seed != preregistration.get("selection_seed"):
+        raise ValueError("relation calibration selection seed mismatch")
+    calibration_directories = preregistration.get("calibration_run_directories")
+    calibration_run_ids = preregistration.get("calibration_run_ids")
+    calibration_journals = preregistration.get("calibration_attempt_journal_directories")
+    if contract.run_index is None:
+        expected_run_binding = (
+            preregistration.get("full_run_id"),
+            preregistration.get("full_run_directory"),
+            preregistration.get("full_attempt_journal_directory"),
+        )
+    else:
+        if (
+            not isinstance(calibration_directories, list)
+            or not isinstance(calibration_run_ids, list)
+            or not isinstance(calibration_journals, list)
+            or contract.run_index not in {1, 2}
+        ):
+            raise ValueError("relation calibration run binding is invalid")
+        index = contract.run_index - 1
+        expected_run_binding = (
+            calibration_run_ids[index],
+            calibration_directories[index],
+            calibration_journals[index],
+        )
+    if (
+        contract.run_id,
+        contract.output_directory,
+        contract.attempt_journal_directory,
+    ) != expected_run_binding:
+        raise ValueError("relation calibration run identity mismatch")
+    if contract.execution_seal_path != preregistration.get("execution_seal_path"):
+        raise ValueError("relation calibration execution seal path mismatch")
+    if file_sha256(Path(contract.execution_seal_path)) != contract.execution_seal_sha256:
+        raise ValueError("relation calibration execution seal hash mismatch")
     if tuple(binding.reviewer_id for binding in contract.reviewer_models) != tuple(sorted(REVIEWERS)):
         raise ValueError("relation run reviewers do not match the frozen reviewer set")
     if len({binding.model_id for binding in contract.reviewer_models}) != len(contract.reviewer_models):
@@ -250,11 +300,15 @@ def validate_calibration_run(
     validate_preregistered_path(run_directory)
     if not run_directory.is_dir():
         raise ValueError(f"calibration run directory is missing: {run_directory}")
+    if str(run_directory) != contract.output_directory:
+        raise ValueError("calibration run directory does not match its ordered contract")
+    validate_artifact_tree(run_directory)
     observed_contract = RelationRunContract.from_dict(
         read_json_object(run_directory / RUN_CONTRACT_FILENAME, "relation run contract")
     )
     if observed_contract != contract:
         raise ValueError(f"calibration run contract mismatch: {run_directory}")
+    _validate_run_identity(run_directory, contract)
     selected_path = run_directory / SELECTED_PAIRS_FILENAME
     selected_pairs = _load_selected_pairs(selected_path)
     _validate_selected_pair_universe(selected_pairs, contract, request_bundle)
@@ -320,7 +374,7 @@ def relation_repeatability(runs: list[dict[str, object]]) -> dict[str, float]:
 
 def validate_authorization_manifest(
     payload: dict[str, Any],
-    contract: RelationRunContract,
+    contracts: tuple[RelationRunContract, RelationRunContract],
 ) -> None:
     """Validate the persisted authorization manifest itself."""
 
@@ -337,10 +391,11 @@ def validate_authorization_manifest(
     }
     if payload.get("thresholds") != thresholds:
         raise ValueError("calibration authorization thresholds are invalid")
-    if payload.get("run_contract") != contract.to_dict():
-        raise ValueError("calibration authorization run contract mismatch")
-    if payload.get("run_contract_sha256") != json_sha256(contract.to_dict()):
-        raise ValueError("calibration authorization run contract hash mismatch")
+    expected_contracts = [contract.to_dict() for contract in contracts]
+    if payload.get("run_contracts") != expected_contracts:
+        raise ValueError("calibration authorization run contracts mismatch")
+    if payload.get("run_contract_sha256s") != [json_sha256(contract) for contract in expected_contracts]:
+        raise ValueError("calibration authorization run contract hashes mismatch")
     if payload.get("selected_task_split") != FROZEN_DEV_SPLIT:
         raise ValueError("calibration authorization dev split is invalid")
     if payload.get("selected_task_ids") != list(FROZEN_DEV_TASK_IDS):
@@ -350,13 +405,13 @@ def validate_authorization_manifest(
     _required_sha256(payload, "selected_pairs_sha256")
     directories = payload.get("run_directories")
     run_rows = payload.get("runs")
-    if directories != list(contract.calibration_run_directories):
+    if directories != [contract.output_directory for contract in contracts]:
         raise ValueError("calibration authorization run directories are invalid")
     if not isinstance(run_rows, list) or len(run_rows) != CALIBRATION_RUN_COUNT:
         raise ValueError("calibration authorization run evidence is invalid")
     for raw_row, expected_directory in zip(
         run_rows,
-        contract.calibration_run_directories,
+        (contract.output_directory for contract in contracts),
         strict=True,
     ):
         row = _required_mapping(raw_row, "run evidence")
@@ -588,8 +643,7 @@ def _validate_model_only_state(payload: dict[str, Any], label: str) -> None:
 def read_json_object(path: Path, label: str) -> dict[str, Any]:
     """Read one required JSON object with a fail-closed error."""
 
-    if not path.is_file():
-        raise ValueError(f"{label} file is missing: {path}")
+    validate_regular_artifact_file(path, label)
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -600,8 +654,7 @@ def read_json_object(path: Path, label: str) -> dict[str, Any]:
 def read_jsonl(path: Path, label: str) -> list[dict[str, Any]]:
     """Read one required non-empty JSONL artifact."""
 
-    if not path.is_file():
-        raise ValueError(f"{label} file is missing: {path}")
+    validate_regular_artifact_file(path, label)
     rows: list[dict[str, Any]] = []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -617,6 +670,72 @@ def read_jsonl(path: Path, label: str) -> list[dict[str, Any]]:
     if not rows:
         raise ValueError(f"{label} must not be empty: {path}")
     return rows
+
+
+def validate_regular_artifact_file(path: Path, label: str) -> None:
+    """Reject missing, symlinked, aliased, or hard-linked evidence files."""
+
+    if path.is_symlink():
+        raise ValueError(f"{label} file must not be a symlink: {path}")
+    if not path.is_file():
+        raise ValueError(f"{label} file is missing: {path}")
+    if path.resolve() != path.absolute():
+        raise ValueError(f"{label} file resolves through a path alias: {path}")
+    if path.stat().st_nlink != 1:
+        raise ValueError(f"{label} file must not be hard-linked: {path}")
+
+
+def validate_artifact_tree(directory: Path) -> None:
+    """Reject any alias, symlink, or hard-linked file in a run artifact tree."""
+
+    if directory.is_symlink() or directory.resolve() != directory.absolute():
+        raise ValueError(f"artifact directory resolves through a symlink or alias: {directory}")
+    for path in directory.rglob("*"):
+        if path.is_symlink():
+            raise ValueError(f"artifact tree contains a symlink: {path}")
+        if path.is_file() and path.stat().st_nlink != 1:
+            raise ValueError(f"artifact tree contains a hard-linked file: {path}")
+
+
+def _validate_run_identity(
+    run_directory: Path,
+    contract: RelationRunContract,
+) -> None:
+    identity = read_json_object(
+        run_directory / RUN_IDENTITY_FILENAME,
+        "relation run identity",
+    )
+    expected_fields = (
+        "status",
+        "protocol",
+        "run_id",
+        "run_index",
+        "output_directory",
+        "attempt_journal_directory",
+        "run_contract_sha256",
+        "execution_seal_sha256",
+        "started_at",
+    )
+    if tuple(identity) != expected_fields:
+        raise ValueError("relation run identity fields are invalid")
+    if (
+        identity.get("status") != "started_from_execution_seal"
+        or identity.get("protocol") != "phase_b_relation_run_identity_v1"
+        or identity.get("run_id") != contract.run_id
+        or identity.get("run_index") != contract.run_index
+        or identity.get("output_directory") != contract.output_directory
+        or identity.get("attempt_journal_directory") != contract.attempt_journal_directory
+        or identity.get("run_contract_sha256") != file_sha256(run_directory / RUN_CONTRACT_FILENAME)
+        or identity.get("execution_seal_sha256") != contract.execution_seal_sha256
+    ):
+        raise ValueError("relation run identity does not match its ordered contract")
+    started_at = _required_string(identity, "started_at")
+    try:
+        parsed = datetime.fromisoformat(started_at)
+    except ValueError as exc:
+        raise ValueError("relation run identity timestamp is invalid") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("relation run identity timestamp must include a timezone")
 
 
 def _required_mapping(payload: object, label: str) -> dict[str, Any]:

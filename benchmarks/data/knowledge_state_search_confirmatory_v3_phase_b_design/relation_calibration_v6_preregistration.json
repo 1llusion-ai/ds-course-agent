@@ -1,0 +1,40 @@
+{
+  "status": "preregistered",
+  "protocol": "phase_b_relation_calibration_v6_bound_runs",
+  "run_contract_version": "phase_b_relation_run_contract_v6",
+  "selection_seed": "phase_b_relation_annotation_selection_v1",
+  "requested_models": {
+    "doubao": "volcengine_maas/doubao-seed-2-1-pro-260628",
+    "gemini": "vertex_ai/gemini-3.5-flash"
+  },
+  "provider_response_models": {
+    "doubao": "doubao-seed-2-1-pro-260628",
+    "gemini": "gemini-3.5-flash"
+  },
+  "base_urls": {
+    "doubao": "https://api.llm.mioffice.cn/v1",
+    "gemini": "http://model.mify.ai.srv/v1"
+  },
+  "thinking_modes": {
+    "doubao": "disabled",
+    "gemini": "minimal"
+  },
+  "calibration_run_ids": [
+    "phase_b_relation_v6_calibration_run1",
+    "phase_b_relation_v6_calibration_run2"
+  ],
+  "calibration_run_directories": [
+    "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v6_bound_dev_run1",
+    "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v6_bound_dev_run2"
+  ],
+  "calibration_attempt_journal_directories": [
+    "var/artifacts/knowledge_state_search/phase_b_relation_calibration_v6_attempt_journals/run1",
+    "var/artifacts/knowledge_state_search/phase_b_relation_calibration_v6_attempt_journals/run2"
+  ],
+  "full_run_id": "phase_b_relation_v6_full",
+  "full_run_directory": "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v6_bound_full",
+  "full_attempt_journal_directory": "var/artifacts/knowledge_state_search/phase_b_relation_calibration_v6_attempt_journals/full",
+  "execution_seal_path": "var/artifacts/knowledge_state_search/phase_b_relation_calibration_v6_execution_seal.json",
+  "authorization_path": "var/artifacts/knowledge_state_search/phase_b_relation_calibration_authorization.json",
+  "replacement_run_allowed": false
+}

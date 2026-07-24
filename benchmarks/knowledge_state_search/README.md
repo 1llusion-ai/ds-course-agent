@@ -154,4 +154,21 @@ not freeze provider-returned model IDs, did not fully validate earlier retry
 attempts, could accept a rehashed HTTP 500 final, and compared exact output
 paths without rejecting symlink aliases. Run contract v5 adds all four
 constraints and corresponding wrong-model, HTTP-error, attempt-chain, and
-symlink adversarial tests. No v5 model call has started.
+symlink adversarial tests.
+
+A fresh priority-subagent audit then rejected v5 before any model call. It
+showed that preregistration and the seed could be changed before contract
+construction, earlier attempts could be deleted before rehashing, ordered run
+contents and sub-artifacts could be swapped or aliased, and provider/local
+timestamps could be moved together into the future.
+
+Run contract v6 freezes the exact tracked preregistration SHA-256, seed,
+requested/provider models, endpoints, thinking modes, ordered run IDs, exact
+output directories, and separate attempt-journal directories. It also requires
+a write-once independent-PASS execution seal bound to one clean git commit.
+Every complete attempt list is copied into a separate write-protected journal;
+authorization rechecks byte-identical raw/journal evidence, ordered run
+identity, regular non-aliased files, and non-future timestamps.
+
+The v5 audit verdict was `FAIL`; no v5 call occurred. v6 is preregistered but
+has not been audited or executed. Canonical authorization remains absent.

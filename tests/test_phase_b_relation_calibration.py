@@ -12,6 +12,12 @@ from typing import Any
 import pytest
 
 from benchmarks.knowledge_state_search import phase_b_relation_calibration as calibration
+from benchmarks.knowledge_state_search import (
+    phase_b_relation_calibration_authorization as calibration_authorization,
+)
+from benchmarks.knowledge_state_search import (
+    phase_b_relation_calibration_provenance as calibration_provenance,
+)
 from benchmarks.knowledge_state_search import phase_b_relation_calibration_support as calibration_support
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_client import (
     build_relation_request_payload,
@@ -38,22 +44,26 @@ from benchmarks.knowledge_state_search.phase_b_relation_calibration_raw import (
 @pytest.fixture(autouse=True)
 def _restore_default_preregistration_path():
     original = calibration.DEFAULT_PREREGISTRATION_PATH
+    original_tracked_path = calibration_provenance.TRACKED_PREREGISTRATION_PATH
+    original_sha256 = calibration_provenance.EXPECTED_PREREGISTRATION_SHA256
     yield
     calibration.DEFAULT_PREREGISTRATION_PATH = original
+    calibration_provenance.TRACKED_PREREGISTRATION_PATH = original_tracked_path
+    calibration_provenance.EXPECTED_PREREGISTRATION_SHA256 = original_sha256
 
 
 def test_calibration_authorization_passes_and_validates(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
-    output_path = Path(contract.authorization_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    output_path = Path(contracts[0].authorization_path)
 
-    manifest = calibration.build_calibration_authorization(
-        expected_contract=contract,
+    manifest = calibration_authorization.build_calibration_authorization(
+        expected_contracts=contracts,
     )
-    validated = calibration.validate_calibration_authorization(
+    validated = calibration_authorization.validate_calibration_authorization(
         output_path,
-        contract,
+        contracts,
     )
 
     assert manifest == validated
@@ -62,13 +72,14 @@ def test_calibration_authorization_passes_and_validates(
     assert manifest["human_verified_count"] == 0
     assert manifest["dataset_frozen"] is False
     assert manifest["method_runs_authorized"] is False
-    assert "secret" not in json.dumps(contract.to_dict())
+    assert "secret" not in json.dumps([contract.to_dict() for contract in contracts])
 
 
 def test_calibration_contract_freezes_single_pair_requests(
     tmp_path: Path,
 ) -> None:
-    contract, _ = _build_calibration_fixture(tmp_path)
+    contracts, _ = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
 
     assert calibration.CALIBRATION_BATCH_SIZE == 1
     assert contract.batch_size == calibration.CALIBRATION_BATCH_SIZE
@@ -81,23 +92,49 @@ def test_calibration_contract_freezes_single_pair_requests(
         )
 
 
+def test_calibration_rejects_preregistration_mutation_before_contract_build(
+    tmp_path: Path,
+) -> None:
+    contracts, _ = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
+    preregistration_path = Path(contract.preregistration_path)
+    payload = _read_json(preregistration_path)
+    payload["selection_seed"] = "attacker-selected-seed"
+    _write_json(preregistration_path, payload)
+
+    with pytest.raises(ValueError, match="not the frozen tracked file"):
+        calibration.build_current_run_contract(
+            reviewers=_reviewers_from_contract(contract),
+            batch_size=contract.batch_size,
+            selection_seed="attacker-selected-seed",
+            selected_task_split=contract.selected_task_split,
+            selected_pair_limit=contract.selected_pair_limit,
+            output_directory=Path(contract.output_directory),
+            packet_manifest_path=Path(contract.packet_manifest_path),
+            target_specs_path=Path(contract.target_specs_path),
+            source_scope_labels_path=Path(contract.source_scope_labels_path),
+            source_scope_report_path=Path(contract.source_scope_report_path),
+        )
+
+
 def test_calibration_contract_derivation_changes_only_selection(
     tmp_path: Path,
 ) -> None:
-    calibration_contract, _ = _build_calibration_fixture(tmp_path)
+    calibration_contracts, _ = _build_calibration_fixture(tmp_path)
+    calibration_contract = calibration_contracts[0]
     full_contract = replace(
         calibration_contract,
+        run_id="full-run",
+        run_index=None,
+        output_directory=str(tmp_path / "full"),
+        attempt_journal_directory=str(tmp_path / "full-journal"),
         selected_task_split=None,
         selected_pair_limit=None,
     )
 
-    derived = calibration.derive_calibration_contract(full_contract)
+    derived = calibration.derive_calibration_contracts(full_contract)
 
-    assert derived == calibration_contract
-    ignored_fields = {"selected_task_split", "selected_pair_limit"}
-    assert {field: value for field, value in derived.to_dict().items() if field not in ignored_fields} == {
-        field: value for field, value in full_contract.to_dict().items() if field not in ignored_fields
-    }
+    assert derived == calibration_contracts
 
 
 @pytest.mark.parametrize("failure_kind", ["agreement", "kappa"])
@@ -105,7 +142,8 @@ def test_calibration_rejects_single_run_threshold_failure(
     tmp_path: Path,
     failure_kind: str,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     consensus_path = run_directories[0] / calibration.CONSENSUS_FILENAME
     rows = _read_jsonl(consensus_path)
     if failure_kind == "agreement":
@@ -129,8 +167,8 @@ def test_calibration_rejects_single_run_threshold_failure(
     output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match=failure_kind):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
 
     assert not output_path.exists()
@@ -139,21 +177,22 @@ def test_calibration_rejects_single_run_threshold_failure(
 def test_calibration_rejects_repeatability_below_threshold(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     consensus_path = run_directories[1] / calibration.CONSENSUS_FILENAME
     rows = _read_jsonl(consensus_path)
     for row in rows[:4]:
         changed_relation = _other_relation(_reviewer_relation(row, "doubao"))
         _set_reviewer_relation(row, "doubao", changed_relation)
         _set_reviewer_relation(row, "gemini", changed_relation)
-    _write_raw_responses_for_consensus(run_directories[1], contract, rows)
+    _write_raw_responses_for_consensus(run_directories[1], contracts[1], rows)
     _write_jsonl(consensus_path, rows)
     _refresh_report(run_directories[1])
     output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="repeatability"):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
 
     assert not output_path.exists()
@@ -164,7 +203,8 @@ def test_calibration_rejects_contract_or_hash_mismatch(
     tmp_path: Path,
     failure_kind: str,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     if failure_kind == "contract":
         path = run_directories[1] / calibration.RUN_CONTRACT_FILENAME
         payload = _read_json(path)
@@ -177,9 +217,10 @@ def test_calibration_rejects_contract_or_hash_mismatch(
         _write_json(path, payload)
     output_path = Path(contract.authorization_path)
 
-    with pytest.raises(ValueError, match=failure_kind):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+    expected_error = "selection seed mismatch" if failure_kind == "contract" else "hash"
+    with pytest.raises(ValueError, match=expected_error):
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
 
     assert not output_path.exists()
@@ -188,16 +229,18 @@ def test_calibration_rejects_contract_or_hash_mismatch(
 def test_calibration_rejects_semantic_drift_error(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     path = run_directories[1] / calibration.RAW_RESPONSES_DIRECTORY / "doubao" / "batch_001.json"
     payload = _read_json(path)
     payload["error"] = "ValueError: semantic judgments changed across retries for the same request"
     _write_json(path, payload)
+    _refresh_attempt_journal_for_raw(contracts[1], path)
     output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="semantic drift"):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
 
     assert not output_path.exists()
@@ -206,25 +249,33 @@ def test_calibration_rejects_semantic_drift_error(
 def test_calibration_rejects_parsed_judgment_detached_from_hashed_body(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     path = run_directories[0] / calibration.RAW_RESPONSES_DIRECTORY / "gemini" / "batch_001.json"
     payload = _read_json(path)
     payload["parsed_judgments"][0]["notes"] = "Tampered outside the hashed body."
     _write_json(path, payload)
+    _refresh_attempt_journal_for_raw(contract, path)
 
     with pytest.raises(ValueError, match="parsed judgments do not match"):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
 
 
 def test_calibration_rejects_local_timestamps_outside_provider_created_window(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     path = run_directories[0] / calibration.RAW_RESPONSES_DIRECTORY / "gemini" / "batch_001.json"
     payload = _read_json(path)
     attempt = payload["attempts"][0]
+    body = json.loads(bytes.fromhex(attempt["response_body_hex"]).decode())
+    body["created"] = int(datetime.fromisoformat("2099-01-01T00:00:00+00:00").timestamp())
+    response_body = json.dumps(body, sort_keys=True).encode()
+    attempt["response_body_hex"] = response_body.hex()
+    attempt["response_body_sha256"] = hashlib.sha256(response_body).hexdigest()
     attempt["request_started_at"] = "2099-01-01T00:00:00+00:00"
     attempt["response_received_at"] = "2099-01-01T00:00:01+00:00"
     attempt["attempt_envelope_sha256"] = calibration.json_sha256(
@@ -241,17 +292,19 @@ def test_calibration_rejects_local_timestamps_outside_provider_created_window(
     payload["parsed_judgments"][0]["response_received_at"] = attempt["response_received_at"]
     payload["attempt_chain_sha256"] = calibration.json_sha256(payload["attempts"])
     _write_json(path, payload)
+    _refresh_attempt_journal_for_raw(contract, path)
 
-    with pytest.raises(ValueError, match="outside the request window"):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+    with pytest.raises(ValueError, match="future|outside the request window"):
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
 
 
 def test_calibration_rejects_wrong_provider_response_model(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     path = run_directories[0] / calibration.RAW_RESPONSES_DIRECTORY / "gemini" / "batch_001.json"
     payload = _read_json(path)
     attempt = payload["attempts"][0]
@@ -263,15 +316,44 @@ def test_calibration_rejects_wrong_provider_response_model(
     attempt["attempt_envelope_sha256"] = _attempt_envelope(attempt)
     payload["attempt_chain_sha256"] = calibration.json_sha256(payload["attempts"])
     _write_json(path, payload)
+    _refresh_attempt_journal_for_raw(contract, path)
 
     with pytest.raises(ValueError, match="provider model mismatch"):
-        calibration.build_calibration_authorization(expected_contract=contract)
+        calibration_authorization.build_calibration_authorization(expected_contracts=contracts)
+
+
+def test_calibration_rejects_deleted_earlier_attempt_after_rehash(
+    tmp_path: Path,
+) -> None:
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
+    path = run_directories[0] / calibration.RAW_RESPONSES_DIRECTORY / "doubao" / "batch_001.json"
+    payload = _read_json(path)
+    final_attempt = payload["attempts"][0]
+    earlier_attempt = dict(final_attempt)
+    earlier_attempt["error"] = "ValueError: first response required retry"
+    final_attempt["attempt"] = 2
+    final_attempt["attempt_envelope_sha256"] = _attempt_envelope(final_attempt)
+    payload["attempts"] = [earlier_attempt, final_attempt]
+    payload["attempt_chain_sha256"] = calibration.json_sha256(payload["attempts"])
+    _write_json(path, payload)
+    _refresh_attempt_journal_for_raw(contract, path)
+
+    payload["attempts"] = [final_attempt]
+    payload["attempts"][0]["attempt"] = 1
+    payload["attempts"][0]["attempt_envelope_sha256"] = _attempt_envelope(payload["attempts"][0])
+    payload["attempt_chain_sha256"] = calibration.json_sha256(payload["attempts"])
+    _write_json(path, payload)
+
+    with pytest.raises(ValueError, match="attempt journal"):
+        calibration_authorization.build_calibration_authorization(expected_contracts=contracts)
 
 
 def test_calibration_rejects_final_http_error_even_with_rehashed_envelope(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     path = run_directories[0] / calibration.RAW_RESPONSES_DIRECTORY / "gemini" / "batch_001.json"
     payload = _read_json(path)
     attempt = payload["attempts"][0]
@@ -279,9 +361,10 @@ def test_calibration_rejects_final_http_error_even_with_rehashed_envelope(
     attempt["attempt_envelope_sha256"] = _attempt_envelope(attempt)
     payload["attempt_chain_sha256"] = calibration.json_sha256(payload["attempts"])
     _write_json(path, payload)
+    _refresh_attempt_journal_for_raw(contract, path)
 
     with pytest.raises(ValueError, match="final HTTP attempt is not successful"):
-        calibration.build_calibration_authorization(expected_contract=contract)
+        calibration_authorization.build_calibration_authorization(expected_contracts=contracts)
 
 
 def test_preregistered_path_rejects_symlink_target(tmp_path: Path) -> None:
@@ -291,18 +374,66 @@ def test_preregistered_path_rejects_symlink_target(tmp_path: Path) -> None:
     declared.symlink_to(target, target_is_directory=True)
 
     with pytest.raises(ValueError, match="symlink or alias"):
-        calibration.validate_preregistered_path(declared)
+        calibration_provenance.validate_preregistered_path(declared)
+
+
+def test_calibration_rejects_symlinked_selected_pairs(
+    tmp_path: Path,
+) -> None:
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    path = run_directories[0] / calibration.SELECTED_PAIRS_FILENAME
+    target = tmp_path / "selected_pairs_copy.jsonl"
+    target.write_bytes(path.read_bytes())
+    path.unlink()
+    path.symlink_to(target)
+
+    with pytest.raises(ValueError, match="symlink"):
+        calibration_authorization.build_calibration_authorization(expected_contracts=contracts)
+
+
+def test_calibration_rejects_swapped_run_directories_and_journals(
+    tmp_path: Path,
+) -> None:
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    run_swap = tmp_path / "run-swap"
+    run_directories[0].rename(run_swap)
+    run_directories[1].rename(run_directories[0])
+    run_swap.rename(run_directories[1])
+    journal_directories = tuple(Path(contract.attempt_journal_directory) for contract in contracts)
+    journal_swap = tmp_path / "journal-swap"
+    journal_directories[0].rename(journal_swap)
+    journal_directories[1].rename(journal_directories[0])
+    journal_swap.rename(journal_directories[1])
+
+    with pytest.raises(ValueError, match="identity|contract mismatch"):
+        calibration_authorization.build_calibration_authorization(expected_contracts=contracts)
+
+
+def test_authorization_path_rejects_symlink_alias(
+    tmp_path: Path,
+) -> None:
+    contracts, _ = _build_calibration_fixture(tmp_path)
+    authorization_path = Path(contracts[0].authorization_path)
+    target = tmp_path / "outside_authorization.json"
+    target.write_text("{}\n", encoding="utf-8")
+    authorization_path.symlink_to(target)
+
+    with pytest.raises(ValueError, match="symlink or alias"):
+        calibration_authorization.build_calibration_authorization(expected_contracts=contracts)
 
 
 def test_calibration_rejects_copied_run_freshness_identifiers(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     for reviewer_id in ("doubao", "gemini"):
         first_directory = run_directories[0] / calibration.RAW_RESPONSES_DIRECTORY / reviewer_id
         second_directory = run_directories[1] / calibration.RAW_RESPONSES_DIRECTORY / reviewer_id
         for first_path in first_directory.glob("*.json"):
-            (second_directory / first_path.name).write_bytes(first_path.read_bytes())
+            second_path = second_directory / first_path.name
+            second_path.write_bytes(first_path.read_bytes())
+            _refresh_attempt_journal_for_raw(contracts[1], second_path)
     (run_directories[1] / calibration.CONSENSUS_FILENAME).write_bytes(
         (run_directories[0] / calibration.CONSENSUS_FILENAME).read_bytes()
     )
@@ -312,8 +443,8 @@ def test_calibration_rejects_copied_run_freshness_identifiers(
     output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="share request_nonces"):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
 
     assert not output_path.exists()
@@ -322,7 +453,8 @@ def test_calibration_rejects_copied_run_freshness_identifiers(
 def test_calibration_rejects_dev_pair_universe_mismatch(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     path = run_directories[1] / calibration.SELECTED_PAIRS_FILENAME
     rows = _read_jsonl(path)
     rows[0]["source_id"] = "changed-source"
@@ -330,8 +462,8 @@ def test_calibration_rejects_dev_pair_universe_mismatch(
     output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="pair universe"):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
 
     assert not output_path.exists()
@@ -340,7 +472,8 @@ def test_calibration_rejects_dev_pair_universe_mismatch(
 def test_calibration_rejects_same_cherry_picked_pair_universe_in_both_runs(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     request_bundle = calibration_support.load_request_inputs(contract)
     selected_rows = _read_jsonl(run_directories[0] / calibration.SELECTED_PAIRS_FILENAME)
     selected_keys = {
@@ -378,23 +511,24 @@ def test_calibration_rejects_same_cherry_picked_pair_universe_in_both_runs(
         )
 
     with pytest.raises(ValueError, match="deterministic selection seed"):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
 
 
 def test_calibration_rejects_source_scope_conflict(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(
+    contracts, run_directories = _build_calibration_fixture(
         tmp_path,
         first_selected_source_out_of_scope=True,
     )
+    contract = contracts[0]
     output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="scope conflicts"):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
 
     assert not output_path.exists()
@@ -403,28 +537,29 @@ def test_calibration_rejects_source_scope_conflict(
 def test_calibration_rejects_consensus_not_bound_to_raw_judgments(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
     path = run_directories[0] / calibration.CONSENSUS_FILENAME
     rows = _read_jsonl(path)
     rows[0]["reviewer_judgments"]["doubao"]["notes"] = "Fabricated consensus."
     _write_jsonl(path, rows)
 
     with pytest.raises(ValueError, match="raw response evidence"):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
 
 
 def test_calibration_missing_evidence_file_fails_closed(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     (run_directories[1] / calibration.CONSENSUS_FILENAME).unlink()
     output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="missing"):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
 
     assert not output_path.exists()
@@ -433,60 +568,63 @@ def test_calibration_missing_evidence_file_fails_closed(
 def test_authorization_validator_fails_closed(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="missing"):
-        calibration.validate_calibration_authorization(output_path, contract)
+        calibration_authorization.validate_calibration_authorization(output_path, contracts)
 
-    calibration.build_calibration_authorization(
-        expected_contract=contract,
+    calibration_authorization.build_calibration_authorization(
+        expected_contracts=contracts,
     )
     with pytest.raises(FileExistsError):
-        calibration.build_calibration_authorization(
-            expected_contract=contract,
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=contracts,
         )
     payload = _read_json(output_path)
     payload["accepted_for_full_run"] = False
     _write_json(output_path, payload)
     with pytest.raises(ValueError, match="not accepted"):
-        calibration.validate_calibration_authorization(output_path, contract)
+        calibration_authorization.validate_calibration_authorization(output_path, contracts)
 
     payload["accepted_for_full_run"] = True
     _write_json(output_path, payload)
     mismatched_contract = replace(contract, selection_seed="different-seed")
-    with pytest.raises(ValueError, match="contract mismatch"):
-        calibration.validate_calibration_authorization(
+    with pytest.raises(ValueError, match="selection seed mismatch"):
+        calibration_authorization.validate_calibration_authorization(
             output_path,
-            mismatched_contract,
+            (mismatched_contract, contracts[1]),
         )
 
 
 def test_calibration_rejects_replacement_run_directories(
     tmp_path: Path,
 ) -> None:
-    contract, _ = _build_calibration_fixture(tmp_path)
-    replacement_contract = replace(
-        contract,
-        calibration_run_directories=(
-            str(tmp_path / "replacement_run3"),
-            str(tmp_path / "replacement_run4"),
+    contracts, _ = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
+    replacement_contracts = (
+        replace(
+            contract,
+            output_directory=str(tmp_path / "replacement_run3"),
         ),
+        contracts[1],
     )
 
-    with pytest.raises(ValueError, match="preregistered run directories mismatch"):
-        calibration.build_calibration_authorization(
-            expected_contract=replacement_contract,
+    with pytest.raises(ValueError, match="run identity mismatch|run order or identity"):
+        calibration_authorization.build_calibration_authorization(
+            expected_contracts=replacement_contracts,
         )
 
 
 def test_authorization_validator_rechecks_persisted_run_evidence(
     tmp_path: Path,
 ) -> None:
-    contract, run_directories = _build_calibration_fixture(tmp_path)
+    contracts, run_directories = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
     output_path = Path(contract.authorization_path)
-    calibration.build_calibration_authorization(
-        expected_contract=contract,
+    calibration_authorization.build_calibration_authorization(
+        expected_contracts=contracts,
     )
     consensus_path = run_directories[0] / calibration.CONSENSUS_FILENAME
     rows = _read_jsonl(consensus_path)
@@ -494,9 +632,9 @@ def test_authorization_validator_rechecks_persisted_run_evidence(
     _write_jsonl(consensus_path, rows)
 
     with pytest.raises(ValueError, match="raw response evidence"):
-        calibration.validate_calibration_authorization(
+        calibration_authorization.validate_calibration_authorization(
             output_path,
-            contract,
+            contracts,
         )
 
 
@@ -504,7 +642,10 @@ def _build_calibration_fixture(
     tmp_path: Path,
     *,
     first_selected_source_out_of_scope: bool = False,
-) -> tuple[calibration.RelationRunContract, tuple[Path, Path]]:
+) -> tuple[
+    tuple[calibration.RelationRunContract, calibration.RelationRunContract],
+    tuple[Path, Path],
+]:
     available_pairs = _available_pairs()
     selected_keys = select_canonical_keys(
         tuple(
@@ -517,7 +658,7 @@ def _build_calibration_fixture(
             for pair in available_pairs
         ),
         limit_pairs=calibration.CALIBRATION_PAIR_COUNT,
-        seed="frozen-selection-seed",
+        seed=calibration.FROZEN_SELECTION_SEED,
     )
     selected_pairs = [
         {
@@ -534,30 +675,70 @@ def _build_calibration_fixture(
     target_specs_path = design_directory / "relation_target_specs.jsonl"
     source_scope_labels_path = tmp_path / "source_scope_labels.jsonl"
     source_scope_report_path = tmp_path / "source_scope_report.json"
-    preregistration_path = tmp_path / "relation_calibration_preregistration.json"
+    preregistration_path = tmp_path / "relation_calibration_v6_preregistration.json"
     run_directories = (tmp_path / "run1", tmp_path / "run2")
     authorization_path = tmp_path / "authorization.json"
     full_run_directory = tmp_path / "full"
+    execution_seal_path = tmp_path / "execution_seal.json"
+    journal_directories = (tmp_path / "journal1", tmp_path / "journal2")
     _write_json(
         preregistration_path,
         {
             "status": "preregistered",
-            "protocol": "phase_b_relation_calibration_v5_bound_runs",
+            "protocol": "phase_b_relation_calibration_v6_bound_runs",
             "run_contract_version": calibration.RUN_CONTRACT_VERSION,
+            "selection_seed": calibration.FROZEN_SELECTION_SEED,
+            "requested_models": {
+                "doubao": "doubao-test-model",
+                "gemini": "gemini-test-model",
+            },
             "provider_response_models": {
                 "doubao": "doubao-test-model",
                 "gemini": "gemini-test-model",
             },
+            "base_urls": {
+                "doubao": "https://doubao.example.invalid/v1",
+                "gemini": "https://gemini.example.invalid/v1",
+            },
+            "thinking_modes": {
+                "doubao": "disabled",
+                "gemini": "minimal",
+            },
+            "calibration_run_ids": ["test-run1", "test-run2"],
             "calibration_run_directories": [
                 str(run_directories[0]),
                 str(run_directories[1]),
             ],
+            "calibration_attempt_journal_directories": [
+                str(journal_directories[0]),
+                str(journal_directories[1]),
+            ],
+            "full_run_id": "test-full",
             "full_run_directory": str(full_run_directory),
+            "full_attempt_journal_directory": str(tmp_path / "full-journal"),
+            "execution_seal_path": str(execution_seal_path),
             "authorization_path": str(authorization_path),
             "replacement_run_allowed": False,
         },
     )
     calibration.DEFAULT_PREREGISTRATION_PATH = preregistration_path
+    calibration_provenance.TRACKED_PREREGISTRATION_PATH = preregistration_path
+    calibration_provenance.EXPECTED_PREREGISTRATION_SHA256 = calibration_support.file_sha256(preregistration_path)
+    _write_json(
+        execution_seal_path,
+        {
+            "status": "sealed_after_independent_audit_pass",
+            "protocol": "phase_b_relation_calibration_v6_execution_seal",
+            "recorded_at": "2026-07-24T00:00:00+00:00",
+            "git_commit": "0" * 40,
+            "git_branch": "test",
+            "tracked_preregistration_path": str(preregistration_path),
+            "tracked_preregistration_sha256": calibration_support.file_sha256(preregistration_path),
+            "audit_agent_id": "test-auditor",
+            "audit_verdict": "PASS",
+            "authorize_exactly_two_calibration_runs": True,
+        },
+    )
     _write_synthetic_packet_and_specs(
         packet_directory,
         design_directory,
@@ -603,24 +784,28 @@ def _build_calibration_fixture(
             thinking_mode=ThinkingMode.MINIMAL,
         ),
     )
-    contract = calibration.build_current_run_contract(
-        reviewers=reviewers,
-        batch_size=calibration.CALIBRATION_BATCH_SIZE,
-        selection_seed="frozen-selection-seed",
-        selected_task_split=calibration.FROZEN_DEV_SPLIT,
-        selected_pair_limit=calibration.CALIBRATION_PAIR_COUNT,
-        packet_manifest_path=packet_manifest_path,
-        target_specs_path=target_specs_path,
-        source_scope_labels_path=source_scope_labels_path,
-        source_scope_report_path=source_scope_report_path,
+    contracts = tuple(
+        calibration.build_current_run_contract(
+            reviewers=reviewers,
+            batch_size=calibration.CALIBRATION_BATCH_SIZE,
+            selection_seed=calibration.FROZEN_SELECTION_SEED,
+            selected_task_split=calibration.FROZEN_DEV_SPLIT,
+            selected_pair_limit=calibration.CALIBRATION_PAIR_COUNT,
+            output_directory=run_directory,
+            packet_manifest_path=packet_manifest_path,
+            target_specs_path=target_specs_path,
+            source_scope_labels_path=source_scope_labels_path,
+            source_scope_report_path=source_scope_report_path,
+        )
+        for run_directory in run_directories
     )
-    for run_directory in run_directories:
+    for run_directory, contract in zip(run_directories, contracts, strict=True):
         _write_calibration_run(
             run_directory,
             contract=contract,
             selected_pairs=selected_pairs,
         )
-    return contract, run_directories
+    return contracts, run_directories  # type: ignore[return-value]
 
 
 def _available_pairs() -> list[dict[str, str]]:
@@ -636,6 +821,22 @@ def _available_pairs() -> list[dict[str, str]]:
                 }
             )
     return rows
+
+
+def _reviewers_from_contract(
+    contract: calibration.RelationRunContract,
+) -> tuple[AnnotationReviewerConfig, AnnotationReviewerConfig]:
+    reviewers = tuple(
+        AnnotationReviewerConfig(
+            reviewer_id=binding.reviewer_id,
+            base_url=binding.base_url,
+            model=binding.model_id,
+            api_key="",
+            thinking_mode=ThinkingMode(binding.thinking_mode),
+        )
+        for binding in contract.reviewer_models
+    )
+    return reviewers  # type: ignore[return-value]
 
 
 def _write_synthetic_packet_and_specs(
@@ -722,6 +923,20 @@ def _write_calibration_run(
     _write_json(
         run_directory / calibration.RUN_CONTRACT_FILENAME,
         contract.to_dict(),
+    )
+    _write_json(
+        run_directory / calibration.RUN_IDENTITY_FILENAME,
+        {
+            "status": "started_from_execution_seal",
+            "protocol": "phase_b_relation_run_identity_v1",
+            "run_id": contract.run_id,
+            "run_index": contract.run_index,
+            "output_directory": contract.output_directory,
+            "attempt_journal_directory": contract.attempt_journal_directory,
+            "run_contract_sha256": calibration_support.file_sha256(run_directory / calibration.RUN_CONTRACT_FILENAME),
+            "execution_seal_sha256": contract.execution_seal_sha256,
+            "started_at": "2026-07-24T00:00:00+00:00",
+        },
     )
     _write_jsonl(
         run_directory / calibration.SELECTED_PAIRS_FILENAME,
@@ -890,9 +1105,15 @@ def _write_raw_responses(
     ],
 ) -> None:
     request_bundle = calibration_support.load_request_inputs(contract)
+    journal_root = Path(contract.attempt_journal_directory)
+    if journal_root.exists():
+        journal_root.chmod(0o755)
     for binding in contract.reviewer_models:
         reviewer_directory = run_directory / calibration.RAW_RESPONSES_DIRECTORY / binding.reviewer_id
         reviewer_directory.mkdir(parents=True, exist_ok=True)
+        reviewer_journal_directory = journal_root / binding.reviewer_id
+        if reviewer_journal_directory.exists():
+            reviewer_journal_directory.chmod(0o755)
         reviewer = AnnotationReviewerConfig(
             reviewer_id=binding.reviewer_id,
             base_url=binding.base_url,
@@ -1015,8 +1236,8 @@ def _write_raw_responses(
                 }
             )
             _write_json(
-                reviewer_directory / f"{batch_id}.json",
-                {
+                raw_path := reviewer_directory / f"{batch_id}.json",
+                payload := {
                     "status": "success",
                     "reviewer_id": binding.reviewer_id,
                     "reviewer_kind": "model",
@@ -1059,6 +1280,13 @@ def _write_raw_responses(
                     "parsed_judgments": parsed_judgments,
                 },
             )
+            _write_attempt_journal_fixture(
+                reviewer_journal_directory / f"{batch_id}.json",
+                raw_path,
+                payload,
+            )
+        reviewer_journal_directory.chmod(0o555)
+    journal_root.chmod(0o555)
 
 
 def _write_raw_responses_for_consensus(
@@ -1180,10 +1408,55 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def _write_attempt_journal_fixture(
+    path: Path,
+    raw_path: Path,
+    payload: dict[str, Any],
+) -> None:
+    if path.exists():
+        path.chmod(0o644)
+    _write_json(
+        path,
+        {
+            "status": "attempt_chain_sealed",
+            "protocol": "phase_b_relation_attempt_journal_v1",
+            "reviewer_id": payload["reviewer_id"],
+            "batch_id": payload["batch_id"],
+            "raw_response_path": str(raw_path),
+            "raw_response_sha256": calibration_support.file_sha256(raw_path),
+            "request_nonce": payload["request_nonce"],
+            "request_fingerprint": payload["request_fingerprint"],
+            "attempt_chain_sha256": payload["attempt_chain_sha256"],
+            "attempts": payload["attempts"],
+            "recorded_at": "2026-07-24T01:00:00+00:00",
+        },
+    )
+    path.chmod(0o444)
+
+
+def _refresh_attempt_journal_for_raw(
+    contract: calibration.RelationRunContract,
+    raw_path: Path,
+) -> None:
+    journal_root = Path(contract.attempt_journal_directory)
+    journal_directory = journal_root / raw_path.parent.name
+    journal_root.chmod(0o755)
+    journal_directory.chmod(0o755)
+    payload = _read_json(raw_path)
+    _write_attempt_journal_fixture(
+        journal_directory / raw_path.name,
+        raw_path,
+        payload,
+    )
+    journal_directory.chmod(0o555)
+    journal_root.chmod(0o555)
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:

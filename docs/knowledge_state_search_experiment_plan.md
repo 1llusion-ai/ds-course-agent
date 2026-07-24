@@ -272,10 +272,19 @@ closed-loop multi-hop:       blocked
 The independent re-audit rejected v4 before any model call: provider-returned
 model IDs were not frozen, earlier retry attempts were not fully validated, a
 rehashed HTTP 500 final could pass, and exact output strings could resolve
-through symlinks. Run contract v5 freezes provider-returned model IDs, validates
-the complete ordered attempt chain, requires a 2xx final response, reconstructs
-semantic fingerprints across retries, and rejects symlink/path aliases. No v5
-model call has started.
+through symlinks. Run contract v5 froze provider-returned model IDs, validated
+the complete ordered attempt chain, required a 2xx final response,
+reconstructed semantic fingerprints across retries, and rejected root
+symlink/path aliases.
+
+A fresh priority-subagent audit still returned FAIL before any v5 call:
+preregistration/seed could be changed before contract construction, earlier
+attempts could be deleted and rehashed, ordered run contents and sub-artifacts
+could be swapped or aliased, and all timestamps could be shifted together.
+Run contract v6 now freezes the exact tracked preregistration bytes and seed,
+adds ordered run identities and separate write-protected attempt journals, and
+requires an independent-PASS execution seal tied to one clean git commit.
+No v5 or v6 model call has occurred.
 
 The full run started automatically only after the machine authorization was
 created. Its lower-model judgments, terminal priority actions, and final proxy

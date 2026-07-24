@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import math
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from benchmarks.knowledge_state_search import (
+    phase_b_relation_calibration_provenance as provenance,
+)
 from benchmarks.knowledge_state_search.phase_b_annotation_packets import (
     DEFAULT_OUTPUT_DIRECTORY as DEFAULT_PACKET_DIRECTORY,
 )
@@ -30,15 +32,19 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_support impor
 from benchmarks.knowledge_state_search.phase_b_relation_target_specs import DEFAULT_TARGET_SPECS_PATH
 
 RUN_CONTRACT_FILENAME = "relation_run_contract.json"
+RUN_IDENTITY_FILENAME = "relation_run_identity.json"
 ANNOTATION_REPORT_FILENAME = "annotation_report.json"
 SELECTED_PAIRS_FILENAME = "selected_canonical_pairs.jsonl"
 CONSENSUS_FILENAME = "dual_model_consensus.jsonl"
 RAW_RESPONSES_DIRECTORY = "raw_responses"
-CALIBRATION_PROTOCOL = "phase_b_relation_calibration_authorization_v4"
-RUN_CONTRACT_VERSION = "phase_b_relation_run_contract_v5"
-DEFAULT_PREREGISTRATION_PATH = Path(
-    "benchmarks/data/knowledge_state_search_confirmatory_v3_phase_b_design/relation_calibration_v5_preregistration.json"
-)
+CALIBRATION_PROTOCOL = "phase_b_relation_calibration_authorization_v5"
+RUN_CONTRACT_VERSION = "phase_b_relation_run_contract_v6"
+TRACKED_PREREGISTRATION_PATH = provenance.TRACKED_PREREGISTRATION_PATH
+EXPECTED_PREREGISTRATION_SHA256 = provenance.EXPECTED_PREREGISTRATION_SHA256
+FROZEN_SELECTION_SEED = provenance.FROZEN_SELECTION_SEED
+DEFAULT_PREREGISTRATION_PATH = TRACKED_PREREGISTRATION_PATH
+create_execution_seal = provenance.create_execution_seal
+validate_preregistered_path = provenance.validate_preregistered_path
 FROZEN_DEV_SPLIT = "phase_b_dev"
 FROZEN_DEV_TASK_IDS = (
     "pb_t01_cv_variance",
@@ -73,6 +79,12 @@ RUN_CONTRACT_FIELDS = (
     "source_scope_labels_sha256",
     "source_scope_report_path",
     "source_scope_report_sha256",
+    "execution_seal_path",
+    "execution_seal_sha256",
+    "run_id",
+    "run_index",
+    "output_directory",
+    "attempt_journal_directory",
     "reviewer_models",
     "batch_size",
     "temperature",
@@ -95,8 +107,8 @@ AUTHORIZATION_FIELDS = (
     "protocol",
     "accepted_for_full_run",
     "thresholds",
-    "run_contract",
-    "run_contract_sha256",
+    "run_contracts",
+    "run_contract_sha256s",
     "run_directories",
     "selected_task_split",
     "selected_task_ids",
@@ -171,6 +183,12 @@ class RelationRunContract:
     source_scope_labels_sha256: str
     source_scope_report_path: str
     source_scope_report_sha256: str
+    execution_seal_path: str
+    execution_seal_sha256: str
+    run_id: str
+    run_index: int | None
+    output_directory: str
+    attempt_journal_directory: str
     reviewer_models: tuple[ReviewerModelBinding, ...]
     batch_size: int
     temperature: float
@@ -203,6 +221,12 @@ class RelationRunContract:
             "source_scope_labels_sha256": self.source_scope_labels_sha256,
             "source_scope_report_path": self.source_scope_report_path,
             "source_scope_report_sha256": self.source_scope_report_sha256,
+            "execution_seal_path": self.execution_seal_path,
+            "execution_seal_sha256": self.execution_seal_sha256,
+            "run_id": self.run_id,
+            "run_index": self.run_index,
+            "output_directory": self.output_directory,
+            "attempt_journal_directory": self.attempt_journal_directory,
             "reviewer_models": [binding.to_dict() for binding in self.reviewer_models],
             "batch_size": self.batch_size,
             "temperature": self.temperature,
@@ -239,6 +263,9 @@ class RelationRunContract:
         split = payload.get("selected_task_split")
         if split is not None and (not isinstance(split, str) or not split.strip()):
             raise ValueError("selected_task_split must be a string or null")
+        run_index = payload.get("run_index")
+        if run_index is not None and (not isinstance(run_index, int) or isinstance(run_index, bool)):
+            raise ValueError("run_index must be an integer or null")
         contract = cls(
             contract_version=_required_string(payload, "contract_version"),
             prompt_version=_required_string(payload, "prompt_version"),
@@ -264,6 +291,15 @@ class RelationRunContract:
             source_scope_labels_sha256=_required_sha256(payload, "source_scope_labels_sha256"),
             source_scope_report_path=_required_string(payload, "source_scope_report_path"),
             source_scope_report_sha256=_required_sha256(payload, "source_scope_report_sha256"),
+            execution_seal_path=_required_string(payload, "execution_seal_path"),
+            execution_seal_sha256=_required_sha256(payload, "execution_seal_sha256"),
+            run_id=_required_string(payload, "run_id"),
+            run_index=run_index,
+            output_directory=_required_string(payload, "output_directory"),
+            attempt_journal_directory=_required_string(
+                payload,
+                "attempt_journal_directory",
+            ),
             reviewer_models=tuple(
                 ReviewerModelBinding.from_dict(_required_mapping(row, "reviewer model")) for row in raw_reviewers
             ),
@@ -293,6 +329,7 @@ def build_current_run_contract(
     max_tokens: int = REQUEST_MAX_TOKENS,
     timeout_seconds: float = CALIBRATION_TIMEOUT_SECONDS,
     max_retries: int = CALIBRATION_MAX_RETRIES,
+    output_directory: Path,
     packet_manifest_path: Path = DEFAULT_PACKET_DIRECTORY / "annotation_packet_manifest.json",
     target_specs_path: Path = DEFAULT_TARGET_SPECS_PATH,
     source_scope_labels_path: Path = DEFAULT_SOURCE_SCOPE_LABELS_PATH,
@@ -307,7 +344,13 @@ def build_current_run_contract(
     )
 
     preregistration_path = DEFAULT_PREREGISTRATION_PATH
-    preregistration = _load_preregistration(preregistration_path)
+    preregistration = provenance.load_preregistration(preregistration_path)
+    run_id, run_index, attempt_journal_directory = provenance.run_binding(
+        preregistration,
+        output_directory,
+    )
+    execution_seal_path = Path(_required_string(preregistration, "execution_seal_path"))
+    provenance.load_execution_seal(execution_seal_path, preregistration_path)
     bindings = tuple(
         sorted(
             (
@@ -345,6 +388,12 @@ def build_current_run_contract(
         source_scope_labels_sha256=file_sha256(source_scope_labels_path),
         source_scope_report_path=str(source_scope_report_path),
         source_scope_report_sha256=file_sha256(source_scope_report_path),
+        execution_seal_path=str(execution_seal_path),
+        execution_seal_sha256=file_sha256(execution_seal_path),
+        run_id=run_id,
+        run_index=run_index,
+        output_directory=str(output_directory),
+        attempt_journal_directory=attempt_journal_directory,
         reviewer_models=bindings,
         batch_size=batch_size,
         temperature=float(temperature),
@@ -359,218 +408,51 @@ def build_current_run_contract(
     return contract
 
 
-def derive_calibration_contract(
+def derive_calibration_contracts(
     run_contract: RelationRunContract,
-) -> RelationRunContract:
-    """Derive the authorization contract without changing execution settings."""
+) -> tuple[RelationRunContract, RelationRunContract]:
+    """Derive both ordered calibration contracts from one full-run contract."""
 
     from benchmarks.knowledge_state_search.phase_b_relation_calibration_support import (
         validate_run_contract,
     )
 
-    contract = replace(
-        run_contract,
-        selected_task_split=FROZEN_DEV_SPLIT,
-        selected_pair_limit=CALIBRATION_PAIR_COUNT,
+    preregistration = provenance.load_preregistration(Path(run_contract.preregistration_path))
+    directories = provenance.required_string_list(
+        preregistration,
+        "calibration_run_directories",
+        CALIBRATION_RUN_COUNT,
     )
-    validate_run_contract(contract)
-    return contract
-
-
-def build_calibration_authorization(
-    *,
-    expected_contract: RelationRunContract,
-) -> dict[str, object]:
-    """Write authorization only when both frozen dev calibration runs pass."""
-
-    from benchmarks.knowledge_state_search.phase_b_relation_calibration_support import (
-        load_request_inputs,
-        relation_repeatability,
-        validate_calibration_run,
-        validate_run_contract,
+    run_ids = provenance.required_string_list(
+        preregistration,
+        "calibration_run_ids",
+        CALIBRATION_RUN_COUNT,
     )
-
-    validate_run_contract(expected_contract)
-    run_directories = tuple(Path(value) for value in expected_contract.calibration_run_directories)
-    if expected_contract.selected_task_split != FROZEN_DEV_SPLIT:
-        raise ValueError("relation calibration contract must use phase_b_dev")
-    if expected_contract.selected_pair_limit != CALIBRATION_PAIR_COUNT:
-        raise ValueError("relation calibration contract must select exactly 30 pairs")
-    request_inputs = load_request_inputs(expected_contract)
-    runs = [validate_calibration_run(path, expected_contract, request_inputs) for path in run_directories]
-    if runs[0]["selected_pairs_sha256"] != runs[1]["selected_pairs_sha256"]:
-        raise ValueError("calibration selected pair files are not identical")
-    if runs[0]["selected_pairs"] != runs[1]["selected_pairs"]:
-        raise ValueError("calibration selected pair universes are not identical")
-    _validate_cross_run_freshness(runs, label="calibration runs")
-    if runs[0]["response_models"] != runs[1]["response_models"]:
-        raise ValueError("calibration runs used different provider response models")
-    repeatability = relation_repeatability(runs)
-    for reviewer_id, rate in repeatability.items():
-        if rate < MIN_REPEATABILITY:
-            raise ValueError(f"{reviewer_id} derived relation repeatability is below {MIN_REPEATABILITY:.2f}")
-    manifest = {
-        "status": "accepted_for_full_run",
-        "protocol": CALIBRATION_PROTOCOL,
-        "accepted_for_full_run": True,
-        "thresholds": _thresholds(),
-        "run_contract": expected_contract.to_dict(),
-        "run_contract_sha256": json_sha256(expected_contract.to_dict()),
-        "run_directories": [str(path) for path in run_directories],
-        "selected_task_split": FROZEN_DEV_SPLIT,
-        "selected_task_ids": list(FROZEN_DEV_TASK_IDS),
-        "selected_canonical_pair_count": CALIBRATION_PAIR_COUNT,
-        "selected_pairs_sha256": runs[0]["selected_pairs_sha256"],
-        "runs": [run["manifest_row"] for run in runs],
-        "repeatability": repeatability,
-        "human_verified_count": 0,
-        "dataset_frozen": False,
-        "method_runs_authorized": False,
-    }
-    output_path = Path(expected_contract.authorization_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("x", encoding="utf-8") as handle:
-        handle.write(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
-    return manifest
-
-
-def validate_calibration_authorization(
-    path: Path,
-    expected_contract: RelationRunContract,
-) -> dict[str, object]:
-    """Validate an accepted calibration manifest and fail closed otherwise."""
-
-    from benchmarks.knowledge_state_search.phase_b_relation_calibration_support import (
-        load_request_inputs,
-        read_json_object,
-        relation_repeatability,
-        validate_authorization_manifest,
-        validate_calibration_run,
-        validate_run_contract,
+    journal_directories = provenance.required_string_list(
+        preregistration,
+        "calibration_attempt_journal_directories",
+        CALIBRATION_RUN_COUNT,
     )
-
-    validate_run_contract(expected_contract)
-    if path != Path(expected_contract.authorization_path):
-        raise ValueError("calibration authorization path does not match preregistration")
-    payload = read_json_object(path, "calibration authorization")
-    validate_authorization_manifest(payload, expected_contract)
-    raw_directories = payload["run_directories"]
-    if raw_directories != list(expected_contract.calibration_run_directories):
-        raise ValueError("calibration authorization run directories are invalid")
-    run_directories = tuple(Path(value) for value in expected_contract.calibration_run_directories)
-    request_inputs = load_request_inputs(expected_contract)
-    runs = [
-        validate_calibration_run(
-            run_directory,
-            expected_contract,
-            request_inputs,
+    contracts = tuple(
+        replace(
+            run_contract,
+            run_id=run_ids[index],
+            run_index=index + 1,
+            output_directory=directories[index],
+            attempt_journal_directory=journal_directories[index],
+            selected_task_split=FROZEN_DEV_SPLIT,
+            selected_pair_limit=CALIBRATION_PAIR_COUNT,
         )
-        for run_directory in run_directories
-    ]
-    if runs[0]["selected_pairs"] != runs[1]["selected_pairs"]:
-        raise ValueError("calibration authorization pair universes differ")
-    _validate_cross_run_freshness(runs, label="calibration authorization runs")
-    if runs[0]["response_models"] != runs[1]["response_models"]:
-        raise ValueError("calibration authorization response models differ")
-    if payload["selected_pairs_sha256"] != runs[0]["selected_pairs_sha256"]:
-        raise ValueError("calibration authorization selected-pair hash mismatch")
-    if payload["runs"] != [run["manifest_row"] for run in runs]:
-        raise ValueError("calibration authorization run evidence mismatch")
-    if payload["repeatability"] != relation_repeatability(runs):
-        raise ValueError("calibration authorization repeatability evidence mismatch")
-    return payload
-
-
-def validate_preregistered_path(path: Path) -> None:
-    """Reject symlink or path-normalization aliases for preregistered artifacts."""
-
-    declared = path if path.is_absolute() else Path.cwd() / path
-    if declared.resolve(strict=False) != declared.absolute():
-        raise ValueError(f"preregistered path resolves through a symlink or alias: {path}")
-
-
-def _thresholds() -> dict[str, float]:
-    return {
-        "minimum_agreement": MIN_AGREEMENT,
-        "minimum_kappa": MIN_KAPPA,
-        "minimum_repeatability": MIN_REPEATABILITY,
-    }
-
-
-def _validate_cross_run_freshness(
-    runs: list[dict[str, object]],
-    *,
-    label: str,
-) -> None:
-    for field_name in (
-        "request_nonces",
-        "request_fingerprints",
-        "response_body_sha256s",
-    ):
-        first = set(_required_string_tuple(runs[0], field_name))
-        second = set(_required_string_tuple(runs[1], field_name))
-        if first.intersection(second):
-            raise ValueError(f"{label} share {field_name}")
-    first_provider_ids = set(_required_string_tuple(runs[0], "provider_response_ids"))
-    second_provider_ids = set(_required_string_tuple(runs[1], "provider_response_ids"))
-    if first_provider_ids.intersection(second_provider_ids):
-        raise ValueError(f"{label} share provider_response_ids")
-
-
-def _required_string_tuple(payload: dict[str, object], field_name: str) -> tuple[str, ...]:
-    value = payload.get(field_name)
-    if not isinstance(value, tuple) or any(not isinstance(item, str) or not item for item in value):
-        raise ValueError(f"{field_name} must be a tuple of non-empty strings")
-    return value
+        for index in range(CALIBRATION_RUN_COUNT)
+    )
+    for contract in contracts:
+        validate_run_contract(contract)
+    return contracts  # type: ignore[return-value]
 
 
 def _required_mapping(payload: object, label: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"{label} must be an object")
-    return payload
-
-
-def _load_preregistration(path: Path) -> dict[str, object]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError("relation calibration preregistration must be an object")
-    required_fields = (
-        "status",
-        "protocol",
-        "run_contract_version",
-        "provider_response_models",
-        "calibration_run_directories",
-        "full_run_directory",
-        "authorization_path",
-        "replacement_run_allowed",
-    )
-    if tuple(payload) != required_fields:
-        raise ValueError("relation calibration preregistration fields are invalid")
-    if payload.get("status") != "preregistered":
-        raise ValueError("relation calibration preregistration status is invalid")
-    if payload.get("protocol") != "phase_b_relation_calibration_v5_bound_runs":
-        raise ValueError("relation calibration preregistration protocol is invalid")
-    if payload.get("run_contract_version") != RUN_CONTRACT_VERSION:
-        raise ValueError("relation calibration preregistration version is invalid")
-    run_directories = payload.get("calibration_run_directories")
-    if (
-        not isinstance(run_directories, list)
-        or len(run_directories) != CALIBRATION_RUN_COUNT
-        or len(set(run_directories)) != CALIBRATION_RUN_COUNT
-        or any(not isinstance(value, str) or not value for value in run_directories)
-    ):
-        raise ValueError("relation calibration preregistered run directories are invalid")
-    _required_string(payload, "full_run_directory")
-    _required_string(payload, "authorization_path")
-    if payload.get("replacement_run_allowed") is not False:
-        raise ValueError("relation calibration replacement runs must be forbidden")
-    provider_models = payload.get("provider_response_models")
-    if (
-        not isinstance(provider_models, dict)
-        or set(provider_models) != {"doubao", "gemini"}
-        or any(not isinstance(value, str) or not value for value in provider_models.values())
-    ):
-        raise ValueError("relation calibration provider response models are invalid")
     return payload
 
 

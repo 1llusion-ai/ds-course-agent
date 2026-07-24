@@ -365,4 +365,26 @@ for each reviewer, hashes and validates the complete ordered attempt chain,
 requires a successful 2xx final attempt, validates every body-bearing attempt,
 rejects cross-retry semantic drift, and rejects symlink/path aliases for
 preregistered outputs. Adversarial wrong-model, HTTP-500, and symlink tests now
-fail closed. No v5 model call has started.
+fail closed.
+
+## v5 terminal audit and v6 preregistration (2026-07-24)
+
+A fresh zero-context priority subagent returned **FAIL** for v5 before any
+model request. Its offline attacks showed four remaining blocker classes:
+
+1. preregistration bytes and the selection seed could be changed before
+   contract construction;
+2. an earlier retry could be deleted, the final attempt renumbered, and all
+   local hashes recomputed;
+3. run1/run2 contents could be swapped and authorization/sub-artifacts could
+   still use aliases;
+4. provider `created` and local request timestamps could all be shifted into
+   the future together.
+
+No v5 model call occurred. Run contract v6 replaces v5 with an exact
+preregistration hash and seed, frozen requested/provider model and endpoint
+bindings, ordered run identities, separate write-protected attempt journals,
+regular-file alias checks, future-time rejection, and a write-once execution
+seal tied to an independent PASS and one clean git commit. Targeted
+relation/packet validation is 56 passed. v6 is not yet independently audited
+or executed; canonical authorization remains absent.
