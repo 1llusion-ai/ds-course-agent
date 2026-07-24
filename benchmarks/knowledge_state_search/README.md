@@ -107,5 +107,9 @@ failed. The first frozen run then failed in Doubao `batch_002`: blind item
 `d_0919` duplicated proposition `p2`, and routing-relevant judgments changed
 across retries. That artifact used run contract v1. Post-failure audit repairs
 and the preregistered single-pair isolation rule define run contract v2, under
-which no model calibration has yet run. No authorization manifest exists, so
-full annotation has not started.
+which exactly two predetermined runs were attempted. Run 1 completed at
+`24/30` agreement, kappa `0.716`, zero source-scope conflicts, and zero
+semantic drift. Run 2 failed in MiMo `batch_004` for `m_0385`: the first
+response used a non-verbatim `p2` quote, and the subsequent responses changed
+routing-relevant judgments. This is a terminal v2 NO-GO. No replacement run,
+authorization manifest, or full annotation was started.

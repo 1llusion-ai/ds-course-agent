@@ -896,8 +896,13 @@ retry-drift rejection remain unchanged. This removes co-batching as a possible
 interference source but does not assume schema reliability is fixed. The
 authorization validator now recomputes the seed-selected pair universe and
 requires exact raw-response-to-consensus judgment binding before metrics are
-accepted. No v2 model calibration has been executed. The last completed
-engineering validation is 647 passed, 14 skipped, with one pre-existing
+accepted. The two predetermined v2 runs were executed: run 1 completed at
+`24/30` agreement, kappa `0.716`, zero source-scope conflicts, and zero
+semantic drift; run 2 failed in MiMo `batch_004` for `m_0385` after a
+non-verbatim `p2` quote was followed by routing-relevant semantic drift across
+retries. The authorization builder rejected the incomplete pair of runs. No
+replacement run, authorization manifest, or full annotation was started.
+Engineering validation is 647 passed, 14 skipped, with one pre-existing
 offline-reranker warning; full ruff, format, diff, and JSON checks pass.
 
 The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future

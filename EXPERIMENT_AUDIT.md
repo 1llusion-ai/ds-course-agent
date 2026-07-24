@@ -237,7 +237,12 @@ schema, selection seed, thresholds, and retry-drift gate remain unchanged.
 Single-pair requests remove co-batching as a possible interference source but
 do not establish reliability by themselves. The authorization validator now
 recomputes the selected pair universe and binds every consensus summary to its
-reparsed raw judgment. No v2 model calibration exists yet.
+reparsed raw judgment. The first predetermined v2 run completed at `24/30`
+agreement, kappa `0.716`, zero scope conflicts, and zero semantic drift. The
+second failed in MiMo `batch_004` for `m_0385`: a non-verbatim `p2` quote was
+followed by routing-relevant semantic drift across retries. The authorization
+builder failed closed and produced no manifest. No replacement run or full
+annotation was started.
 
 The integrity boundary therefore remains:
 

@@ -185,7 +185,16 @@ co-batching as one possible source of cross-item interference but does not
 presume the reliability issue is solved. The v2 gate now recomputes the
 seed-selected pair universe and binds every consensus summary to the reparsed
 raw model judgment before calculating metrics. No parser repair or
-retry-until-pass path was added. No model run has yet been executed under v2.
+retry-until-pass path was added.
+
+The two predetermined v2 runs were then executed. Run 1 completed with
+`24/30` agreement, kappa `0.716`, zero source-scope conflicts, and zero
+semantic drift. Run 2 failed before completion in MiMo `batch_004` for blind
+item `m_0385`: the first response supplied a non-verbatim `p2` evidence quote,
+then the retries changed routing-relevant proposition judgments. The machine
+authorization builder rejected the incomplete pair of runs and no manifest was
+written. This is a terminal v2 NO-GO; no replacement run or full annotation is
+permitted under this contract.
 
 Current boundary:
 

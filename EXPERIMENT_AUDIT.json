@@ -159,7 +159,7 @@
       "accepted_for_full_run": false,
       "full_lower_model_judgments_started": 0,
       "prompt_only_calibration_closed": true,
-      "reason": "first_final_contract_frozen_run_failed_schema_and_semantic_drift_checks",
+      "reason": "second_preregistered_run_contract_v2_calibration_failed_quote_and_semantic_drift_checks",
       "fixed_source_scope_integration": {
         "pair_models_output_task_scope": false,
         "pair_models_output_direct_relation": false,
@@ -190,7 +190,9 @@
       },
       "authorization_manifest_created": false,
       "current_run_contract_version": "phase_b_relation_run_contract_v2",
-      "current_run_contract_model_runs": 0,
+      "current_run_contract_model_runs": 2,
+      "current_run_contract_completed_runs": 1,
+      "current_run_contract_failed_runs": 1,
       "current_run_contract_batch_size": 1,
       "current_run_contract_change": "preregistered_single_pair_request_isolation",
       "current_run_contract_change_scope": "removes_co_batching_as_possible_interference_source_without_presuming_reliability_is_fixed",
@@ -208,7 +210,32 @@
         "selection_seed",
         "thresholds",
         "semantic_drift_rejection"
-      ]
+      ],
+      "v4_run_contract_v2": {
+        "run_1": {
+          "completed": true,
+          "selected_pairs": 30,
+          "exact_relation_agreement_count": 24,
+          "exact_relation_agreement_rate": 0.8,
+          "cohen_kappa": 0.7156398104265403,
+          "source_scope_conflict_count": 0,
+          "semantic_drift_error_count": 0
+        },
+        "run_2": {
+          "completed": false,
+          "failed_reviewer": "mimo",
+          "failed_batch": "batch_004",
+          "failed_blind_item_id": "m_0385",
+          "first_failure": "non_verbatim_p2_evidence_quote",
+          "terminal_failure": "routing_relevant_semantic_drift_across_retries",
+          "successful_doubao_batches": 30,
+          "successful_mimo_batches": 3
+        },
+        "authorization_manifest_created": false,
+        "replacement_run_started": false,
+        "full_annotation_started": false,
+        "decision": "terminal_no_go"
+      }
     },
     "annotation_started": true,
     "dataset_frozen": false,
