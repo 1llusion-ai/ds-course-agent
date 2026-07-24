@@ -284,7 +284,26 @@ could be swapped or aliased, and all timestamps could be shifted together.
 Run contract v6 now freezes the exact tracked preregistration bytes and seed,
 adds ordered run identities and separate write-protected attempt journals, and
 requires an independent-PASS execution seal tied to one clean git commit.
-No v5 or v6 model call has occurred.
+Fixed commit `7ca7ba0` passed the full engineering gate (`659 passed`,
+`14 skipped`, one existing offline-reranker warning, plus full ruff, format,
+diff, and JSON checks), but a fresh zero-context priority-subagent audit still
+returned FAIL before any v6 call. It showed that the seal could be self-asserted
+or recreated without binding the actual audit; raw and journal evidence could
+be rewritten together; provider bodies could be fabricated offline; failed
+canonical runs could be deleted and replaced; run content was not embedded in
+the run identity; time ordering was incomplete; and the full finalizer and
+spot-check configuration could bypass the authorization boundary. The exact
+verdict was `AUTHORIZE_EXACTLY_TWO_V6_CALIBRATION_RUNS: NO`. No v5 or v6 model
+call, execution seal, canonical authorization, or v6 full run has occurred.
+
+The dataset owner subsequently narrowed the operational threat model to normal
+research integrity rather than resistance to a malicious author with local
+write access. This is an exploratory model-proxy labeling stage: labels may be
+repaired before dataset freeze and are not represented as human ground truth.
+The owner explicitly accepted v6 and authorized exactly its two preregistered
+calibration runs. The execution seal must record both the independent FAIL and
+the owner override; it must not relabel the audit as PASS. No replacement run
+is authorized.
 
 The full run started automatically only after the machine authorization was
 created. Its lower-model judgments, terminal priority actions, and final proxy

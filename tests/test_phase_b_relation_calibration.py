@@ -117,6 +117,31 @@ def test_calibration_rejects_preregistration_mutation_before_contract_build(
         )
 
 
+def test_calibration_rejects_false_owner_override_review_verdict(
+    tmp_path: Path,
+) -> None:
+    contracts, _ = _build_calibration_fixture(tmp_path)
+    contract = contracts[0]
+    execution_seal_path = Path(contract.execution_seal_path)
+    payload = _read_json(execution_seal_path)
+    payload["review_verdict"] = "PASS"
+    _write_json(execution_seal_path, payload)
+
+    with pytest.raises(ValueError, match="recorded independent FAIL"):
+        calibration.build_current_run_contract(
+            reviewers=_reviewers_from_contract(contract),
+            batch_size=contract.batch_size,
+            selection_seed=contract.selection_seed,
+            selected_task_split=contract.selected_task_split,
+            selected_pair_limit=contract.selected_pair_limit,
+            output_directory=Path(contract.output_directory),
+            packet_manifest_path=Path(contract.packet_manifest_path),
+            target_specs_path=Path(contract.target_specs_path),
+            source_scope_labels_path=Path(contract.source_scope_labels_path),
+            source_scope_report_path=Path(contract.source_scope_report_path),
+        )
+
+
 def test_calibration_contract_derivation_changes_only_selection(
     tmp_path: Path,
 ) -> None:
@@ -727,15 +752,18 @@ def _build_calibration_fixture(
     _write_json(
         execution_seal_path,
         {
-            "status": "sealed_after_independent_audit_pass",
+            "status": "sealed_after_dataset_owner_override",
             "protocol": "phase_b_relation_calibration_v6_execution_seal",
             "recorded_at": "2026-07-24T00:00:00+00:00",
             "git_commit": "0" * 40,
             "git_branch": "test",
             "tracked_preregistration_path": str(preregistration_path),
             "tracked_preregistration_sha256": calibration_support.file_sha256(preregistration_path),
-            "audit_agent_id": "test-auditor",
-            "audit_verdict": "PASS",
+            "authorization_basis": "dataset_owner_override_after_independent_audit_fail",
+            "authorizer_id": "test-dataset-owner",
+            "review_agent_id": "test-auditor",
+            "review_verdict": "FAIL",
+            "rationale": "Exploratory model-proxy calibration under an honest-executor threat model.",
             "authorize_exactly_two_calibration_runs": True,
         },
     )

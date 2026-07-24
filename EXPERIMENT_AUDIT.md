@@ -388,3 +388,65 @@ regular-file alias checks, future-time rejection, and a write-once execution
 seal tied to an independent PASS and one clean git commit. Targeted
 relation/packet validation is 56 passed. v6 is not yet independently audited
 or executed; canonical authorization remains absent.
+
+## v6 terminal audit (2026-07-24)
+
+Fixed commit `7ca7ba0` was clean and passed the repository engineering gate:
+659 tests passed, 14 were skipped, the existing offline-reranker warning was
+unchanged, and full ruff, format, diff, and JSON validation passed.
+
+Fresh zero-context priority subagent `Kierkegaard`
+(`019f934d-ddd1-7720-8061-fd657a4dba07`) nevertheless returned **FAIL** before
+any execution seal or model request. Its terminal decision was:
+
+```text
+AUTHORIZE_EXACTLY_TWO_V6_CALIBRATION_RUNS: NO
+```
+
+The demonstrated blockers were:
+
+1. the execution seal was a locally self-asserted/recreatable JSON file, not
+   evidence bound to this independent audit or to fixed commit `7ca7ba0`;
+2. raw and attempt-journal files could be changed together after chmod/delete,
+   while authorization did not commit to the complete original evidence tree;
+3. locally fabricated provider bodies could satisfy the same validators as a
+   real provider response;
+4. no seal-bound consumed-run ledger preserved failed attempts or prevented
+   deletion, replacement, retry-until-pass, or run2-before-run1 execution;
+5. raw/journal/request fingerprints did not embed run identity, so content
+   could be exchanged between the two canonical run contracts;
+6. seal, identity, bodyless-attempt, journal, and cross-attempt timestamps did
+   not form one bounded monotonic chain;
+7. finalization and spot-check parameters were not transitively bound to the
+   canonical calibration authorization.
+
+No v6 execution seal, calibration call, canonical authorization, or full run
+was created at that checkpoint. The adversarial audit did not authorize v6.
+
+## Dataset-owner v6 override (2026-07-24)
+
+The dataset owner subsequently stated:
+
+```text
+按正常科研诚信威胁模型接受 v6，继续执行两次校准。
+```
+
+The operational boundary is therefore narrowed from malicious-local-author
+tamper resistance to normal research integrity. This is an exploratory
+model-proxy annotation stage, not a one-shot production of final correct data:
+labels remain repairable before freeze and are never called human verified.
+The accepted safeguards are fixed preregistration, exactly two retained
+calibration runs, raw response retention, reproducible metrics, explicit
+model IDs, and transparent limitations.
+
+The execution seal schema records:
+
+- the independent review agent and its actual `FAIL` verdict;
+- `dataset_owner_override_after_independent_audit_fail` as the authorization
+  basis;
+- the owner rationale and authorization for exactly two calibration runs.
+
+It does not fabricate or imply an independent PASS. Replacement calibration
+runs remain forbidden. The owner-override implementation passed 660 tests with
+14 skips and the one existing offline-reranker warning; full ruff, format,
+diff, and JSON checks also passed.

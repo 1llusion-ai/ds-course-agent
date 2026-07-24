@@ -1034,7 +1034,29 @@ paths. A write-once execution seal must bind an independent PASS to one clean
 git commit before calls begin. Complete per-batch attempt histories are copied
 into separate write-protected journals, and authorization rejects mismatched
 raw/journal evidence, unordered run identities, symlink/path/hard-link
-substitution, and future timestamps. No v5 or v6 call has occurred.
+substitution, and future timestamps.
+
+The independent v6 audit of fixed commit `7ca7ba0` nevertheless returned FAIL.
+The auditor demonstrated that the seal was still a locally self-asserted file
+instead of evidence bound to the actual audit; chmod/delete/recreate could
+rewrite raw and journal together; synthetic provider bodies could be created
+offline; failed canonical paths could be deleted and retried; raw/journal
+content could move between run1 and run2 without an embedded run identity;
+seal/identity/bodyless-attempt timestamps lacked one global monotonic chain;
+and full finalization plus spot-check parameters were not transitively bound to
+the canonical authorization. The terminal line was
+`AUTHORIZE_EXACTLY_TWO_V6_CALIBRATION_RUNS: NO`. No v5 or v6 call, execution
+seal, authorization, or full run has occurred.
+
+On 2026-07-24 the dataset owner explicitly accepted v6 under a normal
+research-integrity threat model. The rejected malicious-author controls are
+not treated as publication prerequisites because an author with local write
+access can always rewrite an entire repository; the relevant safeguards are
+honest preregistration, retained raw model outputs, reproducible metrics, and
+transparent model-proxy labeling. v6 remains exploratory and repairable until
+dataset freeze. Exactly the two preregistered calibration runs are authorized,
+with no replacements. The execution seal records the independent FAIL and
+owner override without fabricating an independent PASS.
 
 The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future
 human A/B protocol. The active exploratory model-proxy authorization gate was

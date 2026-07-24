@@ -1,5 +1,5 @@
 {
-  "date": "2026-07-22",
+  "date": "2026-07-24",
   "auditor": "independent-gpt-5.5-xhigh-fallback",
   "reviewer_backend": "multi_agent_fallback",
   "codex_mcp_available": false,
@@ -385,7 +385,7 @@
         "full_annotation_started": false
       },
       "v6_sealed_run_preregistration": {
-        "status": "preregistering_before_model_calls",
+        "status": "dataset_owner_override_authorized_before_model_calls",
         "run_contract_version": "phase_b_relation_run_contract_v6",
         "tracked_preregistration": "benchmarks/data/knowledge_state_search_confirmatory_v3_phase_b_design/relation_calibration_v6_preregistration.json",
         "tracked_preregistration_sha256": "313aa78e353bd8ef5e082565a33897ac0e0893b28a6f6221b3a16d586809cf8b",
@@ -405,7 +405,51 @@
         "execution_seal_created": false,
         "calibration_runs_completed": 0,
         "authorization_manifest_created": false,
-        "full_annotation_started": false
+        "full_annotation_started": false,
+        "fixed_git_commit": "7ca7ba01015ededbb934fa2a55f0a4c71a55c061",
+        "independent_audit_agent_id": "019f934d-ddd1-7720-8061-fd657a4dba07",
+        "independent_audit_agent_name": "Kierkegaard",
+        "audit_terminal_verdict": "AUTHORIZE_EXACTLY_TWO_V6_CALIBRATION_RUNS: NO",
+        "full_validation": {
+          "pytest_passed": 659,
+          "pytest_skipped": 14,
+          "warnings": 1,
+          "warning_scope": "existing_offline_reranker",
+          "ruff_check_passed": true,
+          "ruff_format_check_passed": true,
+          "git_diff_check_passed": true,
+          "experiment_audit_json_valid": true
+        },
+        "audit_failures": [
+          "execution_seal_self_asserted_recreatable_and_not_bound_to_independent_audit_or_fixed_commit",
+          "raw_and_attempt_journal_evidence_jointly_rewritable",
+          "provider_response_evidence_offline_fabricable",
+          "no_seal_bound_consumed_run_ledger_to_prevent_replacement_or_retry_until_pass",
+          "raw_journal_and_request_fingerprints_not_bound_to_run_identity",
+          "incomplete_global_timestamp_monotonicity_and_future_bounds",
+          "full_finalizer_and_spot_check_configuration_not_transitively_bound_to_authorization"
+        ],
+        "dataset_owner_override": {
+          "authorized": true,
+          "date": "2026-07-24",
+          "authorization_basis": "dataset_owner_override_after_independent_audit_fail",
+          "instruction": "按正常科研诚信威胁模型接受 v6，继续执行两次校准。",
+          "operational_threat_model": "normal_research_integrity_honest_executor",
+          "annotation_stage": "exploratory_model_proxy_repairable_before_freeze",
+          "independent_pass_claimed": false,
+          "authorized_calibration_runs": 2,
+          "replacement_runs_allowed": false,
+          "engineering_validation": {
+            "pytest_passed": 660,
+            "pytest_skipped": 14,
+            "warnings": 1,
+            "warning_scope": "existing_offline_reranker",
+            "ruff_check_passed": true,
+            "ruff_format_check_passed": true,
+            "git_diff_check_passed": true,
+            "experiment_audit_json_valid": true
+          }
+        }
       }
     },
     "annotation_started": true,

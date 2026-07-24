@@ -170,5 +170,21 @@ Every complete attempt list is copied into a separate write-protected journal;
 authorization rechecks byte-identical raw/journal evidence, ordered run
 identity, regular non-aliased files, and non-future timestamps.
 
-The v5 audit verdict was `FAIL`; no v5 call occurred. v6 is preregistered but
-has not been audited or executed. Canonical authorization remains absent.
+The v5 audit verdict was `FAIL`; no v5 call occurred. A fresh zero-context
+audit of the fixed v6 commit `7ca7ba0` also returned `FAIL`: the seal was not
+bound to independently verifiable audit evidence, raw and journal could be
+rewritten together, provider responses could be fabricated offline, failed
+canonical runs could be deleted and replaced, run content could be swapped
+without an embedded identity, timestamp ordering was incomplete, and the full
+finalizer/spot-check path could bypass authorization. The exact terminal
+verdict was `AUTHORIZE_EXACTLY_TWO_V6_CALIBRATION_RUNS: NO`. No v6 execution
+seal or model call was created; canonical authorization remains absent.
+
+The dataset owner then explicitly accepted v6 for exploratory model-proxy
+calibration under a normal research-integrity threat model. The labels are not
+human ground truth and may be repaired before freeze; the protocol is not
+required to resist a malicious repository owner who can rewrite the entire
+local history. Exactly the two preregistered v6 calibration runs are
+authorized, with no replacement runs. The execution seal truthfully records
+the independent FAIL plus the owner override rather than claiming a false
+independent PASS.

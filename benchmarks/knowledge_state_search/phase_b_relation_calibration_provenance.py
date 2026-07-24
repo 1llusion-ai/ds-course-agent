@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,24 @@ PRODUCTION_TRACKED_PREREGISTRATION_PATH = Path(
 TRACKED_PREREGISTRATION_PATH = PRODUCTION_TRACKED_PREREGISTRATION_PATH
 EXPECTED_PREREGISTRATION_SHA256 = "313aa78e353bd8ef5e082565a33897ac0e0893b28a6f6221b3a16d586809cf8b"
 FROZEN_SELECTION_SEED = "phase_b_relation_annotation_selection_v1"
+
+
+class ExecutionAuthorizationBasis(str, Enum):
+    """Allowed truthful bases for starting the two exploratory v6 runs."""
+
+    INDEPENDENT_AUDIT_PASS = "independent_audit_pass"
+    DATASET_OWNER_OVERRIDE = "dataset_owner_override_after_independent_audit_fail"
+
+
+@dataclass(frozen=True)
+class ExecutionAuthorization:
+    """Explicit authority record embedded in the v6 execution seal."""
+
+    basis: ExecutionAuthorizationBasis
+    authorizer_id: str
+    review_agent_id: str
+    review_verdict: str
+    rationale: str
 
 
 def load_preregistration(path: Path) -> dict[str, object]:
@@ -118,7 +138,7 @@ def load_execution_seal(
     path: Path,
     preregistration_path: Path,
 ) -> dict[str, object]:
-    """Validate the independent-PASS seal and its exact repository state."""
+    """Validate the truthful execution authority and repository state."""
 
     validate_preregistered_path(path)
     payload = read_json_object(path, "relation calibration execution seal")
@@ -130,18 +150,26 @@ def load_execution_seal(
         "git_branch",
         "tracked_preregistration_path",
         "tracked_preregistration_sha256",
-        "audit_agent_id",
-        "audit_verdict",
+        "authorization_basis",
+        "authorizer_id",
+        "review_agent_id",
+        "review_verdict",
+        "rationale",
         "authorize_exactly_two_calibration_runs",
     )
     if tuple(payload) != fields:
         raise ValueError("relation calibration execution seal fields are invalid")
-    if (
-        payload.get("status") != "sealed_after_independent_audit_pass"
-        or payload.get("protocol") != "phase_b_relation_calibration_v6_execution_seal"
-        or payload.get("audit_verdict") != "PASS"
-        or payload.get("authorize_exactly_two_calibration_runs") is not True
-    ):
+    if payload.get("protocol") != "phase_b_relation_calibration_v6_execution_seal":
+        raise ValueError("relation calibration execution seal is not authorized")
+    authorization = ExecutionAuthorization(
+        basis=_authorization_basis(payload.get("authorization_basis")),
+        authorizer_id=required_string(payload, "authorizer_id"),
+        review_agent_id=required_string(payload, "review_agent_id"),
+        review_verdict=required_string(payload, "review_verdict"),
+        rationale=required_string(payload, "rationale"),
+    )
+    _validate_execution_authorization(authorization, required_string(payload, "status"))
+    if payload.get("authorize_exactly_two_calibration_runs") is not True:
         raise ValueError("relation calibration execution seal is not authorized")
     if payload.get("tracked_preregistration_path") != str(preregistration_path):
         raise ValueError("execution seal preregistration path mismatch")
@@ -162,28 +190,30 @@ def load_execution_seal(
 
 def create_execution_seal(
     *,
-    audit_agent_id: str,
-    audit_verdict: str,
+    authorization: ExecutionAuthorization,
 ) -> dict[str, object]:
-    """Create the sole write-once execution seal after an independent PASS."""
+    """Create the sole seal from one explicit, truthful execution authority."""
 
-    if audit_verdict != "PASS":
-        raise ValueError("execution seal requires an independent PASS verdict")
+    status = _execution_seal_status(authorization)
+    _validate_execution_authorization(authorization, status)
     preregistration = load_preregistration(TRACKED_PREREGISTRATION_PATH)
     if file_sha256(TRACKED_PREREGISTRATION_PATH) != EXPECTED_PREREGISTRATION_SHA256:
         raise ValueError("tracked preregistration hash is not the frozen value")
     if tracked_working_tree_dirty():
         raise ValueError("execution seal requires a clean tracked working tree")
     payload = {
-        "status": "sealed_after_independent_audit_pass",
+        "status": status,
         "protocol": "phase_b_relation_calibration_v6_execution_seal",
         "recorded_at": datetime.now().astimezone().isoformat(),
         "git_commit": git_output("rev-parse", "HEAD"),
         "git_branch": git_output("rev-parse", "--abbrev-ref", "HEAD"),
         "tracked_preregistration_path": str(TRACKED_PREREGISTRATION_PATH),
         "tracked_preregistration_sha256": EXPECTED_PREREGISTRATION_SHA256,
-        "audit_agent_id": audit_agent_id,
-        "audit_verdict": audit_verdict,
+        "authorization_basis": authorization.basis.value,
+        "authorizer_id": authorization.authorizer_id,
+        "review_agent_id": authorization.review_agent_id,
+        "review_verdict": authorization.review_verdict,
+        "rationale": authorization.rationale,
         "authorize_exactly_two_calibration_runs": True,
     }
     output_path = Path(required_string(preregistration, "execution_seal_path"))
@@ -193,6 +223,43 @@ def create_execution_seal(
         handle.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
     output_path.chmod(0o444)
     return payload
+
+
+def _authorization_basis(value: object) -> ExecutionAuthorizationBasis:
+    """Parse one exact execution-authorization basis."""
+
+    try:
+        return ExecutionAuthorizationBasis(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("execution seal authorization basis is invalid") from exc
+
+
+def _execution_seal_status(authorization: ExecutionAuthorization) -> str:
+    """Return the sole status corresponding to an authorization basis."""
+
+    if authorization.basis is ExecutionAuthorizationBasis.INDEPENDENT_AUDIT_PASS:
+        return "sealed_after_independent_audit_pass"
+    return "sealed_after_dataset_owner_override"
+
+
+def _validate_execution_authorization(
+    authorization: ExecutionAuthorization,
+    status: str,
+) -> None:
+    """Reject false PASS claims while permitting an explicit owner override."""
+
+    if not authorization.authorizer_id.strip():
+        raise ValueError("execution authorization requires an authorizer")
+    if not authorization.review_agent_id.strip():
+        raise ValueError("execution authorization requires the review agent")
+    if not authorization.rationale.strip():
+        raise ValueError("execution authorization requires a rationale")
+    if authorization.basis is ExecutionAuthorizationBasis.INDEPENDENT_AUDIT_PASS:
+        if status != "sealed_after_independent_audit_pass" or authorization.review_verdict != "PASS":
+            raise ValueError("independent-audit execution authorization requires PASS")
+        return
+    if status != "sealed_after_dataset_owner_override" or authorization.review_verdict != "FAIL":
+        raise ValueError("dataset-owner override requires the recorded independent FAIL")
 
 
 def validate_preregistered_path(path: Path) -> None:
