@@ -188,3 +188,11 @@ local history. Exactly the two preregistered v6 calibration runs are
 authorized, with no replacement runs. The execution seal truthfully records
 the independent FAIL plus the owner override rather than claiming a false
 independent PASS.
+
+The two v6 calibrations subsequently passed and created the canonical
+authorization. During the exploratory full run, semantic retry drift stopped
+Doubao at batch 270 and Gemini at batch 700 after 968 total successful
+judgments. Full-run continuation preserves all prior raw files, resumes only
+unprocessed batches, and forces any recovered structurally valid drift item
+into priority review. It never applies this relaxed continuation policy to the
+two calibration runs.

@@ -9,6 +9,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,30 @@ class ProviderResponseBody:
     reasoning_content: str
 
 
+class BatchFailurePolicy(str, Enum):
+    """Control whether structurally valid retry drift is terminal or reviewed."""
+
+    STRICT = "strict"
+    ROUTE_SEMANTIC_DRIFT_TO_PRIORITY = "route_semantic_drift_to_priority"
+
+
+@dataclass(frozen=True)
+class ReviewerRunResult:
+    """One reviewer's complete judgments plus mandatory priority routing."""
+
+    judgments: tuple[ModelRelationJudgment, ...]
+    forced_priority_blind_item_ids: frozenset[str]
+    resumed_batch_count: int
+
+
+@dataclass(frozen=True)
+class _ResumedBatch:
+    """Validated persisted batch used by a continuation run."""
+
+    judgments: tuple[ModelRelationJudgment, ...]
+    requires_priority: bool
+
+
 def run_relation_reviewer(
     *,
     reviewer: AnnotationReviewerConfig,
@@ -57,10 +82,13 @@ def run_relation_reviewer(
     timeout: float,
     max_retries: int,
     attempt_journal_directory: Path,
-) -> tuple[ModelRelationJudgment, ...]:
+    failure_policy: BatchFailurePolicy = BatchFailurePolicy.STRICT,
+) -> ReviewerRunResult:
     """Run or resume every blind relation batch for one reviewer."""
 
     all_judgments: list[ModelRelationJudgment] = []
+    forced_priority_blind_item_ids: set[str] = set()
+    resumed_batch_count = 0
     raw_directory = output_directory / "raw_responses" / reviewer.reviewer_id
     raw_directory.mkdir(parents=True, exist_ok=True)
     journal_directory = attempt_journal_directory / reviewer.reviewer_id
@@ -74,9 +102,13 @@ def run_relation_reviewer(
             reviewer=reviewer,
             batch_id=batch_id,
             inputs=batch,
+            failure_policy=failure_policy,
         )
         if resumed is not None:
-            all_judgments.extend(resumed)
+            all_judgments.extend(resumed.judgments)
+            resumed_batch_count += 1
+            if resumed.requires_priority:
+                forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in resumed.judgments)
             continue
         request_nonce = str(uuid.uuid4())
         request_payload = build_relation_request_payload(
@@ -114,6 +146,7 @@ def run_relation_reviewer(
                 request_nonce=request_nonce,
                 request_fingerprint=request_fingerprint,
                 request_payload=request_payload,
+                failure_policy=failure_policy,
             )
         except RuntimeError as exc:
             failed_audit = _runtime_error_audit(exc)
@@ -123,7 +156,18 @@ def run_relation_reviewer(
                 raw_path=raw_path,
                 payload=failed_audit,
             )
-            raise
+            recovered = _load_resumable_batch(
+                raw_path,
+                reviewer=reviewer,
+                batch_id=batch_id,
+                inputs=batch,
+                failure_policy=failure_policy,
+            )
+            if recovered is None:
+                raise
+            all_judgments.extend(recovered.judgments)
+            forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in recovered.judgments)
+            continue
         _write_json(raw_path, audit)
         _write_attempt_journal(
             journal_directory / f"{batch_id}.json",
@@ -131,13 +175,21 @@ def run_relation_reviewer(
             payload=audit,
         )
         all_judgments.extend(judgments)
+        if audit.get("status") == "success_requires_priority":
+            forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in judgments)
     ordered = tuple(sorted(all_judgments, key=lambda item: item.blind_item_id))
     _write_jsonl(
         output_directory / f"{reviewer.reviewer_id}_judgments.jsonl",
         [judgment.to_dict() for judgment in ordered],
     )
     journal_directory.chmod(0o555)
-    return ordered
+    return ReviewerRunResult(
+        judgments=ordered,
+        forced_priority_blind_item_ids=frozenset(
+            forced_priority_blind_item_ids,
+        ),
+        resumed_batch_count=resumed_batch_count,
+    )
 
 
 def reviewer_usage(raw_directory: Path) -> dict[str, int]:
@@ -154,9 +206,9 @@ def reviewer_usage(raw_directory: Path) -> dict[str, int]:
         return totals
     for path in sorted(raw_directory.glob("*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
-        if payload.get("status") != "success":
-            continue
-        totals["successful_batches"] += 1
+        status = payload.get("status")
+        if status in {"success", "success_requires_priority"}:
+            totals["successful_batches"] += 1
         attempts = payload.get("attempts")
         if not isinstance(attempts, list):
             continue
@@ -192,6 +244,7 @@ def _request_annotation_batch(
     request_nonce: str,
     request_fingerprint: str,
     request_payload: dict[str, object],
+    failure_policy: BatchFailurePolicy,
 ) -> tuple[tuple[ModelRelationJudgment, ...], dict[str, object]]:
     url = f"{reviewer.base_url.rstrip('/')}/chat/completions"
     attempts: list[dict[str, object]] = []
@@ -270,8 +323,6 @@ def _request_annotation_batch(
             if semantic_fingerprint is not None:
                 semantic_fingerprints.add(semantic_fingerprint)
                 attempt_audit["semantic_response_fingerprint"] = semantic_fingerprint
-            if len(semantic_fingerprints) > 1:
-                raise ValueError("semantic judgments changed across retries for the same request")
             judgments = parse_model_relation_judgments(
                 parsed_payload,
                 reviewer=reviewer,
@@ -283,6 +334,9 @@ def _request_annotation_batch(
                 response_received_at=response_received_at,
                 inputs=inputs,
             )
+            semantic_drift = len(semantic_fingerprints) > 1
+            if semantic_drift and failure_policy is BatchFailurePolicy.STRICT:
+                raise ValueError("semantic judgments changed across retries for the same request")
         except (json.JSONDecodeError, ValueError) as exc:
             last_error = f"{type(exc).__name__}: {exc}"
             attempt_audit["error"] = last_error
@@ -291,9 +345,10 @@ def _request_annotation_batch(
                 time.sleep(retry_delay(status_code=None, retry_after=None, attempt=attempt))
             continue
         attempts.append(attempt_audit)
+        status = "success_requires_priority" if semantic_drift else "success"
         return judgments, {
             **_batch_audit(
-                status="success",
+                status=status,
                 reviewer=reviewer,
                 batch_id=batch_id,
                 inputs=inputs,
@@ -302,6 +357,7 @@ def _request_annotation_batch(
                 attempts=attempts,
             ),
             "parsed_judgments": [judgment.to_dict() for judgment in judgments],
+            **({"priority_reason": "semantic_drift_across_retries"} if semantic_drift else {}),
         }
     audit = {
         **_batch_audit(
@@ -324,15 +380,58 @@ def _load_resumable_batch(
     reviewer: AnnotationReviewerConfig,
     batch_id: str,
     inputs: tuple[RelationAnnotationInput, ...],
-) -> tuple[ModelRelationJudgment, ...] | None:
+    failure_policy: BatchFailurePolicy,
+) -> _ResumedBatch | None:
     if not path.exists():
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
     status = payload.get("status")
-    if status in {"pending", "failed"}:
+    if status == "pending":
         raise ValueError(f"existing raw response is not resumable: {path}")
-    if status != "success":
+    if status == "failed":
+        if failure_policy is not BatchFailurePolicy.ROUTE_SEMANTIC_DRIFT_TO_PRIORITY:
+            raise ValueError(f"existing raw response is not resumable: {path}")
+        return _load_failed_semantic_drift_batch(
+            path,
+            payload=payload,
+            reviewer=reviewer,
+            batch_id=batch_id,
+            inputs=inputs,
+        )
+    if status not in {"success", "success_requires_priority"}:
         raise ValueError(f"existing raw response status is invalid: {path}")
+    _validate_existing_batch_contract(
+        path,
+        payload=payload,
+        reviewer=reviewer,
+        batch_id=batch_id,
+        inputs=inputs,
+    )
+    judgments = _parse_persisted_attempt_judgments(
+        path,
+        payload=payload,
+        reviewer=reviewer,
+        batch_id=batch_id,
+        inputs=inputs,
+        allow_attempt_error=False,
+    )
+    stored_judgments = payload.get("parsed_judgments")
+    if stored_judgments != [judgment.to_dict() for judgment in judgments]:
+        raise ValueError(f"existing raw response parsed judgments mismatch: {path}")
+    return _ResumedBatch(
+        judgments=judgments,
+        requires_priority=status == "success_requires_priority",
+    )
+
+
+def _validate_existing_batch_contract(
+    path: Path,
+    *,
+    payload: dict[str, object],
+    reviewer: AnnotationReviewerConfig,
+    batch_id: str,
+    inputs: tuple[RelationAnnotationInput, ...],
+) -> None:
     if (
         payload.get("reviewer_id") != reviewer.reviewer_id
         or payload.get("reviewer_kind") != "model"
@@ -360,53 +459,126 @@ def _load_resumable_batch(
     )
     if payload.get("request_fingerprint") != request_fingerprint:
         raise ValueError(f"existing raw response fingerprint mismatch: {path}")
-    stored_judgments = payload.get("parsed_judgments")
-    if not isinstance(stored_judgments, list):
-        raise ValueError(f"existing raw response lacks parsed judgments: {path}")
-    final_attempt = _final_successful_attempt(payload)
-    response_body_hex = required_string(final_attempt, "response_body_hex")
+
+
+def _parse_persisted_attempt_judgments(
+    path: Path,
+    *,
+    payload: dict[str, object],
+    reviewer: AnnotationReviewerConfig,
+    batch_id: str,
+    inputs: tuple[RelationAnnotationInput, ...],
+    allow_attempt_error: bool,
+) -> tuple[ModelRelationJudgment, ...]:
+    final_attempt = _final_attempt(payload, allow_error=allow_attempt_error)
+    return _parse_attempt_judgments(
+        path,
+        payload=payload,
+        attempt=final_attempt,
+        reviewer=reviewer,
+        batch_id=batch_id,
+        inputs=inputs,
+    )
+
+
+def _parse_attempt_judgments(
+    path: Path,
+    *,
+    payload: dict[str, object],
+    attempt: dict[str, Any],
+    reviewer: AnnotationReviewerConfig,
+    batch_id: str,
+    inputs: tuple[RelationAnnotationInput, ...],
+) -> tuple[ModelRelationJudgment, ...]:
+    request_nonce = required_string(payload, "request_nonce")
+    response_body_hex = required_string(attempt, "response_body_hex")
     try:
         response_body = bytes.fromhex(response_body_hex)
     except ValueError as exc:
         raise ValueError(f"existing raw response body is invalid: {path}") from exc
     if hashlib.sha256(response_body).hexdigest() != required_string(
-        final_attempt,
+        attempt,
         "response_body_sha256",
     ):
         raise ValueError(f"existing raw response body hash mismatch: {path}")
     body = parse_provider_response_body(response_body)
-    if final_attempt.get("attempt_envelope_sha256") != _attempt_envelope_sha256(
-        attempt=_required_integer(final_attempt, "attempt"),
+    if attempt.get("attempt_envelope_sha256") != _attempt_envelope_sha256(
+        attempt=_required_integer(attempt, "attempt"),
         request_nonce=request_nonce,
-        request_started_at=required_string(final_attempt, "request_started_at"),
-        response_received_at=required_string(final_attempt, "response_received_at"),
-        http_status=_required_integer(final_attempt, "http_status"),
+        request_started_at=required_string(attempt, "request_started_at"),
+        response_received_at=required_string(attempt, "response_received_at"),
+        http_status=_required_integer(attempt, "http_status"),
         response_body_sha256=body.body_sha256,
     ):
         raise ValueError(f"existing raw response attempt envelope mismatch: {path}")
     validate_provider_response_timing(
         body,
-        request_started_at=required_string(final_attempt, "request_started_at"),
-        response_received_at=required_string(final_attempt, "response_received_at"),
+        request_started_at=required_string(attempt, "request_started_at"),
+        response_received_at=required_string(attempt, "response_received_at"),
     )
     response_payload = extract_json_object(body.content)
     semantic_fingerprint = semantic_response_fingerprint(response_payload)
-    if semantic_fingerprint is None or final_attempt.get("semantic_response_fingerprint") != semantic_fingerprint:
+    if semantic_fingerprint is None or attempt.get("semantic_response_fingerprint") != semantic_fingerprint:
         raise ValueError(f"existing raw response semantic fingerprint mismatch: {path}")
-    judgments = parse_model_relation_judgments(
+    return parse_model_relation_judgments(
         response_payload,
         reviewer=reviewer,
         batch_id=batch_id,
         request_nonce=request_nonce,
         provider_response_id=body.provider_response_id,
         response_body_sha256=body.body_sha256,
-        request_started_at=required_string(final_attempt, "request_started_at"),
-        response_received_at=required_string(final_attempt, "response_received_at"),
+        request_started_at=required_string(attempt, "request_started_at"),
+        response_received_at=required_string(attempt, "response_received_at"),
         inputs=inputs,
     )
-    if stored_judgments != [judgment.to_dict() for judgment in judgments]:
-        raise ValueError(f"existing raw response parsed judgments mismatch: {path}")
-    return judgments
+
+
+def _load_failed_semantic_drift_batch(
+    path: Path,
+    *,
+    payload: dict[str, object],
+    reviewer: AnnotationReviewerConfig,
+    batch_id: str,
+    inputs: tuple[RelationAnnotationInput, ...],
+) -> _ResumedBatch:
+    _validate_existing_batch_contract(
+        path,
+        payload=payload,
+        reviewer=reviewer,
+        batch_id=batch_id,
+        inputs=inputs,
+    )
+    if payload.get("error") != "ValueError: semantic judgments changed across retries for the same request":
+        raise ValueError(f"existing failed response is not a semantic-drift repair: {path}")
+    attempts = payload.get("attempts")
+    if not isinstance(attempts, list):
+        raise ValueError(f"existing failed response attempts are invalid: {path}")
+    semantic_fingerprints = {
+        attempt.get("semantic_response_fingerprint")
+        for attempt in attempts
+        if isinstance(attempt, dict) and isinstance(attempt.get("semantic_response_fingerprint"), str)
+    }
+    if len(semantic_fingerprints) < 2:
+        raise ValueError(f"existing failed response lacks semantic drift evidence: {path}")
+    judgments: tuple[ModelRelationJudgment, ...] | None = None
+    for attempt in reversed(attempts):
+        if not isinstance(attempt, dict) or "response_body_hex" not in attempt:
+            continue
+        try:
+            judgments = _parse_attempt_judgments(
+                path,
+                payload=payload,
+                attempt=attempt,
+                reviewer=reviewer,
+                batch_id=batch_id,
+                inputs=inputs,
+            )
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            continue
+        break
+    if judgments is None:
+        raise ValueError(f"existing failed response has no structurally valid retry: {path}")
+    return _ResumedBatch(judgments=judgments, requires_priority=True)
 
 
 def parse_provider_response_body(response_body: bytes) -> ProviderResponseBody:
@@ -683,12 +855,16 @@ def _batch_audit(
     }
 
 
-def _final_successful_attempt(payload: dict[str, object]) -> dict[str, Any]:
+def _final_attempt(
+    payload: dict[str, object],
+    *,
+    allow_error: bool,
+) -> dict[str, Any]:
     attempts = payload.get("attempts")
     if not isinstance(attempts, list) or not attempts:
         raise ValueError("raw response attempts are missing")
     final_attempt = attempts[-1]
-    if not isinstance(final_attempt, dict) or "error" in final_attempt:
+    if not isinstance(final_attempt, dict) or ("error" in final_attempt and not allow_error):
         raise ValueError("raw response final attempt is not successful")
     return final_attempt
 

@@ -1058,6 +1058,15 @@ dataset freeze. Exactly the two preregistered calibration runs are authorized,
 with no replacements. The execution seal records the independent FAIL and
 owner override without fabricating an independent PASS.
 
+The two exact v6 calibrations passed and generated canonical authorization.
+The first full-run segment retained 269 successful Doubao judgments and 699
+successful Gemini judgments before semantic retry drift stopped batches 270
+and 700 respectively. Since model-proxy construction is exploratory and
+repairable before freeze, the continuation contract keeps every existing raw
+artifact, resumes only unprocessed batches, and forces recovered drift pairs
+into terminal priority review. It does not restart the full run, overwrite a
+failed batch, relax calibration, or call any label human verified.
+
 The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future
 human A/B protocol. The active exploratory model-proxy authorization gate was
 separately frozen at overall agreement `0.80`, overall kappa `0.65`, and

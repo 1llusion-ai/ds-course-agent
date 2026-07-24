@@ -385,7 +385,7 @@
         "full_annotation_started": false
       },
       "v6_sealed_run_preregistration": {
-        "status": "dataset_owner_override_authorized_before_model_calls",
+        "status": "full_run_resume_ready",
         "run_contract_version": "phase_b_relation_run_contract_v6",
         "tracked_preregistration": "benchmarks/data/knowledge_state_search_confirmatory_v3_phase_b_design/relation_calibration_v6_preregistration.json",
         "tracked_preregistration_sha256": "313aa78e353bd8ef5e082565a33897ac0e0893b28a6f6221b3a16d586809cf8b",
@@ -402,10 +402,10 @@
         ],
         "targeted_tests_passed": 56,
         "independent_audit_passed": false,
-        "execution_seal_created": false,
-        "calibration_runs_completed": 0,
-        "authorization_manifest_created": false,
-        "full_annotation_started": false,
+        "execution_seal_created": true,
+        "calibration_runs_completed": 2,
+        "authorization_manifest_created": true,
+        "full_annotation_started": true,
         "fixed_git_commit": "7ca7ba01015ededbb934fa2a55f0a4c71a55c061",
         "independent_audit_agent_id": "019f934d-ddd1-7720-8061-fd657a4dba07",
         "independent_audit_agent_name": "Kierkegaard",
@@ -444,6 +444,57 @@
             "pytest_skipped": 14,
             "warnings": 1,
             "warning_scope": "existing_offline_reranker",
+            "ruff_check_passed": true,
+            "ruff_format_check_passed": true,
+            "git_diff_check_passed": true,
+            "experiment_audit_json_valid": true
+          }
+        },
+        "calibration_results": {
+          "run_1": {
+            "agreement_rate": 0.8333333333333334,
+            "kappa": 0.7461928934010152,
+            "source_scope_conflict_count": 0,
+            "semantic_drift_error_count": 0
+          },
+          "run_2": {
+            "agreement_rate": 0.8666666666666667,
+            "kappa": 0.8,
+            "source_scope_conflict_count": 0,
+            "semantic_drift_error_count": 0
+          },
+          "repeatability": {
+            "doubao": 1.0,
+            "gemini": 0.9
+          },
+          "accepted_for_full_run": true
+        },
+        "full_run_progress": {
+          "doubao_successful_judgments": 269,
+          "gemini_successful_judgments": 699,
+          "successful_lower_model_judgments": 968,
+          "expected_lower_model_judgments": 2880,
+          "stopped_batches": {
+            "doubao": "batch_270",
+            "gemini": "batch_700"
+          },
+          "stop_reason": "semantic_judgments_changed_across_retries",
+          "consensus_created": false,
+          "final_proxy_labels": 0
+        },
+        "full_run_continuation_policy": {
+          "preserve_existing_successes": true,
+          "overwrite_existing_batches": false,
+          "resume_only_unprocessed_batches": true,
+          "recover_latest_structurally_valid_retry": true,
+          "recovered_drift_pair_forced_to_priority_subagent": true,
+          "applies_to_calibration": false,
+          "human_verified_count": 0,
+          "engineering_validation": {
+            "pytest_passed": 661,
+            "pytest_skipped": 14,
+            "warnings": 1,
+            "warning_scope": "existing_reranker_fail_open",
             "ruff_check_passed": true,
             "ruff_format_check_passed": true,
             "git_diff_check_passed": true,

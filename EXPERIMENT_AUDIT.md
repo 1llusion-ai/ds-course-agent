@@ -450,3 +450,27 @@ It does not fabricate or imply an independent PASS. Replacement calibration
 runs remain forbidden. The owner-override implementation passed 660 tests with
 14 skips and the one existing offline-reranker warning; full ruff, format,
 diff, and JSON checks also passed.
+
+## v6 calibration pass and exploratory full-run continuation (2026-07-24)
+
+Both owner-authorized calibration runs passed the frozen model-proxy gate:
+
+```text
+run 1 agreement / kappa:       0.833 / 0.746
+run 2 agreement / kappa:       0.867 / 0.800
+Doubao / Gemini repeatability: 1.000 / 0.900
+scope conflicts / drift:       0 / 0
+canonical authorization:       accepted
+```
+
+The exact full run then retained 269 successful Doubao judgments and 699
+successful Gemini judgments before semantic changes across retries stopped
+each reviewer at `batch_270` and `batch_700`. The 968 successful raw responses
+remain unchanged. Because this is explicitly an exploratory, repairable
+model-proxy stage, continuation does not restart the run or discard evidence:
+it reuses every successful batch, takes the latest structurally valid response
+from a semantic-drift failure only as provisional lower-model evidence, forces
+that pair into terminal priority-subagent review, and continues with the
+remaining unprocessed batches. Calibration behavior remains strict.
+The continuation implementation passed 661 tests with 14 skips and the one
+existing reranker warning; full ruff, format, diff, and JSON checks passed.

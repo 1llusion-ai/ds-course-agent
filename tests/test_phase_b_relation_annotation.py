@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
 import pytest
 
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_client import (
     REQUEST_MAX_TOKENS,
     REQUEST_TEMPERATURE,
+    BatchFailurePolicy,
+    _load_resumable_batch,
     build_relation_request_payload,
     relation_response_format,
     semantic_response_fingerprint,
@@ -21,6 +28,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract impo
     RelationTargetSpec,
     ThinkingMode,
     derive_relation,
+    json_sha256,
     parse_model_relation_judgments,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_support import (
@@ -257,6 +265,123 @@ def test_pair_relation_contract_structurally_excludes_task_scope_output():
             response_received_at="2026-07-24T00:00:01+00:00",
             inputs=(review_input,),
         )
+
+
+def test_failed_semantic_drift_batch_is_reused_only_for_priority_repair(
+    tmp_path: Path,
+) -> None:
+    reviewer = _reviewer("doubao")
+    review_input = _input("d_0001")
+    batch_id = "batch_001"
+    request_nonce = "nonce-repair"
+    request_payload = build_relation_request_payload(
+        reviewer=reviewer,
+        batch_id=batch_id,
+        inputs=(review_input,),
+        request_nonce=request_nonce,
+    )
+    request_fingerprint = json_sha256(
+        {
+            "endpoint": f"{reviewer.base_url}/chat/completions",
+            "reviewer_id": reviewer.reviewer_id,
+            "request_payload": request_payload,
+        }
+    )
+    now = datetime.now(timezone.utc)
+    attempts = [
+        _response_attempt(
+            attempt=1,
+            reviewer=reviewer,
+            request_nonce=request_nonce,
+            recorded_at=now,
+            response_payload={
+                "request_nonce": request_nonce,
+                "judgments": [
+                    {
+                        "blind_item_id": "d_0001",
+                        "proposition_checks": [
+                            {
+                                "proposition_id": "p1",
+                                "status": "entailed",
+                                "evidence_sentence_ids": ["s9"],
+                            }
+                        ],
+                        "needs_context": False,
+                        "notes": "Invalid evidence sentence.",
+                    }
+                ],
+            },
+            error="ValueError: evidence sentence IDs are unknown",
+        ),
+        _response_attempt(
+            attempt=2,
+            reviewer=reviewer,
+            request_nonce=request_nonce,
+            recorded_at=now,
+            response_payload={
+                "request_nonce": request_nonce,
+                "judgments": [
+                    {
+                        "blind_item_id": "d_0001",
+                        "proposition_checks": [
+                            {
+                                "proposition_id": "p1",
+                                "status": "absent",
+                                "evidence_sentence_ids": [],
+                            }
+                        ],
+                        "needs_context": False,
+                        "notes": "The target is absent.",
+                    }
+                ],
+            },
+            error="ValueError: semantic judgments changed across retries for the same request",
+        ),
+    ]
+    raw_path = tmp_path / "batch_001.json"
+    raw_path.write_text(
+        json.dumps(
+            {
+                "status": "failed",
+                "reviewer_id": reviewer.reviewer_id,
+                "reviewer_kind": "model",
+                "requested_model": reviewer.model,
+                "thinking_mode": reviewer.thinking_mode.value,
+                "base_url": reviewer.base_url,
+                "batch_id": batch_id,
+                "request_nonce": request_nonce,
+                "request_fingerprint": request_fingerprint,
+                "prompt_version": "phase_b_relation_sentence_judge_v5",
+                "blind_item_ids": ["d_0001"],
+                "attempt_chain_sha256": json_sha256(attempts),
+                "attempts": attempts,
+                "error": "ValueError: semantic judgments changed across retries for the same request",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="not resumable"):
+        _load_resumable_batch(
+            raw_path,
+            reviewer=reviewer,
+            batch_id=batch_id,
+            inputs=(review_input,),
+            failure_policy=BatchFailurePolicy.STRICT,
+        )
+
+    recovered = _load_resumable_batch(
+        raw_path,
+        reviewer=reviewer,
+        batch_id=batch_id,
+        inputs=(review_input,),
+        failure_policy=BatchFailurePolicy.ROUTE_SEMANTIC_DRIFT_TO_PRIORITY,
+    )
+
+    assert recovered is not None
+    assert recovered.requires_priority is True
+    assert recovered.judgments[0].proposition_checks[0].status == "absent"
 
 
 def test_relation_request_and_retry_fingerprints_cover_routing_fields():
@@ -683,3 +808,53 @@ def _row_key(row: dict[str, object]) -> tuple[str, str, str, str]:
         str(row["target_id"]),
         str(row["source_id"]),
     )
+
+
+def _response_attempt(
+    *,
+    attempt: int,
+    reviewer: AnnotationReviewerConfig,
+    request_nonce: str,
+    recorded_at: datetime,
+    response_payload: dict[str, object],
+    error: str,
+) -> dict[str, object]:
+    timestamp = recorded_at.isoformat()
+    body = json.dumps(
+        {
+            "id": f"response-{attempt}",
+            "model": reviewer.model,
+            "created": int(recorded_at.timestamp()),
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(response_payload),
+                    }
+                }
+            ],
+            "usage": {},
+        },
+        separators=(",", ":"),
+    ).encode()
+    body_sha256 = hashlib.sha256(body).hexdigest()
+    return {
+        "attempt": attempt,
+        "request_started_at": timestamp,
+        "response_received_at": timestamp,
+        "request_nonce": request_nonce,
+        "http_status": 200,
+        "response_body_hex": body.hex(),
+        "response_body_sha256": body_sha256,
+        "attempt_envelope_sha256": json_sha256(
+            {
+                "attempt": attempt,
+                "request_nonce": request_nonce,
+                "request_started_at": timestamp,
+                "response_received_at": timestamp,
+                "http_status": 200,
+                "response_body_sha256": body_sha256,
+            }
+        ),
+        "semantic_response_fingerprint": semantic_response_fingerprint(response_payload),
+        "error": error,
+    }

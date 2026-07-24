@@ -305,6 +305,15 @@ calibration runs. The execution seal must record both the independent FAIL and
 the owner override; it must not relabel the audit as PASS. No replacement run
 is authorized.
 
+The two v6 calibration runs passed the frozen gate and produced the canonical
+full-run authorization. The exploratory full run later stopped after 269
+successful Doubao and 699 successful Gemini judgments because one batch per
+reviewer changed semantic judgments across retries. Continuation preserves all
+968 successful raw responses, resumes only unseen batches, and routes the
+latest structurally valid judgment from each drifted pair to mandatory
+priority-subagent review. This continuation rule is full-run-only; calibration
+remains strict and no calibration replacement is permitted.
+
 The full run started automatically only after the machine authorization was
 created. Its lower-model judgments, terminal priority actions, and final proxy
 labels are still pending; therefore no dataset-freeze or method claim is

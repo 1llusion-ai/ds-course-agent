@@ -8,6 +8,7 @@ import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -20,6 +21,7 @@ from benchmarks.knowledge_state_search.phase_b_annotation_packets import (
     DEFAULT_OUTPUT_DIRECTORY as DEFAULT_PACKET_DIRECTORY,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_client import (
+    BatchFailurePolicy,
     reviewer_usage,
     run_relation_reviewer,
 )
@@ -50,6 +52,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_calibration import (
     FROZEN_DEV_SPLIT,
     RUN_CONTRACT_FILENAME,
     RUN_IDENTITY_FILENAME,
+    RelationRunContract,
     build_current_run_contract,
     derive_calibration_contracts,
 )
@@ -57,6 +60,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_calibration_authorizatio
     validate_calibration_authorization,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_calibration_provenance import (
+    git_output,
     validate_preregistered_path,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_target_specs import (
@@ -77,6 +81,13 @@ DEFAULT_SPOT_CHECK_SEED = "phase_b_relation_priority_spot_check_v1"
 DEFAULT_PRIORITY_ORDER_SEED = 20260723
 
 
+class RelationExecutionMode(str, Enum):
+    """Choose a new frozen run or an in-place full-run continuation."""
+
+    NEW = "new"
+    RESUME_FULL = "resume_full"
+
+
 def run_dual_model_relation_annotation(
     *,
     reviewers: tuple[AnnotationReviewerConfig, AnnotationReviewerConfig],
@@ -93,6 +104,7 @@ def run_dual_model_relation_annotation(
     selection_seed: str = DEFAULT_SELECTION_SEED,
     spot_check_seed: str = DEFAULT_SPOT_CHECK_SEED,
     task_split: str | None = None,
+    execution_mode: RelationExecutionMode = RelationExecutionMode.NEW,
 ) -> dict[str, object]:
     """Run Doubao/Gemini independently and prepare priority-subagent actions."""
 
@@ -118,22 +130,34 @@ def run_dual_model_relation_annotation(
         limit_pairs=limit_pairs,
         seed=selection_seed,
     )
-    run_contract = build_current_run_contract(
-        reviewers=reviewers,
-        batch_size=batch_size,
-        selection_seed=selection_seed,
-        selected_task_split=task_split,
-        selected_pair_limit=limit_pairs,
-        timeout_seconds=timeout,
-        max_retries=max_retries,
-        output_directory=output_directory,
-        packet_manifest_path=packet_directory / "annotation_packet_manifest.json",
-        target_specs_path=DEFAULT_TARGET_SPECS_PATH,
-        source_scope_labels_path=source_scope_labels_path,
-        source_scope_report_path=source_scope_report_path,
-    )
     calibration_only_selection = task_split == FROZEN_DEV_SPLIT and len(selected_keys) == CALIBRATION_PAIR_COUNT
     full_annotation = task_split is None and len(selected_keys) == len(bundle.canonical_keys)
+    if execution_mode is RelationExecutionMode.RESUME_FULL:
+        if not full_annotation:
+            raise ValueError("only the exact full relation run can be resumed")
+        run_contract = _load_resume_contract(
+            output_directory,
+            reviewers=reviewers,
+            batch_size=batch_size,
+            timeout=timeout,
+            max_retries=max_retries,
+            selection_seed=selection_seed,
+        )
+    else:
+        run_contract = build_current_run_contract(
+            reviewers=reviewers,
+            batch_size=batch_size,
+            selection_seed=selection_seed,
+            selected_task_split=task_split,
+            selected_pair_limit=limit_pairs,
+            timeout_seconds=timeout,
+            max_retries=max_retries,
+            output_directory=output_directory,
+            packet_manifest_path=packet_directory / "annotation_packet_manifest.json",
+            target_specs_path=DEFAULT_TARGET_SPECS_PATH,
+            source_scope_labels_path=source_scope_labels_path,
+            source_scope_report_path=source_scope_report_path,
+        )
     if calibration_only_selection:
         if str(output_directory) not in run_contract.calibration_run_directories:
             raise ValueError("calibration output directory is not one of the preregistered runs")
@@ -162,40 +186,25 @@ def run_dual_model_relation_annotation(
         )
         for reviewer_id in REVIEWERS
     }
-    output_directory.parent.mkdir(parents=True, exist_ok=True)
-    output_directory.mkdir()
     attempt_journal_directory = Path(run_contract.attempt_journal_directory)
-    validate_preregistered_path(attempt_journal_directory)
-    attempt_journal_directory.parent.mkdir(parents=True, exist_ok=True)
-    attempt_journal_directory.mkdir()
     run_contract_path = output_directory / RUN_CONTRACT_FILENAME
-    run_contract_path.write_text(
-        json.dumps(run_contract.to_dict(), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
     run_identity_path = output_directory / RUN_IDENTITY_FILENAME
-    run_identity_path.write_text(
-        json.dumps(
-            {
-                "status": "started_from_execution_seal",
-                "protocol": "phase_b_relation_run_identity_v1",
-                "run_id": run_contract.run_id,
-                "run_index": run_contract.run_index,
-                "output_directory": run_contract.output_directory,
-                "attempt_journal_directory": run_contract.attempt_journal_directory,
-                "run_contract_sha256": file_sha256(run_contract_path),
-                "execution_seal_sha256": run_contract.execution_seal_sha256,
-                "started_at": datetime.now(timezone.utc).isoformat(),
-            },
-            ensure_ascii=False,
-            indent=2,
+    if execution_mode is RelationExecutionMode.RESUME_FULL:
+        _validate_resume_artifacts(
+            output_directory,
+            selected_keys=selected_keys,
+            run_contract=run_contract,
         )
-        + "\n",
-        encoding="utf-8",
-    )
-    _write_jsonl(
-        output_directory / "selected_canonical_pairs.jsonl",
-        [canonical_row(key) for key in selected_keys],
+        _write_resume_segment(output_directory, run_contract)
+    else:
+        _initialize_run_artifacts(
+            output_directory,
+            attempt_journal_directory=attempt_journal_directory,
+            run_contract=run_contract,
+            selected_keys=selected_keys,
+        )
+    failure_policy = (
+        BatchFailurePolicy.ROUTE_SEMANTIC_DRIFT_TO_PRIORITY if full_annotation else BatchFailurePolicy.STRICT
     )
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {
@@ -208,11 +217,18 @@ def run_dual_model_relation_annotation(
                 timeout=timeout,
                 max_retries=max_retries,
                 attempt_journal_directory=attempt_journal_directory,
+                failure_policy=failure_policy,
             )
             for reviewer in reviewers
         }
-        judgments_by_reviewer = {reviewer_id: future.result() for reviewer_id, future in futures.items()}
+        reviewer_results = {reviewer_id: future.result() for reviewer_id, future in futures.items()}
     attempt_journal_directory.chmod(0o555)
+    judgments_by_reviewer = {reviewer_id: result.judgments for reviewer_id, result in reviewer_results.items()}
+    forced_priority_keys = {
+        bundle.canonical_by_blind_id[reviewer_id][blind_item_id]
+        for reviewer_id, result in reviewer_results.items()
+        for blind_item_id in result.forced_priority_blind_item_ids
+    }
 
     consensus = resolve_relation_consensus(
         selected_keys,
@@ -227,7 +243,11 @@ def run_dual_model_relation_annotation(
             seed=spot_check_seed,
         )
     )
-    action_rows = _priority_action_rows(consensus, spot_check_keys)
+    action_rows = _priority_action_rows(
+        consensus,
+        spot_check_keys,
+        forced_priority_keys,
+    )
     action_packet, action_private_map = build_priority_action_packet(
         action_rows,
         bundle.public_payload_by_key,
@@ -240,6 +260,10 @@ def run_dual_model_relation_annotation(
     _write_jsonl(
         output_directory / "source_scope_relation_conflict_queue.jsonl",
         source_scope_conflicts,
+    )
+    _write_jsonl(
+        output_directory / "semantic_drift_priority_queue.jsonl",
+        [canonical_row(key) for key in sorted(forced_priority_keys)],
     )
     _write_jsonl(output_directory / "priority_action_packet.jsonl", action_packet)
     _write_jsonl(
@@ -313,6 +337,11 @@ def run_dual_model_relation_annotation(
         "priority_adjudication_count": sum(row["action_type"] == "adjudication" for row in action_rows),
         "priority_spot_check_count": sum(row["action_type"] == "spot_check" for row in action_rows),
         "priority_action_count": len(action_rows),
+        "forced_priority_repair_count": len(forced_priority_keys),
+        "resumed_batch_count": {
+            reviewer_id: result.resumed_batch_count for reviewer_id, result in reviewer_results.items()
+        },
+        "execution_mode": execution_mode.value,
         "priority_action_manifest_sha256": file_sha256(output_directory / "priority_action_manifest.json"),
         "spot_check_fraction": spot_check_fraction,
         "spot_check_seed": spot_check_seed,
@@ -399,6 +428,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional frozen task split such as phase_b_dev; omit for all tasks.",
     )
     parser.add_argument(
+        "--resume-full",
+        action="store_true",
+        help="Resume the exact existing full run without replacing successful batches.",
+    )
+    parser.add_argument(
         "--doubao-model",
         default=os.environ.get("DOUBAO_MODEL") or DEFAULT_DOUBAO_MODEL,
     )
@@ -452,6 +486,7 @@ def main() -> int:
         limit_pairs=args.limit_pairs,
         spot_check_fraction=args.spot_check_fraction,
         task_split=args.task_split,
+        execution_mode=(RelationExecutionMode.RESUME_FULL if args.resume_full else RelationExecutionMode.NEW),
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
@@ -460,13 +495,14 @@ def main() -> int:
 def _priority_action_rows(
     consensus: tuple[dict[str, object], ...],
     spot_check_keys: set[CanonicalKey],
+    forced_priority_keys: set[CanonicalKey],
 ) -> tuple[dict[str, object], ...]:
     rows: list[dict[str, object]] = []
     for row in consensus:
         key = row_key(row)
         if row["disposition"] == "priority_subagent_required":
             action_type = "adjudication"
-        elif key in spot_check_keys:
+        elif key in spot_check_keys or key in forced_priority_keys:
             action_type = "spot_check"
         else:
             continue
@@ -478,6 +514,169 @@ def _priority_action_rows(
             }
         )
     return tuple(rows)
+
+
+def _load_resume_contract(
+    output_directory: Path,
+    *,
+    reviewers: tuple[AnnotationReviewerConfig, AnnotationReviewerConfig],
+    batch_size: int,
+    timeout: float,
+    max_retries: int,
+    selection_seed: str,
+) -> RelationRunContract:
+    """Load the exact started full-run contract without rebuilding its seal."""
+
+    contract_path = output_directory / RUN_CONTRACT_FILENAME
+    if not output_directory.is_dir() or not contract_path.is_file():
+        raise ValueError("full-run continuation requires an existing run directory")
+    contract = RelationRunContract.from_dict(json.loads(contract_path.read_text(encoding="utf-8")))
+    expected_reviewers = {
+        reviewer.reviewer_id: (
+            reviewer.model,
+            reviewer.base_url.rstrip("/"),
+            reviewer.thinking_mode.value,
+        )
+        for reviewer in reviewers
+    }
+    actual_reviewers = {
+        binding.reviewer_id: (
+            binding.model_id,
+            binding.base_url,
+            binding.thinking_mode,
+        )
+        for binding in contract.reviewer_models
+    }
+    if (
+        contract.run_index is not None
+        or contract.output_directory != str(output_directory)
+        or contract.selected_task_split is not None
+        or contract.selected_pair_limit is not None
+        or contract.batch_size != batch_size
+        or contract.timeout_seconds != timeout
+        or contract.max_retries != max_retries
+        or contract.selection_seed != selection_seed
+        or actual_reviewers != expected_reviewers
+    ):
+        raise ValueError("full-run continuation arguments do not match the started contract")
+    return contract
+
+
+def _initialize_run_artifacts(
+    output_directory: Path,
+    *,
+    attempt_journal_directory: Path,
+    run_contract: RelationRunContract,
+    selected_keys: tuple[CanonicalKey, ...],
+) -> None:
+    """Create the sole initial run contract, identity, and selected-pair file."""
+
+    output_directory.parent.mkdir(parents=True, exist_ok=True)
+    output_directory.mkdir()
+    validate_preregistered_path(attempt_journal_directory)
+    attempt_journal_directory.parent.mkdir(parents=True, exist_ok=True)
+    attempt_journal_directory.mkdir()
+    run_contract_path = output_directory / RUN_CONTRACT_FILENAME
+    run_contract_path.write_text(
+        json.dumps(run_contract.to_dict(), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (output_directory / RUN_IDENTITY_FILENAME).write_text(
+        json.dumps(
+            {
+                "status": "started_from_execution_seal",
+                "protocol": "phase_b_relation_run_identity_v1",
+                "run_id": run_contract.run_id,
+                "run_index": run_contract.run_index,
+                "output_directory": run_contract.output_directory,
+                "attempt_journal_directory": run_contract.attempt_journal_directory,
+                "run_contract_sha256": file_sha256(run_contract_path),
+                "execution_seal_sha256": run_contract.execution_seal_sha256,
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write_jsonl(
+        output_directory / "selected_canonical_pairs.jsonl",
+        [canonical_row(key) for key in selected_keys],
+    )
+
+
+def _validate_resume_artifacts(
+    output_directory: Path,
+    *,
+    selected_keys: tuple[CanonicalKey, ...],
+    run_contract: RelationRunContract,
+) -> None:
+    """Validate immutable start artifacts before continuing existing batches."""
+
+    if (output_directory / "annotation_report.json").exists():
+        raise ValueError("full relation annotation is already complete")
+    run_contract_path = output_directory / RUN_CONTRACT_FILENAME
+    identity_path = output_directory / RUN_IDENTITY_FILENAME
+    selected_path = output_directory / "selected_canonical_pairs.jsonl"
+    identity = json.loads(identity_path.read_text(encoding="utf-8"))
+    if (
+        identity.get("status") != "started_from_execution_seal"
+        or identity.get("run_id") != run_contract.run_id
+        or identity.get("output_directory") != run_contract.output_directory
+        or identity.get("run_contract_sha256") != file_sha256(run_contract_path)
+        or identity.get("execution_seal_sha256") != run_contract.execution_seal_sha256
+    ):
+        raise ValueError("full-run continuation identity mismatch")
+    if _read_jsonl(selected_path) != [canonical_row(key) for key in selected_keys]:
+        raise ValueError("full-run continuation selected-pair universe mismatch")
+    attempt_journal_directory = Path(run_contract.attempt_journal_directory)
+    validate_preregistered_path(attempt_journal_directory)
+    if not attempt_journal_directory.is_dir():
+        raise ValueError("full-run continuation attempt journal is missing")
+
+
+def _write_resume_segment(
+    output_directory: Path,
+    run_contract: RelationRunContract,
+) -> None:
+    """Append one transparent continuation marker without changing old evidence."""
+
+    directory = output_directory / "resume_segments"
+    directory.mkdir(exist_ok=True)
+    existing = sorted(directory.glob("segment_*.json"))
+    path = directory / f"segment_{len(existing) + 1:03d}.json"
+    path.write_text(
+        json.dumps(
+            {
+                "status": "full_run_continuation_started",
+                "protocol": "phase_b_relation_full_resume_v1",
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "resume_git_commit": git_output("rev-parse", "HEAD"),
+                "run_contract_sha256": file_sha256(output_directory / RUN_CONTRACT_FILENAME),
+                "execution_seal_sha256": run_contract.execution_seal_sha256,
+                "failure_policy": (BatchFailurePolicy.ROUTE_SEMANTIC_DRIFT_TO_PRIORITY.value),
+                "preserve_existing_successes": True,
+                "replace_existing_batches": False,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _read_jsonl(path: Path) -> list[dict[str, object]]:
+    """Read one JSONL artifact as an ordered list of objects."""
+
+    rows: list[dict[str, object]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            raise ValueError(f"JSONL row must be an object: {path}")
+        rows.append(payload)
+    return rows
 
 
 def _write_action_manifest(
