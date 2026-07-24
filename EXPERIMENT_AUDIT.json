@@ -241,7 +241,7 @@
         "decision": "terminal_no_go"
       },
       "v3_doubao_gemini_preregistration": {
-        "status": "calibration_accepted_full_run_started",
+        "status": "invalidated_by_priority_subagent_audit",
         "run_contract_version": "phase_b_relation_run_contract_v3",
         "prompt_version": "phase_b_relation_sentence_judge_v5",
         "packet_protocol": "phase_b_blind_relation_dual_model_annotation_v2",
@@ -295,8 +295,8 @@
           "semantic_drift_errors_max": 0
         },
         "calibration_runs_completed": 2,
-        "authorization_manifest_created": true,
-        "full_annotation_started": true,
+        "authorization_manifest_created": false,
+        "full_annotation_started": false,
         "calibration_runs": [
           {
             "run_directory": "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v3_sentence_dev_run1",
@@ -318,7 +318,41 @@
           "gemini": 0.9333333333333333
         },
         "authorization_manifest": "var/artifacts/knowledge_state_search/phase_b_relation_calibration_authorization.json",
-        "full_annotation_output": "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v3_sentence_full"
+        "full_annotation_output": "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v3_sentence_full",
+        "invalidated_authorization_artifact": "var/artifacts/knowledge_state_search/phase_b_relation_calibration_authorization_v3_invalidated.json",
+        "partial_full_run": {
+          "artifact": "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v3_sentence_full",
+          "doubao_successful_batches": 163,
+          "gemini_successful_batches": 94,
+          "pending_batches": {
+            "doubao": 1,
+            "gemini": 1
+          },
+          "accepted_for_dataset": false,
+          "final_relation_labels": 0
+        },
+        "audit_failures": [
+          "hashed_response_body_not_bound_to_parsed_sidecar_content",
+          "authorization_not_bound_to_exact_preregistered_run_directories"
+        ],
+        "accepted_for_full_run": false
+      },
+      "v4_body_bound_fixed_run_preregistration": {
+        "status": "preregistering_before_model_calls",
+        "run_contract_version": "phase_b_relation_run_contract_v4",
+        "tracked_preregistration": "benchmarks/data/knowledge_state_search_confirmatory_v3_phase_b_design/relation_calibration_v4_preregistration.json",
+        "repairs": [
+          "decode_content_model_id_created_usage_from_exact_hashed_response_body",
+          "provider_created_must_match_request_time_window",
+          "attempt_envelope_sha256",
+          "tracked_preregistration_sha256_in_run_contract",
+          "exact_run1_run2_and_full_output_directories",
+          "replacement_run_rejection",
+          "authorization_overwrite_rejection"
+        ],
+        "calibration_runs_completed": 0,
+        "authorization_manifest_created": false,
+        "full_annotation_started": false
       }
     },
     "annotation_started": true,

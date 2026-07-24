@@ -57,7 +57,9 @@ from benchmarks.knowledge_state_search.phase_b_relation_target_specs import (
     load_task_split,
 )
 
-DEFAULT_OUTPUT_DIRECTORY = Path("var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation")
+DEFAULT_OUTPUT_DIRECTORY = Path(
+    "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v4_bound_full"
+)
 DEFAULT_CALIBRATION_AUTHORIZATION_PATH = Path(
     "var/artifacts/knowledge_state_search/phase_b_relation_calibration_authorization.json"
 )
@@ -122,8 +124,19 @@ def run_dual_model_relation_annotation(
         source_scope_labels_path=source_scope_labels_path,
         source_scope_report_path=source_scope_report_path,
     )
-    calibration_only_selection = task_split == FROZEN_DEV_SPLIT and len(selected_keys) <= CALIBRATION_PAIR_COUNT
-    authorization_required = not calibration_only_selection
+    calibration_only_selection = task_split == FROZEN_DEV_SPLIT and len(selected_keys) == CALIBRATION_PAIR_COUNT
+    full_annotation = task_split is None and len(selected_keys) == len(bundle.canonical_keys)
+    if calibration_only_selection:
+        if str(output_directory) not in run_contract.calibration_run_directories:
+            raise ValueError("calibration output directory is not one of the preregistered runs")
+    elif full_annotation:
+        if str(output_directory) != run_contract.full_run_directory:
+            raise ValueError("full annotation output directory is not preregistered")
+    else:
+        raise ValueError(
+            "relation annotation permits only an exact preregistered calibration or the exact authorized full run"
+        )
+    authorization_required = full_annotation
     calibration_authorization: dict[str, object] | None = None
     if authorization_required:
         calibration_contract = derive_calibration_contract(run_contract)
@@ -218,7 +231,6 @@ def run_dual_model_relation_annotation(
         )
         for row in consensus
     ]
-    full_annotation = task_split is None and len(selected_keys) == len(bundle.canonical_keys)
     report = {
         "status": (
             "dual_model_annotation_complete_pending_priority"

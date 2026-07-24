@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,16 +35,21 @@ from benchmarks.knowledge_state_search.phase_b_relation_calibration_raw import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _restore_default_preregistration_path():
+    original = calibration.DEFAULT_PREREGISTRATION_PATH
+    yield
+    calibration.DEFAULT_PREREGISTRATION_PATH = original
+
+
 def test_calibration_authorization_passes_and_validates(
     tmp_path: Path,
 ) -> None:
     contract, run_directories = _build_calibration_fixture(tmp_path)
-    output_path = tmp_path / "authorization.json"
+    output_path = Path(contract.authorization_path)
 
     manifest = calibration.build_calibration_authorization(
-        run_directories=run_directories,
         expected_contract=contract,
-        output_path=output_path,
     )
     validated = calibration.validate_calibration_authorization(
         output_path,
@@ -120,13 +126,11 @@ def test_calibration_rejects_single_run_threshold_failure(
     _write_raw_responses_for_consensus(run_directories[0], contract, rows)
     _write_jsonl(consensus_path, rows)
     _refresh_report(run_directories[0])
-    output_path = tmp_path / "authorization.json"
+    output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match=failure_kind):
         calibration.build_calibration_authorization(
-            run_directories=run_directories,
             expected_contract=contract,
-            output_path=output_path,
         )
 
     assert not output_path.exists()
@@ -145,13 +149,11 @@ def test_calibration_rejects_repeatability_below_threshold(
     _write_raw_responses_for_consensus(run_directories[1], contract, rows)
     _write_jsonl(consensus_path, rows)
     _refresh_report(run_directories[1])
-    output_path = tmp_path / "authorization.json"
+    output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="repeatability"):
         calibration.build_calibration_authorization(
-            run_directories=run_directories,
             expected_contract=contract,
-            output_path=output_path,
         )
 
     assert not output_path.exists()
@@ -173,13 +175,11 @@ def test_calibration_rejects_contract_or_hash_mismatch(
         payload = _read_json(path)
         payload["annotation_inputs"]["target_specs_sha256"] = "0" * 64
         _write_json(path, payload)
-    output_path = tmp_path / "authorization.json"
+    output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match=failure_kind):
         calibration.build_calibration_authorization(
-            run_directories=run_directories,
             expected_contract=contract,
-            output_path=output_path,
         )
 
     assert not output_path.exists()
@@ -198,16 +198,58 @@ def test_calibration_rejects_semantic_drift_error(
         }
     )
     _write_json(path, payload)
-    output_path = tmp_path / "authorization.json"
+    output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="semantic drift"):
         calibration.build_calibration_authorization(
-            run_directories=run_directories,
             expected_contract=contract,
-            output_path=output_path,
         )
 
     assert not output_path.exists()
+
+
+def test_calibration_rejects_parsed_judgment_detached_from_hashed_body(
+    tmp_path: Path,
+) -> None:
+    contract, run_directories = _build_calibration_fixture(tmp_path)
+    path = run_directories[0] / calibration.RAW_RESPONSES_DIRECTORY / "gemini" / "batch_001.json"
+    payload = _read_json(path)
+    payload["parsed_judgments"][0]["notes"] = "Tampered outside the hashed body."
+    _write_json(path, payload)
+
+    with pytest.raises(ValueError, match="parsed judgments do not match"):
+        calibration.build_calibration_authorization(
+            expected_contract=contract,
+        )
+
+
+def test_calibration_rejects_local_timestamps_outside_provider_created_window(
+    tmp_path: Path,
+) -> None:
+    contract, run_directories = _build_calibration_fixture(tmp_path)
+    path = run_directories[0] / calibration.RAW_RESPONSES_DIRECTORY / "gemini" / "batch_001.json"
+    payload = _read_json(path)
+    attempt = payload["attempts"][0]
+    attempt["request_started_at"] = "2099-01-01T00:00:00+00:00"
+    attempt["response_received_at"] = "2099-01-01T00:00:01+00:00"
+    attempt["attempt_envelope_sha256"] = calibration.json_sha256(
+        {
+            "attempt": attempt["attempt"],
+            "request_nonce": attempt["request_nonce"],
+            "request_started_at": attempt["request_started_at"],
+            "response_received_at": attempt["response_received_at"],
+            "http_status": attempt["http_status"],
+            "response_body_sha256": attempt["response_body_sha256"],
+        }
+    )
+    payload["parsed_judgments"][0]["request_started_at"] = attempt["request_started_at"]
+    payload["parsed_judgments"][0]["response_received_at"] = attempt["response_received_at"]
+    _write_json(path, payload)
+
+    with pytest.raises(ValueError, match="outside the request window"):
+        calibration.build_calibration_authorization(
+            expected_contract=contract,
+        )
 
 
 def test_calibration_rejects_copied_run_freshness_identifiers(
@@ -225,13 +267,11 @@ def test_calibration_rejects_copied_run_freshness_identifiers(
     (run_directories[1] / calibration.ANNOTATION_REPORT_FILENAME).write_bytes(
         (run_directories[0] / calibration.ANNOTATION_REPORT_FILENAME).read_bytes()
     )
-    output_path = tmp_path / "authorization.json"
+    output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="share request_nonces"):
         calibration.build_calibration_authorization(
-            run_directories=run_directories,
             expected_contract=contract,
-            output_path=output_path,
         )
 
     assert not output_path.exists()
@@ -245,13 +285,11 @@ def test_calibration_rejects_dev_pair_universe_mismatch(
     rows = _read_jsonl(path)
     rows[0]["source_id"] = "changed-source"
     _write_jsonl(path, rows)
-    output_path = tmp_path / "authorization.json"
+    output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="pair universe"):
         calibration.build_calibration_authorization(
-            run_directories=run_directories,
             expected_contract=contract,
-            output_path=output_path,
         )
 
     assert not output_path.exists()
@@ -299,9 +337,7 @@ def test_calibration_rejects_same_cherry_picked_pair_universe_in_both_runs(
 
     with pytest.raises(ValueError, match="deterministic selection seed"):
         calibration.build_calibration_authorization(
-            run_directories=run_directories,
             expected_contract=contract,
-            output_path=tmp_path / "authorization.json",
         )
 
 
@@ -312,13 +348,11 @@ def test_calibration_rejects_source_scope_conflict(
         tmp_path,
         first_selected_source_out_of_scope=True,
     )
-    output_path = tmp_path / "authorization.json"
+    output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="scope conflicts"):
         calibration.build_calibration_authorization(
-            run_directories=run_directories,
             expected_contract=contract,
-            output_path=output_path,
         )
 
     assert not output_path.exists()
@@ -335,9 +369,7 @@ def test_calibration_rejects_consensus_not_bound_to_raw_judgments(
 
     with pytest.raises(ValueError, match="raw response evidence"):
         calibration.build_calibration_authorization(
-            run_directories=run_directories,
             expected_contract=contract,
-            output_path=tmp_path / "authorization.json",
         )
 
 
@@ -346,13 +378,11 @@ def test_calibration_missing_evidence_file_fails_closed(
 ) -> None:
     contract, run_directories = _build_calibration_fixture(tmp_path)
     (run_directories[1] / calibration.CONSENSUS_FILENAME).unlink()
-    output_path = tmp_path / "authorization.json"
+    output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="missing"):
         calibration.build_calibration_authorization(
-            run_directories=run_directories,
             expected_contract=contract,
-            output_path=output_path,
         )
 
     assert not output_path.exists()
@@ -362,16 +392,18 @@ def test_authorization_validator_fails_closed(
     tmp_path: Path,
 ) -> None:
     contract, run_directories = _build_calibration_fixture(tmp_path)
-    output_path = tmp_path / "authorization.json"
+    output_path = Path(contract.authorization_path)
 
     with pytest.raises(ValueError, match="missing"):
         calibration.validate_calibration_authorization(output_path, contract)
 
     calibration.build_calibration_authorization(
-        run_directories=run_directories,
         expected_contract=contract,
-        output_path=output_path,
     )
+    with pytest.raises(FileExistsError):
+        calibration.build_calibration_authorization(
+            expected_contract=contract,
+        )
     payload = _read_json(output_path)
     payload["accepted_for_full_run"] = False
     _write_json(output_path, payload)
@@ -388,15 +420,31 @@ def test_authorization_validator_fails_closed(
         )
 
 
+def test_calibration_rejects_replacement_run_directories(
+    tmp_path: Path,
+) -> None:
+    contract, _ = _build_calibration_fixture(tmp_path)
+    replacement_contract = replace(
+        contract,
+        calibration_run_directories=(
+            str(tmp_path / "replacement_run3"),
+            str(tmp_path / "replacement_run4"),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="preregistered run directories mismatch"):
+        calibration.build_calibration_authorization(
+            expected_contract=replacement_contract,
+        )
+
+
 def test_authorization_validator_rechecks_persisted_run_evidence(
     tmp_path: Path,
 ) -> None:
     contract, run_directories = _build_calibration_fixture(tmp_path)
-    output_path = tmp_path / "authorization.json"
+    output_path = Path(contract.authorization_path)
     calibration.build_calibration_authorization(
-        run_directories=run_directories,
         expected_contract=contract,
-        output_path=output_path,
     )
     consensus_path = run_directories[0] / calibration.CONSENSUS_FILENAME
     rows = _read_jsonl(consensus_path)
@@ -444,6 +492,26 @@ def _build_calibration_fixture(
     target_specs_path = design_directory / "relation_target_specs.jsonl"
     source_scope_labels_path = tmp_path / "source_scope_labels.jsonl"
     source_scope_report_path = tmp_path / "source_scope_report.json"
+    preregistration_path = tmp_path / "relation_calibration_preregistration.json"
+    run_directories = (tmp_path / "run1", tmp_path / "run2")
+    authorization_path = tmp_path / "authorization.json"
+    full_run_directory = tmp_path / "full"
+    _write_json(
+        preregistration_path,
+        {
+            "status": "preregistered",
+            "protocol": "phase_b_relation_calibration_v4_bound_runs",
+            "run_contract_version": calibration.RUN_CONTRACT_VERSION,
+            "calibration_run_directories": [
+                str(run_directories[0]),
+                str(run_directories[1]),
+            ],
+            "full_run_directory": str(full_run_directory),
+            "authorization_path": str(authorization_path),
+            "replacement_run_allowed": False,
+        },
+    )
+    calibration.DEFAULT_PREREGISTRATION_PATH = preregistration_path
     _write_synthetic_packet_and_specs(
         packet_directory,
         design_directory,
@@ -500,7 +568,6 @@ def _build_calibration_fixture(
         source_scope_labels_path=source_scope_labels_path,
         source_scope_report_path=source_scope_report_path,
     )
-    run_directories = (tmp_path / "run1", tmp_path / "run2")
     for run_directory in run_directories:
         _write_calibration_run(
             run_directory,
@@ -845,7 +912,13 @@ def _write_raw_responses(
             response_body = json.dumps(
                 {
                     "id": "",
+                    "created": int(datetime.fromisoformat(request_started_at).timestamp()),
                     "model": binding.model_id,
+                    "usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 5,
+                        "total_tokens": 15,
+                    },
                     "choices": [
                         {
                             "message": {
@@ -857,6 +930,16 @@ def _write_raw_responses(
                 sort_keys=True,
             ).encode()
             response_body_sha256 = hashlib.sha256(response_body).hexdigest()
+            attempt_envelope_sha256 = calibration.json_sha256(
+                {
+                    "attempt": 1,
+                    "request_nonce": request_nonce,
+                    "request_started_at": request_started_at,
+                    "response_received_at": response_received_at,
+                    "http_status": 200,
+                    "response_body_sha256": response_body_sha256,
+                }
+            )
             parsed_judgments = [
                 judgment.to_dict()
                 for judgment in parse_model_relation_judgments(
@@ -902,13 +985,12 @@ def _write_raw_responses(
                         {
                             "attempt": 1,
                             "request_nonce": request_nonce,
-                            "provider_response_id": None,
+                            "http_status": 200,
                             "response_body_hex": response_body.hex(),
                             "response_body_sha256": response_body_sha256,
-                            "response_model": binding.model_id,
+                            "attempt_envelope_sha256": attempt_envelope_sha256,
                             "request_started_at": request_started_at,
                             "response_received_at": response_received_at,
-                            "content": json.dumps(response_payload),
                             "semantic_response_fingerprint": (semantic_response_fingerprint(response_payload)),
                         }
                     ],

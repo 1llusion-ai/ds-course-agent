@@ -274,6 +274,46 @@ created. Its lower-model judgments, terminal priority actions, and final proxy
 labels are still pending; therefore no dataset-freeze or method claim is
 authorized yet.
 
+### Priority-subagent invalidation of v3 authorization
+
+The owner-authorized priority subagent independently recomputed both v3 runs
+and confirmed their nominal metrics, but rejected the authorization mechanism.
+The validator hashed `response_body_hex` while parsing an independently stored
+sidecar `content` field, and the authorization builder did not enforce the
+exact preregistered run1/run2 directories. A tampered-copy test changed the
+sidecar judgment and local timestamps while retaining the response-body hash;
+the v3 validator still accepted it.
+
+The in-progress full run was stopped at 163 successful Doubao batches and 94
+successful Gemini batches, with one interrupted pending artifact per model.
+No consensus, priority packet, or final relation label was produced. The
+canonical v3 authorization was invalidated and removed from its active path.
+All v3 results are diagnostic-only.
+
+Run contract v4 repairs the authorization boundary before any new model call:
+
+- all response content/model/ID/usage fields are decoded from the exact hashed
+  response body;
+- provider `created` is checked against the local request window;
+- the attempt envelope is hashed;
+- a tracked preregistration file and its SHA-256 bind exact run1/run2, exact
+  full output, and the sole authorization path;
+- replacement runs and authorization overwrite are rejected;
+- new fail-closed tests cover body/content detachment, timestamp tampering,
+  replacement directories, and overwrite attempts.
+
+Current boundary:
+
+```text
+v4 calibration runs complete: 0 / 2
+canonical authorization:     absent
+v4 full annotation:          not started
+full proxy relation labels:  0 / 1,440
+dataset frozen:              false
+Phase B methods authorized:  false
+closed-loop multi-hop:       blocked
+```
+
 ## Claim Map
 
 | Claim | Why it matters | Minimum convincing evidence | Blocks |

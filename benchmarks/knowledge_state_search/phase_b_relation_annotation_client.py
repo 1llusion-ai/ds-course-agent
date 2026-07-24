@@ -7,7 +7,8 @@ import json
 import re
 import time
 import uuid
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,20 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract impo
 
 REQUEST_TEMPERATURE = 0
 REQUEST_MAX_TOKENS = 2048
+
+
+@dataclass(frozen=True)
+class ProviderResponseBody:
+    """Fields decoded directly from the exact persisted HTTP response body."""
+
+    body_hex: str
+    body_sha256: str
+    provider_response_id: str | None
+    response_model: str
+    created: int | None
+    usage: dict[str, object]
+    content: str
+    reasoning_content: str
 
 
 def run_relation_reviewer(
@@ -133,8 +148,12 @@ def reviewer_usage(raw_directory: Path) -> dict[str, int]:
         for attempt in attempts:
             if not isinstance(attempt, dict):
                 continue
-            usage = attempt.get("usage")
-            if not isinstance(usage, dict):
+            response_body_hex = attempt.get("response_body_hex")
+            if not isinstance(response_body_hex, str):
+                continue
+            try:
+                usage = parse_provider_response_body(bytes.fromhex(response_body_hex)).usage
+            except (UnicodeDecodeError, ValueError):
                 continue
             for field_name in ("prompt_tokens", "completion_tokens", "total_tokens"):
                 value = usage.get(field_name)
@@ -192,20 +211,24 @@ def _request_annotation_batch(
             continue
 
         response_received_at = datetime.now(timezone.utc).isoformat()
-        body = _response_body(response)
+        body = parse_provider_response_body(response.content)
+        attempt_envelope_sha256 = _attempt_envelope_sha256(
+            attempt=attempt,
+            request_nonce=request_nonce,
+            request_started_at=request_started_at,
+            response_received_at=response_received_at,
+            http_status=response.status_code,
+            response_body_sha256=body.body_sha256,
+        )
         attempt_audit: dict[str, object] = {
             "attempt": attempt,
             "request_started_at": request_started_at,
             "response_received_at": response_received_at,
             "request_nonce": request_nonce,
             "http_status": response.status_code,
-            "provider_response_id": body["provider_response_id"],
-            "response_body_hex": body["response_body_hex"],
-            "response_body_sha256": body["response_body_sha256"],
-            "response_model": body["response_model"],
-            "usage": body["usage"],
-            "content": body["content"],
-            "reasoning_content": body["reasoning_content"],
+            "response_body_hex": body.body_hex,
+            "response_body_sha256": body.body_sha256,
+            "attempt_envelope_sha256": attempt_envelope_sha256,
         }
         if not response.ok:
             last_error = f"HTTP {response.status_code}: {response.text[:500]}"
@@ -222,7 +245,12 @@ def _request_annotation_batch(
                 continue
             break
         try:
-            parsed_payload = extract_json_object(str(body["content"]))
+            validate_provider_response_timing(
+                body,
+                request_started_at=request_started_at,
+                response_received_at=response_received_at,
+            )
+            parsed_payload = extract_json_object(body.content)
             semantic_fingerprint = semantic_response_fingerprint(parsed_payload)
             if semantic_fingerprint is not None:
                 semantic_fingerprints.add(semantic_fingerprint)
@@ -234,10 +262,8 @@ def _request_annotation_batch(
                 reviewer=reviewer,
                 batch_id=batch_id,
                 request_nonce=request_nonce,
-                provider_response_id=(
-                    str(body["provider_response_id"]) if isinstance(body["provider_response_id"], str) else None
-                ),
-                response_body_sha256=str(body["response_body_sha256"]),
+                provider_response_id=body.provider_response_id,
+                response_body_sha256=body.body_sha256,
                 request_started_at=request_started_at,
                 response_received_at=response_received_at,
                 inputs=inputs,
@@ -333,7 +359,22 @@ def _load_resumable_batch(
         "response_body_sha256",
     ):
         raise ValueError(f"existing raw response body hash mismatch: {path}")
-    response_payload = extract_json_object(required_string(final_attempt, "content"))
+    body = parse_provider_response_body(response_body)
+    if final_attempt.get("attempt_envelope_sha256") != _attempt_envelope_sha256(
+        attempt=_required_integer(final_attempt, "attempt"),
+        request_nonce=request_nonce,
+        request_started_at=required_string(final_attempt, "request_started_at"),
+        response_received_at=required_string(final_attempt, "response_received_at"),
+        http_status=_required_integer(final_attempt, "http_status"),
+        response_body_sha256=body.body_sha256,
+    ):
+        raise ValueError(f"existing raw response attempt envelope mismatch: {path}")
+    validate_provider_response_timing(
+        body,
+        request_started_at=required_string(final_attempt, "request_started_at"),
+        response_received_at=required_string(final_attempt, "response_received_at"),
+    )
+    response_payload = extract_json_object(body.content)
     semantic_fingerprint = semantic_response_fingerprint(response_payload)
     if semantic_fingerprint is None or final_attempt.get("semantic_response_fingerprint") != semantic_fingerprint:
         raise ValueError(f"existing raw response semantic fingerprint mismatch: {path}")
@@ -342,8 +383,8 @@ def _load_resumable_batch(
         reviewer=reviewer,
         batch_id=batch_id,
         request_nonce=request_nonce,
-        provider_response_id=_optional_string(final_attempt, "provider_response_id"),
-        response_body_sha256=required_string(final_attempt, "response_body_sha256"),
+        provider_response_id=body.provider_response_id,
+        response_body_sha256=body.body_sha256,
         request_started_at=required_string(final_attempt, "request_started_at"),
         response_received_at=required_string(final_attempt, "response_received_at"),
         inputs=inputs,
@@ -353,13 +394,16 @@ def _load_resumable_batch(
     return judgments
 
 
-def _response_body(response: requests.Response) -> dict[str, object]:
+def parse_provider_response_body(response_body: bytes) -> ProviderResponseBody:
+    """Decode the exact provider body used for provenance and judgment parsing."""
+
     try:
-        payload = response.json()
-    except ValueError:
+        payload = json.loads(response_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
         payload = {}
     provider_response_id: str | None = None
     response_model = ""
+    created: int | None = None
     usage: dict[str, object] = {}
     content = ""
     reasoning_content = ""
@@ -368,6 +412,9 @@ def _response_body(response: requests.Response) -> dict[str, object]:
         if isinstance(raw_response_id, str) and raw_response_id.strip():
             provider_response_id = raw_response_id.strip()
         response_model = str(payload.get("model") or "")
+        raw_created = payload.get("created")
+        if isinstance(raw_created, int) and not isinstance(raw_created, bool):
+            created = raw_created
         if isinstance(payload.get("usage"), dict):
             usage = payload["usage"]
         choices = payload.get("choices")
@@ -376,15 +423,36 @@ def _response_body(response: requests.Response) -> dict[str, object]:
             if isinstance(message, dict):
                 content = str(message.get("content") or "")
                 reasoning_content = str(message.get("reasoning_content") or "")
-    return {
-        "provider_response_id": provider_response_id,
-        "response_body_hex": response.content.hex(),
-        "response_body_sha256": hashlib.sha256(response.content).hexdigest(),
-        "response_model": response_model,
-        "usage": usage,
-        "content": content,
-        "reasoning_content": reasoning_content,
-    }
+    return ProviderResponseBody(
+        body_hex=response_body.hex(),
+        body_sha256=hashlib.sha256(response_body).hexdigest(),
+        provider_response_id=provider_response_id,
+        response_model=response_model,
+        created=created,
+        usage=usage,
+        content=content,
+        reasoning_content=reasoning_content,
+    )
+
+
+def validate_provider_response_timing(
+    body: ProviderResponseBody,
+    *,
+    request_started_at: str,
+    response_received_at: str,
+) -> None:
+    """Require provider-created time to agree with the local request window."""
+
+    if body.created is None:
+        raise ValueError("provider response created timestamp is missing")
+    started = _parse_datetime(request_started_at, "request_started_at")
+    received = _parse_datetime(response_received_at, "response_received_at")
+    if received < started:
+        raise ValueError("response timestamps are out of order")
+    provider_created = datetime.fromtimestamp(body.created, tz=timezone.utc)
+    tolerance = timedelta(minutes=5)
+    if not started - tolerance <= provider_created <= received + tolerance:
+        raise ValueError("provider response created timestamp is outside the request window")
 
 
 def extract_json_object(text: str) -> dict[str, Any]:
@@ -606,15 +674,6 @@ def _final_successful_attempt(payload: dict[str, object]) -> dict[str, Any]:
     return final_attempt
 
 
-def _optional_string(payload: dict[str, Any], field_name: str) -> str | None:
-    value = payload.get(field_name)
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{field_name} must be null or a non-empty string")
-    return value.strip()
-
-
 def _runtime_error_audit(error: RuntimeError) -> dict[str, object]:
     try:
         payload = json.loads(str(error))
@@ -639,3 +698,41 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
         encoding="utf-8",
     )
     temporary_path.replace(path)
+
+
+def _attempt_envelope_sha256(
+    *,
+    attempt: int,
+    request_nonce: str,
+    request_started_at: str,
+    response_received_at: str,
+    http_status: int,
+    response_body_sha256: str,
+) -> str:
+    return json_sha256(
+        {
+            "attempt": attempt,
+            "request_nonce": request_nonce,
+            "request_started_at": request_started_at,
+            "response_received_at": response_received_at,
+            "http_status": http_status,
+            "response_body_sha256": response_body_sha256,
+        }
+    )
+
+
+def _required_integer(payload: dict[str, Any], field_name: str) -> int:
+    value = payload.get(field_name)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{field_name} must be an integer")
+    return value
+
+
+def _parse_datetime(value: str, field_name: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an ISO-8601 datetime") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field_name} must include a timezone")
+    return parsed

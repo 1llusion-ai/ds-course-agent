@@ -126,7 +126,25 @@ run 2: agreement 0.867; kappa 0.798; conflicts 0; drift 0
 repeatability: Doubao 0.967; Gemini 0.933
 ```
 
-The machine authorization manifest was created, and the 1,440-pair full
-Doubao/Gemini annotation started on July 24, 2026. Dataset freeze and Phase B
-method runs remain blocked until all lower-model judgments and terminal
-priority-subagent actions are finalized with zero unresolved repair rows.
+The first v3 machine authorization was created and the 1,440-pair run started,
+but an independent priority-subagent audit then found that the validator parsed
+a sidecar `content` field instead of content decoded from the hashed response
+body, and that authorization did not enforce the exact preregistered run
+directories. The full run was stopped at 163 successful Doubao batches and 94
+successful Gemini batches, plus one interrupted pending batch for each model.
+Those partial outputs and the two v3 calibrations are diagnostic-only. The
+canonical authorization file was removed from the active path.
+
+Run contract v4 repairs the root causes before any new calls:
+
+- parse model content, response model, provider ID, `created`, and usage only
+  from the exact hashed response body;
+- bind and verify the local attempt envelope, then require provider `created`
+  to fall within the request window with bounded clock tolerance;
+- bind the tracked preregistration file by SHA-256;
+- permit only its exact two calibration directories and exact full directory;
+- reject replacement run directories and refuse to overwrite an existing
+  authorization manifest.
+
+No v4 calibration or full run has started. Dataset freeze and Phase B methods
+remain blocked.

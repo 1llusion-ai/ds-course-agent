@@ -307,3 +307,48 @@ This changes the relation-data construction boundary from blocked to
 authorized-and-running. It does not change the audit verdict for dataset
 freeze, paper claims, or closed-loop multi-hop: those remain blocked until the
 full lower-model run and terminal priority-subagent finalization complete.
+
+## Priority-subagent audit correction (2026-07-24)
+
+The owner-authorized priority subagent subsequently returned **FAIL** for the
+v3 authorization mechanism while confirming that the two run metrics were
+internally consistent. Two blockers were demonstrated:
+
+1. the validator checked the SHA-256 of `response_body_hex` but parsed a
+   separately stored sidecar `content` field;
+2. the authorization builder accepted any two distinct calibration
+   directories rather than the exact preregistered run1/run2.
+
+The subagent reproduced the first issue on a `/tmp` copy by retaining the
+original response-body hash, changing the sidecar judgment and timestamps, and
+observing that the v3 validator still accepted the copy.
+
+The v3 full run was stopped immediately. Partial coverage was 163 successful
+Doubao batches and 94 successful Gemini batches, with one interrupted pending
+artifact per model. No final relation labels were created. The v3 authorization
+was moved out of the canonical active path; all v3 calibration and partial-full
+artifacts are diagnostic-only.
+
+Run contract v4 is preregistered with these repairs:
+
+- decode content, model, provider ID, provider `created`, usage, and reasoning
+  content only from the exact persisted provider body;
+- hash the attempt envelope and require provider `created` within the request
+  window with bounded clock tolerance;
+- bind a tracked preregistration file by SHA-256;
+- allow only its exact two calibration directories, exact full directory, and
+  sole authorization path;
+- reject replacement directories and authorization overwrite;
+- add fail-closed tests for body/content detachment, timestamp tampering,
+  replacement runs, and overwrite attempts.
+
+Corrected integrity boundary:
+
+```text
+v4 calibration authorization: absent
+v4 calibration runs:          0 / 2
+v4 full annotation:           not started
+full proxy relation labels:   0 / 1,440
+dataset frozen:               false
+Phase B methods authorized:   false
+```

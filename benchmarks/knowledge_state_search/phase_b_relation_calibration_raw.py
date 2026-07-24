@@ -14,7 +14,9 @@ from benchmarks.knowledge_state_search.phase_b_annotation_packet_contract import
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_client import (
     build_relation_request_payload,
     extract_json_object,
+    parse_provider_response_body,
     semantic_response_fingerprint,
+    validate_provider_response_timing,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract import (
     AnnotationReviewerConfig,
@@ -94,7 +96,6 @@ def validate_raw_responses(
             if required_string(final_attempt, "request_nonce") != request_nonce:
                 raise ValueError("raw response request nonce mismatch")
             request_fingerprint = required_string(payload, "request_fingerprint")
-            provider_response_id = _optional_string(final_attempt, "provider_response_id")
             response_body_hex = required_string(final_attempt, "response_body_hex")
             try:
                 response_body = bytes.fromhex(response_body_hex)
@@ -103,11 +104,34 @@ def validate_raw_responses(
             response_body_sha256 = _required_sha256(final_attempt, "response_body_sha256")
             if hashlib.sha256(response_body).hexdigest() != response_body_sha256:
                 raise ValueError("raw response body hash mismatch")
+            body = parse_provider_response_body(response_body)
+            request_started_value = required_string(final_attempt, "request_started_at")
+            response_received_value = required_string(final_attempt, "response_received_at")
+            validate_provider_response_timing(
+                body,
+                request_started_at=request_started_value,
+                response_received_at=response_received_value,
+            )
             request_started_at = _required_datetime(final_attempt, "request_started_at")
             response_received_at = _required_datetime(final_attempt, "response_received_at")
-            if response_received_at < request_started_at:
-                raise ValueError("raw response timestamps are out of order")
-            response_model = required_string(final_attempt, "response_model")
+            attempt_number = _required_integer(final_attempt, "attempt")
+            http_status = _required_integer(final_attempt, "http_status")
+            expected_envelope_sha256 = json_sha256(
+                {
+                    "attempt": attempt_number,
+                    "request_nonce": request_nonce,
+                    "request_started_at": request_started_at.isoformat(),
+                    "response_received_at": response_received_at.isoformat(),
+                    "http_status": http_status,
+                    "response_body_sha256": response_body_sha256,
+                }
+            )
+            if final_attempt.get("attempt_envelope_sha256") != expected_envelope_sha256:
+                raise ValueError("raw response attempt envelope hash mismatch")
+            provider_response_id = body.provider_response_id
+            response_model = body.response_model
+            if not response_model:
+                raise ValueError("raw response model is missing from the provider body")
             if (
                 request_nonce in request_nonces
                 or request_fingerprint in request_fingerprints
@@ -163,7 +187,7 @@ def validate_raw_responses(
                 api_key="",
                 thinking_mode=ThinkingMode(binding.thinking_mode),
             )
-            parsed_payload = extract_json_object(required_string(final_attempt, "content"))
+            parsed_payload = extract_json_object(body.content)
             semantic_fingerprint = semantic_response_fingerprint(parsed_payload)
             if semantic_fingerprint is None:
                 raise ValueError("raw response semantic fingerprint cannot be reconstructed")
@@ -236,19 +260,17 @@ def _iter_strings(payload: object) -> Iterator[str]:
             yield from _iter_strings(value)
 
 
-def _optional_string(payload: dict[str, object], field_name: str) -> str | None:
-    value = payload.get(field_name)
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{field_name} must be null or a non-empty string")
-    return value.strip()
-
-
 def _required_sha256(payload: dict[str, object], field_name: str) -> str:
     value = required_string(payload, field_name)
     if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
         raise ValueError(f"{field_name} must be a lowercase SHA-256 digest")
+    return value
+
+
+def _required_integer(payload: dict[str, object], field_name: str) -> int:
+    value = payload.get(field_name)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{field_name} must be an integer")
     return value
 
 

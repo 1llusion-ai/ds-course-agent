@@ -1,0 +1,12 @@
+{
+  "status": "preregistered",
+  "protocol": "phase_b_relation_calibration_v4_bound_runs",
+  "run_contract_version": "phase_b_relation_run_contract_v4",
+  "calibration_run_directories": [
+    "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v4_bound_dev_run1",
+    "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v4_bound_dev_run2"
+  ],
+  "full_run_directory": "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v4_bound_full",
+  "authorization_path": "var/artifacts/knowledge_state_search/phase_b_relation_calibration_authorization.json",
+  "replacement_run_allowed": false
+}

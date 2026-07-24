@@ -960,6 +960,57 @@ The full run uses the preregistered output directory
 under the accepted authorization manifest. Priority-subagent adjudication,
 final proxy labels, dataset freeze, and method runs remain pending.
 
+### Priority-subagent audit correction and v4 preregistration (2026-07-24)
+
+An owner-authorized independent subagent audited the v3 code and raw artifacts
+after the nominal authorization. It confirmed the reported v3 metrics but found
+two structural authorization blockers:
+
+1. `response_body_hex` and its SHA-256 were checked, but the validator parsed a
+   separate sidecar `content` field instead of decoding content/model/ID/usage
+   from the hashed body;
+2. the authorization builder accepted any two distinct calibration directories
+   instead of enforcing the exact pair recorded by preregistration.
+
+The v3 full run was immediately stopped. Retained partial coverage is:
+
+```text
+Doubao successful batches:  163 / 1,440
+Gemini successful batches:   94 / 1,440
+pending interrupted batches: 1 per model
+final relation labels:        0 / 1,440
+```
+
+The v3 authorization was moved out of the canonical active path. The v3
+calibrations and partial full run are diagnostic-only and cannot authorize
+freeze or paper claims.
+
+Run contract v4 is preregistered in the tracked file
+`benchmarks/data/knowledge_state_search_confirmatory_v3_phase_b_design/relation_calibration_v4_preregistration.json`.
+It makes the following structural repairs:
+
+- content, response model, provider ID, provider `created`, usage, and
+  reasoning content are decoded only from the exact persisted response body;
+- the local request envelope is hashed and provider `created` must fall within
+  the request start/end window with bounded clock tolerance;
+- the run contract binds the tracked preregistration file by SHA-256;
+- only the exact two tracked calibration directories and one exact full-run
+  directory are permitted;
+- replacement directories are rejected;
+- an existing authorization path cannot be overwritten;
+- tampered parsed judgments, 2099 timestamps, replacement directories, and
+  authorization overwrite attempts are covered by fail-closed tests.
+
+At the v4 preregistration boundary:
+
+```text
+v4 calibration runs complete: 0 / 2
+canonical authorization:      absent
+v4 full annotation:           not started
+dataset frozen:               false
+Phase B methods authorized:   false
+```
+
 The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future
 human A/B protocol. The active exploratory model-proxy authorization gate was
 separately frozen at overall agreement `0.80`, overall kappa `0.65`, and

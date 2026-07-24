@@ -91,6 +91,10 @@ def text_sha256(value: str) -> str:
 def validate_run_contract(contract: RelationRunContract) -> None:
     """Bind a run contract to the current prompt, client, inputs, and models."""
 
+    from benchmarks.knowledge_state_search.phase_b_relation_calibration import (
+        DEFAULT_PREREGISTRATION_PATH,
+    )
+
     if tuple(contract.to_dict()) != RUN_CONTRACT_FIELDS:
         raise ValueError("relation run contract fields are invalid")
     if contract.contract_version != RUN_CONTRACT_VERSION or contract.prompt_version != PROMPT_VERSION:
@@ -101,6 +105,25 @@ def validate_run_contract(contract: RelationRunContract) -> None:
         raise ValueError("relation run system prompt hash does not match current code")
     if contract.response_format_sha256 != json_sha256(relation_response_format()):
         raise ValueError("relation run response format hash does not match current code")
+    if contract.preregistration_path != str(DEFAULT_PREREGISTRATION_PATH):
+        raise ValueError("relation calibration preregistration path is not the tracked path")
+    preregistration_path = DEFAULT_PREREGISTRATION_PATH
+    if file_sha256(preregistration_path) != contract.preregistration_sha256:
+        raise ValueError("relation calibration preregistration hash mismatch")
+    preregistration = read_json_object(
+        preregistration_path,
+        "relation calibration preregistration",
+    )
+    if preregistration.get("run_contract_version") != contract.contract_version:
+        raise ValueError("relation calibration preregistration version mismatch")
+    if preregistration.get("calibration_run_directories") != list(contract.calibration_run_directories):
+        raise ValueError("relation calibration preregistered run directories mismatch")
+    if preregistration.get("full_run_directory") != contract.full_run_directory:
+        raise ValueError("relation calibration preregistered full directory mismatch")
+    if preregistration.get("authorization_path") != contract.authorization_path:
+        raise ValueError("relation calibration preregistered authorization path mismatch")
+    if preregistration.get("replacement_run_allowed") is not False:
+        raise ValueError("relation calibration replacement runs must be forbidden")
     if tuple(binding.reviewer_id for binding in contract.reviewer_models) != tuple(sorted(REVIEWERS)):
         raise ValueError("relation run reviewers do not match the frozen reviewer set")
     if len({binding.model_id for binding in contract.reviewer_models}) != len(contract.reviewer_models):
@@ -321,12 +344,18 @@ def validate_authorization_manifest(
     _required_sha256(payload, "selected_pairs_sha256")
     directories = payload.get("run_directories")
     run_rows = payload.get("runs")
-    if not isinstance(directories, list) or len(directories) != CALIBRATION_RUN_COUNT:
+    if directories != list(contract.calibration_run_directories):
         raise ValueError("calibration authorization run directories are invalid")
     if not isinstance(run_rows, list) or len(run_rows) != CALIBRATION_RUN_COUNT:
         raise ValueError("calibration authorization run evidence is invalid")
-    for raw_row in run_rows:
+    for raw_row, expected_directory in zip(
+        run_rows,
+        contract.calibration_run_directories,
+        strict=True,
+    ):
         row = _required_mapping(raw_row, "run evidence")
+        if row.get("run_directory") != expected_directory:
+            raise ValueError("calibration authorization run evidence directory is invalid")
         if _required_rate(row, "agreement_rate") < MIN_AGREEMENT:
             raise ValueError("calibration authorization agreement is below threshold")
         if _required_number(row, "kappa") < MIN_KAPPA:
