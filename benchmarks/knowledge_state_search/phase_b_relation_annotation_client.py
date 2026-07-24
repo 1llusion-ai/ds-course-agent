@@ -660,6 +660,7 @@ def _batch_audit(
         "request_fingerprint": request_fingerprint,
         "prompt_version": PROMPT_VERSION,
         "blind_item_ids": [item.blind_item_id for item in inputs],
+        "attempt_chain_sha256": json_sha256(attempts),
         "attempts": attempts,
     }
 

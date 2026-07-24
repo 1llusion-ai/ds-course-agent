@@ -148,3 +148,10 @@ Run contract v4 repairs the root causes before any new calls:
 
 No v4 calibration or full run has started. Dataset freeze and Phase B methods
 remain blocked.
+
+An independent re-audit then rejected v4 before any model call because it did
+not freeze provider-returned model IDs, did not fully validate earlier retry
+attempts, could accept a rehashed HTTP 500 final, and compared exact output
+paths without rejecting symlink aliases. Run contract v5 adds all four
+constraints and corresponding wrong-model, HTTP-error, attempt-chain, and
+symlink adversarial tests. No v5 model call has started.

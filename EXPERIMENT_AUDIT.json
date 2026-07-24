@@ -338,7 +338,7 @@
         "accepted_for_full_run": false
       },
       "v4_body_bound_fixed_run_preregistration": {
-        "status": "preregistering_before_model_calls",
+        "status": "invalidated_before_model_calls_by_reaudit",
         "run_contract_version": "phase_b_relation_run_contract_v4",
         "tracked_preregistration": "benchmarks/data/knowledge_state_search_confirmatory_v3_phase_b_design/relation_calibration_v4_preregistration.json",
         "repairs": [
@@ -349,6 +349,30 @@
           "exact_run1_run2_and_full_output_directories",
           "replacement_run_rejection",
           "authorization_overwrite_rejection"
+        ],
+        "calibration_runs_completed": 0,
+        "authorization_manifest_created": false,
+        "full_annotation_started": false,
+        "audit_failures": [
+          "provider_response_model_not_frozen",
+          "earlier_attempts_and_final_http_status_not_fully_validated",
+          "preregistered_path_symlink_alias"
+        ]
+      },
+      "v5_provider_attempt_path_preregistration": {
+        "status": "preregistering_before_model_calls",
+        "run_contract_version": "phase_b_relation_run_contract_v5",
+        "tracked_preregistration": "benchmarks/data/knowledge_state_search_confirmatory_v3_phase_b_design/relation_calibration_v5_preregistration.json",
+        "provider_response_models": {
+          "doubao": "doubao-seed-2-1-pro-260628",
+          "gemini": "gemini-3.5-flash"
+        },
+        "repairs": [
+          "full_ordered_attempt_chain_sha256",
+          "all_body_attempts_validated",
+          "final_http_2xx_required",
+          "cross_retry_semantic_drift_reconstructed",
+          "preregistered_symlink_alias_rejected"
         ],
         "calibration_runs_completed": 0,
         "authorization_manifest_created": false,

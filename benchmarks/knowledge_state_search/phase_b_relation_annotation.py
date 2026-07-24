@@ -51,6 +51,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_calibration import (
     build_current_run_contract,
     derive_calibration_contract,
     validate_calibration_authorization,
+    validate_preregistered_path,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_target_specs import (
     DEFAULT_TARGET_SPECS_PATH,
@@ -136,6 +137,7 @@ def run_dual_model_relation_annotation(
         raise ValueError(
             "relation annotation permits only an exact preregistered calibration or the exact authorized full run"
         )
+    validate_preregistered_path(output_directory)
     authorization_required = full_annotation
     calibration_authorization: dict[str, object] | None = None
     if authorization_required:
@@ -246,6 +248,11 @@ def run_dual_model_relation_annotation(
                 "reviewer_id": reviewer.reviewer_id,
                 "reviewer_kind": "model",
                 "model": reviewer.model,
+                "provider_model": next(
+                    binding.provider_model_id
+                    for binding in run_contract.reviewer_models
+                    if binding.reviewer_id == reviewer.reviewer_id
+                ),
                 "base_url": reviewer.base_url.rstrip("/"),
                 "thinking_mode": reviewer.thinking_mode.value,
             }

@@ -57,6 +57,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_calibration import (
     RUN_CONTRACT_VERSION,
     SELECTED_PAIRS_FILENAME,
     RelationRunContract,
+    validate_preregistered_path,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_target_specs import load_relation_target_specs
 
@@ -124,6 +125,10 @@ def validate_run_contract(contract: RelationRunContract) -> None:
         raise ValueError("relation calibration preregistered authorization path mismatch")
     if preregistration.get("replacement_run_allowed") is not False:
         raise ValueError("relation calibration replacement runs must be forbidden")
+    if preregistration.get("provider_response_models") != {
+        binding.reviewer_id: binding.provider_model_id for binding in contract.reviewer_models
+    }:
+        raise ValueError("relation calibration provider response models mismatch")
     if tuple(binding.reviewer_id for binding in contract.reviewer_models) != tuple(sorted(REVIEWERS)):
         raise ValueError("relation run reviewers do not match the frozen reviewer set")
     if len({binding.model_id for binding in contract.reviewer_models}) != len(contract.reviewer_models):
@@ -242,6 +247,7 @@ def validate_calibration_run(
         validate_raw_responses,
     )
 
+    validate_preregistered_path(run_directory)
     if not run_directory.is_dir():
         raise ValueError(f"calibration run directory is missing: {run_directory}")
     observed_contract = RelationRunContract.from_dict(
@@ -384,7 +390,7 @@ def _validate_report(report: dict[str, Any], contract: RelationRunContract) -> N
     reviewer_rows = report.get("reviewers")
     if not isinstance(reviewer_rows, list):
         raise ValueError("annotation report reviewers must be a list")
-    observed_models: dict[str, tuple[str, str, str]] = {}
+    observed_models: dict[str, tuple[str, str, str, str]] = {}
     for raw_row in reviewer_rows:
         row = _required_mapping(raw_row, "reviewer")
         reviewer_id = _required_string(row, "reviewer_id")
@@ -393,11 +399,17 @@ def _validate_report(report: dict[str, Any], contract: RelationRunContract) -> N
             raise ValueError("annotation report reviewer contract is invalid")
         observed_models[reviewer_id] = (
             _required_string(row, "model"),
+            _required_string(row, "provider_model"),
             _required_string(row, "base_url").rstrip("/"),
             thinking_mode,
         )
     expected_models = {
-        binding.reviewer_id: (binding.model_id, binding.base_url, binding.thinking_mode)
+        binding.reviewer_id: (
+            binding.model_id,
+            binding.provider_model_id,
+            binding.base_url,
+            binding.thinking_mode,
+        )
         for binding in contract.reviewer_models
     }
     if observed_models != expected_models:

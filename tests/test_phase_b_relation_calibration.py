@@ -191,12 +191,7 @@ def test_calibration_rejects_semantic_drift_error(
     contract, run_directories = _build_calibration_fixture(tmp_path)
     path = run_directories[1] / calibration.RAW_RESPONSES_DIRECTORY / "doubao" / "batch_001.json"
     payload = _read_json(path)
-    payload["attempts"].append(
-        {
-            "attempt": 2,
-            "error": ("ValueError: semantic judgments changed across retries for the same request"),
-        }
-    )
+    payload["error"] = "ValueError: semantic judgments changed across retries for the same request"
     _write_json(path, payload)
     output_path = Path(contract.authorization_path)
 
@@ -244,12 +239,59 @@ def test_calibration_rejects_local_timestamps_outside_provider_created_window(
     )
     payload["parsed_judgments"][0]["request_started_at"] = attempt["request_started_at"]
     payload["parsed_judgments"][0]["response_received_at"] = attempt["response_received_at"]
+    payload["attempt_chain_sha256"] = calibration.json_sha256(payload["attempts"])
     _write_json(path, payload)
 
     with pytest.raises(ValueError, match="outside the request window"):
         calibration.build_calibration_authorization(
             expected_contract=contract,
         )
+
+
+def test_calibration_rejects_wrong_provider_response_model(
+    tmp_path: Path,
+) -> None:
+    contract, run_directories = _build_calibration_fixture(tmp_path)
+    path = run_directories[0] / calibration.RAW_RESPONSES_DIRECTORY / "gemini" / "batch_001.json"
+    payload = _read_json(path)
+    attempt = payload["attempts"][0]
+    body = json.loads(bytes.fromhex(attempt["response_body_hex"]).decode())
+    body["model"] = "attacker-routed-model"
+    response_body = json.dumps(body, sort_keys=True).encode()
+    attempt["response_body_hex"] = response_body.hex()
+    attempt["response_body_sha256"] = hashlib.sha256(response_body).hexdigest()
+    attempt["attempt_envelope_sha256"] = _attempt_envelope(attempt)
+    payload["attempt_chain_sha256"] = calibration.json_sha256(payload["attempts"])
+    _write_json(path, payload)
+
+    with pytest.raises(ValueError, match="provider model mismatch"):
+        calibration.build_calibration_authorization(expected_contract=contract)
+
+
+def test_calibration_rejects_final_http_error_even_with_rehashed_envelope(
+    tmp_path: Path,
+) -> None:
+    contract, run_directories = _build_calibration_fixture(tmp_path)
+    path = run_directories[0] / calibration.RAW_RESPONSES_DIRECTORY / "gemini" / "batch_001.json"
+    payload = _read_json(path)
+    attempt = payload["attempts"][0]
+    attempt["http_status"] = 500
+    attempt["attempt_envelope_sha256"] = _attempt_envelope(attempt)
+    payload["attempt_chain_sha256"] = calibration.json_sha256(payload["attempts"])
+    _write_json(path, payload)
+
+    with pytest.raises(ValueError, match="final HTTP attempt is not successful"):
+        calibration.build_calibration_authorization(expected_contract=contract)
+
+
+def test_preregistered_path_rejects_symlink_target(tmp_path: Path) -> None:
+    target = tmp_path / "replacement"
+    target.mkdir()
+    declared = tmp_path / "run1"
+    declared.symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="symlink or alias"):
+        calibration.validate_preregistered_path(declared)
 
 
 def test_calibration_rejects_copied_run_freshness_identifiers(
@@ -500,8 +542,12 @@ def _build_calibration_fixture(
         preregistration_path,
         {
             "status": "preregistered",
-            "protocol": "phase_b_relation_calibration_v4_bound_runs",
+            "protocol": "phase_b_relation_calibration_v5_bound_runs",
             "run_contract_version": calibration.RUN_CONTRACT_VERSION,
+            "provider_response_models": {
+                "doubao": "doubao-test-model",
+                "gemini": "gemini-test-model",
+            },
             "calibration_run_directories": [
                 str(run_directories[0]),
                 str(run_directories[1]),
@@ -791,6 +837,7 @@ def _annotation_report(
             {
                 "reviewer_id": binding.reviewer_id,
                 "model": binding.model_id,
+                "provider_model": binding.provider_model_id,
                 "base_url": binding.base_url,
                 "thinking_mode": binding.thinking_mode,
             }
@@ -981,6 +1028,21 @@ def _write_raw_responses(
                     "prompt_version": contract.prompt_version,
                     "blind_item_ids": blind_item_ids,
                     "request_fingerprint": request_fingerprint,
+                    "attempt_chain_sha256": calibration.json_sha256(
+                        [
+                            {
+                                "attempt": 1,
+                                "request_nonce": request_nonce,
+                                "http_status": 200,
+                                "response_body_hex": response_body.hex(),
+                                "response_body_sha256": response_body_sha256,
+                                "attempt_envelope_sha256": attempt_envelope_sha256,
+                                "request_started_at": request_started_at,
+                                "response_received_at": response_received_at,
+                                "semantic_response_fingerprint": semantic_response_fingerprint(response_payload),
+                            }
+                        ]
+                    ),
                     "attempts": [
                         {
                             "attempt": 1,
@@ -1092,6 +1154,19 @@ def _reviewer_relation(row: dict[str, Any], reviewer_id: str) -> str:
 
 def _other_relation(relation: str) -> str:
     return "partial" if relation != "partial" else "supported"
+
+
+def _attempt_envelope(attempt: dict[str, Any]) -> str:
+    return calibration.json_sha256(
+        {
+            "attempt": attempt["attempt"],
+            "request_nonce": attempt["request_nonce"],
+            "request_started_at": attempt["request_started_at"],
+            "response_received_at": attempt["response_received_at"],
+            "http_status": attempt["http_status"],
+            "response_body_sha256": attempt["response_body_sha256"],
+        }
+    )
 
 
 def _read_json(path: Path) -> dict[str, Any]:

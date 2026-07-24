@@ -1,0 +1,16 @@
+{
+  "status": "preregistered",
+  "protocol": "phase_b_relation_calibration_v5_bound_runs",
+  "run_contract_version": "phase_b_relation_run_contract_v5",
+  "provider_response_models": {
+    "doubao": "doubao-seed-2-1-pro-260628",
+    "gemini": "gemini-3.5-flash"
+  },
+  "calibration_run_directories": [
+    "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v5_bound_dev_run1",
+    "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v5_bound_dev_run2"
+  ],
+  "full_run_directory": "var/artifacts/knowledge_state_search/phase_b_relation_dual_model_annotation_v5_bound_full",
+  "authorization_path": "var/artifacts/knowledge_state_search/phase_b_relation_calibration_authorization.json",
+  "replacement_run_allowed": false
+}

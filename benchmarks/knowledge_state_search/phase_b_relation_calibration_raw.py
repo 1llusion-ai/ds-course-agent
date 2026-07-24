@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
@@ -84,9 +85,17 @@ def validate_raw_responses(
         seen_canonical_keys: set[CanonicalKey] = set()
         for path, expected_size in zip(paths, expected_sizes, strict=True):
             payload = read_json_object(path, "raw response")
+            binding = bindings[reviewer_id]
             attempts = payload.get("attempts")
             if not isinstance(attempts, list) or not attempts:
                 raise ValueError("raw response attempts are missing")
+            _validate_attempt_chain(
+                payload,
+                attempts=attempts,
+                request_nonce=required_string(payload, "request_nonce"),
+                expected_provider_model=binding.provider_model_id,
+                max_retries=contract.max_retries,
+            )
             if _contains_semantic_drift_error(payload):
                 raise ValueError(f"semantic drift error found in raw responses: {path}")
             final_attempt = attempts[-1]
@@ -145,7 +154,8 @@ def validate_raw_responses(
             if provider_response_id is not None:
                 provider_response_ids.add(provider_response_id)
             response_models[reviewer_id].add(response_model)
-            binding = bindings[reviewer_id]
+            if response_model != binding.provider_model_id:
+                raise ValueError("raw response provider model mismatch")
             if payload.get("status") != "success" or payload.get("reviewer_id") != reviewer_id:
                 raise ValueError("raw response status or reviewer mismatch")
             if payload.get("requested_model") != binding.model_id:
@@ -240,6 +250,81 @@ def validate_raw_responses(
 def _expected_batch_sizes(total: int, batch_size: int) -> tuple[int, ...]:
     count, remainder = divmod(total, batch_size)
     return tuple([batch_size] * count + ([remainder] if remainder else []))
+
+
+def _validate_attempt_chain(
+    payload: dict[str, object],
+    *,
+    attempts: list[object],
+    request_nonce: str,
+    expected_provider_model: str,
+    max_retries: int,
+) -> None:
+    if len(attempts) > max_retries:
+        raise ValueError("raw response attempt count exceeds the run contract")
+    if payload.get("attempt_chain_sha256") != json_sha256(attempts):
+        raise ValueError("raw response attempt chain hash mismatch")
+    semantic_fingerprints: set[str] = set()
+    for index, raw_attempt in enumerate(attempts, 1):
+        if not isinstance(raw_attempt, dict):
+            raise ValueError("raw response attempt must be an object")
+        if _required_integer(raw_attempt, "attempt") != index:
+            raise ValueError("raw response attempt sequence is invalid")
+        if required_string(raw_attempt, "request_nonce") != request_nonce:
+            raise ValueError("raw response attempt nonce mismatch")
+        is_final = index == len(attempts)
+        has_body = "response_body_hex" in raw_attempt
+        if not has_body:
+            if "error" not in raw_attempt or is_final:
+                raise ValueError("raw response bodyless attempt is invalid")
+            _required_datetime(raw_attempt, "request_started_at")
+            _required_datetime(raw_attempt, "response_received_at")
+            continue
+        response_body = bytes.fromhex(required_string(raw_attempt, "response_body_hex"))
+        body = parse_provider_response_body(response_body)
+        if body.body_sha256 != _required_sha256(raw_attempt, "response_body_sha256"):
+            raise ValueError("raw response attempt body hash mismatch")
+        if body.response_model != expected_provider_model:
+            raise ValueError("raw response attempt provider model mismatch")
+        validate_provider_response_timing(
+            body,
+            request_started_at=required_string(raw_attempt, "request_started_at"),
+            response_received_at=required_string(raw_attempt, "response_received_at"),
+        )
+        http_status = _required_integer(raw_attempt, "http_status")
+        expected_envelope = json_sha256(
+            {
+                "attempt": index,
+                "request_nonce": request_nonce,
+                "request_started_at": required_string(
+                    raw_attempt,
+                    "request_started_at",
+                ),
+                "response_received_at": required_string(
+                    raw_attempt,
+                    "response_received_at",
+                ),
+                "http_status": http_status,
+                "response_body_sha256": body.body_sha256,
+            }
+        )
+        if raw_attempt.get("attempt_envelope_sha256") != expected_envelope:
+            raise ValueError("raw response attempt envelope hash mismatch")
+        if is_final:
+            if "error" in raw_attempt or not 200 <= http_status < 300:
+                raise ValueError("raw response final HTTP attempt is not successful")
+        elif "error" not in raw_attempt:
+            raise ValueError("raw response earlier attempt lacks an error")
+        if 200 <= http_status < 300:
+            try:
+                response_payload = extract_json_object(body.content)
+            except (ValueError, json.JSONDecodeError):
+                continue
+            fingerprint = semantic_response_fingerprint(response_payload)
+            if fingerprint is not None:
+                semantic_fingerprints.add(fingerprint)
+    if len(semantic_fingerprints) > 1:
+        raise ValueError("semantic judgments changed across retries for the same request")
 
 
 def _contains_semantic_drift_error(payload: object) -> bool:

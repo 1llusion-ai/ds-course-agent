@@ -1011,6 +1011,15 @@ dataset frozen:               false
 Phase B methods authorized:   false
 ```
 
+The priority-subagent re-audit rejected v4 before any model call because the
+provider-returned model ID was not frozen, only the last retry attempt was
+fully validated, HTTP 500 could be accepted after rehashing, and exact path
+strings could resolve through symlinks. Run contract v5 adds provider-model
+binding, full ordered attempt-chain validation, mandatory 2xx final status,
+cross-retry semantic-drift reconstruction, and symlink/path-alias rejection.
+The exact v5 run directories are tracked in
+`relation_calibration_v5_preregistration.json`; no v5 call has started.
+
 The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future
 human A/B protocol. The active exploratory model-proxy authorization gate was
 separately frozen at overall agreement `0.80`, overall kappa `0.65`, and

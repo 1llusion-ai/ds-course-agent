@@ -269,6 +269,14 @@ Phase B methods authorized:  false
 closed-loop multi-hop:       blocked
 ```
 
+The independent re-audit rejected v4 before any model call: provider-returned
+model IDs were not frozen, earlier retry attempts were not fully validated, a
+rehashed HTTP 500 final could pass, and exact output strings could resolve
+through symlinks. Run contract v5 freezes provider-returned model IDs, validates
+the complete ordered attempt chain, requires a 2xx final response, reconstructs
+semantic fingerprints across retries, and rejects symlink/path aliases. No v5
+model call has started.
+
 The full run started automatically only after the machine authorization was
 created. Its lower-model judgments, terminal priority actions, and final proxy
 labels are still pending; therefore no dataset-freeze or method claim is

@@ -352,3 +352,17 @@ full proxy relation labels:   0 / 1,440
 dataset frozen:               false
 Phase B methods authorized:   false
 ```
+
+## v4 re-audit and v5 preregistration (2026-07-24)
+
+The independent subagent rejected v4 before any model call. It found that
+provider-returned model IDs were not frozen, only the final retry attempt was
+fully validated, a rehashed HTTP 500 final could be accepted, and exact output
+strings could resolve through symlinks.
+
+Run contract v5 therefore additionally freezes the provider-returned model ID
+for each reviewer, hashes and validates the complete ordered attempt chain,
+requires a successful 2xx final attempt, validates every body-bearing attempt,
+rejects cross-retry semantic drift, and rejects symlink/path aliases for
+preregistered outputs. Adversarial wrong-model, HTTP-500, and symlink tests now
+fail closed. No v5 model call has started.

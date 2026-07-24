@@ -34,10 +34,10 @@ ANNOTATION_REPORT_FILENAME = "annotation_report.json"
 SELECTED_PAIRS_FILENAME = "selected_canonical_pairs.jsonl"
 CONSENSUS_FILENAME = "dual_model_consensus.jsonl"
 RAW_RESPONSES_DIRECTORY = "raw_responses"
-CALIBRATION_PROTOCOL = "phase_b_relation_calibration_authorization_v3"
-RUN_CONTRACT_VERSION = "phase_b_relation_run_contract_v4"
+CALIBRATION_PROTOCOL = "phase_b_relation_calibration_authorization_v4"
+RUN_CONTRACT_VERSION = "phase_b_relation_run_contract_v5"
 DEFAULT_PREREGISTRATION_PATH = Path(
-    "benchmarks/data/knowledge_state_search_confirmatory_v3_phase_b_design/relation_calibration_v4_preregistration.json"
+    "benchmarks/data/knowledge_state_search_confirmatory_v3_phase_b_design/relation_calibration_v5_preregistration.json"
 )
 FROZEN_DEV_SPLIT = "phase_b_dev"
 FROZEN_DEV_TASK_IDS = (
@@ -83,7 +83,13 @@ RUN_CONTRACT_FIELDS = (
     "selected_task_split",
     "selected_pair_limit",
 )
-REVIEWER_MODEL_FIELDS = ("reviewer_id", "model_id", "base_url", "thinking_mode")
+REVIEWER_MODEL_FIELDS = (
+    "reviewer_id",
+    "model_id",
+    "provider_model_id",
+    "base_url",
+    "thinking_mode",
+)
 AUTHORIZATION_FIELDS = (
     "status",
     "protocol",
@@ -110,6 +116,7 @@ class ReviewerModelBinding:
 
     reviewer_id: str
     model_id: str
+    provider_model_id: str
     base_url: str
     thinking_mode: str
 
@@ -119,6 +126,7 @@ class ReviewerModelBinding:
         return {
             "reviewer_id": self.reviewer_id,
             "model_id": self.model_id,
+            "provider_model_id": self.provider_model_id,
             "base_url": self.base_url,
             "thinking_mode": self.thinking_mode,
         }
@@ -135,6 +143,7 @@ class ReviewerModelBinding:
         return cls(
             reviewer_id=_required_string(payload, "reviewer_id"),
             model_id=_required_string(payload, "model_id"),
+            provider_model_id=_required_string(payload, "provider_model_id"),
             base_url=_required_string(payload, "base_url").rstrip("/"),
             thinking_mode=thinking_mode,
         )
@@ -305,6 +314,10 @@ def build_current_run_contract(
                 ReviewerModelBinding(
                     reviewer_id=reviewer.reviewer_id,
                     model_id=reviewer.model,
+                    provider_model_id=_provider_model_id(
+                        preregistration,
+                        reviewer.reviewer_id,
+                    ),
                     base_url=reviewer.base_url.rstrip("/"),
                     thinking_mode=reviewer.thinking_mode.value,
                 )
@@ -468,6 +481,14 @@ def validate_calibration_authorization(
     return payload
 
 
+def validate_preregistered_path(path: Path) -> None:
+    """Reject symlink or path-normalization aliases for preregistered artifacts."""
+
+    declared = path if path.is_absolute() else Path.cwd() / path
+    if declared.resolve(strict=False) != declared.absolute():
+        raise ValueError(f"preregistered path resolves through a symlink or alias: {path}")
+
+
 def _thresholds() -> dict[str, float]:
     return {
         "minimum_agreement": MIN_AGREEMENT,
@@ -517,6 +538,7 @@ def _load_preregistration(path: Path) -> dict[str, object]:
         "status",
         "protocol",
         "run_contract_version",
+        "provider_response_models",
         "calibration_run_directories",
         "full_run_directory",
         "authorization_path",
@@ -526,7 +548,7 @@ def _load_preregistration(path: Path) -> dict[str, object]:
         raise ValueError("relation calibration preregistration fields are invalid")
     if payload.get("status") != "preregistered":
         raise ValueError("relation calibration preregistration status is invalid")
-    if payload.get("protocol") != "phase_b_relation_calibration_v4_bound_runs":
+    if payload.get("protocol") != "phase_b_relation_calibration_v5_bound_runs":
         raise ValueError("relation calibration preregistration protocol is invalid")
     if payload.get("run_contract_version") != RUN_CONTRACT_VERSION:
         raise ValueError("relation calibration preregistration version is invalid")
@@ -542,7 +564,25 @@ def _load_preregistration(path: Path) -> dict[str, object]:
     _required_string(payload, "authorization_path")
     if payload.get("replacement_run_allowed") is not False:
         raise ValueError("relation calibration replacement runs must be forbidden")
+    provider_models = payload.get("provider_response_models")
+    if (
+        not isinstance(provider_models, dict)
+        or set(provider_models) != {"doubao", "gemini"}
+        or any(not isinstance(value, str) or not value for value in provider_models.values())
+    ):
+        raise ValueError("relation calibration provider response models are invalid")
     return payload
+
+
+def _provider_model_id(
+    preregistration: dict[str, object],
+    reviewer_id: str,
+) -> str:
+    provider_models = _required_mapping(
+        preregistration.get("provider_response_models"),
+        "provider_response_models",
+    )
+    return _required_string(provider_models, reviewer_id)
 
 
 def _required_string(payload: dict[str, Any], field: str) -> str:
