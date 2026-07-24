@@ -25,6 +25,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract impo
     RelationTargetSpec,
     derive_relation,
     required_string,
+    segment_source_excerpt,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_target_specs import (
     DEFAULT_DESIGN_DIRECTORY,
@@ -54,6 +55,7 @@ PRIORITY_PACKET_FIELDS = (
     "source_title",
     "source_url",
     "source_excerpt",
+    "source_sentences",
     "fixed_task_scope",
 )
 
@@ -169,9 +171,10 @@ def load_packet_bundle(
             if existing is not None and existing != payload_without_id:
                 raise ValueError(f"reviewer packets disagree on public content: {key}")
             public_payload_by_key[key] = payload_without_id
-    if key_sets["doubao"] != key_sets["mimo"]:
-        raise ValueError("Doubao/MiMo private maps cover different canonical pairs")
-    canonical_keys = tuple(sorted(key_sets["doubao"]))
+    first_reviewer, second_reviewer = REVIEWERS
+    if key_sets[first_reviewer] != key_sets[second_reviewer]:
+        raise ValueError("relation reviewer private maps cover different canonical pairs")
+    canonical_keys = tuple(sorted(key_sets[first_reviewer]))
     source_scope_by_key = load_source_scope_labels(
         source_scope_labels_path,
         expected_count=expected_source_scope_count,
@@ -278,7 +281,7 @@ def resolve_relation_consensus(
     """Resolve relations from structural checks under fixed source-level scope."""
 
     if set(judgments_by_reviewer) != set(REVIEWERS):
-        raise ValueError("relation consensus requires Doubao and MiMo judgments")
+        raise ValueError("relation consensus requires both frozen reviewers")
     judgments_by_key: dict[str, dict[CanonicalKey, ModelRelationJudgment]] = {}
     expected_keys = set(selected_keys)
     missing_scope_keys = {
@@ -301,34 +304,35 @@ def resolve_relation_consensus(
         judgments_by_key[reviewer_id] = mapped
 
     rows: list[dict[str, object]] = []
+    first_reviewer, second_reviewer = REVIEWERS
     for key in selected_keys:
-        doubao = judgments_by_key["doubao"][key]
-        mimo = judgments_by_key["mimo"][key]
+        first_judgment = judgments_by_key[first_reviewer][key]
+        second_judgment = judgments_by_key[second_reviewer][key]
         fixed_task_scope = source_scope_by_key[source_scope_key(key)]
         if fixed_task_scope not in TASK_SCOPE_LABEL_SET:
             raise ValueError(f"fixed source scope label is invalid for {source_scope_key(key)}")
-        doubao_relation = derive_relation(
+        first_relation = derive_relation(
             target_type=key[1],
             task_scope=fixed_task_scope,
-            proposition_checks=doubao.proposition_checks,
+            proposition_checks=first_judgment.proposition_checks,
         )
-        mimo_relation = derive_relation(
+        second_relation = derive_relation(
             target_type=key[1],
             task_scope=fixed_task_scope,
-            proposition_checks=mimo.proposition_checks,
+            proposition_checks=second_judgment.proposition_checks,
         )
-        doubao_scope_conflict = _has_source_scope_relation_conflict(
+        first_scope_conflict = _has_source_scope_relation_conflict(
             fixed_task_scope,
-            doubao,
+            first_judgment,
         )
-        mimo_scope_conflict = _has_source_scope_relation_conflict(
+        second_scope_conflict = _has_source_scope_relation_conflict(
             fixed_task_scope,
-            mimo,
+            second_judgment,
         )
-        any_scope_conflict = doubao_scope_conflict or mimo_scope_conflict
-        relation_agreement = doubao_relation == mimo_relation
-        routing_agreement = relation_agreement and doubao.needs_context == mimo.needs_context
-        any_needs_context = doubao.needs_context or mimo.needs_context
+        any_scope_conflict = first_scope_conflict or second_scope_conflict
+        relation_agreement = first_relation == second_relation
+        routing_agreement = relation_agreement and first_judgment.needs_context == second_judgment.needs_context
+        any_needs_context = first_judgment.needs_context or second_judgment.needs_context
         if any_scope_conflict:
             disposition = "source_scope_repair_required"
             reason = "source_scope_relation_conflict"
@@ -336,7 +340,7 @@ def resolve_relation_consensus(
         elif routing_agreement and not any_needs_context:
             disposition = "dual_model_consensus"
             reason = "same_relation_without_context_flag"
-            consensus_relation: str | None = doubao_relation
+            consensus_relation: str | None = first_relation
         else:
             disposition = "priority_subagent_required"
             reason = "context_uncertainty" if any_needs_context else "relation_disagreement"
@@ -345,17 +349,17 @@ def resolve_relation_consensus(
             {
                 **canonical_row(key),
                 "reviewer_judgments": {
-                    "doubao": judgment_summary(
-                        doubao,
+                    first_reviewer: judgment_summary(
+                        first_judgment,
                         fixed_task_scope=fixed_task_scope,
-                        derived_relation=doubao_relation,
-                        source_scope_conflict=doubao_scope_conflict,
+                        derived_relation=first_relation,
+                        source_scope_conflict=first_scope_conflict,
                     ),
-                    "mimo": judgment_summary(
-                        mimo,
+                    second_reviewer: judgment_summary(
+                        second_judgment,
                         fixed_task_scope=fixed_task_scope,
-                        derived_relation=mimo_relation,
-                        source_scope_conflict=mimo_scope_conflict,
+                        derived_relation=second_relation,
+                        source_scope_conflict=second_scope_conflict,
                     ),
                 },
                 "source_scope_relation_conflict": any_scope_conflict,
@@ -446,6 +450,9 @@ def build_priority_action_packet(
             "source_title": public_payload["source_title"],
             "source_url": public_payload["source_url"],
             "source_excerpt": public_payload["source_excerpt"],
+            "source_sentences": [
+                sentence.prompt_fields() for sentence in segment_source_excerpt(public_payload["source_excerpt"])
+            ],
             "fixed_task_scope": fixed_task_scope,
         }
         if tuple(packet_row) != PRIORITY_PACKET_FIELDS:
@@ -536,7 +543,9 @@ def judgment_summary(
         "needs_context": judgment.needs_context,
         "notes": judgment.notes,
         "input_sha256": judgment.input_sha256,
-        "response_id": judgment.response_id,
+        "request_nonce": judgment.request_nonce,
+        "provider_response_id": judgment.provider_response_id,
+        "response_body_sha256": judgment.response_body_sha256,
     }
 
 

@@ -46,7 +46,7 @@ measure actual evidence support, citation precision, and search cost.
 ## Phase B model-proxy relation annotation
 
 After the model-only source-verification gate passes, generate the unlabeled
-independent Doubao/MiMo relation packets with:
+independent Doubao/Gemini relation packets with:
 
 ```bash
 PYTHONPATH=src:. \
@@ -70,13 +70,14 @@ python -m benchmarks.knowledge_state_search.phase_b_relation_annotation \
   --output var/artifacts/knowledge_state_search/relation_annotation_dev_smoke
 ```
 
-Doubao and MiMo label all selected pairs independently. Every disagreement,
+Doubao and Gemini label all selected pairs independently. Every disagreement,
 every context-uncertain row, and a deterministic stratified 20% sample of clean
 agreements is written to a fresh blind priority-subagent packet. The priority
 decision is terminal, but the subagent returns atomic proposition checks rather
 than choosing a relation directly. Deterministic code derives every five-way
 relation from those checks and the same finalized source-level scope. All
-non-`absent` checks require normalized verbatim excerpt quotes.
+non-`absent` checks require contiguous sentence IDs; deterministic code
+reconstructs the exact verbatim excerpt span.
 
 The runner writes `relation_run_contract.json`, which binds the complete
 request/schema/configuration and source-scope provenance. A 1,440-pair run
@@ -91,25 +92,28 @@ The release gates remain agreement `>=0.80`, kappa `>=0.65`, and per-model
 derived-relation repeatability `>=0.90`, with zero source-scope conflicts and
 zero retry semantic drift.
 
-Run contract v2 is preregistered at exactly one target-source pair per request.
-This changes only request isolation: reviewer models, prompt, response schema,
-selection seed, fixed 30-pair universe, thresholds, and retry-drift rejection
-remain unchanged. The single-pair contract removes co-batching as one possible
-source of cross-item interference; it does not assume schema reliability is
-fixed before the two v2 runs. The authorization gate also recomputes the
-seed-selected pair universe and requires every consensus judgment to match its
-reparsed raw response exactly. No parser repair or retry-until-pass path is
-added.
+Historical run contracts v1 and v2 are terminal NO-GO evidence. Under v2,
+run 1 completed at `24/30` agreement and kappa `0.716`, but run 2 failed in
+MiMo `batch_004` after a non-verbatim quote and routing-relevant retry drift.
+No replacement v2 run or full annotation was started.
 
-The July 24, 2026 run-contract-v1 calibration is NO-GO. A diagnostic
-run reached `24/30` agreement and kappa `0.718`, but the paired diagnostic
-failed. The first frozen run then failed in Doubao `batch_002`: blind item
-`d_0919` duplicated proposition `p2`, and routing-relevant judgments changed
-across retries. That artifact used run contract v1. Post-failure audit repairs
-and the preregistered single-pair isolation rule define run contract v2, under
-which exactly two predetermined runs were attempted. Run 1 completed at
-`24/30` agreement, kappa `0.716`, zero source-scope conflicts, and zero
-semantic drift. Run 2 failed in MiMo `batch_004` for `m_0385`: the first
-response used a non-verbatim `p2` quote, and the subsequent responses changed
-routing-relevant judgments. This is a terminal v2 NO-GO. No replacement run,
-authorization manifest, or full annotation was started.
+Run contract v3 is a new preregistered reviewer/schema contract, not a v2
+replacement run. It freezes:
+
+- Doubao Seed 2.1 Pro with thinking disabled;
+- `vertex_ai/gemini-3.5-flash` with `reasoning_effort=minimal`;
+- one pair per request, temperature `0`, max tokens `2048`, timeout `180s`,
+  and at most three same-request attempts with semantic-drift rejection;
+- deterministic sentence segmentation and sentence-ID evidence;
+- a unique request nonce that the schema must echo exactly;
+- exact raw-response body hashes, request fingerprints, timestamps, and
+  optional provider response IDs;
+- exactly two predetermined 30-pair dev runs, with no replacement run;
+- unchanged `0.80/0.65/0.90` release thresholds and zero conflict/drift gates.
+
+A non-gating, zero-retry 5-item × 2-run Gemini diagnostic passed 10/10 schema,
+nonce, and sentence-ID validations, with proposition-status and derived-relation
+repeatability both `1.0`. Gemini does not provide a response ID through the
+current gateway, so v3 freshness is established by unique nonce echo,
+request fingerprint, exact response-body SHA-256, and timezone-aware request
+timestamps rather than by inventing a provider ID.

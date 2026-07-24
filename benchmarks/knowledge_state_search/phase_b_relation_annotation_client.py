@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -21,13 +23,14 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract impo
     AnnotationReviewerConfig,
     ModelRelationJudgment,
     RelationAnnotationInput,
+    ThinkingMode,
     json_sha256,
     parse_model_relation_judgments,
     required_string,
 )
 
 REQUEST_TEMPERATURE = 0
-REQUEST_MAX_TOKENS = 8000
+REQUEST_MAX_TOKENS = 2048
 
 
 def run_relation_reviewer(
@@ -48,10 +51,21 @@ def run_relation_reviewer(
         batch = inputs[offset : offset + batch_size]
         batch_id = f"batch_{offset // batch_size + 1:03d}"
         raw_path = raw_directory / f"{batch_id}.json"
+        resumed = _load_resumable_batch(
+            raw_path,
+            reviewer=reviewer,
+            batch_id=batch_id,
+            inputs=batch,
+        )
+        if resumed is not None:
+            all_judgments.extend(resumed)
+            continue
+        request_nonce = str(uuid.uuid4())
         request_payload = build_relation_request_payload(
             reviewer=reviewer,
             batch_id=batch_id,
             inputs=batch,
+            request_nonce=request_nonce,
         )
         request_fingerprint = json_sha256(
             {
@@ -60,16 +74,18 @@ def run_relation_reviewer(
                 "request_payload": request_payload,
             }
         )
-        resumed = _load_resumable_batch(
+        _write_json(
             raw_path,
-            request_fingerprint=request_fingerprint,
-            reviewer=reviewer,
-            batch_id=batch_id,
-            inputs=batch,
+            _batch_audit(
+                status="pending",
+                reviewer=reviewer,
+                batch_id=batch_id,
+                inputs=batch,
+                request_nonce=request_nonce,
+                request_fingerprint=request_fingerprint,
+                attempts=[],
+            ),
         )
-        if resumed is not None:
-            all_judgments.extend(resumed)
-            continue
         try:
             judgments, audit = _request_annotation_batch(
                 reviewer=reviewer,
@@ -77,16 +93,14 @@ def run_relation_reviewer(
                 inputs=batch,
                 timeout=timeout,
                 max_retries=max_retries,
+                request_nonce=request_nonce,
                 request_fingerprint=request_fingerprint,
                 request_payload=request_payload,
             )
         except RuntimeError as exc:
-            raw_path.write_text(f"{exc}\n", encoding="utf-8")
+            _write_json(raw_path, _runtime_error_audit(exc))
             raise
-        raw_path.write_text(
-            json.dumps(audit, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        _write_json(raw_path, audit)
         all_judgments.extend(judgments)
     ordered = tuple(sorted(all_judgments, key=lambda item: item.blind_item_id))
     _write_jsonl(
@@ -102,6 +116,7 @@ def reviewer_usage(raw_directory: Path) -> dict[str, int]:
     totals = {
         "prompt_tokens": 0,
         "completion_tokens": 0,
+        "reasoning_tokens": 0,
         "total_tokens": 0,
         "successful_batches": 0,
     }
@@ -125,6 +140,11 @@ def reviewer_usage(raw_directory: Path) -> dict[str, int]:
                 value = usage.get(field_name)
                 if isinstance(value, int):
                     totals[field_name] += value
+            completion_details = usage.get("completion_tokens_details")
+            if isinstance(completion_details, dict):
+                reasoning_tokens = completion_details.get("reasoning_tokens")
+                if isinstance(reasoning_tokens, int):
+                    totals["reasoning_tokens"] += reasoning_tokens
     return totals
 
 
@@ -135,6 +155,7 @@ def _request_annotation_batch(
     inputs: tuple[RelationAnnotationInput, ...],
     timeout: float,
     max_retries: int,
+    request_nonce: str,
     request_fingerprint: str,
     request_payload: dict[str, object],
 ) -> tuple[tuple[ModelRelationJudgment, ...], dict[str, object]]:
@@ -143,7 +164,7 @@ def _request_annotation_batch(
     semantic_fingerprints: set[str] = set()
     last_error = "unknown model annotation failure"
     for attempt in range(1, max_retries + 1):
-        reviewed_at = datetime.now(timezone.utc).isoformat()
+        request_started_at = datetime.now(timezone.utc).isoformat()
         try:
             response = requests.post(
                 url,
@@ -155,11 +176,14 @@ def _request_annotation_batch(
                 timeout=timeout,
             )
         except requests.RequestException as exc:
+            response_received_at = datetime.now(timezone.utc).isoformat()
             last_error = f"{type(exc).__name__}: {exc}"
             attempts.append(
                 {
                     "attempt": attempt,
-                    "reviewed_at": reviewed_at,
+                    "request_started_at": request_started_at,
+                    "response_received_at": response_received_at,
+                    "request_nonce": request_nonce,
                     "error": last_error,
                 }
             )
@@ -167,12 +191,17 @@ def _request_annotation_batch(
                 time.sleep(retry_delay(status_code=None, retry_after=None, attempt=attempt))
             continue
 
+        response_received_at = datetime.now(timezone.utc).isoformat()
         body = _response_body(response)
         attempt_audit: dict[str, object] = {
             "attempt": attempt,
-            "reviewed_at": reviewed_at,
+            "request_started_at": request_started_at,
+            "response_received_at": response_received_at,
+            "request_nonce": request_nonce,
             "http_status": response.status_code,
-            "response_id": body["response_id"],
+            "provider_response_id": body["provider_response_id"],
+            "response_body_hex": body["response_body_hex"],
+            "response_body_sha256": body["response_body_sha256"],
             "response_model": body["response_model"],
             "usage": body["usage"],
             "content": body["content"],
@@ -204,8 +233,13 @@ def _request_annotation_batch(
                 parsed_payload,
                 reviewer=reviewer,
                 batch_id=batch_id,
-                reviewed_at=reviewed_at,
-                response_id=str(body["response_id"]),
+                request_nonce=request_nonce,
+                provider_response_id=(
+                    str(body["provider_response_id"]) if isinstance(body["provider_response_id"], str) else None
+                ),
+                response_body_sha256=str(body["response_body_sha256"]),
+                request_started_at=request_started_at,
+                response_received_at=response_received_at,
                 inputs=inputs,
             )
         except (json.JSONDecodeError, ValueError) as exc:
@@ -217,31 +251,27 @@ def _request_annotation_batch(
             continue
         attempts.append(attempt_audit)
         return judgments, {
-            "status": "success",
-            "reviewer_id": reviewer.reviewer_id,
-            "reviewer_kind": "model",
-            "requested_model": reviewer.model,
-            "disable_thinking": reviewer.disable_thinking,
-            "base_url": reviewer.base_url.rstrip("/"),
-            "batch_id": batch_id,
-            "request_fingerprint": request_fingerprint,
-            "prompt_version": PROMPT_VERSION,
-            "blind_item_ids": [item.blind_item_id for item in inputs],
-            "attempts": attempts,
+            **_batch_audit(
+                status="success",
+                reviewer=reviewer,
+                batch_id=batch_id,
+                inputs=inputs,
+                request_nonce=request_nonce,
+                request_fingerprint=request_fingerprint,
+                attempts=attempts,
+            ),
             "parsed_judgments": [judgment.to_dict() for judgment in judgments],
         }
     audit = {
-        "status": "failed",
-        "reviewer_id": reviewer.reviewer_id,
-        "reviewer_kind": "model",
-        "requested_model": reviewer.model,
-        "disable_thinking": reviewer.disable_thinking,
-        "base_url": reviewer.base_url.rstrip("/"),
-        "batch_id": batch_id,
-        "request_fingerprint": request_fingerprint,
-        "prompt_version": PROMPT_VERSION,
-        "blind_item_ids": [item.blind_item_id for item in inputs],
-        "attempts": attempts,
+        **_batch_audit(
+            status="failed",
+            reviewer=reviewer,
+            batch_id=batch_id,
+            inputs=inputs,
+            request_nonce=request_nonce,
+            request_fingerprint=request_fingerprint,
+            attempts=attempts,
+        ),
         "error": last_error,
     }
     raise RuntimeError(json.dumps(audit, ensure_ascii=False))
@@ -250,7 +280,6 @@ def _request_annotation_batch(
 def _load_resumable_batch(
     path: Path,
     *,
-    request_fingerprint: str,
     reviewer: AnnotationReviewerConfig,
     batch_id: str,
     inputs: tuple[RelationAnnotationInput, ...],
@@ -258,35 +287,70 @@ def _load_resumable_batch(
     if not path.exists():
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("status") != "success":
-        return None
+    status = payload.get("status")
+    if status in {"pending", "failed"}:
+        raise ValueError(f"existing raw response is not resumable: {path}")
+    if status != "success":
+        raise ValueError(f"existing raw response status is invalid: {path}")
+    if (
+        payload.get("reviewer_id") != reviewer.reviewer_id
+        or payload.get("reviewer_kind") != "model"
+        or payload.get("requested_model") != reviewer.model
+        or payload.get("thinking_mode") != reviewer.thinking_mode.value
+        or payload.get("base_url") != reviewer.base_url.rstrip("/")
+        or payload.get("batch_id") != batch_id
+        or payload.get("prompt_version") != PROMPT_VERSION
+        or payload.get("blind_item_ids") != [item.blind_item_id for item in inputs]
+    ):
+        raise ValueError(f"existing raw response contract mismatch: {path}")
+    request_nonce = required_string(payload, "request_nonce")
+    request_payload = build_relation_request_payload(
+        reviewer=reviewer,
+        batch_id=batch_id,
+        inputs=inputs,
+        request_nonce=request_nonce,
+    )
+    request_fingerprint = json_sha256(
+        {
+            "endpoint": f"{reviewer.base_url.rstrip('/')}/chat/completions",
+            "reviewer_id": reviewer.reviewer_id,
+            "request_payload": request_payload,
+        }
+    )
     if payload.get("request_fingerprint") != request_fingerprint:
         raise ValueError(f"existing raw response fingerprint mismatch: {path}")
-    parsed_judgments = payload.get("parsed_judgments")
-    if not isinstance(parsed_judgments, list):
+    stored_judgments = payload.get("parsed_judgments")
+    if not isinstance(stored_judgments, list):
         raise ValueError(f"existing raw response lacks parsed judgments: {path}")
-    response_payload = {
-        "judgments": [
-            {
-                "blind_item_id": row.get("blind_item_id"),
-                "proposition_checks": row.get("proposition_checks"),
-                "needs_context": row.get("needs_context"),
-                "notes": row.get("notes"),
-            }
-            for row in parsed_judgments
-            if isinstance(row, dict)
-        ]
-    }
-    reviewed_at = required_string(parsed_judgments[0], "reviewed_at") if parsed_judgments else ""
-    response_id = required_string(parsed_judgments[0], "response_id") if parsed_judgments else ""
-    return parse_model_relation_judgments(
+    final_attempt = _final_successful_attempt(payload)
+    response_body_hex = required_string(final_attempt, "response_body_hex")
+    try:
+        response_body = bytes.fromhex(response_body_hex)
+    except ValueError as exc:
+        raise ValueError(f"existing raw response body is invalid: {path}") from exc
+    if hashlib.sha256(response_body).hexdigest() != required_string(
+        final_attempt,
+        "response_body_sha256",
+    ):
+        raise ValueError(f"existing raw response body hash mismatch: {path}")
+    response_payload = extract_json_object(required_string(final_attempt, "content"))
+    semantic_fingerprint = semantic_response_fingerprint(response_payload)
+    if semantic_fingerprint is None or final_attempt.get("semantic_response_fingerprint") != semantic_fingerprint:
+        raise ValueError(f"existing raw response semantic fingerprint mismatch: {path}")
+    judgments = parse_model_relation_judgments(
         response_payload,
         reviewer=reviewer,
         batch_id=batch_id,
-        reviewed_at=reviewed_at,
-        response_id=response_id,
+        request_nonce=request_nonce,
+        provider_response_id=_optional_string(final_attempt, "provider_response_id"),
+        response_body_sha256=required_string(final_attempt, "response_body_sha256"),
+        request_started_at=required_string(final_attempt, "request_started_at"),
+        response_received_at=required_string(final_attempt, "response_received_at"),
         inputs=inputs,
     )
+    if stored_judgments != [judgment.to_dict() for judgment in judgments]:
+        raise ValueError(f"existing raw response parsed judgments mismatch: {path}")
+    return judgments
 
 
 def _response_body(response: requests.Response) -> dict[str, object]:
@@ -294,13 +358,15 @@ def _response_body(response: requests.Response) -> dict[str, object]:
         payload = response.json()
     except ValueError:
         payload = {}
-    response_id = ""
+    provider_response_id: str | None = None
     response_model = ""
     usage: dict[str, object] = {}
     content = ""
     reasoning_content = ""
     if isinstance(payload, dict):
-        response_id = str(payload.get("id") or "")
+        raw_response_id = payload.get("id")
+        if isinstance(raw_response_id, str) and raw_response_id.strip():
+            provider_response_id = raw_response_id.strip()
         response_model = str(payload.get("model") or "")
         if isinstance(payload.get("usage"), dict):
             usage = payload["usage"]
@@ -311,7 +377,9 @@ def _response_body(response: requests.Response) -> dict[str, object]:
                 content = str(message.get("content") or "")
                 reasoning_content = str(message.get("reasoning_content") or "")
     return {
-        "response_id": response_id,
+        "provider_response_id": provider_response_id,
+        "response_body_hex": response.content.hex(),
+        "response_body_sha256": hashlib.sha256(response.content).hexdigest(),
         "response_model": response_model,
         "usage": usage,
         "content": content,
@@ -351,6 +419,7 @@ def relation_response_format() -> dict[str, object]:
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
+                    "request_nonce": {"type": "string"},
                     "judgments": {
                         "type": "array",
                         "items": {
@@ -374,14 +443,15 @@ def relation_response_format() -> dict[str, object]:
                                                     "absent",
                                                 ],
                                             },
-                                            "evidence_quote": {
-                                                "type": ["string", "null"],
+                                            "evidence_sentence_ids": {
+                                                "type": "array",
+                                                "items": {"type": "string"},
                                             },
                                         },
                                         "required": [
                                             "proposition_id",
                                             "status",
-                                            "evidence_quote",
+                                            "evidence_sentence_ids",
                                         ],
                                     },
                                 },
@@ -395,9 +465,9 @@ def relation_response_format() -> dict[str, object]:
                                 "notes",
                             ],
                         },
-                    }
+                    },
                 },
-                "required": ["judgments"],
+                "required": ["request_nonce", "judgments"],
             },
         },
     }
@@ -408,12 +478,14 @@ def build_relation_request_payload(
     reviewer: AnnotationReviewerConfig,
     batch_id: str,
     inputs: tuple[RelationAnnotationInput, ...],
+    request_nonce: str,
 ) -> dict[str, object]:
     """Build the complete secret-free request body used for every retry."""
 
     user_payload = {
         "batch_id": batch_id,
         "prompt_version": PROMPT_VERSION,
+        "request_nonce": request_nonce,
         "items": [item.prompt_payload() for item in inputs],
     }
     request_payload: dict[str, object] = {
@@ -429,14 +501,23 @@ def build_relation_request_payload(
         "max_tokens": REQUEST_MAX_TOKENS,
         "response_format": relation_response_format(),
     }
-    if reviewer.disable_thinking:
+    if reviewer.thinking_mode is ThinkingMode.DISABLED:
         request_payload["thinking"] = {"type": "disabled"}
+    elif reviewer.thinking_mode is ThinkingMode.MINIMAL:
+        request_payload["reasoning_effort"] = "minimal"
+    else:
+        raise ValueError(f"unsupported reviewer thinking mode: {reviewer.thinking_mode}")
     return request_payload
 
 
 def semantic_response_fingerprint(payload: dict[str, Any]) -> str | None:
     """Hash every routing-relevant model output field across retries."""
 
+    if set(payload) != {"request_nonce", "judgments"}:
+        return None
+    request_nonce = payload.get("request_nonce")
+    if not isinstance(request_nonce, str) or not request_nonce:
+        return None
     judgments = payload.get("judgments")
     if not isinstance(judgments, list):
         return None
@@ -453,24 +534,25 @@ def semantic_response_fingerprint(payload: dict[str, Any]) -> str | None:
             or not isinstance(needs_context, bool)
         ):
             return None
-        normalized_checks: list[dict[str, str | None]] = []
+        normalized_checks: list[dict[str, object]] = []
         for check in proposition_checks:
             if not isinstance(check, dict):
                 return None
             proposition_id = check.get("proposition_id")
             status = check.get("status")
-            evidence_quote = check.get("evidence_quote")
+            evidence_sentence_ids = check.get("evidence_sentence_ids")
             if (
                 not isinstance(proposition_id, str)
                 or not isinstance(status, str)
-                or (evidence_quote is not None and not isinstance(evidence_quote, str))
+                or not isinstance(evidence_sentence_ids, list)
+                or any(not isinstance(sentence_id, str) for sentence_id in evidence_sentence_ids)
             ):
                 return None
             normalized_checks.append(
                 {
                     "proposition_id": proposition_id,
                     "status": status,
-                    "evidence_quote": (" ".join(evidence_quote.split()) if isinstance(evidence_quote, str) else None),
+                    "evidence_sentence_ids": evidence_sentence_ids,
                 }
             )
         normalized.append(
@@ -480,7 +562,67 @@ def semantic_response_fingerprint(payload: dict[str, Any]) -> str | None:
                 "needs_context": needs_context,
             }
         )
-    return json_sha256(normalized)
+    return json_sha256(
+        {
+            "request_nonce": request_nonce,
+            "judgments": normalized,
+        }
+    )
+
+
+def _batch_audit(
+    *,
+    status: str,
+    reviewer: AnnotationReviewerConfig,
+    batch_id: str,
+    inputs: tuple[RelationAnnotationInput, ...],
+    request_nonce: str,
+    request_fingerprint: str,
+    attempts: list[dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "status": status,
+        "reviewer_id": reviewer.reviewer_id,
+        "reviewer_kind": "model",
+        "requested_model": reviewer.model,
+        "thinking_mode": reviewer.thinking_mode.value,
+        "base_url": reviewer.base_url.rstrip("/"),
+        "batch_id": batch_id,
+        "request_nonce": request_nonce,
+        "request_fingerprint": request_fingerprint,
+        "prompt_version": PROMPT_VERSION,
+        "blind_item_ids": [item.blind_item_id for item in inputs],
+        "attempts": attempts,
+    }
+
+
+def _final_successful_attempt(payload: dict[str, object]) -> dict[str, Any]:
+    attempts = payload.get("attempts")
+    if not isinstance(attempts, list) or not attempts:
+        raise ValueError("raw response attempts are missing")
+    final_attempt = attempts[-1]
+    if not isinstance(final_attempt, dict) or "error" in final_attempt:
+        raise ValueError("raw response final attempt is not successful")
+    return final_attempt
+
+
+def _optional_string(payload: dict[str, Any], field_name: str) -> str | None:
+    value = payload.get(field_name)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be null or a non-empty string")
+    return value.strip()
+
+
+def _runtime_error_audit(error: RuntimeError) -> dict[str, object]:
+    try:
+        payload = json.loads(str(error))
+    except json.JSONDecodeError as exc:
+        raise ValueError("annotation failure did not contain a JSON audit") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("annotation failure audit must be an object")
+    return payload
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
@@ -488,3 +630,12 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
         "\n".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) for row in rows) + ("\n" if rows else ""),
         encoding="utf-8",
     )
+
+
+def _write_json(path: Path, payload: dict[str, object]) -> None:
+    temporary_path = path.with_name(f".{path.name}.tmp")
+    temporary_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary_path.replace(path)

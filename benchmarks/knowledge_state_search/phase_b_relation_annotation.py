@@ -25,6 +25,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_client import
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract import (
     PROMPT_VERSION,
     AnnotationReviewerConfig,
+    ThinkingMode,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_support import (
     DEFAULT_SOURCE_SCOPE_LABELS_PATH,
@@ -42,7 +43,9 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_support impor
 )
 from benchmarks.knowledge_state_search.phase_b_relation_calibration import (
     CALIBRATION_BATCH_SIZE,
+    CALIBRATION_MAX_RETRIES,
     CALIBRATION_PAIR_COUNT,
+    CALIBRATION_TIMEOUT_SECONDS,
     FROZEN_DEV_SPLIT,
     RUN_CONTRACT_FILENAME,
     build_current_run_contract,
@@ -59,7 +62,7 @@ DEFAULT_CALIBRATION_AUTHORIZATION_PATH = Path(
     "var/artifacts/knowledge_state_search/phase_b_relation_calibration_authorization.json"
 )
 DEFAULT_DOUBAO_MODEL = "volcengine_maas/doubao-seed-2-1-pro-260628"
-DEFAULT_MIMO_MODEL = "xiaomi/mimo-v2.5-pro"
+DEFAULT_GEMINI_MODEL = "vertex_ai/gemini-3.5-flash"
 DEFAULT_SELECTION_SEED = "phase_b_relation_annotation_selection_v1"
 DEFAULT_SPOT_CHECK_SEED = "phase_b_relation_priority_spot_check_v1"
 DEFAULT_PRIORITY_ORDER_SEED = 20260723
@@ -74,15 +77,15 @@ def run_dual_model_relation_annotation(
     calibration_authorization_path: Path = DEFAULT_CALIBRATION_AUTHORIZATION_PATH,
     output_directory: Path = DEFAULT_OUTPUT_DIRECTORY,
     batch_size: int = CALIBRATION_BATCH_SIZE,
-    timeout: float = 180.0,
-    max_retries: int = 3,
+    timeout: float = CALIBRATION_TIMEOUT_SECONDS,
+    max_retries: int = CALIBRATION_MAX_RETRIES,
     limit_pairs: int | None = None,
     spot_check_fraction: float = 0.20,
     selection_seed: str = DEFAULT_SELECTION_SEED,
     spot_check_seed: str = DEFAULT_SPOT_CHECK_SEED,
     task_split: str | None = None,
 ) -> dict[str, object]:
-    """Run Doubao/MiMo independently and prepare priority-subagent actions."""
+    """Run Doubao/Gemini independently and prepare priority-subagent actions."""
 
     _validate_reviewer_pair(reviewers)
     if batch_size < 1:
@@ -112,6 +115,8 @@ def run_dual_model_relation_annotation(
         selection_seed=selection_seed,
         selected_task_split=task_split,
         selected_pair_limit=limit_pairs,
+        timeout_seconds=timeout,
+        max_retries=max_retries,
         packet_manifest_path=packet_directory / "annotation_packet_manifest.json",
         target_specs_path=DEFAULT_TARGET_SPECS_PATH,
         source_scope_labels_path=source_scope_labels_path,
@@ -205,10 +210,11 @@ def run_dual_model_relation_annotation(
 
     exact_relation_agreement_count = sum(row["relation_agreement"] is True for row in consensus)
     routing_agreement_count = sum(row["routing_agreement"] is True for row in consensus)
+    first_reviewer, second_reviewer = REVIEWERS
     relation_pairs = [
         (
-            str(row["reviewer_judgments"]["doubao"]["relation"]),
-            str(row["reviewer_judgments"]["mimo"]["relation"]),
+            str(row["reviewer_judgments"][first_reviewer]["relation"]),
+            str(row["reviewer_judgments"][second_reviewer]["relation"]),
         )
         for row in consensus
     ]
@@ -229,10 +235,17 @@ def run_dual_model_relation_annotation(
                 "reviewer_kind": "model",
                 "model": reviewer.model,
                 "base_url": reviewer.base_url.rstrip("/"),
-                "disable_thinking": reviewer.disable_thinking,
+                "thinking_mode": reviewer.thinking_mode.value,
             }
             for reviewer in reviewers
         ],
+        "execution_contract": {
+            "batch_size": batch_size,
+            "timeout_seconds": timeout,
+            "max_retries": max_retries,
+            "temperature": run_contract.temperature,
+            "max_tokens": run_contract.max_tokens,
+        },
         "available_canonical_pair_count": len(bundle.canonical_keys),
         "selected_task_split": task_split,
         "selected_task_ids": sorted(selected_task_ids) if selected_task_ids is not None else None,
@@ -296,7 +309,7 @@ def run_dual_model_relation_annotation(
 def build_parser() -> argparse.ArgumentParser:
     """Build the dual-model relation-annotation CLI."""
 
-    parser = argparse.ArgumentParser(description="Run independent Doubao and MiMo Phase B relation annotation.")
+    parser = argparse.ArgumentParser(description="Run independent Doubao and Gemini Phase B relation annotation.")
     parser.add_argument("--packets", type=Path, default=DEFAULT_PACKET_DIRECTORY)
     parser.add_argument(
         "--source-scope-labels",
@@ -320,8 +333,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=CALIBRATION_BATCH_SIZE,
         help="Frozen run-contract-v2 request size; must remain one pair per request.",
     )
-    parser.add_argument("--timeout", type=float, default=180.0)
-    parser.add_argument("--max-retries", type=int, default=3)
+    parser.add_argument("--timeout", type=float, default=CALIBRATION_TIMEOUT_SECONDS)
+    parser.add_argument("--max-retries", type=int, default=CALIBRATION_MAX_RETRIES)
     parser.add_argument("--limit-pairs", type=int)
     parser.add_argument("--spot-check-fraction", type=float, default=0.20)
     parser.add_argument(
@@ -333,8 +346,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.environ.get("DOUBAO_MODEL") or DEFAULT_DOUBAO_MODEL,
     )
     parser.add_argument(
-        "--mimo-model",
-        default=os.environ.get("PROFILE_EVAL_MODEL") or _configured_mimo_model() or DEFAULT_MIMO_MODEL,
+        "--gemini-model",
+        default=os.environ.get("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL,
     )
     return parser
 
@@ -345,10 +358,10 @@ def main() -> int:
     load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
     args = build_parser().parse_args()
     doubao_key = os.environ.get("DOUBAO_API_KEY") or os.environ.get("JUDGE_API_KEY", "")
-    mimo_key = os.environ.get("MIMO_API_KEY", "")
-    if not doubao_key or not mimo_key:
+    gemini_key = os.environ.get("MIFY_API_KEY", "")
+    if not doubao_key or not gemini_key:
         print(
-            "API key not found. Configure JUDGE_API_KEY/DOUBAO_API_KEY and MIMO_API_KEY.",
+            "API key not found. Configure JUDGE_API_KEY/DOUBAO_API_KEY and MIFY_API_KEY.",
             file=sys.stderr,
         )
         return 2
@@ -359,13 +372,14 @@ def main() -> int:
             or os.environ.get("JUDGE_BASE_URL", "https://api.llm.mioffice.cn/v1"),
             model=args.doubao_model,
             api_key=doubao_key,
-            disable_thinking=True,
+            thinking_mode=ThinkingMode.DISABLED,
         ),
         AnnotationReviewerConfig(
-            reviewer_id="mimo",
-            base_url=os.environ.get("MIMO_BASE_URL") or os.environ.get("MIFY_BASE_URL", "http://model.mify.ai.srv/v1"),
-            model=args.mimo_model,
-            api_key=mimo_key,
+            reviewer_id="gemini",
+            base_url=os.environ.get("MIFY_BASE_URL", "http://model.mify.ai.srv/v1"),
+            model=args.gemini_model,
+            api_key=gemini_key,
+            thinking_mode=ThinkingMode.MINIMAL,
         ),
     )
     report = run_dual_model_relation_annotation(
@@ -422,7 +436,7 @@ def _write_action_manifest(
     private_map_path = output_directory / "data_lead_priority_action_map.jsonl"
     manifest = {
         "status": "ready_for_priority_subagent",
-        "protocol": "phase_b_relation_priority_subagent_v2",
+        "protocol": "phase_b_relation_priority_subagent_v3",
         "priority_rule": "subagent_decision_is_terminal",
         "no_recursive_model_review": True,
         "action_count": len(action_packet),
@@ -458,14 +472,6 @@ def _validate_reviewer_pair(
         raise ValueError("dual-model reviewers must use distinct model identifiers")
 
 
-def _configured_mimo_model() -> str:
-    model = os.environ.get("MIMO_MODEL", "").strip()
-    provider = os.environ.get("MIMO_PROVIDER", "").strip()
-    if provider and model and "/" not in model:
-        return f"{provider}/{model}"
-    return model
-
-
 def _priority_subagent_instructions() -> str:
     return """# Phase B priority relation review
 
@@ -476,14 +482,14 @@ labels and notes are intentionally hidden to prevent anchoring.
 Return one JSONL row per blind item:
 
 ```json
-{"blind_item_id":"p_0001","proposition_checks":[{"proposition_id":"p1","status":"entailed","evidence_quote":"exact excerpt substring"}],"needs_context":false,"notes":"brief excerpt-grounded reason","reviewer_kind":"subagent_model","reviewer_id":"model:codex-priority-subagent","model":"gpt-5.6-sol"}
+{"blind_item_id":"p_0001","proposition_checks":[{"proposition_id":"p1","status":"entailed","evidence_sentence_ids":["s2"]}],"needs_context":false,"notes":"brief excerpt-grounded reason","reviewer_kind":"subagent_model","reviewer_id":"model:codex-priority-subagent","model":"gpt-5.6-sol"}
 ```
 
 For every supplied atomic proposition, use exactly one status:
 `entailed`, `weaker`, `contradicted`, or `absent`. Non-absent checks require a
-short continuous verbatim `evidence_quote`; absent checks require null. Preserve
-the supplied proposition order and IDs. For edge targets, judge the endpoint
-atoms and the directed `relation` atom separately.
+non-empty contiguous `evidence_sentence_ids` span; absent checks require an
+empty array. Preserve the supplied proposition order and IDs. For edge targets,
+judge the endpoint atoms and the directed `relation` atom separately.
 
 Do not output a five-way relation. The finalizer derives it deterministically
 from your proposition checks and `fixed_task_scope`, which is the finalized

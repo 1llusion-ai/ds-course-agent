@@ -113,6 +113,7 @@ def test_priority_non_absent_evidence_under_out_of_scope_requires_repair(
     for summary in consensus[2]["reviewer_judgments"].values():
         summary["fixed_task_scope"] = "out_of_scope"
         summary["proposition_checks"][0]["status"] = "absent"
+        summary["proposition_checks"][0]["evidence_sentence_ids"] = []
         summary["proposition_checks"][0]["evidence_quote"] = None
         summary["relation"] = "unrelated"
     _write_jsonl(paths["packet"], packet)
@@ -188,7 +189,7 @@ def _fixture(tmp_path: Path, *, spot_needs_context: bool) -> dict[str, Path]:
     paths["manifest"].write_text(
         json.dumps(
             {
-                "protocol": "phase_b_relation_priority_subagent_v2",
+                "protocol": "phase_b_relation_priority_subagent_v3",
                 "priority_rule": "subagent_decision_is_terminal",
                 "no_recursive_model_review": True,
                 "fixed_source_scope_visible_to_subagent": True,
@@ -218,7 +219,7 @@ def _consensus(
     disposition: str,
 ) -> dict[str, object]:
     doubao_relation = relation or "supported"
-    mimo_relation = relation or "partial"
+    gemini_relation = relation or "partial"
     return {
         "task_id": task_id,
         "target_type": "claim",
@@ -226,7 +227,7 @@ def _consensus(
         "source_id": f"{task_id}_{source_suffix}",
         "reviewer_judgments": {
             "doubao": _lower_summary("doubao", doubao_relation),
-            "mimo": _lower_summary("mimo", mimo_relation),
+            "gemini": _lower_summary("gemini", gemini_relation),
         },
         "relation_agreement": relation is not None,
         "routing_agreement": relation is not None,
@@ -262,6 +263,7 @@ def _lower_summary(
             {
                 "proposition_id": "p1",
                 "status": status,
+                "evidence_sentence_ids": [] if status == "absent" else ["s1"],
                 "evidence_quote": None if status == "absent" else "Synthetic evidence.",
             }
         ],
@@ -269,7 +271,9 @@ def _lower_summary(
         "needs_context": False,
         "notes": "Synthetic lower-model judgment.",
         "input_sha256": "0" * 64,
-        "response_id": f"response-{reviewer_id}",
+        "request_nonce": f"nonce-{reviewer_id}",
+        "provider_response_id": None,
+        "response_body_sha256": "1" * 64,
     }
 
 
@@ -310,6 +314,7 @@ def _packet(
         "source_title": "Synthetic source",
         "source_url": "https://example.invalid/source",
         "source_excerpt": excerpt,
+        "source_sentences": [{"sentence_id": "s1", "text": excerpt}],
         "fixed_task_scope": "in_scope",
     }
 
@@ -326,7 +331,7 @@ def _result(
             {
                 "proposition_id": "p1",
                 "status": status,
-                "evidence_quote": evidence_quote,
+                "evidence_sentence_ids": ["s1"],
             }
         ],
         "needs_context": needs_context,

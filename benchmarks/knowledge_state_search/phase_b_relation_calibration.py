@@ -34,8 +34,8 @@ ANNOTATION_REPORT_FILENAME = "annotation_report.json"
 SELECTED_PAIRS_FILENAME = "selected_canonical_pairs.jsonl"
 CONSENSUS_FILENAME = "dual_model_consensus.jsonl"
 RAW_RESPONSES_DIRECTORY = "raw_responses"
-CALIBRATION_PROTOCOL = "phase_b_relation_calibration_authorization_v1"
-RUN_CONTRACT_VERSION = "phase_b_relation_run_contract_v2"
+CALIBRATION_PROTOCOL = "phase_b_relation_calibration_authorization_v2"
+RUN_CONTRACT_VERSION = "phase_b_relation_run_contract_v3"
 FROZEN_DEV_SPLIT = "phase_b_dev"
 FROZEN_DEV_TASK_IDS = (
     "pb_t01_cv_variance",
@@ -45,6 +45,8 @@ FROZEN_DEV_TASK_IDS = (
 CALIBRATION_RUN_COUNT = 2
 CALIBRATION_PAIR_COUNT = 30
 CALIBRATION_BATCH_SIZE = 1
+CALIBRATION_TIMEOUT_SECONDS = 180.0
+CALIBRATION_MAX_RETRIES = 3
 MIN_AGREEMENT = 0.80
 MIN_KAPPA = 0.65
 MIN_REPEATABILITY = 0.90
@@ -67,11 +69,13 @@ RUN_CONTRACT_FIELDS = (
     "batch_size",
     "temperature",
     "max_tokens",
+    "timeout_seconds",
+    "max_retries",
     "selection_seed",
     "selected_task_split",
     "selected_pair_limit",
 )
-REVIEWER_MODEL_FIELDS = ("reviewer_id", "model_id", "base_url", "disable_thinking")
+REVIEWER_MODEL_FIELDS = ("reviewer_id", "model_id", "base_url", "thinking_mode")
 AUTHORIZATION_FIELDS = (
     "status",
     "protocol",
@@ -99,7 +103,7 @@ class ReviewerModelBinding:
     reviewer_id: str
     model_id: str
     base_url: str
-    disable_thinking: bool
+    thinking_mode: str
 
     def to_dict(self) -> dict[str, object]:
         """Return a stable JSON-compatible reviewer binding."""
@@ -108,7 +112,7 @@ class ReviewerModelBinding:
             "reviewer_id": self.reviewer_id,
             "model_id": self.model_id,
             "base_url": self.base_url,
-            "disable_thinking": self.disable_thinking,
+            "thinking_mode": self.thinking_mode,
         }
 
     @classmethod
@@ -117,14 +121,14 @@ class ReviewerModelBinding:
 
         if tuple(payload) != REVIEWER_MODEL_FIELDS:
             raise ValueError("relation run reviewer model fields are invalid")
-        disable_thinking = payload.get("disable_thinking")
-        if not isinstance(disable_thinking, bool):
-            raise ValueError("disable_thinking must be boolean")
+        thinking_mode = _required_string(payload, "thinking_mode")
+        if thinking_mode not in {"disabled", "minimal"}:
+            raise ValueError("thinking_mode is invalid")
         return cls(
             reviewer_id=_required_string(payload, "reviewer_id"),
             model_id=_required_string(payload, "model_id"),
             base_url=_required_string(payload, "base_url").rstrip("/"),
-            disable_thinking=disable_thinking,
+            thinking_mode=thinking_mode,
         )
 
 
@@ -149,6 +153,8 @@ class RelationRunContract:
     batch_size: int
     temperature: float
     max_tokens: int
+    timeout_seconds: float
+    max_retries: int
     selection_seed: str
     selected_task_split: str | None
     selected_pair_limit: int | None
@@ -174,6 +180,8 @@ class RelationRunContract:
             "batch_size": self.batch_size,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
+            "timeout_seconds": self.timeout_seconds,
+            "max_retries": self.max_retries,
             "selection_seed": self.selection_seed,
             "selected_task_split": self.selected_task_split,
             "selected_pair_limit": self.selected_pair_limit,
@@ -190,6 +198,7 @@ class RelationRunContract:
             raise ValueError("relation run reviewer_models must be a list")
         batch_size = _required_integer(payload, "batch_size")
         max_tokens = _required_integer(payload, "max_tokens")
+        max_retries = _required_integer(payload, "max_retries")
         pair_limit = payload.get("selected_pair_limit")
         if pair_limit is not None and (not isinstance(pair_limit, int) or isinstance(pair_limit, bool)):
             raise ValueError("selected_pair_limit must be an integer or null")
@@ -219,6 +228,8 @@ class RelationRunContract:
             batch_size=batch_size,
             temperature=_required_number(payload, "temperature"),
             max_tokens=max_tokens,
+            timeout_seconds=_required_number(payload, "timeout_seconds"),
+            max_retries=max_retries,
             selection_seed=_required_string(payload, "selection_seed"),
             selected_task_split=split.strip() if isinstance(split, str) else None,
             selected_pair_limit=pair_limit,
@@ -238,6 +249,8 @@ def build_current_run_contract(
     selected_pair_limit: int | None,
     temperature: float = REQUEST_TEMPERATURE,
     max_tokens: int = REQUEST_MAX_TOKENS,
+    timeout_seconds: float = CALIBRATION_TIMEOUT_SECONDS,
+    max_retries: int = CALIBRATION_MAX_RETRIES,
     packet_manifest_path: Path = DEFAULT_PACKET_DIRECTORY / "annotation_packet_manifest.json",
     target_specs_path: Path = DEFAULT_TARGET_SPECS_PATH,
     source_scope_labels_path: Path = DEFAULT_SOURCE_SCOPE_LABELS_PATH,
@@ -258,7 +271,7 @@ def build_current_run_contract(
                     reviewer_id=reviewer.reviewer_id,
                     model_id=reviewer.model,
                     base_url=reviewer.base_url.rstrip("/"),
-                    disable_thinking=reviewer.disable_thinking,
+                    thinking_mode=reviewer.thinking_mode.value,
                 )
                 for reviewer in reviewers
             ),
@@ -283,6 +296,8 @@ def build_current_run_contract(
         batch_size=batch_size,
         temperature=float(temperature),
         max_tokens=max_tokens,
+        timeout_seconds=float(timeout_seconds),
+        max_retries=max_retries,
         selection_seed=selection_seed,
         selected_task_split=selected_task_split,
         selected_pair_limit=selected_pair_limit,
@@ -337,10 +352,7 @@ def build_calibration_authorization(
         raise ValueError("calibration selected pair files are not identical")
     if runs[0]["selected_pairs"] != runs[1]["selected_pairs"]:
         raise ValueError("calibration selected pair universes are not identical")
-    if set(runs[0]["response_ids"]).intersection(runs[1]["response_ids"]):
-        raise ValueError("calibration runs are not fresh: response IDs overlap")
-    if set(runs[0]["reviewed_at_values"]).intersection(runs[1]["reviewed_at_values"]):
-        raise ValueError("calibration runs are not fresh: review timestamps overlap")
+    _validate_cross_run_freshness(runs, label="calibration runs")
     if runs[0]["response_models"] != runs[1]["response_models"]:
         raise ValueError("calibration runs used different provider response models")
     repeatability = relation_repeatability(runs)
@@ -407,10 +419,7 @@ def validate_calibration_authorization(
     ]
     if runs[0]["selected_pairs"] != runs[1]["selected_pairs"]:
         raise ValueError("calibration authorization pair universes differ")
-    if set(runs[0]["response_ids"]).intersection(runs[1]["response_ids"]):
-        raise ValueError("calibration authorization runs share response IDs")
-    if set(runs[0]["reviewed_at_values"]).intersection(runs[1]["reviewed_at_values"]):
-        raise ValueError("calibration authorization runs share review timestamps")
+    _validate_cross_run_freshness(runs, label="calibration authorization runs")
     if runs[0]["response_models"] != runs[1]["response_models"]:
         raise ValueError("calibration authorization response models differ")
     if payload["selected_pairs_sha256"] != runs[0]["selected_pairs_sha256"]:
@@ -428,6 +437,33 @@ def _thresholds() -> dict[str, float]:
         "minimum_kappa": MIN_KAPPA,
         "minimum_repeatability": MIN_REPEATABILITY,
     }
+
+
+def _validate_cross_run_freshness(
+    runs: list[dict[str, object]],
+    *,
+    label: str,
+) -> None:
+    for field_name in (
+        "request_nonces",
+        "request_fingerprints",
+        "response_body_sha256s",
+    ):
+        first = set(_required_string_tuple(runs[0], field_name))
+        second = set(_required_string_tuple(runs[1], field_name))
+        if first.intersection(second):
+            raise ValueError(f"{label} share {field_name}")
+    first_provider_ids = set(_required_string_tuple(runs[0], "provider_response_ids"))
+    second_provider_ids = set(_required_string_tuple(runs[1], "provider_response_ids"))
+    if first_provider_ids.intersection(second_provider_ids):
+        raise ValueError(f"{label} share provider_response_ids")
+
+
+def _required_string_tuple(payload: dict[str, object], field_name: str) -> tuple[str, ...]:
+    value = payload.get(field_name)
+    if not isinstance(value, tuple) or any(not isinstance(item, str) or not item for item in value):
+        raise ValueError(f"{field_name} must be a tuple of non-empty strings")
+    return value
 
 
 def _required_mapping(payload: object, label: str) -> dict[str, Any]:

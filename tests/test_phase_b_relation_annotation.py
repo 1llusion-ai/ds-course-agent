@@ -19,6 +19,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract impo
     PropositionCheck,
     RelationAnnotationInput,
     RelationTargetSpec,
+    ThinkingMode,
     derive_relation,
     parse_model_relation_judgments,
 )
@@ -45,6 +46,7 @@ def test_relation_response_parser_requires_exact_blind_item_coverage():
 
     judgments = parse_model_relation_judgments(
         {
+            "request_nonce": "nonce-1",
             "judgments": [
                 {
                     "blind_item_id": "d_0001",
@@ -52,7 +54,7 @@ def test_relation_response_parser_requires_exact_blind_item_coverage():
                         {
                             "proposition_id": "p1",
                             "status": "entailed",
-                            "evidence_quote": "Excerpt.",
+                            "evidence_sentence_ids": ["s1"],
                         }
                     ],
                     "needs_context": False,
@@ -64,18 +66,21 @@ def test_relation_response_parser_requires_exact_blind_item_coverage():
                         {
                             "proposition_id": "p1",
                             "status": "weaker",
-                            "evidence_quote": "Excerpt.",
+                            "evidence_sentence_ids": ["s1"],
                         }
                     ],
                     "needs_context": True,
                     "notes": "The excerpt omits the directed qualifier.",
                 },
-            ]
+            ],
         },
         reviewer=reviewer,
         batch_id="batch_001",
-        reviewed_at="2026-07-23T00:00:00+00:00",
-        response_id="response-1",
+        request_nonce="nonce-1",
+        provider_response_id=None,
+        response_body_sha256="a" * 64,
+        request_started_at="2026-07-24T00:00:00+00:00",
+        response_received_at="2026-07-24T00:00:01+00:00",
         inputs=inputs,
     )
 
@@ -84,10 +89,11 @@ def test_relation_response_parser_requires_exact_blind_item_coverage():
     assert judgments[1].needs_context is True
 
 
-def test_relation_response_parser_rejects_non_verbatim_evidence_quote():
-    with pytest.raises(ValueError, match="not a verbatim excerpt substring"):
+def test_relation_response_parser_rejects_unknown_evidence_sentence_id():
+    with pytest.raises(ValueError, match="are unknown"):
         parse_model_relation_judgments(
             {
+                "request_nonce": "nonce-1",
                 "judgments": [
                     {
                         "blind_item_id": "d_0001",
@@ -95,23 +101,73 @@ def test_relation_response_parser_rejects_non_verbatim_evidence_quote():
                             {
                                 "proposition_id": "p1",
                                 "status": "entailed",
-                                "evidence_quote": "Paraphrased evidence.",
+                                "evidence_sentence_ids": ["s9"],
                             }
                         ],
                         "needs_context": False,
                         "notes": "The quote is not copied from the excerpt.",
                     }
-                ]
+                ],
             },
             reviewer=_reviewer("doubao"),
             batch_id="batch_001",
-            reviewed_at="2026-07-23T00:00:00+00:00",
-            response_id="response-1",
+            request_nonce="nonce-1",
+            provider_response_id=None,
+            response_body_sha256="b" * 64,
+            request_started_at="2026-07-24T00:00:00+00:00",
+            response_received_at="2026-07-24T00:00:01+00:00",
             inputs=(_input("d_0001"),),
         )
 
 
-def test_relation_response_parser_normalizes_whitespace_and_math_delimiters():
+def test_relation_response_parser_rejects_noncontiguous_sentence_ids():
+    review_input = RelationAnnotationInput.from_packet_row(
+        {
+            "blind_item_id": "d_0001",
+            "task_question": "Question?",
+            "target_text": "Target.",
+            "source_title": "Source",
+            "source_url": "https://example.edu",
+            "source_excerpt": "First sentence. Second sentence. Third sentence.",
+        },
+        RelationTargetSpec(
+            task_id="pb_t01",
+            target_type="claim",
+            propositions=(AtomicProposition("p1", "Target."),),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="must be contiguous"):
+        parse_model_relation_judgments(
+            {
+                "request_nonce": "nonce-1",
+                "judgments": [
+                    {
+                        "blind_item_id": "d_0001",
+                        "proposition_checks": [
+                            {
+                                "proposition_id": "p1",
+                                "status": "entailed",
+                                "evidence_sentence_ids": ["s1", "s3"],
+                            }
+                        ],
+                        "needs_context": False,
+                        "notes": "Noncontiguous evidence is invalid.",
+                    }
+                ],
+            },
+            reviewer=_reviewer("doubao"),
+            batch_id="batch_001",
+            request_nonce="nonce-1",
+            provider_response_id=None,
+            response_body_sha256="f" * 64,
+            request_started_at="2026-07-24T00:00:00+00:00",
+            response_received_at="2026-07-24T00:00:01+00:00",
+            inputs=(review_input,),
+        )
+
+
+def test_relation_response_parser_reconstructs_exact_math_sentence():
     review_input = RelationAnnotationInput.from_packet_row(
         {
             "blind_item_id": "d_0001",
@@ -130,6 +186,7 @@ def test_relation_response_parser_normalizes_whitespace_and_math_delimiters():
 
     judgments = parse_model_relation_judgments(
         {
+            "request_nonce": "nonce-1",
             "judgments": [
                 {
                     "blind_item_id": "d_0001",
@@ -137,22 +194,26 @@ def test_relation_response_parser_normalizes_whitespace_and_math_delimiters():
                         {
                             "proposition_id": "p1",
                             "status": "entailed",
-                            "evidence_quote": "A model uses k-1 folds as training data.",
+                            "evidence_sentence_ids": ["s1"],
                         }
                     ],
                     "needs_context": False,
                     "notes": "The normalized quote is still contiguous source text.",
                 }
-            ]
+            ],
         },
         reviewer=_reviewer("doubao"),
         batch_id="batch_001",
-        reviewed_at="2026-07-23T00:00:00+00:00",
-        response_id="response-1",
+        request_nonce="nonce-1",
+        provider_response_id=None,
+        response_body_sha256="c" * 64,
+        request_started_at="2026-07-24T00:00:00+00:00",
+        response_received_at="2026-07-24T00:00:01+00:00",
         inputs=(review_input,),
     )
 
     assert judgments[0].proposition_checks[0].status == "entailed"
+    assert judgments[0].proposition_checks[0].evidence_quote == "A model uses \\(k-1\\) folds as training data."
 
 
 def test_pair_relation_contract_structurally_excludes_task_scope_output():
@@ -167,9 +228,10 @@ def test_pair_relation_contract_structurally_excludes_task_scope_output():
     response_item = relation_response_format()["json_schema"]["schema"]["properties"]["judgments"]["items"]
     assert "task_scope" not in response_item["properties"]
     assert "task_scope" not in response_item["required"]
-    with pytest.raises(ValueError, match="v4 contract"):
+    with pytest.raises(ValueError, match="v5 contract"):
         parse_model_relation_judgments(
             {
+                "request_nonce": "nonce-1",
                 "judgments": [
                     {
                         "blind_item_id": "d_0001",
@@ -178,18 +240,21 @@ def test_pair_relation_contract_structurally_excludes_task_scope_output():
                             {
                                 "proposition_id": "p1",
                                 "status": "absent",
-                                "evidence_quote": None,
+                                "evidence_sentence_ids": [],
                             }
                         ],
                         "needs_context": False,
                         "notes": "Unexpected repeated scope output.",
                     }
-                ]
+                ],
             },
             reviewer=_reviewer("doubao"),
             batch_id="batch_001",
-            reviewed_at="2026-07-24T00:00:00+00:00",
-            response_id="response-1",
+            request_nonce="nonce-1",
+            provider_response_id=None,
+            response_body_sha256="d" * 64,
+            request_started_at="2026-07-24T00:00:00+00:00",
+            response_received_at="2026-07-24T00:00:01+00:00",
             inputs=(review_input,),
         )
 
@@ -200,6 +265,7 @@ def test_relation_request_and_retry_fingerprints_cover_routing_fields():
         reviewer=reviewer,
         batch_id="batch_001",
         inputs=(_input("d_0001"),),
+        request_nonce="nonce-1",
     )
 
     assert request["temperature"] == REQUEST_TEMPERATURE
@@ -207,6 +273,14 @@ def test_relation_request_and_retry_fingerprints_cover_routing_fields():
     assert request["model"] == reviewer.model
     assert request["response_format"] == relation_response_format()
     assert request["thinking"] == {"type": "disabled"}
+    gemini_request = build_relation_request_payload(
+        reviewer=_reviewer("gemini"),
+        batch_id="batch_001",
+        inputs=(_input("g_0001"),),
+        request_nonce="nonce-2",
+    )
+    assert gemini_request["reasoning_effort"] == "minimal"
+    assert "thinking" not in gemini_request
 
     base_judgment = {
         "blind_item_id": "d_0001",
@@ -214,25 +288,27 @@ def test_relation_request_and_retry_fingerprints_cover_routing_fields():
             {
                 "proposition_id": "p1",
                 "status": "entailed",
-                "evidence_quote": "Excerpt.",
+                "evidence_sentence_ids": ["s1"],
             }
         ],
         "needs_context": False,
         "notes": "Test.",
     }
-    base = semantic_response_fingerprint({"judgments": [base_judgment]})
+    base = semantic_response_fingerprint({"request_nonce": "nonce-1", "judgments": [base_judgment]})
     changed_context = semantic_response_fingerprint(
         {
+            "request_nonce": "nonce-1",
             "judgments": [
                 {
                     **base_judgment,
                     "needs_context": True,
                 }
-            ]
+            ],
         }
     )
-    changed_quote = semantic_response_fingerprint(
+    changed_evidence = semantic_response_fingerprint(
         {
+            "request_nonce": "nonce-1",
             "judgments": [
                 {
                     **base_judgment,
@@ -240,24 +316,24 @@ def test_relation_request_and_retry_fingerprints_cover_routing_fields():
                         {
                             "proposition_id": "p1",
                             "status": "entailed",
-                            "evidence_quote": "Different quote.",
+                            "evidence_sentence_ids": [],
                         }
                     ],
                 }
-            ]
+            ],
         }
     )
 
     assert base is not None
     assert base != changed_context
-    assert base != changed_quote
+    assert base != changed_evidence
 
 
 def test_relation_is_derived_from_structural_checks():
-    entailed = (PropositionCheck("p1", "entailed", "quote"),)
-    weaker = (PropositionCheck("p1", "weaker", "quote"),)
-    absent = (PropositionCheck("p1", "absent", None),)
-    contradicted = (PropositionCheck("p1", "contradicted", "quote"),)
+    entailed = (_check("p1", "entailed"),)
+    weaker = (_check("p1", "weaker"),)
+    absent = (_check("p1", "absent"),)
+    contradicted = (_check("p1", "contradicted"),)
 
     assert (
         derive_relation(
@@ -304,8 +380,8 @@ def test_relation_is_derived_from_structural_checks():
             target_type="edge",
             task_scope="in_scope",
             proposition_checks=(
-                PropositionCheck("left.p1", "entailed", "quote"),
-                PropositionCheck("relation", "absent", None),
+                _check("left.p1", "entailed"),
+                _check("relation", "absent"),
             ),
         )
         == "partial"
@@ -315,9 +391,9 @@ def test_relation_is_derived_from_structural_checks():
             target_type="edge",
             task_scope="in_scope",
             proposition_checks=(
-                PropositionCheck("left.p1", "entailed", "quote"),
-                PropositionCheck("right.p1", "entailed", "quote"),
-                PropositionCheck("relation", "entailed", "quote"),
+                _check("left.p1", "entailed"),
+                _check("right.p1", "entailed"),
+                _check("relation", "entailed"),
             ),
         )
         == "supported"
@@ -327,8 +403,8 @@ def test_relation_is_derived_from_structural_checks():
             target_type="edge",
             task_scope="in_scope",
             proposition_checks=(
-                PropositionCheck("left.p1", "absent", None),
-                PropositionCheck("relation", "contradicted", "quote"),
+                _check("left.p1", "absent"),
+                _check("relation", "contradicted"),
             ),
         )
         == "contradicted"
@@ -338,9 +414,9 @@ def test_relation_is_derived_from_structural_checks():
             target_type="edge",
             task_scope="in_scope",
             proposition_checks=(
-                PropositionCheck("left.p1", "entailed", "quote"),
-                PropositionCheck("right.p1", "contradicted", "quote"),
-                PropositionCheck("relation", "absent", None),
+                _check("left.p1", "entailed"),
+                _check("right.p1", "contradicted"),
+                _check("relation", "absent"),
             ),
         )
         == "contradicted"
@@ -379,10 +455,10 @@ def test_consensus_routes_disagreement_and_context_uncertainty_to_priority():
             "d_0002": keys[1],
             "d_0003": keys[2],
         },
-        "mimo": {
-            "m_0001": keys[0],
-            "m_0002": keys[1],
-            "m_0003": keys[2],
+        "gemini": {
+            "g_0001": keys[0],
+            "g_0002": keys[1],
+            "g_0003": keys[2],
         },
     }
     judgments = {
@@ -391,10 +467,10 @@ def test_consensus_routes_disagreement_and_context_uncertainty_to_priority():
             _judgment("doubao", "d_0002", "partial"),
             _judgment("doubao", "d_0003", "distractor", needs_context=True),
         ),
-        "mimo": (
-            _judgment("mimo", "m_0001", "supported"),
-            _judgment("mimo", "m_0002", "contradicted"),
-            _judgment("mimo", "m_0003", "distractor"),
+        "gemini": (
+            _judgment("gemini", "g_0001", "supported"),
+            _judgment("gemini", "g_0002", "contradicted"),
+            _judgment("gemini", "g_0003", "distractor"),
         ),
     }
 
@@ -452,7 +528,7 @@ def test_priority_packet_hides_lower_labels_and_uses_independent_blind_ids():
             "action_type": "adjudication",
             "reviewer_judgments": {
                 "doubao": {"relation": "supported"},
-                "mimo": {"relation": "partial"},
+                "gemini": {"relation": "partial"},
             },
         },
     )
@@ -496,6 +572,7 @@ def test_priority_packet_hides_lower_labels_and_uses_independent_blind_ids():
             "source_title": "Source",
             "source_url": "https://example.edu",
             "source_excerpt": "Excerpt.",
+            "source_sentences": [{"sentence_id": "s1", "text": "Excerpt."}],
             "fixed_task_scope": "in_scope",
         }
     ]
@@ -529,7 +606,7 @@ def _reviewer(reviewer_id: str) -> AnnotationReviewerConfig:
         base_url="https://example.invalid/v1",
         model=f"{reviewer_id}-model",
         api_key="test-key",
-        disable_thinking=reviewer_id == "doubao",
+        thinking_mode=(ThinkingMode.DISABLED if reviewer_id == "doubao" else ThinkingMode.MINIMAL),
     )
 
 
@@ -574,15 +651,28 @@ def _judgment(
             PropositionCheck(
                 "p1",
                 status,
+                () if status == "absent" else ("s1",),
                 None if status == "absent" else "quote",
             ),
         ),
         needs_context=needs_context,
         notes="Test judgment.",
-        reviewed_at="2026-07-23T00:00:00+00:00",
         batch_id="batch_001",
         input_sha256=f"sha-{blind_item_id}",
-        response_id=f"response-{blind_item_id}",
+        request_nonce=f"nonce-{blind_item_id}",
+        provider_response_id=None,
+        response_body_sha256="e" * 64,
+        request_started_at="2026-07-24T00:00:00+00:00",
+        response_received_at="2026-07-24T00:00:01+00:00",
+    )
+
+
+def _check(proposition_id: str, status: str) -> PropositionCheck:
+    return PropositionCheck(
+        proposition_id=proposition_id,
+        status=status,
+        evidence_sentence_ids=() if status == "absent" else ("s1",),
+        evidence_quote=None if status == "absent" else "quote",
     )
 
 

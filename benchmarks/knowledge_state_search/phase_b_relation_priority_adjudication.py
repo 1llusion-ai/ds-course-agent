@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from benchmarks.knowledge_state_search.phase_b_annotation_packet_contract import (
+    REVIEWERS,
     file_sha256,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_annotation import (
@@ -20,6 +21,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract impo
     derive_relation,
     parse_proposition_checks,
     required_string,
+    segment_source_excerpt,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_support import (
     DEFAULT_SOURCE_SCOPE_LABELS_PATH,
@@ -84,7 +86,7 @@ def finalize_priority_relation_adjudication(
     action_packet_rows = _read_jsonl(action_packet_path)
     action_rows = _read_jsonl(action_map_path)
     result_rows = _read_jsonl(priority_results_path)
-    if action_manifest.get("protocol") != "phase_b_relation_priority_subagent_v2":
+    if action_manifest.get("protocol") != "phase_b_relation_priority_subagent_v3":
         raise ValueError("priority action manifest protocol is invalid")
     if action_manifest.get("priority_rule") != "subagent_decision_is_terminal":
         raise ValueError("priority action manifest lacks the terminal-decision rule")
@@ -326,12 +328,12 @@ def _validate_consensus_derivation(
     fixed_task_scope: str,
 ) -> str | None:
     judgments = row.get("reviewer_judgments")
-    if not isinstance(judgments, dict) or set(judgments) != {"doubao", "mimo"}:
+    if not isinstance(judgments, dict) or set(judgments) != set(REVIEWERS):
         raise ValueError(f"consensus reviewer coverage is invalid: {key}")
     derived_relations: dict[str, str] = {}
     needs_context: dict[str, bool] = {}
     source_scope_conflicts: dict[str, bool] = {}
-    for reviewer_id in ("doubao", "mimo"):
+    for reviewer_id in REVIEWERS:
         summary = judgments[reviewer_id]
         if not isinstance(summary, dict):
             raise ValueError(f"consensus reviewer summary is invalid: {key}/{reviewer_id}")
@@ -355,8 +357,9 @@ def _validate_consensus_derivation(
         needs_context[reviewer_id] = reviewer_needs_context
         source_scope_conflicts[reviewer_id] = source_scope_conflict
 
-    relation_agreement = derived_relations["doubao"] == derived_relations["mimo"]
-    routing_agreement = relation_agreement and needs_context["doubao"] == needs_context["mimo"]
+    first_reviewer, second_reviewer = REVIEWERS
+    relation_agreement = derived_relations[first_reviewer] == derived_relations[second_reviewer]
+    routing_agreement = relation_agreement and needs_context[first_reviewer] == needs_context[second_reviewer]
     any_needs_context = any(needs_context.values())
     any_scope_conflict = any(source_scope_conflicts.values())
     if any_scope_conflict:
@@ -366,7 +369,7 @@ def _validate_consensus_derivation(
     elif routing_agreement and not any_needs_context:
         expected_disposition = "dual_model_consensus"
         expected_reason = "same_relation_without_context_flag"
-        expected_consensus_relation = derived_relations["doubao"]
+        expected_consensus_relation = derived_relations[first_reviewer]
     else:
         expected_disposition = "priority_subagent_required"
         expected_reason = "context_uncertainty" if any_needs_context else "relation_disagreement"
@@ -400,6 +403,7 @@ def _consensus_proposition_checks(
         if not isinstance(raw, dict) or set(raw) != {
             "proposition_id",
             "status",
+            "evidence_sentence_ids",
             "evidence_quote",
         }:
             raise ValueError(f"consensus proposition check fields are invalid: {key}/{reviewer_id}")
@@ -410,16 +414,23 @@ def _consensus_proposition_checks(
         status = required_string(raw, "status")
         if status not in PROPOSITION_LABEL_SET:
             raise ValueError(f"consensus proposition status is invalid: {key}/{reviewer_id}")
+        raw_evidence_sentence_ids = raw.get("evidence_sentence_ids")
+        if not isinstance(raw_evidence_sentence_ids, list) or any(
+            not isinstance(sentence_id, str) or not sentence_id for sentence_id in raw_evidence_sentence_ids
+        ):
+            raise ValueError(f"consensus evidence sentence IDs are invalid: {key}/{reviewer_id}")
+        evidence_sentence_ids = tuple(raw_evidence_sentence_ids)
         evidence_quote = raw.get("evidence_quote")
         if status == "absent":
-            if evidence_quote is not None:
+            if evidence_sentence_ids or evidence_quote is not None:
                 raise ValueError(f"consensus absent evidence quote is invalid: {key}/{reviewer_id}")
-        elif not isinstance(evidence_quote, str) or not evidence_quote.strip():
-            raise ValueError(f"consensus non-absent evidence quote is invalid: {key}/{reviewer_id}")
+        elif not evidence_sentence_ids or not isinstance(evidence_quote, str) or not evidence_quote.strip():
+            raise ValueError(f"consensus non-absent evidence fields are invalid: {key}/{reviewer_id}")
         checks.append(
             PropositionCheck(
                 proposition_id=proposition_id,
                 status=status,
+                evidence_sentence_ids=evidence_sentence_ids,
                 evidence_quote=evidence_quote.strip() if isinstance(evidence_quote, str) else None,
             )
         )
@@ -445,11 +456,16 @@ def _validate_priority_result(
     if required_string(packet, "blind_item_id") != blind_item_id:
         raise ValueError("priority result/packet blind_item_id mismatch")
     propositions = _packet_propositions(packet)
+    source_excerpt = required_string(packet, "source_excerpt")
+    source_sentences = segment_source_excerpt(source_excerpt)
+    if packet.get("source_sentences") != [sentence.prompt_fields() for sentence in source_sentences]:
+        raise ValueError("priority packet source sentence segmentation is invalid")
     proposition_checks = parse_proposition_checks(
         payload,
         propositions,
         blind_item_id=blind_item_id,
-        source_excerpt=required_string(packet, "source_excerpt"),
+        source_sentences=source_sentences,
+        source_excerpt=source_excerpt,
     )
     target_type = required_string(packet, "target_type")
     if target_type not in {"claim", "edge"}:

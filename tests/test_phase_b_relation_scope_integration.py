@@ -228,9 +228,9 @@ def test_fixed_source_scope_eliminates_scope_only_relation_disagreement() -> Non
     )
     canonical_by_blind_id = {
         "doubao": {"d_0001": keys[0], "d_0002": keys[1]},
-        "mimo": {"m_0001": keys[0], "m_0002": keys[1]},
+        "gemini": {"g_0001": keys[0], "g_0002": keys[1]},
     }
-    absent_checks = (PropositionCheck("p1", "absent", None),)
+    absent_checks = (_check("p1", "absent"),)
     judgments = {
         "doubao": (
             _judgment(
@@ -244,15 +244,15 @@ def test_fixed_source_scope_eliminates_scope_only_relation_disagreement() -> Non
                 proposition_checks=absent_checks,
             ),
         ),
-        "mimo": (
+        "gemini": (
             _judgment(
-                "mimo",
-                "m_0001",
+                "gemini",
+                "g_0001",
                 proposition_checks=absent_checks,
             ),
             _judgment(
-                "mimo",
-                "m_0002",
+                "gemini",
+                "g_0002",
                 proposition_checks=absent_checks,
             ),
         ),
@@ -292,14 +292,14 @@ def test_out_of_scope_non_absent_evidence_requires_source_scope_repair() -> None
             _judgment(
                 "doubao",
                 "d_0001",
-                proposition_checks=(PropositionCheck("p1", "entailed", "quote"),),
+                proposition_checks=(_check("p1", "entailed"),),
             ),
         ),
-        "mimo": (
+        "gemini": (
             _judgment(
-                "mimo",
-                "m_0001",
-                proposition_checks=(PropositionCheck("p1", "absent", None),),
+                "gemini",
+                "g_0001",
+                proposition_checks=(_check("p1", "absent"),),
             ),
         ),
     }
@@ -309,7 +309,7 @@ def test_out_of_scope_non_absent_evidence_requires_source_scope_repair() -> None
         judgments,
         {
             "doubao": {"d_0001": key},
-            "mimo": {"m_0001": key},
+            "gemini": {"g_0001": key},
         },
         {SourceScopeKey("task-1", "source-1"): "out_of_scope"},
     )
@@ -319,7 +319,7 @@ def test_out_of_scope_non_absent_evidence_requires_source_scope_repair() -> None
     assert row["source_scope_relation_conflict"] is True
     assert row["consensus_relation"] is None
     assert row["reviewer_judgments"]["doubao"]["source_scope_conflict"] is True
-    assert row["reviewer_judgments"]["mimo"]["source_scope_conflict"] is False
+    assert row["reviewer_judgments"]["gemini"]["source_scope_conflict"] is False
 
 
 def _build_packet_directory(
@@ -350,7 +350,7 @@ def _build_packet_directory(
     )
     for reviewer_id, blind_item_id in (
         ("doubao", "d_0001"),
-        ("mimo", "m_0001"),
+        ("gemini", "g_0001"),
     ):
         _write_jsonl(
             public_directory / f"{reviewer_id}.jsonl",
@@ -394,10 +394,22 @@ def _judgment(
         proposition_checks=proposition_checks,
         needs_context=False,
         notes="Synthetic judgment.",
-        reviewed_at="2026-07-24T00:00:00+00:00",
         batch_id="batch-1",
         input_sha256=f"sha-{blind_item_id}",
-        response_id=f"response-{blind_item_id}",
+        request_nonce=f"nonce-{blind_item_id}",
+        provider_response_id=None,
+        response_body_sha256="a" * 64,
+        request_started_at="2026-07-24T00:00:00+00:00",
+        response_received_at="2026-07-24T00:00:01+00:00",
+    )
+
+
+def _check(proposition_id: str, status: str) -> PropositionCheck:
+    return PropositionCheck(
+        proposition_id=proposition_id,
+        status=status,
+        evidence_sentence_ids=() if status == "absent" else ("s1",),
+        evidence_quote=None if status == "absent" else "quote",
     )
 
 

@@ -85,7 +85,7 @@ def write_blind_model_annotation_packets(
     output_directory: Path = DEFAULT_OUTPUT_DIRECTORY,
     random_seed: int = DEFAULT_RANDOM_SEED,
 ) -> dict[str, object]:
-    """Write independent Doubao/MiMo packet orders, private maps, and checksums."""
+    """Write independent Doubao/Gemini packet orders, private maps, and checksums."""
 
     gate = _load_source_gate(source_gate_path)
     pairs, counts = _load_pairs(design_directory, sources_path)
@@ -125,8 +125,9 @@ def write_blind_model_annotation_packets(
             "private_map_sha256": packet_contract.file_sha256(private_map_path),
         }
 
-    if private_orders["doubao"] == private_orders["mimo"]:
-        raise ValueError("Doubao/MiMo packet orders must be independently randomized")
+    first_reviewer, second_reviewer = packet_contract.REVIEWERS
+    if private_orders[first_reviewer] == private_orders[second_reviewer]:
+        raise ValueError("reviewer packet orders must be independently randomized")
 
     instructions_path = packet_directory / "ANNOTATION_INSTRUCTIONS.md"
     instructions_path.write_text(_annotation_instructions(), encoding="utf-8")
@@ -161,12 +162,12 @@ def write_blind_model_annotation_packets(
         "distribution_policy": {
             "reviewers_receive_only": [
                 "packets/ANNOTATION_INSTRUCTIONS.md",
-                "their own packets/[doubao|mimo].jsonl file",
+                "their own packets/[doubao|gemini].jsonl file",
             ],
             "data_lead_only": [
                 "annotation_packet_manifest.json",
                 "data_lead_private/doubao_id_map.jsonl",
-                "data_lead_private/mimo_id_map.jsonl",
+                "data_lead_private/gemini_id_map.jsonl",
             ],
         },
         "input_fingerprints": {
@@ -397,7 +398,7 @@ def _annotation_instructions() -> str:
     return """# Phase B blind dual-model relation annotation
 
 Label each `blind_item_id` independently. Do not exchange labels or ordering
-information between Doubao and MiMo.
+information between Doubao and Gemini.
 
 Allowed relation labels:
 

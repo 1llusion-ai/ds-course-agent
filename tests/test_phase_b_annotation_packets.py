@@ -10,6 +10,8 @@ import pytest
 
 from benchmarks.knowledge_state_search.evidence import SnapshotSource
 from benchmarks.knowledge_state_search.phase_b_annotation_packet_contract import (
+    PROTOCOL_VERSION,
+    REVIEWERS,
     validate_blind_model_annotation_packets,
 )
 from benchmarks.knowledge_state_search.phase_b_annotation_packets import (
@@ -39,27 +41,38 @@ def test_blind_model_packets_cover_all_pairs_without_labels_or_private_metadata(
     )
 
     doubao_packet = _read_jsonl(paths["output"] / "packets/doubao.jsonl")
-    mimo_packet = _read_jsonl(paths["output"] / "packets/mimo.jsonl")
+    gemini_packet = _read_jsonl(paths["output"] / "packets/gemini.jsonl")
     doubao_map = _read_jsonl(paths["output"] / "data_lead_private/doubao_id_map.jsonl")
-    mimo_map = _read_jsonl(paths["output"] / "data_lead_private/mimo_id_map.jsonl")
+    gemini_map = _read_jsonl(paths["output"] / "data_lead_private/gemini_id_map.jsonl")
+    instructions = (paths["output"] / "packets/ANNOTATION_INSTRUCTIONS.md").read_text(encoding="utf-8")
 
+    assert PROTOCOL_VERSION == "phase_b_blind_relation_dual_model_annotation_v2"
+    assert REVIEWERS == ("doubao", "gemini")
+    assert manifest["protocol_version"] == PROTOCOL_VERSION
+    assert tuple(manifest["reviewers"]) == REVIEWERS
     assert manifest["random_seed"] == DEFAULT_RANDOM_SEED
     assert manifest["counts"]["canonical_pairs"] == 1440
     assert manifest["counts"]["pairs_per_reviewer"] == 1440
     assert manifest["counts"]["independent_judgments_required"] == 2880
     assert manifest["counts"]["labels_populated"] == 0
-    assert len(doubao_packet) == len(mimo_packet) == len(doubao_map) == len(mimo_map) == 1440
-    assert all(set(row) == _PACKET_FIELDS for row in doubao_packet + mimo_packet)
+    assert len(doubao_packet) == len(gemini_packet) == len(doubao_map) == len(gemini_map) == 1440
+    assert all(set(row) == _PACKET_FIELDS for row in doubao_packet + gemini_packet)
     assert all(
-        "relation" not in row and "source_id" not in row and "task_id" not in row for row in doubao_packet + mimo_packet
+        "relation" not in row and "source_id" not in row and "task_id" not in row
+        for row in doubao_packet + gemini_packet
     )
-    assert all("oracle evidence query" not in row["target_text"] for row in doubao_packet + mimo_packet)
-    assert [row["blind_item_id"] for row in doubao_packet] != [row["blind_item_id"] for row in mimo_packet]
+    assert all("oracle evidence query" not in row["target_text"] for row in doubao_packet + gemini_packet)
+    assert all(row["blind_item_id"].startswith("d_") for row in doubao_packet)
+    assert all(row["blind_item_id"].startswith("g_") for row in gemini_packet)
+    assert "MiMo" not in instructions
+    assert "mimo" not in json.dumps(manifest)
+    assert not (paths["output"] / "packets/mimo.jsonl").exists()
+    assert not (paths["output"] / "data_lead_private/mimo_id_map.jsonl").exists()
 
     doubao_order = [_canonical_key(row) for row in doubao_map]
-    mimo_order = [_canonical_key(row) for row in mimo_map]
-    assert doubao_order != mimo_order
-    assert set(doubao_order) == set(mimo_order)
+    gemini_order = [_canonical_key(row) for row in gemini_map]
+    assert doubao_order != gemini_order
+    assert set(doubao_order) == set(gemini_order)
     assert manifest["annotation_started"] is False
     assert manifest["dataset_frozen"] is False
     assert manifest["method_runs_authorized"] is False
@@ -101,9 +114,9 @@ def test_blind_model_packet_generation_is_reproducible_for_the_recorded_seed(tmp
     assert first == second
     for relative_path in (
         "packets/doubao.jsonl",
-        "packets/mimo.jsonl",
+        "packets/gemini.jsonl",
         "data_lead_private/doubao_id_map.jsonl",
-        "data_lead_private/mimo_id_map.jsonl",
+        "data_lead_private/gemini_id_map.jsonl",
         "annotation_packet_manifest.json",
     ):
         assert (first_output / relative_path).read_bytes() == (second_output / relative_path).read_bytes()

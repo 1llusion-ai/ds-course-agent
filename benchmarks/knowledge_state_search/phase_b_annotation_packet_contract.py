@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-PROTOCOL_VERSION = "phase_b_blind_relation_dual_model_annotation_v1"
-REVIEWERS = ("doubao", "mimo")
+PROTOCOL_VERSION = "phase_b_blind_relation_dual_model_annotation_v2"
+REVIEWERS = ("doubao", "gemini")
 PACKET_FIELDS = (
     "blind_item_id",
     "task_question",
@@ -38,7 +38,7 @@ FORBIDDEN_PACKET_FIELDS = frozenset(
         "edge_id",
         "gold_relation",
         "human_status",
-        "mimo_status",
+        "gemini_status",
         "model_notes",
         "oracle_query",
         "profile_condition",
@@ -118,10 +118,11 @@ def validate_blind_model_annotation_packets(output_directory: Path) -> dict[str,
         if int(record.get("ordering_seed", -1)) != derive_ordering_seed(random_seed, reviewer_id):
             raise ValueError(f"{reviewer_id} ordering seed does not match the recorded master seed")
 
-    if set(canonical_orders["doubao"]) != set(canonical_orders["mimo"]):
-        raise ValueError("Doubao/MiMo packets do not cover the same canonical pairs")
-    if canonical_orders["doubao"] == canonical_orders["mimo"]:
-        raise ValueError("Doubao/MiMo packet orders are not independent")
+    first_reviewer, second_reviewer = REVIEWERS
+    if set(canonical_orders[first_reviewer]) != set(canonical_orders[second_reviewer]):
+        raise ValueError("reviewer packets do not cover the same canonical pairs")
+    if canonical_orders[first_reviewer] == canonical_orders[second_reviewer]:
+        raise ValueError("reviewer packet orders are not independent")
 
     counts = _required_mapping(manifest, "counts")
     observed_counts = {field: int(counts.get(field, -1)) for field in _EXPECTED_COUNTS}

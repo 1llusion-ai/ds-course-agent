@@ -85,14 +85,18 @@
       "verification_basis": "dual_model_plus_priority_subagent"
     },
     "blind_annotation_packets": {
-      "protocol": "phase_b_blind_relation_dual_model_annotation_v1",
+      "protocol": "phase_b_blind_relation_dual_model_annotation_v2",
       "random_seed": 20260723,
+      "reviewers": [
+        "doubao",
+        "gemini"
+      ],
       "canonical_pairs": 1440,
       "pairs_per_reviewer": 1440,
       "independent_judgments_required": 2880,
       "labels_populated": 0
     },
-    "active_annotation_basis": "model_only_proxy",
+    "active_annotation_basis": "model_only_proxy_doubao_gemini_plus_priority_subagent",
     "human_packet_status": "superseded_before_labels",
     "dual_model_smoke_v1": {
       "selected_pairs": 12,
@@ -235,6 +239,64 @@
         "replacement_run_started": false,
         "full_annotation_started": false,
         "decision": "terminal_no_go"
+      },
+      "v3_doubao_gemini_preregistration": {
+        "status": "preregistered_before_frozen_runs",
+        "run_contract_version": "phase_b_relation_run_contract_v3",
+        "prompt_version": "phase_b_relation_sentence_judge_v5",
+        "packet_protocol": "phase_b_blind_relation_dual_model_annotation_v2",
+        "reviewers": {
+          "doubao": {
+            "model": "volcengine_maas/doubao-seed-2-1-pro-260628",
+            "thinking_mode": "disabled"
+          },
+          "gemini": {
+            "model": "vertex_ai/gemini-3.5-flash",
+            "thinking_mode": "minimal"
+          }
+        },
+        "execution": {
+          "batch_size": 1,
+          "temperature": 0,
+          "max_tokens": 2048,
+          "timeout_seconds": 180.0,
+          "max_retries": 3,
+          "predetermined_calibration_runs": 2,
+          "replacement_runs_allowed": false
+        },
+        "evidence_contract": {
+          "model_copied_quotes": false,
+          "contiguous_sentence_ids": true,
+          "deterministic_verbatim_reconstruction": true,
+          "request_nonce_echo_required": true,
+          "response_body_sha256_required": true,
+          "provider_response_id_optional": true,
+          "synthetic_provider_response_id_forbidden": true,
+          "failed_or_pending_batch_resume_allowed": false
+        },
+        "diagnostic": {
+          "artifact": "var/artifacts/knowledge_state_search/gemini_3_5_flash_relation_diagnostic.json",
+          "items": 5,
+          "runs": 2,
+          "requests": 10,
+          "retries": 0,
+          "valid_requests": 10,
+          "proposition_status_repeatability": 1.0,
+          "derived_relation_repeatability": 1.0,
+          "mean_reasoning_tokens": 848.0,
+          "provider_response_ids_all_empty": true,
+          "accepted_for_full_run": false
+        },
+        "unchanged_release_gates": {
+          "agreement_min": 0.8,
+          "kappa_min": 0.65,
+          "per_model_repeatability_min": 0.9,
+          "source_scope_conflicts_max": 0,
+          "semantic_drift_errors_max": 0
+        },
+        "calibration_runs_completed": 0,
+        "authorization_manifest_created": false,
+        "full_annotation_started": false
       }
     },
     "annotation_started": true,

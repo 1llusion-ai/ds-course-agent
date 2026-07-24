@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from benchmarks.knowledge_state_search.phase_b_annotation_packet_contract import (
@@ -17,6 +19,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_client import
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract import (
     AnnotationReviewerConfig,
     ModelRelationJudgment,
+    ThinkingMode,
     json_sha256,
     parse_model_relation_judgments,
     required_string,
@@ -36,8 +39,10 @@ from benchmarks.knowledge_state_search.phase_b_relation_calibration_support impo
 class RawResponseEvidence:
     """Reconstructed raw judgments and freshness identifiers for one run."""
 
-    response_ids: tuple[str, ...]
-    reviewed_at_values: tuple[str, ...]
+    request_nonces: tuple[str, ...]
+    request_fingerprints: tuple[str, ...]
+    provider_response_ids: tuple[str, ...]
+    response_body_sha256s: tuple[str, ...]
     response_models: dict[str, tuple[str, ...]]
     judgments_by_reviewer: dict[str, dict[CanonicalKey, ModelRelationJudgment]]
 
@@ -60,8 +65,10 @@ def validate_raw_responses(
         raise ValueError("raw response directory contains unexpected files")
     bindings = {binding.reviewer_id: binding for binding in contract.reviewer_models}
     expected_sizes = _expected_batch_sizes(CALIBRATION_PAIR_COUNT, contract.batch_size)
-    response_ids: set[str] = set()
-    reviewed_at_values: set[str] = set()
+    request_nonces: set[str] = set()
+    request_fingerprints: set[str] = set()
+    provider_response_ids: set[str] = set()
+    response_body_sha256s: set[str] = set()
     response_models: dict[str, set[str]] = {reviewer_id: set() for reviewer_id in REVIEWERS}
     judgments_by_reviewer: dict[str, dict[CanonicalKey, ModelRelationJudgment]] = {
         reviewer_id: {} for reviewer_id in REVIEWERS
@@ -83,13 +90,36 @@ def validate_raw_responses(
             final_attempt = attempts[-1]
             if not isinstance(final_attempt, dict) or "error" in final_attempt:
                 raise ValueError("raw response final attempt is not successful")
-            response_id = required_string(final_attempt, "response_id")
-            reviewed_at = required_string(final_attempt, "reviewed_at")
+            request_nonce = required_string(payload, "request_nonce")
+            if required_string(final_attempt, "request_nonce") != request_nonce:
+                raise ValueError("raw response request nonce mismatch")
+            request_fingerprint = required_string(payload, "request_fingerprint")
+            provider_response_id = _optional_string(final_attempt, "provider_response_id")
+            response_body_hex = required_string(final_attempt, "response_body_hex")
+            try:
+                response_body = bytes.fromhex(response_body_hex)
+            except ValueError as exc:
+                raise ValueError("raw response body hex is invalid") from exc
+            response_body_sha256 = _required_sha256(final_attempt, "response_body_sha256")
+            if hashlib.sha256(response_body).hexdigest() != response_body_sha256:
+                raise ValueError("raw response body hash mismatch")
+            request_started_at = _required_datetime(final_attempt, "request_started_at")
+            response_received_at = _required_datetime(final_attempt, "response_received_at")
+            if response_received_at < request_started_at:
+                raise ValueError("raw response timestamps are out of order")
             response_model = required_string(final_attempt, "response_model")
-            if response_id in response_ids or reviewed_at in reviewed_at_values:
+            if (
+                request_nonce in request_nonces
+                or request_fingerprint in request_fingerprints
+                or response_body_sha256 in response_body_sha256s
+                or (provider_response_id is not None and provider_response_id in provider_response_ids)
+            ):
                 raise ValueError("raw response freshness identifiers are duplicated within a run")
-            response_ids.add(response_id)
-            reviewed_at_values.add(reviewed_at)
+            request_nonces.add(request_nonce)
+            request_fingerprints.add(request_fingerprint)
+            response_body_sha256s.add(response_body_sha256)
+            if provider_response_id is not None:
+                provider_response_ids.add(provider_response_id)
             response_models[reviewer_id].add(response_model)
             binding = bindings[reviewer_id]
             if payload.get("status") != "success" or payload.get("reviewer_id") != reviewer_id:
@@ -98,7 +128,7 @@ def validate_raw_responses(
                 raise ValueError("raw response model mismatch")
             if payload.get("base_url") != binding.base_url:
                 raise ValueError("raw response endpoint mismatch")
-            if payload.get("disable_thinking") is not binding.disable_thinking:
+            if payload.get("thinking_mode") != binding.thinking_mode:
                 raise ValueError("raw response thinking contract mismatch")
             if payload.get("prompt_version") != contract.prompt_version:
                 raise ValueError("raw response prompt version mismatch")
@@ -131,7 +161,7 @@ def validate_raw_responses(
                 base_url=binding.base_url,
                 model=binding.model_id,
                 api_key="",
-                disable_thinking=binding.disable_thinking,
+                thinking_mode=ThinkingMode(binding.thinking_mode),
             )
             parsed_payload = extract_json_object(required_string(final_attempt, "content"))
             semantic_fingerprint = semantic_response_fingerprint(parsed_payload)
@@ -143,8 +173,11 @@ def validate_raw_responses(
                 parsed_payload,
                 reviewer=reviewer,
                 batch_id=batch_id,
-                reviewed_at=reviewed_at,
-                response_id=response_id,
+                request_nonce=request_nonce,
+                provider_response_id=provider_response_id,
+                response_body_sha256=response_body_sha256,
+                request_started_at=request_started_at.isoformat(),
+                response_received_at=response_received_at.isoformat(),
                 inputs=batch_inputs,
             )
             if parsed != [judgment.to_dict() for judgment in reconstructed]:
@@ -155,6 +188,7 @@ def validate_raw_responses(
                 reviewer=reviewer,
                 batch_id=batch_id,
                 inputs=batch_inputs,
+                request_nonce=request_nonce,
             )
             fingerprint = json_sha256(
                 {
@@ -163,15 +197,17 @@ def validate_raw_responses(
                     "request_payload": request_payload,
                 }
             )
-            if payload.get("request_fingerprint") != fingerprint:
+            if request_fingerprint != fingerprint:
                 raise ValueError("raw response request fingerprint mismatch")
         if len(seen) != CALIBRATION_PAIR_COUNT:
             raise ValueError("raw response reviewer coverage is incomplete")
         if seen_canonical_keys != selected_pair_set:
             raise ValueError("raw response reviewer canonical pair coverage is incomplete")
     return RawResponseEvidence(
-        response_ids=tuple(sorted(response_ids)),
-        reviewed_at_values=tuple(sorted(reviewed_at_values)),
+        request_nonces=tuple(sorted(request_nonces)),
+        request_fingerprints=tuple(sorted(request_fingerprints)),
+        provider_response_ids=tuple(sorted(provider_response_ids)),
+        response_body_sha256s=tuple(sorted(response_body_sha256s)),
         response_models={reviewer_id: tuple(sorted(models)) for reviewer_id, models in response_models.items()},
         judgments_by_reviewer=judgments_by_reviewer,
     )
@@ -198,3 +234,30 @@ def _iter_strings(payload: object) -> Iterator[str]:
     elif isinstance(payload, list):
         for value in payload:
             yield from _iter_strings(value)
+
+
+def _optional_string(payload: dict[str, object], field_name: str) -> str | None:
+    value = payload.get(field_name)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be null or a non-empty string")
+    return value.strip()
+
+
+def _required_sha256(payload: dict[str, object], field_name: str) -> str:
+    value = required_string(payload, field_name)
+    if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+        raise ValueError(f"{field_name} must be a lowercase SHA-256 digest")
+    return value
+
+
+def _required_datetime(payload: dict[str, object], field_name: str) -> datetime:
+    value = required_string(payload, field_name)
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an ISO-8601 datetime") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field_name} must include a timezone")
+    return parsed

@@ -215,7 +215,7 @@ The dataset owner superseded the immediate human A/B execution plan for the
 current exploratory stage. This does not erase Sections 6.2-6.3 as the stronger
 paper-grade target; it creates a separate provisional label track:
 
-1. Doubao and MiMo independently label all 1,440 blind target-source pairs.
+1. Doubao and Gemini independently label all 1,440 blind target-source pairs.
 2. Their packet orders and blind IDs are independently derived from fixed seed
    `20260723`.
 3. A clean exact agreement requires the same five-way relation and
@@ -789,24 +789,24 @@ var/artifacts/knowledge_state_search/phase_b_model_annotation_packets/
 ├── packets/
 │   ├── ANNOTATION_INSTRUCTIONS.md
 │   ├── doubao.jsonl
-│   └── mimo.jsonl
+│   └── gemini.jsonl
 └── data_lead_private/
     ├── doubao_id_map.jsonl
-    └── mimo_id_map.jsonl
+    └── gemini_id_map.jsonl
 ```
 
 Packet contract:
 
 - fixed recorded seed: `20260723`;
-- protocol: `phase_b_blind_relation_dual_model_annotation_v1`;
-- 1,440 rows for Doubao and 1,440 rows for MiMo;
+- protocol: `phase_b_blind_relation_dual_model_annotation_v2`;
+- 1,440 rows for Doubao and 1,440 rows for Gemini;
 - both packets cover the same 1,440 canonical target-source pairs in
   independently derived orders;
 - public rows contain exactly `blind_item_id`, task question, target text,
   source title, source URL, and verbatim excerpt;
 - public rows exclude canonical IDs, profile state, source role, candidate
   targets, discovery query/preview, oracle query, relation labels, and all
-  Doubao/MiMo/subagent decisions or notes;
+  Doubao/Gemini/subagent decisions or notes;
 - canonical maps and the full manifest are data-lead-only and are not supplied
   to either lower-priority reviewer;
 - packet SHA-256 values are recorded in the manifest;
@@ -904,6 +904,50 @@ retries. The authorization builder rejected the incomplete pair of runs. No
 replacement run, authorization manifest, or full annotation was started.
 Engineering validation is 647 passed, 14 skipped, with one pre-existing
 offline-reranker warning; full ruff, format, diff, and JSON checks pass.
+
+### Run-contract-v3 reviewer/schema preregistration (2026-07-24)
+
+The terminal v2 NO-GO is retained unchanged. Run contract v3 is a new
+reviewer/schema protocol rather than a replacement v2 attempt:
+
+1. lower reviewers are Doubao Seed 2.1 Pro and
+   `vertex_ai/gemini-3.5-flash`;
+2. Doubao uses `thinking=disabled`; Gemini uses the provider-supported minimum
+   `reasoning_effort=minimal`;
+3. one pair is sent per request at temperature `0`, max tokens `2048`,
+   timeout `180s`, and at most three same-request attempts;
+4. models return ordered `evidence_sentence_ids`; deterministic code validates
+   contiguous IDs and reconstructs the exact verbatim excerpt span;
+5. every request carries a unique nonce that the response schema must echo
+   exactly;
+6. raw evidence stores and validates the request fingerprint, nonce, exact
+   response-body SHA-256, timezone-aware start/end timestamps, response model,
+   and optional provider response ID;
+7. failed or pending batch artifacts cannot be resumed or overwritten;
+8. the same frozen 30-pair dev universe, source-scope labels, selection seed,
+   agreement `>=0.80`, kappa `>=0.65`, repeatability `>=0.90`, zero
+   source-scope conflict, and zero semantic-drift gates remain unchanged;
+9. exactly two predetermined v3 calibration runs are permitted. A failed or
+   incomplete run is terminal for v3; no replacement run is allowed.
+
+Before preregistration, a diagnostic-only Gemini check used five deterministic
+dev pairs twice with zero retries. All 10 requests returned HTTP 200 and passed
+the schema, nonce, sentence-ID, and verbatim reconstruction checks.
+Proposition-status repeatability and derived-relation repeatability were both
+`1.0`. The current gateway returned empty provider response IDs, so v3 does
+not fabricate one; freshness instead requires disjoint nonce, request
+fingerprint, and exact response-body hash sets across the two runs.
+
+The diagnostic does not authorize the full run. At preregistration time:
+
+```text
+v3 calibration runs complete: 0 / 2
+authorization manifest:       absent
+full judgments:               0 / 2,880
+full relation labels:          0 / 1,440
+dataset frozen:                false
+Phase B methods authorized:    false
+```
 
 The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future
 human A/B protocol. The active exploratory model-proxy authorization gate was

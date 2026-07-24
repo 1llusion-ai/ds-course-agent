@@ -40,9 +40,11 @@ from benchmarks.knowledge_state_search.phase_b_relation_calibration import (
     ANNOTATION_REPORT_FILENAME,
     AUTHORIZATION_FIELDS,
     CALIBRATION_BATCH_SIZE,
+    CALIBRATION_MAX_RETRIES,
     CALIBRATION_PAIR_COUNT,
     CALIBRATION_PROTOCOL,
     CALIBRATION_RUN_COUNT,
+    CALIBRATION_TIMEOUT_SECONDS,
     CONSENSUS_FILENAME,
     FROZEN_DEV_SPLIT,
     FROZEN_DEV_TASK_IDS,
@@ -100,17 +102,26 @@ def validate_run_contract(contract: RelationRunContract) -> None:
     if contract.response_format_sha256 != json_sha256(relation_response_format()):
         raise ValueError("relation run response format hash does not match current code")
     if tuple(binding.reviewer_id for binding in contract.reviewer_models) != tuple(sorted(REVIEWERS)):
-        raise ValueError("relation run reviewers must be exactly Doubao and MiMo")
+        raise ValueError("relation run reviewers do not match the frozen reviewer set")
     if len({binding.model_id for binding in contract.reviewer_models}) != len(contract.reviewer_models):
         raise ValueError("relation run reviewer model IDs must be distinct")
     if any(not binding.model_id or not binding.base_url for binding in contract.reviewer_models):
         raise ValueError("relation run reviewer binding is invalid")
+    if {binding.thinking_mode for binding in contract.reviewer_models} != {
+        "disabled",
+        "minimal",
+    }:
+        raise ValueError("relation run thinking modes must be disabled and minimal")
     if contract.batch_size != CALIBRATION_BATCH_SIZE:
         raise ValueError(f"relation run batch_size must match the preregistered value: {CALIBRATION_BATCH_SIZE}")
     if contract.temperature != float(REQUEST_TEMPERATURE):
         raise ValueError("relation run temperature does not match current client")
     if contract.max_tokens != REQUEST_MAX_TOKENS:
         raise ValueError("relation run max_tokens does not match current client")
+    if contract.timeout_seconds != CALIBRATION_TIMEOUT_SECONDS:
+        raise ValueError("relation run timeout does not match the preregistered value")
+    if contract.max_retries != CALIBRATION_MAX_RETRIES:
+        raise ValueError("relation run max_retries does not match the preregistered value")
     if not contract.selection_seed:
         raise ValueError("relation run selection_seed must be non-empty")
     if contract.selected_pair_limit is not None and contract.selected_pair_limit < 1:
@@ -187,12 +198,13 @@ def load_request_inputs(contract: RelationRunContract) -> CalibrationRequestBund
         inputs[reviewer_id] = reviewer_inputs
         canonical_by_blind_id[reviewer_id] = reviewer_canonical
         canonical_key_sets[reviewer_id] = set(reviewer_canonical.values())
-    if canonical_key_sets["doubao"] != canonical_key_sets["mimo"]:
+    first_reviewer, second_reviewer = REVIEWERS
+    if canonical_key_sets[first_reviewer] != canonical_key_sets[second_reviewer]:
         raise ValueError("calibration reviewer canonical pair universes differ")
     return CalibrationRequestBundle(
         inputs_by_reviewer=inputs,
         canonical_by_blind_id=canonical_by_blind_id,
-        canonical_keys=tuple(sorted(canonical_key_sets["doubao"])),
+        canonical_keys=tuple(sorted(canonical_key_sets[first_reviewer])),
     )
 
 
@@ -244,8 +256,10 @@ def validate_calibration_run(
         "selected_pairs": selected_pairs,
         "selected_pairs_sha256": file_sha256(selected_path),
         "relations": relations,
-        "response_ids": raw_freshness.response_ids,
-        "reviewed_at_values": raw_freshness.reviewed_at_values,
+        "request_nonces": raw_freshness.request_nonces,
+        "request_fingerprints": raw_freshness.request_fingerprints,
+        "provider_response_ids": raw_freshness.provider_response_ids,
+        "response_body_sha256s": raw_freshness.response_body_sha256s,
         "response_models": response_models,
         "manifest_row": {
             "run_directory": str(run_directory),
@@ -341,24 +355,36 @@ def _validate_report(report: dict[str, Any], contract: RelationRunContract) -> N
     reviewer_rows = report.get("reviewers")
     if not isinstance(reviewer_rows, list):
         raise ValueError("annotation report reviewers must be a list")
-    observed_models: dict[str, tuple[str, str, bool]] = {}
+    observed_models: dict[str, tuple[str, str, str]] = {}
     for raw_row in reviewer_rows:
         row = _required_mapping(raw_row, "reviewer")
         reviewer_id = _required_string(row, "reviewer_id")
-        disable_thinking = row.get("disable_thinking")
-        if not isinstance(disable_thinking, bool) or reviewer_id in observed_models:
+        thinking_mode = _required_string(row, "thinking_mode")
+        if thinking_mode not in {"disabled", "minimal"} or reviewer_id in observed_models:
             raise ValueError("annotation report reviewer contract is invalid")
         observed_models[reviewer_id] = (
             _required_string(row, "model"),
             _required_string(row, "base_url").rstrip("/"),
-            disable_thinking,
+            thinking_mode,
         )
     expected_models = {
-        binding.reviewer_id: (binding.model_id, binding.base_url, binding.disable_thinking)
+        binding.reviewer_id: (binding.model_id, binding.base_url, binding.thinking_mode)
         for binding in contract.reviewer_models
     }
     if observed_models != expected_models:
         raise ValueError("annotation report reviewer model contract mismatch")
+    execution_contract = _required_mapping(
+        report.get("execution_contract"),
+        "execution_contract",
+    )
+    if execution_contract != {
+        "batch_size": contract.batch_size,
+        "timeout_seconds": contract.timeout_seconds,
+        "max_retries": contract.max_retries,
+        "temperature": contract.temperature,
+        "max_tokens": contract.max_tokens,
+    }:
+        raise ValueError("annotation report execution contract mismatch")
     inputs = _required_mapping(report.get("annotation_inputs"), "annotation_inputs")
     expected_inputs = {
         "target_specs_path": contract.target_specs_path,

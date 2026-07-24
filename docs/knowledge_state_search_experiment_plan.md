@@ -113,7 +113,7 @@ collected. The active exploratory protocol is:
 - fixed seed `20260723`;
 - 1,440 canonical claim/edge-source pairs;
 - 1,440 independently ordered blind rows for Doubao;
-- 1,440 independently ordered blind rows for MiMo;
+- 1,440 independently ordered blind rows for Gemini;
 - all disagreements and any context-uncertain rows go to the priority Codex
   subagent;
 - a deterministic stratified 20% of clean agreements also goes to the priority
@@ -154,7 +154,7 @@ multi-hop remains blocked.
 The source-level decomposition is now structurally integrated into pair-level
 relation annotation:
 
-- Doubao and MiMo output only ordered atomic proposition checks,
+- Doubao and Gemini output only ordered atomic proposition checks,
   `needs_context`, and notes; they no longer output `task_scope` or a five-way
   relation;
 - both reviewers' five-way relations are derived with the same finalized
@@ -209,6 +209,59 @@ Phase B methods authorized:  false
 This is a structural NO-GO, not a threshold failure to tune around. Any future
 change to batching or reviewer design must be preregistered as a new calibration
 version. Closed-loop multi-hop remains blocked.
+
+## Doubao/Gemini sentence-ID preregistration (2026-07-24)
+
+The v2 result above remains terminal. A new run contract v3 replaces MiMo in
+the current relation-label gate with `vertex_ai/gemini-3.5-flash` and replaces
+model-copied quotes with deterministic sentence-ID evidence. This is a new
+reviewer/schema contract, not a replacement v2 run.
+
+Frozen v3 settings:
+
+```text
+annotator A:              volcengine_maas/doubao-seed-2-1-pro-260628
+annotator A thinking:     disabled
+annotator B:              vertex_ai/gemini-3.5-flash
+annotator B thinking:     reasoning_effort=minimal
+pair batch size:          1
+temperature:              0
+max tokens:               2048
+timeout:                  180 seconds
+same-request attempts:    3 maximum, reject semantic drift
+calibration runs:         exactly 2 predetermined runs
+```
+
+Each response must echo a unique request nonce. For every non-`absent`
+proposition, the model returns a contiguous span of sentence IDs; code
+reconstructs the exact source substring and rejects unknown, duplicate, or
+noncontiguous IDs. Raw evidence binds the request nonce, full request
+fingerprint, exact response-body SHA-256, timezone-aware request timestamps,
+response model, and optional provider response ID. The current gateway returns
+an empty provider ID for Gemini, so no synthetic provider ID is created.
+
+A diagnostic-only, zero-retry 5-item × 2-run check completed 10/10 valid
+requests. Proposition-status repeatability and derived-relation repeatability
+were both `1.0`. Gemini reported a mean of `848` reasoning tokens per request
+under the minimum supported setting; therefore v3 keeps the 2,048-token cap
+and records reasoning-token usage separately.
+
+The release gates are unchanged: each run must reach agreement `>=0.80` and
+kappa `>=0.65`; each model must reach repeatability `>=0.90`; scope conflicts
+and semantic drift must both be zero. Failed or pending batch artifacts cannot
+be resumed or overwritten. No replacement v3 calibration is permitted.
+
+Current boundary before the two v3 runs:
+
+```text
+v3 calibration runs complete: 0 / 2
+full-run authorization:      absent
+full dual-model judgments:   0 / 2,880
+full proxy relation labels:  0 / 1,440
+dataset frozen:              false
+Phase B methods authorized:  false
+closed-loop multi-hop:       blocked
+```
 
 ## Claim Map
 

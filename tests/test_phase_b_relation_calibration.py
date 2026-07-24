@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -17,6 +18,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_client import
 )
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract import (
     AnnotationReviewerConfig,
+    ThinkingMode,
     derive_relation,
     parse_model_relation_judgments,
 )
@@ -50,7 +52,7 @@ def test_calibration_authorization_passes_and_validates(
 
     assert manifest == validated
     assert manifest["accepted_for_full_run"] is True
-    assert manifest["repeatability"] == {"doubao": 1.0, "mimo": 1.0}
+    assert manifest["repeatability"] == {"doubao": 1.0, "gemini": 1.0}
     assert manifest["human_verified_count"] == 0
     assert manifest["dataset_frozen"] is False
     assert manifest["method_runs_authorized"] is False
@@ -104,15 +106,15 @@ def test_calibration_rejects_single_run_threshold_failure(
         for row in rows[:7]:
             _set_reviewer_relation(
                 row,
-                "mimo",
-                _other_relation(_reviewer_relation(row, "mimo")),
+                "gemini",
+                _other_relation(_reviewer_relation(row, "gemini")),
             )
     else:
         for index, row in enumerate(rows):
             _set_reviewer_relation(row, "doubao", "supported")
             _set_reviewer_relation(
                 row,
-                "mimo",
+                "gemini",
                 "supported" if index < 24 else "partial",
             )
     _write_raw_responses_for_consensus(run_directories[0], contract, rows)
@@ -139,7 +141,7 @@ def test_calibration_rejects_repeatability_below_threshold(
     for row in rows[:4]:
         changed_relation = _other_relation(_reviewer_relation(row, "doubao"))
         _set_reviewer_relation(row, "doubao", changed_relation)
-        _set_reviewer_relation(row, "mimo", changed_relation)
+        _set_reviewer_relation(row, "gemini", changed_relation)
     _write_raw_responses_for_consensus(run_directories[1], contract, rows)
     _write_jsonl(consensus_path, rows)
     _refresh_report(run_directories[1])
@@ -212,7 +214,7 @@ def test_calibration_rejects_copied_run_freshness_identifiers(
     tmp_path: Path,
 ) -> None:
     contract, run_directories = _build_calibration_fixture(tmp_path)
-    for reviewer_id in ("doubao", "mimo"):
+    for reviewer_id in ("doubao", "gemini"):
         first_directory = run_directories[0] / calibration.RAW_RESPONSES_DIRECTORY / reviewer_id
         second_directory = run_directories[1] / calibration.RAW_RESPONSES_DIRECTORY / reviewer_id
         for first_path in first_directory.glob("*.json"):
@@ -225,7 +227,7 @@ def test_calibration_rejects_copied_run_freshness_identifiers(
     )
     output_path = tmp_path / "authorization.json"
 
-    with pytest.raises(ValueError, match="not fresh"):
+    with pytest.raises(ValueError, match="share request_nonces"):
         calibration.build_calibration_authorization(
             run_directories=run_directories,
             expected_contract=contract,
@@ -398,7 +400,7 @@ def test_authorization_validator_rechecks_persisted_run_evidence(
     )
     consensus_path = run_directories[0] / calibration.CONSENSUS_FILENAME
     rows = _read_jsonl(consensus_path)
-    _set_reviewer_relation(rows[0], "mimo", "partial")
+    _set_reviewer_relation(rows[0], "gemini", "partial")
     _write_jsonl(consensus_path, rows)
 
     with pytest.raises(ValueError, match="raw response evidence"):
@@ -477,14 +479,14 @@ def _build_calibration_fixture(
             base_url="https://doubao.example.invalid/v1",
             model="doubao-test-model",
             api_key="secret-doubao",
-            disable_thinking=True,
+            thinking_mode=ThinkingMode.DISABLED,
         ),
         AnnotationReviewerConfig(
-            reviewer_id="mimo",
-            base_url="https://mimo.example.invalid/v1",
-            model="mimo-test-model",
-            api_key="secret-mimo",
-            disable_thinking=False,
+            reviewer_id="gemini",
+            base_url="https://gemini.example.invalid/v1",
+            model="gemini-test-model",
+            api_key="secret-gemini",
+            thinking_mode=ThinkingMode.MINIMAL,
         ),
     )
     contract = calibration.build_current_run_contract(
@@ -564,7 +566,7 @@ def _write_synthetic_packet_and_specs(
         design_directory / "relation_target_specs.jsonl",
         target_specs,
     )
-    for reviewer_id in ("doubao", "mimo"):
+    for reviewer_id in ("doubao", "gemini"):
         prefix = reviewer_id[0]
         packet_rows: list[dict[str, str]] = []
         private_rows: list[dict[str, str]] = []
@@ -632,7 +634,7 @@ def _write_calibration_run(
         contract,
         {
             "doubao": dict(relation_by_key),
-            "mimo": dict(relation_by_key),
+            "gemini": dict(relation_by_key),
         },
     )
     request_bundle = calibration_support.load_request_inputs(contract)
@@ -653,7 +655,7 @@ def _write_calibration_run(
         reviewer_judgments: dict[str, dict[str, object]] = {}
         reviewer_relations: dict[str, str] = {}
         reviewer_conflicts: dict[str, bool] = {}
-        for reviewer_id in ("doubao", "mimo"):
+        for reviewer_id in ("doubao", "gemini"):
             judgment = raw_evidence.judgments_by_reviewer[reviewer_id][key]
             relation = derive_relation(
                 target_type=key[1],
@@ -672,7 +674,7 @@ def _write_calibration_run(
                 source_scope_conflict=conflict,
             )
         any_conflict = any(reviewer_conflicts.values())
-        agreement = reviewer_relations["doubao"] == reviewer_relations["mimo"]
+        agreement = reviewer_relations["doubao"] == reviewer_relations["gemini"]
         consensus_rows.append(
             {
                 **pair,
@@ -711,7 +713,7 @@ def _annotation_report(
     relation_pairs = [
         (
             _reviewer_relation(row, "doubao"),
-            _reviewer_relation(row, "mimo"),
+            _reviewer_relation(row, "gemini"),
         )
         for row in consensus_rows
     ]
@@ -723,10 +725,17 @@ def _annotation_report(
                 "reviewer_id": binding.reviewer_id,
                 "model": binding.model_id,
                 "base_url": binding.base_url,
-                "disable_thinking": binding.disable_thinking,
+                "thinking_mode": binding.thinking_mode,
             }
             for binding in contract.reviewer_models
         ],
+        "execution_contract": {
+            "batch_size": contract.batch_size,
+            "timeout_seconds": contract.timeout_seconds,
+            "max_retries": contract.max_retries,
+            "temperature": contract.temperature,
+            "max_tokens": contract.max_tokens,
+        },
         "selected_task_split": calibration.FROZEN_DEV_SPLIT,
         "selected_task_ids": list(calibration.FROZEN_DEV_TASK_IDS),
         "selected_canonical_pair_count": calibration.CALIBRATION_PAIR_COUNT,
@@ -775,7 +784,7 @@ def _write_raw_responses(
             base_url=binding.base_url,
             model=binding.model_id,
             api_key="",
-            disable_thinking=binding.disable_thinking,
+            thinking_mode=ThinkingMode(binding.thinking_mode),
         )
         ordered_inputs = tuple(
             request_bundle.inputs_by_reviewer[binding.reviewer_id][blind_item_id]
@@ -793,11 +802,16 @@ def _write_raw_responses(
             batch_id = f"batch_{batch_index + 1:03d}"
             batch_inputs = ordered_inputs[start : start + contract.batch_size]
             blind_item_ids = [item.blind_item_id for item in batch_inputs]
-            response_id = f"{run_directory.name}-{binding.reviewer_id}-{batch_id}"
-            reviewed_at = (
+            request_nonce = f"{run_directory.name}-{binding.reviewer_id}-{batch_id}-nonce"
+            request_started_at = (
                 "2026-07-24T00:"
                 f"{batch_index:02d}:"
                 f"{(0 if run_directory.name == 'run1' else 1) + (0 if binding.reviewer_id == 'doubao' else 10):02d}+00:00"
+            )
+            response_received_at = (
+                "2026-07-24T00:"
+                f"{batch_index:02d}:"
+                f"{(2 if run_directory.name == 'run1' else 3) + (0 if binding.reviewer_id == 'doubao' else 10):02d}+00:00"
             )
             status_by_relation = {
                 "supported": "entailed",
@@ -807,6 +821,7 @@ def _write_raw_responses(
                 "unrelated": "absent",
             }
             response_payload = {
+                "request_nonce": request_nonce,
                 "judgments": [
                     {
                         "blind_item_id": item.blind_item_id,
@@ -814,10 +829,10 @@ def _write_raw_responses(
                             {
                                 "proposition_id": "p1",
                                 "status": status_by_relation[relation_by_blind_item_id[item.blind_item_id]],
-                                "evidence_quote": (
-                                    None
+                                "evidence_sentence_ids": (
+                                    []
                                     if status_by_relation[relation_by_blind_item_id[item.blind_item_id]] == "absent"
-                                    else "Synthetic excerpt"
+                                    else ["s1"]
                                 ),
                             }
                         ],
@@ -825,16 +840,34 @@ def _write_raw_responses(
                         "notes": "Synthetic calibration judgment.",
                     }
                     for item in batch_inputs
-                ]
+                ],
             }
+            response_body = json.dumps(
+                {
+                    "id": "",
+                    "model": binding.model_id,
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(response_payload),
+                            }
+                        }
+                    ],
+                },
+                sort_keys=True,
+            ).encode()
+            response_body_sha256 = hashlib.sha256(response_body).hexdigest()
             parsed_judgments = [
                 judgment.to_dict()
                 for judgment in parse_model_relation_judgments(
                     response_payload,
                     reviewer=reviewer,
                     batch_id=batch_id,
-                    reviewed_at=reviewed_at,
-                    response_id=response_id,
+                    request_nonce=request_nonce,
+                    provider_response_id=None,
+                    response_body_sha256=response_body_sha256,
+                    request_started_at=request_started_at,
+                    response_received_at=response_received_at,
                     inputs=batch_inputs,
                 )
             ]
@@ -842,6 +875,7 @@ def _write_raw_responses(
                 reviewer=reviewer,
                 batch_id=batch_id,
                 inputs=batch_inputs,
+                request_nonce=request_nonce,
             )
             request_fingerprint = calibration.json_sha256(
                 {
@@ -855,19 +889,25 @@ def _write_raw_responses(
                 {
                     "status": "success",
                     "reviewer_id": binding.reviewer_id,
+                    "reviewer_kind": "model",
                     "requested_model": binding.model_id,
                     "base_url": binding.base_url,
-                    "disable_thinking": binding.disable_thinking,
+                    "thinking_mode": binding.thinking_mode,
                     "batch_id": batch_id,
+                    "request_nonce": request_nonce,
                     "prompt_version": contract.prompt_version,
                     "blind_item_ids": blind_item_ids,
                     "request_fingerprint": request_fingerprint,
                     "attempts": [
                         {
                             "attempt": 1,
-                            "response_id": response_id,
+                            "request_nonce": request_nonce,
+                            "provider_response_id": None,
+                            "response_body_hex": response_body.hex(),
+                            "response_body_sha256": response_body_sha256,
                             "response_model": binding.model_id,
-                            "reviewed_at": reviewed_at,
+                            "request_started_at": request_started_at,
+                            "response_received_at": response_received_at,
                             "content": json.dumps(response_payload),
                             "semantic_response_fingerprint": (semantic_response_fingerprint(response_payload)),
                         }
@@ -892,13 +932,51 @@ def _write_raw_responses_for_consensus(
             ): _reviewer_relation(row, reviewer_id)
             for row in consensus_rows
         }
-        for reviewer_id in ("doubao", "mimo")
+        for reviewer_id in ("doubao", "gemini")
     }
     _write_raw_responses(
         run_directory,
         contract,
         relations_by_reviewer,
     )
+    request_bundle = calibration_support.load_request_inputs(contract)
+    selected_keys = tuple(
+        (
+            str(row["task_id"]),
+            str(row["target_type"]),
+            str(row["target_id"]),
+            str(row["source_id"]),
+        )
+        for row in consensus_rows
+    )
+    raw_evidence = validate_raw_responses(
+        run_directory / calibration.RAW_RESPONSES_DIRECTORY,
+        contract,
+        request_bundle,
+        selected_keys,
+    )
+    source_scope_by_key = load_source_scope_labels(
+        Path(contract.source_scope_labels_path),
+        expected_count=144,
+    )
+    for row, key in zip(consensus_rows, selected_keys, strict=True):
+        fixed_scope = source_scope_by_key[SourceScopeKey(task_id=key[0], source_id=key[3])]
+        for reviewer_id in ("doubao", "gemini"):
+            judgment = raw_evidence.judgments_by_reviewer[reviewer_id][key]
+            relation = derive_relation(
+                target_type=key[1],
+                task_scope=fixed_scope,
+                proposition_checks=judgment.proposition_checks,
+            )
+            conflict = fixed_scope == "out_of_scope" and any(
+                check.status != "absent" for check in judgment.proposition_checks
+            )
+            row["reviewer_judgments"][reviewer_id] = judgment_summary(
+                judgment,
+                fixed_task_scope=fixed_scope,
+                derived_relation=relation,
+                source_scope_conflict=conflict,
+            )
 
 
 def _set_reviewer_relation(
@@ -915,12 +993,13 @@ def _set_reviewer_relation(
     summary = row["reviewer_judgments"][reviewer_id]
     summary["relation"] = relation
     summary["proposition_checks"][0]["status"] = status_by_relation[relation]
+    summary["proposition_checks"][0]["evidence_sentence_ids"] = [] if relation == "distractor" else ["s1"]
     summary["proposition_checks"][0]["evidence_quote"] = None if relation == "distractor" else "Synthetic excerpt"
     doubao_relation = _reviewer_relation(row, "doubao")
-    mimo_relation = _reviewer_relation(row, "mimo")
-    row["relation_agreement"] = doubao_relation == mimo_relation
+    gemini_relation = _reviewer_relation(row, "gemini")
+    row["relation_agreement"] = doubao_relation == gemini_relation
     row["routing_agreement"] = row["relation_agreement"]
-    row["consensus_relation"] = doubao_relation if doubao_relation == mimo_relation else None
+    row["consensus_relation"] = doubao_relation if doubao_relation == gemini_relation else None
     row["disposition"] = "dual_model_consensus" if row["relation_agreement"] else "priority_subagent_required"
     row["reason"] = "same_relation_without_context_flag" if row["relation_agreement"] else "relation_disagreement"
 

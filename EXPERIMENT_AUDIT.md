@@ -178,7 +178,7 @@ are not presented as final benchmark evidence.
 
 Since the read-only audit above, source construction and the source gate have
 completed with 144/144 model-only verifications. The human A/B packet draft was
-superseded before labels were collected. The active exploratory protocol uses
+superseded before labels were collected. The first exploratory relation protocol used
 independent Doubao/MiMo labels plus terminal priority-subagent review of all
 disagreements and a deterministic 20% agreement sample.
 
@@ -258,3 +258,43 @@ This is a structural NO-GO. The existing thresholds were not lowered, and no
 full relation annotation or method run was started. Current engineering
 validation is 647 passed, 14 skipped, with one pre-existing offline-reranker
 warning; full ruff, format, diff, and JSON checks pass.
+
+## Doubao/Gemini v3 preregistration (2026-07-24; not a new independent audit)
+
+The terminal v2 NO-GO remains part of the audit trail. The next relation gate
+is a newly preregistered v3 contract, not a replacement v2 run:
+
+- relation reviewers are Doubao Seed 2.1 Pro and
+  `vertex_ai/gemini-3.5-flash`;
+- Doubao thinking is disabled; Gemini uses `reasoning_effort=minimal`;
+- model-copied evidence quotes are removed from the response schema;
+- non-`absent` evidence is represented by contiguous sentence IDs, and code
+  reconstructs the exact source span;
+- every request contains a unique nonce that must be echoed exactly;
+- raw evidence stores the full request fingerprint, exact response-body hash,
+  timezone-aware start/end timestamps, response model, and optional provider
+  response ID;
+- pending or failed batch artifacts are fail-closed and cannot be overwritten;
+- the fixed 30-pair universe, source-scope labels, and `0.80/0.65/0.90`
+  thresholds remain unchanged;
+- exactly two predetermined v3 runs are allowed, with no replacement run.
+
+The current gateway returned an empty Gemini provider response ID. The v3
+implementation does not fabricate one. Freshness instead requires disjoint
+echoed nonce, request fingerprint, and response-body-hash sets across runs.
+
+A diagnostic-only 5-item × 2-run check used zero retries and completed 10/10
+valid requests. Proposition-status and derived-relation repeatability were both
+`1.0`. Gemini used a mean of `848` reasoning tokens per request at the minimum
+supported reasoning setting. This diagnostic only justified preregistration;
+it did not authorize the full run.
+
+The integrity boundary before the two v3 runs is:
+
+```text
+v3 calibration authorization: absent
+full dual-model judgments:     0 / 2,880
+full proxy relation labels:    0 / 1,440
+dataset frozen:                false
+Phase B methods authorized:    false
+```
