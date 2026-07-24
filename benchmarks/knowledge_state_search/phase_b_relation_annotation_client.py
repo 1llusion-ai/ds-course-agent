@@ -26,6 +26,9 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract impo
     required_string,
 )
 
+REQUEST_TEMPERATURE = 0
+REQUEST_MAX_TOKENS = 8000
+
 
 def run_relation_reviewer(
     *,
@@ -45,15 +48,16 @@ def run_relation_reviewer(
         batch = inputs[offset : offset + batch_size]
         batch_id = f"batch_{offset // batch_size + 1:03d}"
         raw_path = raw_directory / f"{batch_id}.json"
+        request_payload = build_relation_request_payload(
+            reviewer=reviewer,
+            batch_id=batch_id,
+            inputs=batch,
+        )
         request_fingerprint = json_sha256(
             {
-                "prompt_version": PROMPT_VERSION,
-                "system_prompt": SYSTEM_PROMPT,
-                "response_format": _response_format(),
+                "endpoint": f"{reviewer.base_url.rstrip('/')}/chat/completions",
                 "reviewer_id": reviewer.reviewer_id,
-                "model": reviewer.model,
-                "disable_thinking": reviewer.disable_thinking,
-                "inputs": [item.input_sha256 for item in batch],
+                "request_payload": request_payload,
             }
         )
         resumed = _load_resumable_batch(
@@ -74,6 +78,7 @@ def run_relation_reviewer(
                 timeout=timeout,
                 max_retries=max_retries,
                 request_fingerprint=request_fingerprint,
+                request_payload=request_payload,
             )
         except RuntimeError as exc:
             raw_path.write_text(f"{exc}\n", encoding="utf-8")
@@ -131,28 +136,9 @@ def _request_annotation_batch(
     timeout: float,
     max_retries: int,
     request_fingerprint: str,
+    request_payload: dict[str, object],
 ) -> tuple[tuple[ModelRelationJudgment, ...], dict[str, object]]:
     url = f"{reviewer.base_url.rstrip('/')}/chat/completions"
-    user_payload = {
-        "batch_id": batch_id,
-        "prompt_version": PROMPT_VERSION,
-        "items": [item.prompt_payload() for item in inputs],
-    }
-    request_payload: dict[str, object] = {
-        "model": reviewer.model,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": json.dumps(user_payload, ensure_ascii=False),
-            },
-        ],
-        "temperature": 0,
-        "max_tokens": 8000,
-        "response_format": _response_format(),
-    }
-    if reviewer.disable_thinking:
-        request_payload["thinking"] = {"type": "disabled"}
     attempts: list[dict[str, object]] = []
     semantic_fingerprints: set[str] = set()
     last_error = "unknown model annotation failure"
@@ -207,8 +193,8 @@ def _request_annotation_batch(
                 continue
             break
         try:
-            parsed_payload = _extract_json_object(str(body["content"]))
-            semantic_fingerprint = _semantic_response_fingerprint(parsed_payload)
+            parsed_payload = extract_json_object(str(body["content"]))
+            semantic_fingerprint = semantic_response_fingerprint(parsed_payload)
             if semantic_fingerprint is not None:
                 semantic_fingerprints.add(semantic_fingerprint)
                 attempt_audit["semantic_response_fingerprint"] = semantic_fingerprint
@@ -283,7 +269,6 @@ def _load_resumable_batch(
         "judgments": [
             {
                 "blind_item_id": row.get("blind_item_id"),
-                "task_scope": row.get("task_scope"),
                 "proposition_checks": row.get("proposition_checks"),
                 "needs_context": row.get("needs_context"),
                 "notes": row.get("notes"),
@@ -334,7 +319,9 @@ def _response_body(response: requests.Response) -> dict[str, object]:
     }
 
 
-def _extract_json_object(text: str) -> dict[str, Any]:
+def extract_json_object(text: str) -> dict[str, Any]:
+    """Extract one JSON object from a model response body."""
+
     raw = text.strip()
     if raw.startswith("```"):
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
@@ -352,7 +339,9 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     return parsed
 
 
-def _response_format() -> dict[str, object]:
+def relation_response_format() -> dict[str, object]:
+    """Return the strict proposition-only model response schema."""
+
     return {
         "type": "json_schema",
         "json_schema": {
@@ -369,10 +358,6 @@ def _response_format() -> dict[str, object]:
                             "additionalProperties": False,
                             "properties": {
                                 "blind_item_id": {"type": "string"},
-                                "task_scope": {
-                                    "type": "string",
-                                    "enum": ["in_scope", "out_of_scope"],
-                                },
                                 "proposition_checks": {
                                     "type": "array",
                                     "items": {
@@ -405,7 +390,6 @@ def _response_format() -> dict[str, object]:
                             },
                             "required": [
                                 "blind_item_id",
-                                "task_scope",
                                 "proposition_checks",
                                 "needs_context",
                                 "notes",
@@ -419,7 +403,40 @@ def _response_format() -> dict[str, object]:
     }
 
 
-def _semantic_response_fingerprint(payload: dict[str, Any]) -> str | None:
+def build_relation_request_payload(
+    *,
+    reviewer: AnnotationReviewerConfig,
+    batch_id: str,
+    inputs: tuple[RelationAnnotationInput, ...],
+) -> dict[str, object]:
+    """Build the complete secret-free request body used for every retry."""
+
+    user_payload = {
+        "batch_id": batch_id,
+        "prompt_version": PROMPT_VERSION,
+        "items": [item.prompt_payload() for item in inputs],
+    }
+    request_payload: dict[str, object] = {
+        "model": reviewer.model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": json.dumps(user_payload, ensure_ascii=False),
+            },
+        ],
+        "temperature": REQUEST_TEMPERATURE,
+        "max_tokens": REQUEST_MAX_TOKENS,
+        "response_format": relation_response_format(),
+    }
+    if reviewer.disable_thinking:
+        request_payload["thinking"] = {"type": "disabled"}
+    return request_payload
+
+
+def semantic_response_fingerprint(payload: dict[str, Any]) -> str | None:
+    """Hash every routing-relevant model output field across retries."""
+
     judgments = payload.get("judgments")
     if not isinstance(judgments, list):
         return None
@@ -428,33 +445,39 @@ def _semantic_response_fingerprint(payload: dict[str, Any]) -> str | None:
         if not isinstance(judgment, dict):
             return None
         blind_item_id = judgment.get("blind_item_id")
-        task_scope = judgment.get("task_scope")
         proposition_checks = judgment.get("proposition_checks")
+        needs_context = judgment.get("needs_context")
         if (
             not isinstance(blind_item_id, str)
-            or not isinstance(task_scope, str)
             or not isinstance(proposition_checks, list)
+            or not isinstance(needs_context, bool)
         ):
             return None
-        normalized_checks: list[dict[str, str]] = []
+        normalized_checks: list[dict[str, str | None]] = []
         for check in proposition_checks:
             if not isinstance(check, dict):
                 return None
             proposition_id = check.get("proposition_id")
             status = check.get("status")
-            if not isinstance(proposition_id, str) or not isinstance(status, str):
+            evidence_quote = check.get("evidence_quote")
+            if (
+                not isinstance(proposition_id, str)
+                or not isinstance(status, str)
+                or (evidence_quote is not None and not isinstance(evidence_quote, str))
+            ):
                 return None
             normalized_checks.append(
                 {
                     "proposition_id": proposition_id,
                     "status": status,
+                    "evidence_quote": (" ".join(evidence_quote.split()) if isinstance(evidence_quote, str) else None),
                 }
             )
         normalized.append(
             {
                 "blind_item_id": blind_item_id,
-                "task_scope": task_scope,
                 "proposition_checks": normalized_checks,
+                "needs_context": needs_context,
             }
         )
     return json_sha256(normalized)

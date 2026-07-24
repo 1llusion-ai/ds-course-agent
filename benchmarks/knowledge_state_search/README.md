@@ -66,20 +66,35 @@ PYTHONPATH=src:. \
 python -m benchmarks.knowledge_state_search.phase_b_relation_annotation \
   --task-split phase_b_dev \
   --limit-pairs 30 \
-  --batch-size 4 \
+  --batch-size 10 \
   --output var/artifacts/knowledge_state_search/relation_annotation_dev_smoke
 ```
 
 Doubao and MiMo label all selected pairs independently. Every disagreement,
 every context-uncertain row, and a deterministic stratified 20% sample of clean
 agreements is written to a fresh blind priority-subagent packet. The priority
-decision is terminal. The structural prompt derives five-way labels from
-annotation-only atomic propositions and requires normalized verbatim excerpt
-quotes for every non-`absent` proposition. Resulting labels are explicitly
-model-only proxies.
+decision is terminal, but the subagent returns atomic proposition checks rather
+than choosing a relation directly. Deterministic code derives every five-way
+relation from those checks and the same finalized source-level scope. All
+non-`absent` checks require normalized verbatim excerpt quotes.
 
-The best repeated dev calibration is currently below the frozen release gates:
-v3.2 reached `22/30` agreement with kappa `0.610`, then `21/30` with kappa
-`0.563`; v3.3 remained `21/30`, kappa `0.564`; v3.4 synthetic boundary
-examples remained `21/30`, kappa `0.570`. Prompt-only calibration is stopped,
-and full annotation is not authorized.
+The runner writes `relation_run_contract.json`, which binds the complete
+request/schema/configuration and source-scope provenance. A 1,440-pair run
+fails closed unless two frozen 30-pair dev runs first produce:
+
+```text
+var/artifacts/knowledge_state_search/
+└── phase_b_relation_calibration_authorization.json
+```
+
+The release gates remain agreement `>=0.80`, kappa `>=0.65`, and per-model
+derived-relation repeatability `>=0.90`, with zero source-scope conflicts and
+zero retry semantic drift.
+
+The July 24, 2026 final-contract calibration is currently NO-GO. A diagnostic
+run reached `24/30` agreement and kappa `0.718`, but the paired diagnostic
+failed. The first frozen run then failed in Doubao `batch_002`: blind item
+`d_0919` duplicated proposition `p2`, and routing-relevant judgments changed
+across retries. That artifact used run contract v1. Post-failure audit repairs
+bumped the current contract to v2, under which no model calibration has run.
+No authorization manifest exists, so full annotation did not start.

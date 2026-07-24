@@ -77,7 +77,7 @@
     "Rerun methods under the repaired metric and cost contract before Phase B method claims."
   ],
   "post_audit_progress": {
-    "date": "2026-07-23",
+    "date": "2026-07-24",
     "independently_reaudited": false,
     "source_gate": {
       "final_source_verified_count": 144,
@@ -159,11 +159,54 @@
       "accepted_for_full_run": false,
       "full_lower_model_judgments_started": 0,
       "prompt_only_calibration_closed": true,
-      "reason": "no_repeated_dev_calibration_meets_frozen_agreement_kappa_and_repeatability_gates"
+      "reason": "first_final_contract_frozen_run_failed_schema_and_semantic_drift_checks",
+      "fixed_source_scope_integration": {
+        "pair_models_output_task_scope": false,
+        "pair_models_output_direct_relation": false,
+        "priority_outputs_atomic_proposition_checks": true,
+        "deterministic_relation_derivation": true,
+        "source_scope_conflict_routes_to_repair": true,
+        "complete_request_fingerprint": true,
+        "machine_full_run_authorization_required": true
+      },
+      "v4_fixed_scope_diagnostic": {
+        "selected_pairs": 30,
+        "exact_relation_agreement_count": 24,
+        "exact_relation_agreement_rate": 0.8,
+        "cohen_kappa": 0.7183098591549296,
+        "source_scope_conflict_count": 0,
+        "accepted_for_full_run": false,
+        "reason": "paired_repeat_incomplete"
+      },
+      "v4_final_contract_frozen_run_1": {
+        "completed": false,
+        "failed_reviewer": "doubao",
+        "failed_batch": "batch_002",
+        "failed_blind_item_id": "d_0919",
+        "failure": "duplicate_proposition_p2_and_semantic_drift_across_retries",
+        "run_contract_version": "phase_b_relation_run_contract_v1"
+      },
+      "authorization_manifest_created": false,
+      "current_run_contract_version": "phase_b_relation_run_contract_v2",
+      "current_run_contract_model_runs": 0
     },
     "annotation_started": true,
     "dataset_frozen": false,
     "method_runs_authorized": false,
-    "verdict_changed": false
+    "verdict_changed": false,
+    "source_scope_annotation": {
+      "annotation_basis": "dual_model_consensus_plus_priority_subagent",
+      "model_only_proxy": true,
+      "selected_sources": 144,
+      "lower_model_judgments": 288,
+      "lower_model_agreements": 128,
+      "lower_model_disagreements": 16,
+      "priority_actions": 42,
+      "finalized_scope_labels": 144,
+      "unresolved_context_count": 0,
+      "labels_sha256": "1aa8dda17cabf9b204898ea960391f8a55105e7171ce8181e7f904670b737de9",
+      "provenance_report_verified": true,
+      "human_verified_count": 0
+    }
   }
 }

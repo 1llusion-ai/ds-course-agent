@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import pytest
 
+from benchmarks.knowledge_state_search.phase_b_relation_annotation_client import (
+    REQUEST_MAX_TOKENS,
+    REQUEST_TEMPERATURE,
+    build_relation_request_payload,
+    relation_response_format,
+    semantic_response_fingerprint,
+)
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract import (
+    SYSTEM_PROMPT,
     AnnotationReviewerConfig,
     AtomicProposition,
     ModelRelationJudgment,
@@ -15,6 +23,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract impo
     parse_model_relation_judgments,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_support import (
+    SourceScopeKey,
     build_priority_action_packet,
     cohen_kappa,
     resolve_relation_consensus,
@@ -39,7 +48,6 @@ def test_relation_response_parser_requires_exact_blind_item_coverage():
             "judgments": [
                 {
                     "blind_item_id": "d_0001",
-                    "task_scope": "in_scope",
                     "proposition_checks": [
                         {
                             "proposition_id": "p1",
@@ -52,7 +60,6 @@ def test_relation_response_parser_requires_exact_blind_item_coverage():
                 },
                 {
                     "blind_item_id": "d_0002",
-                    "task_scope": "in_scope",
                     "proposition_checks": [
                         {
                             "proposition_id": "p1",
@@ -73,7 +80,7 @@ def test_relation_response_parser_requires_exact_blind_item_coverage():
     )
 
     assert [item.blind_item_id for item in judgments] == ["d_0001", "d_0002"]
-    assert judgments[0].relation == "supported"
+    assert judgments[0].proposition_checks[0].status == "entailed"
     assert judgments[1].needs_context is True
 
 
@@ -84,7 +91,6 @@ def test_relation_response_parser_rejects_non_verbatim_evidence_quote():
                 "judgments": [
                     {
                         "blind_item_id": "d_0001",
-                        "task_scope": "in_scope",
                         "proposition_checks": [
                             {
                                 "proposition_id": "p1",
@@ -116,10 +122,8 @@ def test_relation_response_parser_normalizes_whitespace_and_math_delimiters():
             "source_excerpt": "A model uses \\(k-1\\) folds as training data.",
         },
         RelationTargetSpec(
+            task_id="pb_t01",
             target_type="claim",
-            task_scope_summary="The task covers one test concept.",
-            in_scope_concepts=("test concept",),
-            out_of_scope_examples=("another topic",),
             propositions=(AtomicProposition("p1", "Target."),),
         ),
     )
@@ -129,7 +133,6 @@ def test_relation_response_parser_normalizes_whitespace_and_math_delimiters():
             "judgments": [
                 {
                     "blind_item_id": "d_0001",
-                    "task_scope": "in_scope",
                     "proposition_checks": [
                         {
                             "proposition_id": "p1",
@@ -149,7 +152,105 @@ def test_relation_response_parser_normalizes_whitespace_and_math_delimiters():
         inputs=(review_input,),
     )
 
-    assert judgments[0].relation == "supported"
+    assert judgments[0].proposition_checks[0].status == "entailed"
+
+
+def test_pair_relation_contract_structurally_excludes_task_scope_output():
+    review_input = _input("d_0001")
+
+    assert "task_scope" not in SYSTEM_PROMPT
+    assert set(review_input.target_spec.prompt_fields()) == {
+        "target_type",
+        "atomic_propositions",
+        "edge_type",
+    }
+    response_item = relation_response_format()["json_schema"]["schema"]["properties"]["judgments"]["items"]
+    assert "task_scope" not in response_item["properties"]
+    assert "task_scope" not in response_item["required"]
+    with pytest.raises(ValueError, match="v4 contract"):
+        parse_model_relation_judgments(
+            {
+                "judgments": [
+                    {
+                        "blind_item_id": "d_0001",
+                        "task_scope": "in_scope",
+                        "proposition_checks": [
+                            {
+                                "proposition_id": "p1",
+                                "status": "absent",
+                                "evidence_quote": None,
+                            }
+                        ],
+                        "needs_context": False,
+                        "notes": "Unexpected repeated scope output.",
+                    }
+                ]
+            },
+            reviewer=_reviewer("doubao"),
+            batch_id="batch_001",
+            reviewed_at="2026-07-24T00:00:00+00:00",
+            response_id="response-1",
+            inputs=(review_input,),
+        )
+
+
+def test_relation_request_and_retry_fingerprints_cover_routing_fields():
+    reviewer = _reviewer("doubao")
+    request = build_relation_request_payload(
+        reviewer=reviewer,
+        batch_id="batch_001",
+        inputs=(_input("d_0001"),),
+    )
+
+    assert request["temperature"] == REQUEST_TEMPERATURE
+    assert request["max_tokens"] == REQUEST_MAX_TOKENS
+    assert request["model"] == reviewer.model
+    assert request["response_format"] == relation_response_format()
+    assert request["thinking"] == {"type": "disabled"}
+
+    base_judgment = {
+        "blind_item_id": "d_0001",
+        "proposition_checks": [
+            {
+                "proposition_id": "p1",
+                "status": "entailed",
+                "evidence_quote": "Excerpt.",
+            }
+        ],
+        "needs_context": False,
+        "notes": "Test.",
+    }
+    base = semantic_response_fingerprint({"judgments": [base_judgment]})
+    changed_context = semantic_response_fingerprint(
+        {
+            "judgments": [
+                {
+                    **base_judgment,
+                    "needs_context": True,
+                }
+            ]
+        }
+    )
+    changed_quote = semantic_response_fingerprint(
+        {
+            "judgments": [
+                {
+                    **base_judgment,
+                    "proposition_checks": [
+                        {
+                            "proposition_id": "p1",
+                            "status": "entailed",
+                            "evidence_quote": "Different quote.",
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    assert base is not None
+    assert base != changed_context
+    assert base != changed_quote
 
 
 def test_relation_is_derived_from_structural_checks():
@@ -232,6 +333,18 @@ def test_relation_is_derived_from_structural_checks():
         )
         == "contradicted"
     )
+    assert (
+        derive_relation(
+            target_type="edge",
+            task_scope="in_scope",
+            proposition_checks=(
+                PropositionCheck("left.p1", "entailed", "quote"),
+                PropositionCheck("right.p1", "contradicted", "quote"),
+                PropositionCheck("relation", "absent", None),
+            ),
+        )
+        == "contradicted"
+    )
 
 
 def test_relation_target_specs_cover_claims_edges_and_dev_split():
@@ -257,7 +370,7 @@ def test_relation_target_specs_cover_claims_edges_and_dev_split():
 def test_consensus_routes_disagreement_and_context_uncertainty_to_priority():
     keys = (
         ("pb_t01", "claim", "pb_t01_c01", "pb_t01_s01"),
-        ("pb_t02", "edge", "pb_t02_e01", "pb_t02_s01"),
+        ("pb_t02", "claim", "pb_t02_c01", "pb_t02_s01"),
         ("pb_t03", "claim", "pb_t03_c01", "pb_t03_s01"),
     )
     canonical_by_blind = {
@@ -285,7 +398,13 @@ def test_consensus_routes_disagreement_and_context_uncertainty_to_priority():
         ),
     }
 
-    rows = resolve_relation_consensus(keys, judgments, canonical_by_blind)
+    source_scopes = {
+        SourceScopeKey("pb_t01", "pb_t01_s01"): "in_scope",
+        SourceScopeKey("pb_t02", "pb_t02_s01"): "in_scope",
+        SourceScopeKey("pb_t03", "pb_t03_s01"): "in_scope",
+    }
+
+    rows = resolve_relation_consensus(keys, judgments, canonical_by_blind, source_scopes)
 
     assert rows[0]["disposition"] == "dual_model_consensus"
     assert rows[0]["consensus_relation"] == "supported"
@@ -347,19 +466,41 @@ def test_priority_packet_hides_lower_labels_and_uses_independent_blind_ids():
         }
     }
 
-    packet, private_map = build_priority_action_packet(action_rows, public, random_seed=7)
+    packet, private_map = build_priority_action_packet(
+        action_rows,
+        public,
+        {
+            key: RelationTargetSpec(
+                task_id="pb_t01",
+                target_type="claim",
+                propositions=(AtomicProposition("p1", "Target."),),
+            )
+        },
+        {SourceScopeKey("pb_t01", "pb_t01_s01"): "in_scope"},
+        random_seed=7,
+    )
 
     assert packet == [
         {
             "blind_item_id": "p_0001",
             "task_question": "Question?",
             "target_text": "Target.",
+            "target_type": "claim",
+            "atomic_propositions": [
+                {
+                    "proposition_id": "p1",
+                    "text": "Target.",
+                }
+            ],
+            "edge_type": None,
             "source_title": "Source",
             "source_url": "https://example.edu",
             "source_excerpt": "Excerpt.",
+            "fixed_task_scope": "in_scope",
         }
     ]
     assert "reviewer_judgments" not in packet[0]
+    assert private_map[0]["fixed_task_scope"] == "in_scope"
     assert private_map[0]["lower_priority_judgments"] == action_rows[0]["reviewer_judgments"]
 
 
@@ -388,6 +529,7 @@ def _reviewer(reviewer_id: str) -> AnnotationReviewerConfig:
         base_url="https://example.invalid/v1",
         model=f"{reviewer_id}-model",
         api_key="test-key",
+        disable_thinking=reviewer_id == "doubao",
     )
 
 
@@ -402,10 +544,8 @@ def _input(blind_item_id: str) -> RelationAnnotationInput:
             "source_excerpt": "Excerpt.",
         },
         RelationTargetSpec(
+            task_id="pb_t01",
             target_type="claim",
-            task_scope_summary="The task covers one test concept.",
-            in_scope_concepts=("test concept",),
-            out_of_scope_examples=("another topic",),
             propositions=(AtomicProposition("p1", "Target."),),
         ),
     )
@@ -418,13 +558,25 @@ def _judgment(
     *,
     needs_context: bool = False,
 ) -> ModelRelationJudgment:
+    status_by_relation = {
+        "supported": "entailed",
+        "partial": "weaker",
+        "contradicted": "contradicted",
+        "distractor": "absent",
+        "unrelated": "absent",
+    }
+    status = status_by_relation[relation]
     return ModelRelationJudgment(
         blind_item_id=blind_item_id,
         reviewer_id=reviewer_id,
         model=f"{reviewer_id}-model",
-        task_scope="in_scope",
-        proposition_checks=(PropositionCheck("p1", "entailed", "quote"),),
-        relation=relation,
+        proposition_checks=(
+            PropositionCheck(
+                "p1",
+                status,
+                None if status == "absent" else "quote",
+            ),
+        ),
         needs_context=needs_context,
         notes="Test judgment.",
         reviewed_at="2026-07-23T00:00:00+00:00",

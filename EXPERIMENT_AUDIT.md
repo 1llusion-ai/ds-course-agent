@@ -208,3 +208,43 @@ agreement at least `0.80`, kappa at least `0.65`, and per-model relation
 repeatability at least `0.90`.
 Even after full completion, these labels must be described as model-only proxy
 annotations unless a separate external validation stage is completed.
+
+## Fixed-scope authorization progress (2026-07-24; not a new independent audit)
+
+The pair-level contract now consumes the terminal 144-source scope artifact
+instead of asking each pair reviewer to rejudge scope. Doubao, MiMo, and the
+terminal priority subagent return atomic proposition checks; deterministic code
+derives the relation using the same fixed scope. The implementation also adds:
+
+- complete source-scope provenance hashes;
+- target-to-task consistency checks;
+- repair routing for non-`absent` evidence under fixed `out_of_scope`;
+- complete request fingerprints including endpoint and request payload;
+- a machine-generated calibration authorization manifest;
+- a fail-closed full runner that cannot start all 1,440 pairs without that
+  manifest.
+
+A pre-gate diagnostic produced `24/30` derived-relation agreement, kappa
+`0.718`, and zero scope conflicts. Its repeat did not complete. The first
+final-contract frozen run on July 24, 2026 also failed before completion:
+Doubao `batch_002` duplicated proposition `p2` for `d_0919`, and
+routing-relevant judgments changed across all retries. The failure artifact
+was retained. A replacement run was not launched, because retrying until two
+runs pass would undermine the preregistered two-run gate. The failed artifact
+used run contract v1; post-failure audit repairs bumped the current contract to
+v2, and no v2 model calibration exists.
+
+The integrity boundary therefore remains:
+
+```text
+calibration authorization:   absent
+full dual-model judgments:   0 / 2,880
+full proxy relation labels:  0 / 1,440
+dataset frozen:              false
+Phase B methods authorized:  false
+```
+
+This is a structural NO-GO. The existing thresholds were not lowered, and no
+full relation annotation or method run was started. Engineering validation is
+643 passed, 14 skipped, with one pre-existing offline-reranker warning; full
+ruff, format, diff, and JSON checks pass.

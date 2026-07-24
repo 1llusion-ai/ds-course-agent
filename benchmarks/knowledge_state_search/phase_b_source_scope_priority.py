@@ -7,6 +7,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+from benchmarks.knowledge_state_search.phase_b_annotation_packet_contract import (
+    file_sha256,
+)
 from benchmarks.knowledge_state_search.phase_b_source_scope_annotation import (
     DEFAULT_OUTPUT_DIRECTORY,
     EXPECTED_FULL_SOURCE_COUNT,
@@ -194,6 +197,14 @@ def finalize_priority_source_scope_annotation(
         "model_proxy_labels_finalized": len(final_labels),
         "selected_sources_finalized": selected_sources_finalized,
         "full_model_proxy_annotation_complete": full_model_proxy_annotation_complete,
+        "artifact_hashes": {
+            "consensus_sha256": file_sha256(consensus_path),
+            "action_manifest_sha256": file_sha256(action_manifest_path),
+            "action_map_sha256": file_sha256(action_map_path),
+            "priority_results_sha256": file_sha256(priority_results_path),
+            "final_labels_sha256": file_sha256(final_labels_path),
+            "unresolved_sha256": file_sha256(unresolved_path),
+        },
         "dataset_frozen": False,
         "method_runs_authorized": False,
     }

@@ -1,4 +1,4 @@
-"""Load frozen annotation-only task scopes and atomic relation targets."""
+"""Load frozen annotation-only atomic relation targets."""
 
 from __future__ import annotations
 
@@ -14,30 +14,21 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract impo
 
 DEFAULT_DESIGN_DIRECTORY = Path("benchmarks/data/knowledge_state_search_confirmatory_v3_phase_b_design")
 DEFAULT_TARGET_SPECS_PATH = DEFAULT_DESIGN_DIRECTORY / "relation_target_specs.jsonl"
-DEFAULT_TASK_SCOPES_PATH = DEFAULT_DESIGN_DIRECTORY / "relation_task_scopes.jsonl"
 
 
 def load_relation_target_specs(
     *,
     design_directory: Path = DEFAULT_DESIGN_DIRECTORY,
     target_specs_path: Path = DEFAULT_TARGET_SPECS_PATH,
-    task_scopes_path: Path = DEFAULT_TASK_SCOPES_PATH,
 ) -> dict[tuple[str, str], RelationTargetSpec]:
     """Load and validate annotation-only claim and edge target decompositions."""
 
-    tasks = _load_unique_rows(design_directory / "tasks.jsonl", "task_id")
     claims = _load_unique_rows(design_directory / "claims.jsonl", "claim_id")
     edges = _load_unique_rows(design_directory / "claim_edges.jsonl", "edge_id")
-    scopes = _load_unique_rows(task_scopes_path, "task_id")
     claim_specs = _load_unique_rows(target_specs_path, "claim_id")
-    if set(scopes) != set(tasks):
-        raise ValueError("relation task scopes must cover every Phase B task exactly")
     if set(claim_specs) != set(claims):
         raise ValueError("relation target specs must cover every Phase B claim exactly")
 
-    scope_by_task = {
-        task_id: _task_scope(scope, expected_task_id=task_id, task=tasks[task_id]) for task_id, scope in scopes.items()
-    }
     result: dict[tuple[str, str], RelationTargetSpec] = {}
     for claim_id, claim in claims.items():
         task_id = required_string(claim, "task_id")
@@ -48,9 +39,9 @@ def load_relation_target_specs(
             raise ValueError(f"relation claim spec task mismatch: {claim_id}")
         propositions = _atomic_propositions(spec, claim_id=claim_id)
         result[("claim", claim_id)] = RelationTargetSpec(
+            task_id=task_id,
             target_type="claim",
             propositions=propositions,
-            **scope_by_task[task_id],
         )
 
     for edge_id, edge in edges.items():
@@ -67,6 +58,7 @@ def load_relation_target_specs(
         if required_string(left_claim, "task_id") != task_id or required_string(right_claim, "task_id") != task_id:
             raise ValueError(f"relation edge crosses task boundaries: {edge_id}")
         result[("edge", edge_id)] = RelationTargetSpec(
+            task_id=task_id,
             target_type="edge",
             propositions=tuple(
                 AtomicProposition(
@@ -93,7 +85,6 @@ def load_relation_target_specs(
                 ),
             ),
             edge_type=required_string(edge, "edge_type"),
-            **scope_by_task[task_id],
         )
     return result
 
@@ -119,37 +110,6 @@ def load_task_split(
     return frozenset(task_ids)
 
 
-def _task_scope(
-    payload: dict[str, Any],
-    *,
-    expected_task_id: str,
-    task: dict[str, Any],
-) -> dict[str, object]:
-    if tuple(payload) != (
-        "task_id",
-        "summary",
-        "in_scope_concepts",
-        "out_of_scope_examples",
-    ):
-        raise ValueError(f"relation task scope fields are invalid: {expected_task_id}")
-    if required_string(payload, "task_id") != expected_task_id:
-        raise ValueError(f"relation task scope ID mismatch: {expected_task_id}")
-    in_scope_concepts = _string_tuple(payload, "in_scope_concepts")
-    out_of_scope_examples = _string_tuple(payload, "out_of_scope_examples")
-    target_concepts = task.get("target_concepts")
-    if not isinstance(target_concepts, list) or any(
-        not isinstance(concept, str) or not concept.strip() for concept in target_concepts
-    ):
-        raise ValueError(f"task target concepts are invalid: {expected_task_id}")
-    if not set(target_concepts).issubset(in_scope_concepts):
-        raise ValueError(f"relation task scope omits target concepts: {expected_task_id}")
-    return {
-        "task_scope_summary": required_string(payload, "summary"),
-        "in_scope_concepts": in_scope_concepts,
-        "out_of_scope_examples": out_of_scope_examples,
-    }
-
-
 def _atomic_propositions(
     payload: dict[str, Any],
     *,
@@ -172,16 +132,6 @@ def _atomic_propositions(
             )
         )
     return tuple(propositions)
-
-
-def _string_tuple(payload: dict[str, Any], field_name: str) -> tuple[str, ...]:
-    raw_values = payload.get(field_name)
-    if not isinstance(raw_values, list) or not raw_values:
-        raise ValueError(f"{field_name} must be a non-empty string list")
-    values = tuple(value.strip() for value in raw_values if isinstance(value, str) and value.strip())
-    if len(values) != len(raw_values) or len(set(values)) != len(values):
-        raise ValueError(f"{field_name} must contain unique non-empty strings")
-    return values
 
 
 def _load_unique_rows(path: Path, key_field: str) -> dict[str, dict[str, Any]]:

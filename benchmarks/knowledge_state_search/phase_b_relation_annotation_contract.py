@@ -9,7 +9,8 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
-PROMPT_VERSION = "phase_b_relation_structural_judge_v3_4"
+PROMPT_VERSION = "phase_b_relation_proposition_judge_v4"
+RELATION_DERIVATION_VERSION = "phase_b_relation_derivation_v2"
 RELATION_LABELS = (
     "supported",
     "partial",
@@ -18,8 +19,6 @@ RELATION_LABELS = (
     "unrelated",
 )
 RELATION_LABEL_SET = frozenset(RELATION_LABELS)
-TASK_SCOPE_LABELS = ("in_scope", "out_of_scope")
-TASK_SCOPE_LABEL_SET = frozenset(TASK_SCOPE_LABELS)
 PROPOSITION_LABELS = ("entailed", "weaker", "contradicted", "absent")
 PROPOSITION_LABEL_SET = frozenset(PROPOSITION_LABELS)
 
@@ -37,7 +36,6 @@ blind_item_id and every supplied proposition_id exactly. Each judgment must
 have this schema:
 {
   "blind_item_id": "...",
-  "task_scope": "in_scope|out_of_scope",
   "proposition_checks": [
     {
       "proposition_id": "p1",
@@ -48,17 +46,6 @@ have this schema:
   "needs_context": false,
   "notes": "brief excerpt-grounded reason"
 }
-
-Task scope:
-- in_scope: the excerpt is substantively inside the broad domain of the
-  task_question. This includes sibling concepts, methods, examples, caveats,
-  and failure modes that a reasonable search for the task question could
-  retrieve, even when none of the target propositions is supported.
-- out_of_scope: the excerpt discusses a genuinely different domain or
-  operation. Use this only when it is not substantively about the question,
-  task_scope_summary, or any in_scope_concept. Shared generic words such as
-  model, data, probability, or analysis are not enough by themselves.
-- out_of_scope_examples are boundary examples, not an exhaustive list.
 
 For every supplied atomic proposition:
 - entailed: the excerpt directly states the proposition or a meaning-equivalent
@@ -94,42 +81,28 @@ checks even when needs_context=true.
 
 Synthetic boundary examples:
 
-1. Broad task scope is judged against the whole task, not the current target.
-   Task: rooftop-greenhouse water management. Target atoms: a moisture sensor
-   triggers irrigation; this reduces unnecessary watering. Excerpt: "Mulch
-   slows surface evaporation, and stored rainwater supplements irrigation."
-   task_scope=in_scope; both atoms absent; derived relation=distractor.
-
-2. Shared generic words do not create task scope. With the same greenhouse
-   task and target, excerpt: "A reflective warehouse roof reduced cooling load
-   and compressor runtime." task_scope=out_of_scope; both atoms absent; derived
-   relation=unrelated.
-
-3. One instance does not support a general comparison. Target atom: canary
+1. One instance does not support a general comparison. Target atom: canary
    releases generally have fewer production incidents than immediate full
    releases. Excerpt: "In release 8.2, canary traffic exposed a configuration
-   error before full rollout." task_scope=in_scope; atom absent, not weaker;
-   derived relation=distractor.
+   error before full rollout." The atom is absent, not weaker.
 
-4. Related outcomes and different metrics are absent. Target atom: a bus lane
+2. Related outcomes and different metrics are absent. Target atom: a bus lane
    reduced median passenger travel time. Excerpt: "Ridership rose twelve
-   percent, while average fuel use rose five percent." task_scope=in_scope;
-   atom absent, not contradicted; derived relation=distractor.
+   percent, while average fuel use rose five percent." The atom is absent, not
+   contradicted.
 
-5. A composite claim is partial when only one atom is supported. Target atoms:
+3. A composite target is checked atom by atom. Target atoms:
    the system sends a reminder 24 hours before expiry; it automatically extends
    an unanswered booking by two days. Excerpt: "The system sends one reminder
    24 hours before expiry. Extensions must be requested in the app." The first
    atom is entailed with quote "sends one reminder 24 hours before expiry"; the
-   second is absent; derived relation=partial.
+   second is absent.
 
-6. A directed edge is supported only when all endpoint atoms and the requested
-   direction are directly stated. Target: compute a package digest; compare it
-   with a signed manifest; reject a mismatch; this check prevents corrupted
-   installation. Excerpt directly states all four propositions. All endpoint
-   atoms and relation are entailed; derived relation=supported. If only the
-   endpoints appear without the direction, relation is absent and the derived
-   relation is partial.
+4. For a directed edge, endpoints and direction are separate checks. Target:
+   compute a package digest; compare it with a signed manifest; reject a
+   mismatch; this check prevents corrupted installation. If the excerpt states
+   the endpoint facts but not the requested direction, endpoint checks are
+   entailed and the "relation" check is absent.
 """
 
 
@@ -164,10 +137,8 @@ class AtomicProposition:
 class RelationTargetSpec:
     """Annotation-only decomposition of one claim or directed edge."""
 
+    task_id: str
     target_type: str
-    task_scope_summary: str
-    in_scope_concepts: tuple[str, ...]
-    out_of_scope_examples: tuple[str, ...]
     propositions: tuple[AtomicProposition, ...]
     edge_type: str | None = None
 
@@ -175,9 +146,6 @@ class RelationTargetSpec:
         """Return the reviewer-visible annotation-only target structure."""
 
         return {
-            "task_scope_summary": self.task_scope_summary,
-            "in_scope_concepts": list(self.in_scope_concepts),
-            "out_of_scope_examples": list(self.out_of_scope_examples),
             "target_type": self.target_type,
             "atomic_propositions": [proposition.to_dict() for proposition in self.propositions],
             "edge_type": self.edge_type,
@@ -260,14 +228,12 @@ class PropositionCheck:
 
 @dataclass(frozen=True)
 class ModelRelationJudgment:
-    """Validated structural judgment and deterministic five-way relation."""
+    """Validated model checks over frozen atomic propositions."""
 
     blind_item_id: str
     reviewer_id: str
     model: str
-    task_scope: str
     proposition_checks: tuple[PropositionCheck, ...]
-    relation: str
     needs_context: bool
     notes: str
     reviewed_at: str
@@ -283,9 +249,7 @@ class ModelRelationJudgment:
             "reviewer_id": self.reviewer_id,
             "reviewer_kind": "model",
             "model": self.model,
-            "task_scope": self.task_scope,
             "proposition_checks": [check.to_dict() for check in self.proposition_checks],
-            "relation": self.relation,
             "needs_context": self.needs_context,
             "notes": self.notes,
             "reviewed_at": self.reviewed_at,
@@ -305,12 +269,16 @@ def parse_model_relation_judgments(
     response_id: str,
     inputs: tuple[RelationAnnotationInput, ...],
 ) -> tuple[ModelRelationJudgment, ...]:
-    """Validate structural model output and derive five-way relations."""
+    """Validate exact model fields and complete proposition-check coverage."""
 
+    if set(payload) != {"judgments"}:
+        raise ValueError("model response must contain only a judgments list")
     raw_judgments = payload.get("judgments")
     if not isinstance(raw_judgments, list):
         raise ValueError("model response must contain a judgments list")
     input_by_id = {item.blind_item_id: item for item in inputs}
+    if len(input_by_id) != len(inputs):
+        raise ValueError("annotation inputs contain duplicate blind_item_id values")
     judgments: list[ModelRelationJudgment] = []
     seen: set[str] = set()
     for raw in raw_judgments:
@@ -318,23 +286,19 @@ def parse_model_relation_judgments(
             raise ValueError("each model judgment must be an object")
         if set(raw) != {
             "blind_item_id",
-            "task_scope",
             "proposition_checks",
             "needs_context",
             "notes",
         }:
-            raise ValueError("model judgment fields do not match the v3 contract")
+            raise ValueError("model judgment fields do not match the v4 contract")
         blind_item_id = required_string(raw, "blind_item_id")
         if blind_item_id not in input_by_id:
             raise ValueError(f"model returned an unknown blind_item_id: {blind_item_id}")
         if blind_item_id in seen:
             raise ValueError(f"model returned duplicate blind_item_id: {blind_item_id}")
         seen.add(blind_item_id)
-        task_scope = required_string(raw, "task_scope")
-        if task_scope not in TASK_SCOPE_LABEL_SET:
-            raise ValueError(f"invalid task_scope for {blind_item_id}: {task_scope}")
         review_input = input_by_id[blind_item_id]
-        proposition_checks = _parse_proposition_checks(
+        proposition_checks = parse_proposition_checks(
             raw,
             review_input.target_spec.propositions,
             blind_item_id=blind_item_id,
@@ -349,13 +313,7 @@ def parse_model_relation_judgments(
                 blind_item_id=blind_item_id,
                 reviewer_id=reviewer.reviewer_id,
                 model=reviewer.model,
-                task_scope=task_scope,
                 proposition_checks=proposition_checks,
-                relation=derive_relation(
-                    target_type=review_input.target_spec.target_type,
-                    task_scope=task_scope,
-                    proposition_checks=proposition_checks,
-                ),
                 needs_context=needs_context,
                 notes=notes,
                 reviewed_at=reviewed_at,
@@ -395,12 +353,12 @@ def derive_relation(
             return "supported"
         if relation_status == "contradicted":
             return "contradicted"
+        if any(status == "contradicted" for status in endpoint_statuses):
+            return "contradicted"
         if relation_status in {"entailed", "weaker"} or any(
             status in {"entailed", "weaker"} for status in endpoint_statuses
         ):
             return "partial"
-        if any(status == "contradicted" for status in endpoint_statuses):
-            return "contradicted"
     elif target_type == "claim":
         statuses = tuple(check.status for check in proposition_checks)
         if statuses and all(status == "entailed" for status in statuses):
@@ -443,13 +401,15 @@ def _target_spec_payload(target_spec: RelationTargetSpec) -> dict[str, object]:
     return target_spec.prompt_fields()
 
 
-def _parse_proposition_checks(
+def parse_proposition_checks(
     payload: dict[str, Any],
     propositions: tuple[AtomicProposition, ...],
     *,
     blind_item_id: str,
     source_excerpt: str,
 ) -> tuple[PropositionCheck, ...]:
+    """Validate ordered proposition checks and verbatim evidence quotes."""
+
     raw_checks = payload.get("proposition_checks")
     if not isinstance(raw_checks, list):
         raise ValueError(f"proposition_checks must be a list: {blind_item_id}")

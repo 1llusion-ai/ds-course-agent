@@ -1,7 +1,7 @@
 # Knowledge-State Search Phase B Dataset-Construction Plan
 
-**Date:** 2026-07-23
-**Status:** P1 task design and P2-P5 source collection/verification are complete. The human A/B packet draft was superseded before any labels were collected. Pair-level prompt calibration stopped after v3.4 remained below the relation gates. The first structural redesign is now complete: task scope is judged once per source instead of repeatedly for every target-source pair. Two 36-source dev runs reached agreement `0.944/0.889`, kappa `0.870/0.724`, and per-model repeatability `0.972/0.972`. The 144-source full scope run completed 288/288 lower-model judgments; 16 disagreements plus 26 agreement spot checks went to the terminal priority subagent, which finalized 144/144 model-proxy scope labels with zero flips and zero unresolved context. Pair-level relation annotation must next consume these fixed scope labels and delete its repeated `task_scope` output before a new relation smoke. The dataset is not frozen and Phase B methods remain unauthorized.
+**Date:** 2026-07-24
+**Status:** P1 task design and P2-P5 source collection/verification are complete. The human A/B packet draft was superseded before any labels were collected. The 144 source-level scope labels are finalized under the model-only protocol, and pair-level relation annotation now consumes those fixed labels instead of asking each reviewer to repeat `task_scope`. Priority review also returns atomic proposition checks, while deterministic code derives the final five-way label. Source-scope provenance, cross-stage conflict repair, complete request fingerprints, and a machine-validated full-run authorization gate are implemented. A diagnostic run reached `24/30` agreement with kappa `0.718`, but its repeat failed. The first final-contract frozen run on July 24, 2026 failed because Doubao duplicated proposition `p2` for `d_0919` and changed routing-relevant judgments across retries. No authorization manifest was created, the 1,440-pair full annotation did not start, the dataset is not frozen, and Phase B methods remain unauthorized.
 **Scope:** construct the v3 Phase B confirmatory dataset. This document does not authorize Phase B method claims, closed-loop multi-hop, SFT, or learning-gain claims.
 
 ## 0. Inputs and non-negotiable constraints
@@ -845,6 +845,62 @@ Packet contract:
 The 12 v1 labels are retained only as protocol diagnostics. They are not merged
 into the future 1,440-row proxy label file and do not satisfy G4.
 
+### Fixed-source-scope integration checkpoint (2026-07-24)
+
+The next structural stage is implemented in:
+
+- `phase_b_relation_calibration.py`;
+- `phase_b_relation_calibration_support.py`;
+- the updated relation contract/client/support/runner/priority finalizer;
+- `tests/test_phase_b_relation_scope_integration.py`;
+- `tests/test_phase_b_relation_calibration.py`.
+
+The active contract now enforces:
+
+1. pair reviewers cannot output `task_scope` or direct relation labels;
+2. both lower reviewers and the terminal priority subagent return ordered
+   proposition checks with verbatim evidence quotes;
+3. deterministic code combines those checks with the same finalized
+   source-level scope;
+4. a non-`absent` check under fixed `out_of_scope` is a repair conflict;
+5. the source-scope final report and artifacts form a verified SHA-256 chain;
+6. the complete request payload, endpoint, model, thinking mode, batch size,
+   prompt, response schema, target specs, packet manifest, and source-scope
+   artifacts are bound in `relation_run_contract.json`;
+7. the full runner refuses all 1,440 pairs without
+   `phase_b_relation_calibration_authorization.json`.
+
+Calibration outcome:
+
+```text
+pre-gate diagnostic:        24 / 30; kappa 0.718; scope conflicts 0
+paired diagnostic repeat:  incomplete
+final frozen run 1:        incomplete
+failure reviewer/batch:    Doubao / batch_002
+failure item:              d_0919
+failure mode:              duplicate p2 + semantic drift across retries
+authorization manifest:    absent
+full judgments:            0 / 2,880
+full relation labels:      0 / 1,440
+```
+
+The final frozen attempt is a structural NO-GO. A second replacement run was
+not launched because retrying until two runs pass would create a cherry-picking
+path. The existing thresholds were not lowered. Any future batching/model
+change requires a new preregistered calibration version. The failed artifact
+used run contract v1. Subsequent audit fixes made clean-consensus finalization,
+fresh-run evidence, actual provider model IDs, and edge contradiction precedence
+explicit and bumped the current run contract to v2; no v2 model calibration has
+been executed. Final engineering validation is 643 passed, 14 skipped, with one
+pre-existing offline-reranker warning; full ruff, format, diff, and JSON checks
+pass.
+
+The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future
+human A/B protocol. The active exploratory model-proxy authorization gate was
+separately frozen at overall agreement `0.80`, overall kappa `0.65`, and
+per-model repeatability `0.90`; this distinction must be preserved in paper
+wording.
+
 Within each source-collection batch, process tasks in alternating type order to reduce curator drift: prerequisite, misconception, goal.
 
 ## 12. Human and model cost estimate
@@ -915,6 +971,8 @@ Before marking Phase B dataset construction complete:
 - [ ] Every source has a valid source-level checksum.
 - [x] All 3 priority adjudications and 29 deterministic spot checks are complete.
 - [x] Fixed-seed A/B blind packets and data-lead-only ID maps cover all 1,440 pairs.
+- [x] All 144 source-level scope labels are terminally finalized with zero unresolved context and a verified artifact hash chain.
+- [ ] Two frozen 30-pair relation calibrations complete under one run contract and produce a valid full-run authorization manifest.
 - [ ] Every schema-loaded file has a manifest SHA-256 fingerprint.
 - [ ] A/B annotations are complete and independently produced.
 - [ ] Adjudication is complete; agreement gates pass.

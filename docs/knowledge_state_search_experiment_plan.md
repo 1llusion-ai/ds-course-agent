@@ -1,8 +1,8 @@
 # Knowledge-State Search Experiment Plan
 
-**Date:** 2026-07-21
+**Date:** 2026-07-24
 **Branch:** `feat/research-knowledge-state-search`
-**Status:** Ready for implementation; no result claim is made by this document.
+**Status:** Phase B relation calibration is structurally blocked; no full annotation or method claim is authorized.
 
 ## 2026-07-21 Status Amendment
 
@@ -148,6 +148,51 @@ no repeated dev smoke meets agreement `>=0.80`, kappa `>=0.65`, and per-model
 relation repeatability `>=0.90`. A final synthetic-boundary-example prompt did
 not improve the result, so prompt-only iteration is stopped. Closed-loop
 multi-hop remains blocked.
+
+## Fixed-source-scope relation amendment (2026-07-24)
+
+The source-level decomposition is now structurally integrated into pair-level
+relation annotation:
+
+- Doubao and MiMo output only ordered atomic proposition checks,
+  `needs_context`, and notes; they no longer output `task_scope` or a five-way
+  relation;
+- both reviewers' five-way relations are derived with the same finalized
+  144-source scope artifact;
+- the source-scope terminal report binds the consensus, priority manifest/map,
+  priority results, final labels, and unresolved queue by SHA-256;
+- any `out_of_scope` source with non-`absent` target evidence enters repair
+  instead of silently becoming `supported` or `partial`;
+- the priority subagent also returns atomic proposition checks, and its final
+  relation is derived with the same fixed scope;
+- a full 1,440-pair run now fails closed unless a machine-generated
+  authorization manifest proves that two frozen 30-pair dev runs both meet the
+  existing `0.80/0.65/0.90` gates with zero scope conflicts and zero retry
+  semantic drift.
+
+A pre-authorization diagnostic completed at `24/30` agreement with kappa
+`0.718` and zero cross-stage scope conflicts. Its paired repeat did not
+complete. The first final-contract frozen attempt on July 24, 2026 also failed:
+Doubao duplicated proposition `p2` for blind item `d_0919` in `batch_002`, and
+routing-relevant judgments changed across all retries. Because the frozen
+protocol requires two completed fresh runs, no replacement attempt was started
+and no authorization manifest was created. That failure used run contract v1.
+Post-failure audit repairs bumped the current contract to v2; no model run has
+yet been executed under v2.
+
+Current boundary:
+
+```text
+full dual-model judgments:   0 / 2,880
+full proxy relation labels:  0 / 1,440
+full-run authorization:      absent
+dataset frozen:              false
+Phase B methods authorized:  false
+```
+
+This is a structural NO-GO, not a threshold failure to tune around. Any future
+change to batching or reviewer design must be preregistered as a new calibration
+version. Closed-loop multi-hop remains blocked.
 
 ## Claim Map
 
