@@ -177,8 +177,15 @@ Doubao duplicated proposition `p2` for blind item `d_0919` in `batch_002`, and
 routing-relevant judgments changed across all retries. Because the frozen
 protocol requires two completed fresh runs, no replacement attempt was started
 and no authorization manifest was created. That failure used run contract v1.
-Post-failure audit repairs bumped the current contract to v2; no model run has
-yet been executed under v2.
+Post-failure audit repairs and a preregistered request-isolation change define
+the current contract v2: exactly one target-source pair per request. The
+reviewer models, prompt, response schema, fixed 30-pair universe, selection
+seed, thresholds, and semantic-drift rejection are unchanged. This removes
+co-batching as one possible source of cross-item interference but does not
+presume the reliability issue is solved. The v2 gate now recomputes the
+seed-selected pair universe and binds every consensus summary to the reparsed
+raw model judgment before calculating metrics. No parser repair or
+retry-until-pass path was added. No model run has yet been executed under v2.
 
 Current boundary:
 

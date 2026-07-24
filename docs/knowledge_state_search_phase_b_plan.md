@@ -884,16 +884,21 @@ full judgments:            0 / 2,880
 full relation labels:      0 / 1,440
 ```
 
-The final frozen attempt is a structural NO-GO. A second replacement run was
+The run-contract-v1 frozen attempt is a structural NO-GO. A second replacement run was
 not launched because retrying until two runs pass would create a cherry-picking
 path. The existing thresholds were not lowered. Any future batching/model
 change requires a new preregistered calibration version. The failed artifact
 used run contract v1. Subsequent audit fixes made clean-consensus finalization,
 fresh-run evidence, actual provider model IDs, and edge contradiction precedence
-explicit and bumped the current run contract to v2; no v2 model calibration has
-been executed. Final engineering validation is 643 passed, 14 skipped, with one
-pre-existing offline-reranker warning; full ruff, format, diff, and JSON checks
-pass.
+explicit. Run contract v2 is now preregistered at exactly one pair per request;
+the reviewer models, prompt, schema, selected pair universe, thresholds, and
+retry-drift rejection remain unchanged. This removes co-batching as a possible
+interference source but does not assume schema reliability is fixed. The
+authorization validator now recomputes the seed-selected pair universe and
+requires exact raw-response-to-consensus judgment binding before metrics are
+accepted. No v2 model calibration has been executed. The last completed
+engineering validation is 647 passed, 14 skipped, with one pre-existing
+offline-reranker warning; full ruff, format, diff, and JSON checks pass.
 
 The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future
 human A/B protocol. The active exploratory model-proxy authorization gate was

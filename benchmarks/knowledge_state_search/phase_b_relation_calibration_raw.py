@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from benchmarks.knowledge_state_search.phase_b_annotation_packet_contract import (
@@ -15,7 +16,7 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_client import
 )
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract import (
     AnnotationReviewerConfig,
-    RelationAnnotationInput,
+    ModelRelationJudgment,
     json_sha256,
     parse_model_relation_judgments,
     required_string,
@@ -25,17 +26,28 @@ from benchmarks.knowledge_state_search.phase_b_relation_calibration import (
     RelationRunContract,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_calibration_support import (
+    CalibrationRequestBundle,
+    CanonicalKey,
     read_json_object,
 )
 
-RequestInputs = dict[str, dict[str, RelationAnnotationInput]]
+
+@dataclass(frozen=True)
+class RawResponseEvidence:
+    """Reconstructed raw judgments and freshness identifiers for one run."""
+
+    response_ids: tuple[str, ...]
+    reviewed_at_values: tuple[str, ...]
+    response_models: dict[str, tuple[str, ...]]
+    judgments_by_reviewer: dict[str, dict[CanonicalKey, ModelRelationJudgment]]
 
 
 def validate_raw_responses(
     raw_directory: Path,
     contract: RelationRunContract,
-    request_inputs: RequestInputs,
-) -> dict[str, object]:
+    request_bundle: CalibrationRequestBundle,
+    selected_pairs: tuple[CanonicalKey, ...],
+) -> RawResponseEvidence:
     """Verify raw content, parsed judgments, request fingerprints, and freshness."""
 
     if not raw_directory.is_dir():
@@ -51,11 +63,16 @@ def validate_raw_responses(
     response_ids: set[str] = set()
     reviewed_at_values: set[str] = set()
     response_models: dict[str, set[str]] = {reviewer_id: set() for reviewer_id in REVIEWERS}
+    judgments_by_reviewer: dict[str, dict[CanonicalKey, ModelRelationJudgment]] = {
+        reviewer_id: {} for reviewer_id in REVIEWERS
+    }
+    selected_pair_set = set(selected_pairs)
     for reviewer_id in REVIEWERS:
         paths = sorted((raw_directory / reviewer_id).glob("*.json"))
         if len(paths) != len(expected_sizes):
             raise ValueError("raw response batch count does not match run contract")
         seen: set[str] = set()
+        seen_canonical_keys: set[CanonicalKey] = set()
         for path, expected_size in zip(paths, expected_sizes, strict=True):
             payload = read_json_object(path, "raw response")
             attempts = payload.get("attempts")
@@ -94,10 +111,18 @@ def validate_raw_responses(
             if any(not isinstance(item, str) or not item or item in seen for item in blind_ids):
                 raise ValueError("raw responses contain invalid or duplicate blind-item IDs")
             try:
-                batch_inputs = tuple(request_inputs[reviewer_id][blind_item_id] for blind_item_id in blind_ids)
+                batch_inputs = tuple(
+                    request_bundle.inputs_by_reviewer[reviewer_id][blind_item_id] for blind_item_id in blind_ids
+                )
+                batch_keys = tuple(
+                    request_bundle.canonical_by_blind_id[reviewer_id][blind_item_id] for blind_item_id in blind_ids
+                )
             except KeyError as exc:
                 raise ValueError("raw response references an unknown packet input") from exc
+            if any(key not in selected_pair_set or key in seen_canonical_keys for key in batch_keys):
+                raise ValueError("raw responses do not match the selected canonical pair universe")
             seen.update(blind_ids)
+            seen_canonical_keys.update(batch_keys)
             parsed = payload.get("parsed_judgments")
             if not isinstance(parsed, list) or len(parsed) != len(batch_inputs):
                 raise ValueError("raw response lacks parsed judgments")
@@ -124,6 +149,8 @@ def validate_raw_responses(
             )
             if parsed != [judgment.to_dict() for judgment in reconstructed]:
                 raise ValueError("raw response parsed judgments do not match model content")
+            for judgment, key in zip(reconstructed, batch_keys, strict=True):
+                judgments_by_reviewer[reviewer_id][key] = judgment
             request_payload = build_relation_request_payload(
                 reviewer=reviewer,
                 batch_id=batch_id,
@@ -140,11 +167,14 @@ def validate_raw_responses(
                 raise ValueError("raw response request fingerprint mismatch")
         if len(seen) != CALIBRATION_PAIR_COUNT:
             raise ValueError("raw response reviewer coverage is incomplete")
-    return {
-        "response_ids": tuple(sorted(response_ids)),
-        "reviewed_at_values": tuple(sorted(reviewed_at_values)),
-        "response_models": {reviewer_id: tuple(sorted(models)) for reviewer_id, models in response_models.items()},
-    }
+        if seen_canonical_keys != selected_pair_set:
+            raise ValueError("raw response reviewer canonical pair coverage is incomplete")
+    return RawResponseEvidence(
+        response_ids=tuple(sorted(response_ids)),
+        reviewed_at_values=tuple(sorted(reviewed_at_values)),
+        response_models={reviewer_id: tuple(sorted(models)) for reviewer_id, models in response_models.items()},
+        judgments_by_reviewer=judgments_by_reviewer,
+    )
 
 
 def _expected_batch_sizes(total: int, batch_size: int) -> tuple[int, ...]:

@@ -231,8 +231,13 @@ Doubao `batch_002` duplicated proposition `p2` for `d_0919`, and
 routing-relevant judgments changed across all retries. The failure artifact
 was retained. A replacement run was not launched, because retrying until two
 runs pass would undermine the preregistered two-run gate. The failed artifact
-used run contract v1; post-failure audit repairs bumped the current contract to
-v2, and no v2 model calibration exists.
+used run contract v1. Post-failure audit repairs and a preregistered single-pair
+request-isolation rule define run contract v2. The models, prompt, response
+schema, selection seed, thresholds, and retry-drift gate remain unchanged.
+Single-pair requests remove co-batching as a possible interference source but
+do not establish reliability by themselves. The authorization validator now
+recomputes the selected pair universe and binds every consensus summary to its
+reparsed raw judgment. No v2 model calibration exists yet.
 
 The integrity boundary therefore remains:
 
@@ -245,6 +250,6 @@ Phase B methods authorized:  false
 ```
 
 This is a structural NO-GO. The existing thresholds were not lowered, and no
-full relation annotation or method run was started. Engineering validation is
-643 passed, 14 skipped, with one pre-existing offline-reranker warning; full
-ruff, format, diff, and JSON checks pass.
+full relation annotation or method run was started. Current engineering
+validation is 647 passed, 14 skipped, with one pre-existing offline-reranker
+warning; full ruff, format, diff, and JSON checks pass.

@@ -66,7 +66,7 @@ PYTHONPATH=src:. \
 python -m benchmarks.knowledge_state_search.phase_b_relation_annotation \
   --task-split phase_b_dev \
   --limit-pairs 30 \
-  --batch-size 10 \
+  --batch-size 1 \
   --output var/artifacts/knowledge_state_search/relation_annotation_dev_smoke
 ```
 
@@ -91,10 +91,21 @@ The release gates remain agreement `>=0.80`, kappa `>=0.65`, and per-model
 derived-relation repeatability `>=0.90`, with zero source-scope conflicts and
 zero retry semantic drift.
 
-The July 24, 2026 final-contract calibration is currently NO-GO. A diagnostic
+Run contract v2 is preregistered at exactly one target-source pair per request.
+This changes only request isolation: reviewer models, prompt, response schema,
+selection seed, fixed 30-pair universe, thresholds, and retry-drift rejection
+remain unchanged. The single-pair contract removes co-batching as one possible
+source of cross-item interference; it does not assume schema reliability is
+fixed before the two v2 runs. The authorization gate also recomputes the
+seed-selected pair universe and requires every consensus judgment to match its
+reparsed raw response exactly. No parser repair or retry-until-pass path is
+added.
+
+The July 24, 2026 run-contract-v1 calibration is NO-GO. A diagnostic
 run reached `24/30` agreement and kappa `0.718`, but the paired diagnostic
 failed. The first frozen run then failed in Doubao `batch_002`: blind item
 `d_0919` duplicated proposition `p2`, and routing-relevant judgments changed
 across retries. That artifact used run contract v1. Post-failure audit repairs
-bumped the current contract to v2, under which no model calibration has run.
-No authorization manifest exists, so full annotation did not start.
+and the preregistered single-pair isolation rule define run contract v2, under
+which no model calibration has yet run. No authorization manifest exists, so
+full annotation has not started.

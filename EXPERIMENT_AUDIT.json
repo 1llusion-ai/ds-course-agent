@@ -167,6 +167,8 @@
         "deterministic_relation_derivation": true,
         "source_scope_conflict_routes_to_repair": true,
         "complete_request_fingerprint": true,
+        "raw_judgment_to_consensus_binding": true,
+        "selection_seed_pair_universe_recomputed": true,
         "machine_full_run_authorization_required": true
       },
       "v4_fixed_scope_diagnostic": {
@@ -188,7 +190,25 @@
       },
       "authorization_manifest_created": false,
       "current_run_contract_version": "phase_b_relation_run_contract_v2",
-      "current_run_contract_model_runs": 0
+      "current_run_contract_model_runs": 0,
+      "current_run_contract_batch_size": 1,
+      "current_run_contract_change": "preregistered_single_pair_request_isolation",
+      "current_run_contract_change_scope": "removes_co_batching_as_possible_interference_source_without_presuming_reliability_is_fixed",
+      "authorization_gate_repairs": [
+        "raw_blind_item_to_canonical_pair_binding",
+        "reparsed_raw_judgment_to_consensus_exact_match",
+        "selection_seed_to_pair_universe_recomputation",
+        "full_run_contract_to_calibration_contract_structural_derivation"
+      ],
+      "unchanged_gate_components": [
+        "reviewer_models",
+        "prompt",
+        "response_schema",
+        "selected_pair_universe",
+        "selection_seed",
+        "thresholds",
+        "semantic_drift_rejection"
+      ]
     },
     "annotation_started": true,
     "dataset_frozen": false,

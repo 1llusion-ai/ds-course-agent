@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +44,7 @@ FROZEN_DEV_TASK_IDS = (
 )
 CALIBRATION_RUN_COUNT = 2
 CALIBRATION_PAIR_COUNT = 30
+CALIBRATION_BATCH_SIZE = 1
 MIN_AGREEMENT = 0.80
 MIN_KAPPA = 0.65
 MIN_REPEATABILITY = 0.90
@@ -285,6 +286,24 @@ def build_current_run_contract(
         selection_seed=selection_seed,
         selected_task_split=selected_task_split,
         selected_pair_limit=selected_pair_limit,
+    )
+    validate_run_contract(contract)
+    return contract
+
+
+def derive_calibration_contract(
+    run_contract: RelationRunContract,
+) -> RelationRunContract:
+    """Derive the authorization contract without changing execution settings."""
+
+    from benchmarks.knowledge_state_search.phase_b_relation_calibration_support import (
+        validate_run_contract,
+    )
+
+    contract = replace(
+        run_contract,
+        selected_task_split=FROZEN_DEV_SPLIT,
+        selected_pair_limit=CALIBRATION_PAIR_COUNT,
     )
     validate_run_contract(contract)
     return contract

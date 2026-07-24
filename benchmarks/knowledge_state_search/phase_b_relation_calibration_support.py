@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -20,10 +21,9 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_client import
 )
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract import (
     PROMPT_VERSION,
-    PROPOSITION_LABEL_SET,
     RELATION_DERIVATION_VERSION,
     SYSTEM_PROMPT,
-    PropositionCheck,
+    ModelRelationJudgment,
     RelationAnnotationInput,
     derive_relation,
     json_sha256,
@@ -32,11 +32,14 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract impo
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_support import (
     SourceScopeKey,
     cohen_kappa,
+    judgment_summary,
     load_source_scope_labels,
+    select_canonical_keys,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_calibration import (
     ANNOTATION_REPORT_FILENAME,
     AUTHORIZATION_FIELDS,
+    CALIBRATION_BATCH_SIZE,
     CALIBRATION_PAIR_COUNT,
     CALIBRATION_PROTOCOL,
     CALIBRATION_RUN_COUNT,
@@ -58,6 +61,15 @@ from benchmarks.knowledge_state_search.phase_b_relation_target_specs import load
 _CANONICAL_PAIR_FIELDS = ("task_id", "target_type", "target_id", "source_id")
 CanonicalKey = tuple[str, str, str, str]
 RequestInputs = dict[str, dict[str, RelationAnnotationInput]]
+
+
+@dataclass(frozen=True)
+class CalibrationRequestBundle:
+    """Reviewer inputs plus their private canonical identities."""
+
+    inputs_by_reviewer: RequestInputs
+    canonical_by_blind_id: dict[str, dict[str, CanonicalKey]]
+    canonical_keys: tuple[CanonicalKey, ...]
 
 
 def file_sha256(path: Path) -> str:
@@ -93,8 +105,8 @@ def validate_run_contract(contract: RelationRunContract) -> None:
         raise ValueError("relation run reviewer model IDs must be distinct")
     if any(not binding.model_id or not binding.base_url for binding in contract.reviewer_models):
         raise ValueError("relation run reviewer binding is invalid")
-    if not isinstance(contract.batch_size, int) or isinstance(contract.batch_size, bool) or contract.batch_size < 1:
-        raise ValueError("relation run batch_size must be positive")
+    if contract.batch_size != CALIBRATION_BATCH_SIZE:
+        raise ValueError(f"relation run batch_size must match the preregistered value: {CALIBRATION_BATCH_SIZE}")
     if contract.temperature != float(REQUEST_TEMPERATURE):
         raise ValueError("relation run temperature does not match current client")
     if contract.max_tokens != REQUEST_MAX_TOKENS:
@@ -113,8 +125,8 @@ def validate_run_contract(contract: RelationRunContract) -> None:
             raise ValueError(f"relation run {label} hash mismatch")
 
 
-def load_request_inputs(contract: RelationRunContract) -> RequestInputs:
-    """Reconstruct reviewer inputs needed to verify complete request payloads."""
+def load_request_inputs(contract: RelationRunContract) -> CalibrationRequestBundle:
+    """Reconstruct reviewer inputs and private identities for evidence checks."""
 
     packet_directory = Path(contract.packet_manifest_path).parent
     target_specs_path = Path(contract.target_specs_path)
@@ -123,6 +135,8 @@ def load_request_inputs(contract: RelationRunContract) -> RequestInputs:
         target_specs_path=target_specs_path,
     )
     inputs: RequestInputs = {}
+    canonical_by_blind_id: dict[str, dict[str, CanonicalKey]] = {}
+    canonical_key_sets: dict[str, set[CanonicalKey]] = {}
     for reviewer_id in REVIEWERS:
         packet_rows = read_jsonl(
             packet_directory / "packets" / f"{reviewer_id}.jsonl",
@@ -141,6 +155,7 @@ def load_request_inputs(contract: RelationRunContract) -> RequestInputs:
                 raise ValueError(f"{reviewer_id} packet duplicates a blind item")
             packet_by_id[blind_item_id] = row
         reviewer_inputs: dict[str, RelationAnnotationInput] = {}
+        reviewer_canonical: dict[str, CanonicalKey] = {}
         for row in private_rows:
             if tuple(row) != PRIVATE_MAP_FIELDS or row.get("reviewer_id") != reviewer_id:
                 raise ValueError(f"{reviewer_id} private map fields are invalid")
@@ -154,6 +169,15 @@ def load_request_inputs(contract: RelationRunContract) -> RequestInputs:
                 raise ValueError(f"missing relation target spec: {target_key}") from exc
             if target_spec.task_id != required_string(row, "task_id"):
                 raise ValueError(f"relation target spec task mismatch: {target_key}")
+            canonical_key: CanonicalKey = (
+                target_spec.task_id,
+                required_string(row, "target_type"),
+                required_string(row, "target_id"),
+                required_string(row, "source_id"),
+            )
+            if canonical_key in reviewer_canonical.values():
+                raise ValueError(f"{reviewer_id} private map duplicates a canonical pair")
+            reviewer_canonical[blind_item_id] = canonical_key
             reviewer_inputs[blind_item_id] = RelationAnnotationInput.from_packet_row(
                 packet_by_id[blind_item_id],
                 target_spec,
@@ -161,13 +185,21 @@ def load_request_inputs(contract: RelationRunContract) -> RequestInputs:
         if set(reviewer_inputs) != set(packet_by_id):
             raise ValueError(f"{reviewer_id} packet/private map coverage differs")
         inputs[reviewer_id] = reviewer_inputs
-    return inputs
+        canonical_by_blind_id[reviewer_id] = reviewer_canonical
+        canonical_key_sets[reviewer_id] = set(reviewer_canonical.values())
+    if canonical_key_sets["doubao"] != canonical_key_sets["mimo"]:
+        raise ValueError("calibration reviewer canonical pair universes differ")
+    return CalibrationRequestBundle(
+        inputs_by_reviewer=inputs,
+        canonical_by_blind_id=canonical_by_blind_id,
+        canonical_keys=tuple(sorted(canonical_key_sets["doubao"])),
+    )
 
 
 def validate_calibration_run(
     run_directory: Path,
     contract: RelationRunContract,
-    request_inputs: RequestInputs,
+    request_bundle: CalibrationRequestBundle,
 ) -> dict[str, object]:
     """Validate one complete frozen dev calibration run."""
 
@@ -184,12 +216,20 @@ def validate_calibration_run(
         raise ValueError(f"calibration run contract mismatch: {run_directory}")
     selected_path = run_directory / SELECTED_PAIRS_FILENAME
     selected_pairs = _load_selected_pairs(selected_path)
+    _validate_selected_pair_universe(selected_pairs, contract, request_bundle)
     report = read_json_object(run_directory / ANNOTATION_REPORT_FILENAME, "annotation report")
     _validate_report(report, contract)
+    raw_freshness = validate_raw_responses(
+        run_directory / RAW_RESPONSES_DIRECTORY,
+        contract,
+        request_bundle,
+        selected_pairs,
+    )
     agreement, kappa, conflicts, relations = _load_consensus(
         run_directory / CONSENSUS_FILENAME,
         selected_pairs,
         contract,
+        raw_freshness.judgments_by_reviewer,
     )
     _validate_report_metrics(report, agreement, kappa, conflicts)
     if agreement < MIN_AGREEMENT:
@@ -198,22 +238,14 @@ def validate_calibration_run(
         raise ValueError(f"calibration kappa is below {MIN_KAPPA:.2f}: {run_directory}")
     if conflicts:
         raise ValueError(f"calibration source scope conflicts are nonzero: {run_directory}")
-    raw_freshness = validate_raw_responses(
-        run_directory / RAW_RESPONSES_DIRECTORY,
-        contract,
-        request_inputs,
-    )
-    response_models = _required_mapping(
-        raw_freshness["response_models"],
-        "response models",
-    )
+    response_models = raw_freshness.response_models
     serialized_response_models = {reviewer_id: list(models) for reviewer_id, models in response_models.items()}
     return {
         "selected_pairs": selected_pairs,
         "selected_pairs_sha256": file_sha256(selected_path),
         "relations": relations,
-        "response_ids": raw_freshness["response_ids"],
-        "reviewed_at_values": raw_freshness["reviewed_at_values"],
+        "response_ids": raw_freshness.response_ids,
+        "reviewed_at_values": raw_freshness.reviewed_at_values,
         "response_models": response_models,
         "manifest_row": {
             "run_directory": str(run_directory),
@@ -362,15 +394,30 @@ def _load_selected_pairs(path: Path) -> tuple[CanonicalKey, ...]:
     return tuple(keys)
 
 
+def _validate_selected_pair_universe(
+    selected_pairs: tuple[CanonicalKey, ...],
+    contract: RelationRunContract,
+    request_bundle: CalibrationRequestBundle,
+) -> None:
+    available_dev_pairs = tuple(key for key in request_bundle.canonical_keys if key[0] in FROZEN_DEV_TASK_IDS)
+    expected_pairs = select_canonical_keys(
+        available_dev_pairs,
+        limit_pairs=CALIBRATION_PAIR_COUNT,
+        seed=contract.selection_seed,
+    )
+    if selected_pairs != expected_pairs:
+        raise ValueError("calibration pair universe does not match the deterministic selection seed")
+
+
 def _load_consensus(
     path: Path,
     selected_pairs: tuple[CanonicalKey, ...],
     contract: RelationRunContract,
+    raw_judgments: dict[str, dict[CanonicalKey, ModelRelationJudgment]],
 ) -> tuple[float, float, int, dict[str, dict[CanonicalKey, str]]]:
     rows = read_jsonl(path, "dual-model consensus")
     if len(rows) != CALIBRATION_PAIR_COUNT:
         raise ValueError("dual-model consensus must contain exactly 30 rows")
-    models = {binding.reviewer_id: binding.model_id for binding in contract.reviewer_models}
     source_scope_by_key = load_source_scope_labels(
         Path(contract.source_scope_labels_path),
         expected_count=144,
@@ -394,24 +441,27 @@ def _load_consensus(
             raise ValueError("consensus source scope key is missing") from exc
         for reviewer_id in REVIEWERS:
             summary = _required_mapping(judgments.get(reviewer_id), f"{reviewer_id} summary")
-            if summary.get("model") != models[reviewer_id]:
-                raise ValueError("consensus reviewer model mismatch")
-            if _required_string(summary, "fixed_task_scope") != fixed_task_scope:
-                raise ValueError("consensus fixed source scope mismatch")
-            checks = _summary_proposition_checks(summary)
+            try:
+                raw_judgment = raw_judgments[reviewer_id][key]
+            except KeyError as exc:
+                raise ValueError("consensus pair is missing raw reviewer evidence") from exc
             relation = derive_relation(
                 target_type=key[1],
                 task_scope=fixed_task_scope,
-                proposition_checks=checks,
+                proposition_checks=raw_judgment.proposition_checks,
             )
-            if summary.get("relation") != relation:
-                raise ValueError("consensus reviewer relation derivation mismatch")
-            conflict = fixed_task_scope == "out_of_scope" and any(check.status != "absent" for check in checks)
-            if summary.get("source_scope_conflict") is not conflict:
-                raise ValueError("consensus reviewer source_scope_conflict is invalid")
-            needs_context = summary.get("needs_context")
-            if not isinstance(needs_context, bool):
-                raise ValueError("consensus reviewer needs_context is invalid")
+            conflict = fixed_task_scope == "out_of_scope" and any(
+                check.status != "absent" for check in raw_judgment.proposition_checks
+            )
+            expected_summary = judgment_summary(
+                raw_judgment,
+                fixed_task_scope=fixed_task_scope,
+                derived_relation=relation,
+                source_scope_conflict=conflict,
+            )
+            if summary != expected_summary:
+                raise ValueError("consensus reviewer judgment does not match raw response evidence")
+            needs_context = raw_judgment.needs_context
             reviewer_conflicts.append(conflict)
             needs_context_values.append(needs_context)
             relations.append(relation)
@@ -448,41 +498,6 @@ def _load_consensus(
         raise ValueError("consensus pair universe does not match selected pairs")
     agreement_rate = sum(first == second for first, second in label_pairs) / len(label_pairs)
     return agreement_rate, cohen_kappa(label_pairs), conflict_count, relations_by_reviewer
-
-
-def _summary_proposition_checks(
-    summary: dict[str, Any],
-) -> tuple[PropositionCheck, ...]:
-    raw_checks = summary.get("proposition_checks")
-    if not isinstance(raw_checks, list) or not raw_checks:
-        raise ValueError("consensus proposition checks are invalid")
-    checks: list[PropositionCheck] = []
-    seen: set[str] = set()
-    for raw in raw_checks:
-        check = _required_mapping(raw, "consensus proposition check")
-        if set(check) != {"proposition_id", "status", "evidence_quote"}:
-            raise ValueError("consensus proposition check fields are invalid")
-        proposition_id = _required_string(check, "proposition_id")
-        if proposition_id in seen:
-            raise ValueError("consensus proposition check is duplicated")
-        seen.add(proposition_id)
-        status = _required_string(check, "status")
-        if status not in PROPOSITION_LABEL_SET:
-            raise ValueError("consensus proposition status is invalid")
-        evidence_quote = check.get("evidence_quote")
-        if status == "absent":
-            if evidence_quote is not None:
-                raise ValueError("consensus absent evidence quote is invalid")
-        elif not isinstance(evidence_quote, str) or not evidence_quote.strip():
-            raise ValueError("consensus non-absent evidence quote is invalid")
-        checks.append(
-            PropositionCheck(
-                proposition_id=proposition_id,
-                status=status,
-                evidence_quote=evidence_quote.strip() if isinstance(evidence_quote, str) else None,
-            )
-        )
-    return tuple(checks)
 
 
 def _validate_report_metrics(report: dict[str, Any], agreement: float, kappa: float, conflicts: int) -> None:

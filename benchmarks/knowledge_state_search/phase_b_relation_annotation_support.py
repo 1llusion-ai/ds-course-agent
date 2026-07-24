@@ -345,13 +345,13 @@ def resolve_relation_consensus(
             {
                 **canonical_row(key),
                 "reviewer_judgments": {
-                    "doubao": _judgment_summary(
+                    "doubao": judgment_summary(
                         doubao,
                         fixed_task_scope=fixed_task_scope,
                         derived_relation=doubao_relation,
                         source_scope_conflict=doubao_scope_conflict,
                     ),
-                    "mimo": _judgment_summary(
+                    "mimo": judgment_summary(
                         mimo,
                         fixed_task_scope=fixed_task_scope,
                         derived_relation=mimo_relation,
@@ -519,7 +519,7 @@ def source_scope_key(key: CanonicalKey) -> SourceScopeKey:
     return SourceScopeKey(task_id=key[0], source_id=key[3])
 
 
-def _judgment_summary(
+def judgment_summary(
     judgment: ModelRelationJudgment,
     *,
     fixed_task_scope: str,

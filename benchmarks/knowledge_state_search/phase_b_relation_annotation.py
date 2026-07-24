@@ -41,10 +41,12 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_support impor
     select_priority_spot_check_keys,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_calibration import (
+    CALIBRATION_BATCH_SIZE,
     CALIBRATION_PAIR_COUNT,
     FROZEN_DEV_SPLIT,
     RUN_CONTRACT_FILENAME,
     build_current_run_contract,
+    derive_calibration_contract,
     validate_calibration_authorization,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_target_specs import (
@@ -71,7 +73,7 @@ def run_dual_model_relation_annotation(
     source_scope_report_path: Path = DEFAULT_SOURCE_SCOPE_REPORT_PATH,
     calibration_authorization_path: Path = DEFAULT_CALIBRATION_AUTHORIZATION_PATH,
     output_directory: Path = DEFAULT_OUTPUT_DIRECTORY,
-    batch_size: int = 10,
+    batch_size: int = CALIBRATION_BATCH_SIZE,
     timeout: float = 180.0,
     max_retries: int = 3,
     limit_pairs: int | None = None,
@@ -119,17 +121,7 @@ def run_dual_model_relation_annotation(
     authorization_required = not calibration_only_selection
     calibration_authorization: dict[str, object] | None = None
     if authorization_required:
-        calibration_contract = build_current_run_contract(
-            reviewers=reviewers,
-            batch_size=batch_size,
-            selection_seed=selection_seed,
-            selected_task_split=FROZEN_DEV_SPLIT,
-            selected_pair_limit=CALIBRATION_PAIR_COUNT,
-            packet_manifest_path=packet_directory / "annotation_packet_manifest.json",
-            target_specs_path=DEFAULT_TARGET_SPECS_PATH,
-            source_scope_labels_path=source_scope_labels_path,
-            source_scope_report_path=source_scope_report_path,
-        )
+        calibration_contract = derive_calibration_contract(run_contract)
         calibration_authorization = validate_calibration_authorization(
             calibration_authorization_path,
             calibration_contract,
@@ -322,7 +314,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CALIBRATION_AUTHORIZATION_PATH,
     )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIRECTORY)
-    parser.add_argument("--batch-size", type=int, default=10)
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=CALIBRATION_BATCH_SIZE,
+        help="Frozen run-contract-v2 request size; must remain one pair per request.",
+    )
     parser.add_argument("--timeout", type=float, default=180.0)
     parser.add_argument("--max-retries", type=int, default=3)
     parser.add_argument("--limit-pairs", type=int)

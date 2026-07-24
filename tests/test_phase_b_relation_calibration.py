@@ -17,10 +17,18 @@ from benchmarks.knowledge_state_search.phase_b_relation_annotation_client import
 )
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_contract import (
     AnnotationReviewerConfig,
+    derive_relation,
     parse_model_relation_judgments,
 )
 from benchmarks.knowledge_state_search.phase_b_relation_annotation_support import (
+    SourceScopeKey,
     cohen_kappa,
+    judgment_summary,
+    load_source_scope_labels,
+    select_canonical_keys,
+)
+from benchmarks.knowledge_state_search.phase_b_relation_calibration_raw import (
+    validate_raw_responses,
 )
 
 
@@ -49,6 +57,41 @@ def test_calibration_authorization_passes_and_validates(
     assert "secret" not in json.dumps(contract.to_dict())
 
 
+def test_calibration_contract_freezes_single_pair_requests(
+    tmp_path: Path,
+) -> None:
+    contract, _ = _build_calibration_fixture(tmp_path)
+
+    assert calibration.CALIBRATION_BATCH_SIZE == 1
+    assert contract.batch_size == calibration.CALIBRATION_BATCH_SIZE
+    with pytest.raises(ValueError, match="preregistered value"):
+        calibration_support.validate_run_contract(
+            replace(
+                contract,
+                batch_size=calibration.CALIBRATION_BATCH_SIZE + 1,
+            )
+        )
+
+
+def test_calibration_contract_derivation_changes_only_selection(
+    tmp_path: Path,
+) -> None:
+    calibration_contract, _ = _build_calibration_fixture(tmp_path)
+    full_contract = replace(
+        calibration_contract,
+        selected_task_split=None,
+        selected_pair_limit=None,
+    )
+
+    derived = calibration.derive_calibration_contract(full_contract)
+
+    assert derived == calibration_contract
+    ignored_fields = {"selected_task_split", "selected_pair_limit"}
+    assert {field: value for field, value in derived.to_dict().items() if field not in ignored_fields} == {
+        field: value for field, value in full_contract.to_dict().items() if field not in ignored_fields
+    }
+
+
 @pytest.mark.parametrize("failure_kind", ["agreement", "kappa"])
 def test_calibration_rejects_single_run_threshold_failure(
     tmp_path: Path,
@@ -72,6 +115,7 @@ def test_calibration_rejects_single_run_threshold_failure(
                 "mimo",
                 "supported" if index < 24 else "partial",
             )
+    _write_raw_responses_for_consensus(run_directories[0], contract, rows)
     _write_jsonl(consensus_path, rows)
     _refresh_report(run_directories[0])
     output_path = tmp_path / "authorization.json"
@@ -96,6 +140,7 @@ def test_calibration_rejects_repeatability_below_threshold(
         changed_relation = _other_relation(_reviewer_relation(row, "doubao"))
         _set_reviewer_relation(row, "doubao", changed_relation)
         _set_reviewer_relation(row, "mimo", changed_relation)
+    _write_raw_responses_for_consensus(run_directories[1], contract, rows)
     _write_jsonl(consensus_path, rows)
     _refresh_report(run_directories[1])
     output_path = tmp_path / "authorization.json"
@@ -172,6 +217,12 @@ def test_calibration_rejects_copied_run_freshness_identifiers(
         second_directory = run_directories[1] / calibration.RAW_RESPONSES_DIRECTORY / reviewer_id
         for first_path in first_directory.glob("*.json"):
             (second_directory / first_path.name).write_bytes(first_path.read_bytes())
+    (run_directories[1] / calibration.CONSENSUS_FILENAME).write_bytes(
+        (run_directories[0] / calibration.CONSENSUS_FILENAME).read_bytes()
+    )
+    (run_directories[1] / calibration.ANNOTATION_REPORT_FILENAME).write_bytes(
+        (run_directories[0] / calibration.ANNOTATION_REPORT_FILENAME).read_bytes()
+    )
     output_path = tmp_path / "authorization.json"
 
     with pytest.raises(ValueError, match="not fresh"):
@@ -204,21 +255,64 @@ def test_calibration_rejects_dev_pair_universe_mismatch(
     assert not output_path.exists()
 
 
-def test_calibration_rejects_source_scope_conflict(
+def test_calibration_rejects_same_cherry_picked_pair_universe_in_both_runs(
     tmp_path: Path,
 ) -> None:
     contract, run_directories = _build_calibration_fixture(tmp_path)
-    path = run_directories[0] / calibration.CONSENSUS_FILENAME
-    rows = _read_jsonl(path)
-    rows[0]["source_scope_relation_conflict"] = True
-    rows[0]["reviewer_judgments"]["mimo"]["source_scope_conflict"] = True
-    rows[0]["consensus_relation"] = None
-    rows[0]["disposition"] = "source_scope_repair_required"
-    _write_jsonl(path, rows)
-    _refresh_report(run_directories[0])
+    request_bundle = calibration_support.load_request_inputs(contract)
+    selected_rows = _read_jsonl(run_directories[0] / calibration.SELECTED_PAIRS_FILENAME)
+    selected_keys = {
+        (
+            row["task_id"],
+            row["target_type"],
+            row["target_id"],
+            row["source_id"],
+        )
+        for row in selected_rows
+    }
+    omitted_key = next(
+        key
+        for key in request_bundle.canonical_keys
+        if key not in selected_keys and key[0] == selected_rows[0]["task_id"]
+    )
+    selected_rows[0] = {
+        "task_id": omitted_key[0],
+        "target_type": omitted_key[1],
+        "target_id": omitted_key[2],
+        "source_id": omitted_key[3],
+    }
+    selected_rows.sort(
+        key=lambda row: (
+            row["task_id"],
+            row["target_type"],
+            row["target_id"],
+            row["source_id"],
+        )
+    )
+    for run_directory in run_directories:
+        _write_jsonl(
+            run_directory / calibration.SELECTED_PAIRS_FILENAME,
+            selected_rows,
+        )
+
+    with pytest.raises(ValueError, match="deterministic selection seed"):
+        calibration.build_calibration_authorization(
+            run_directories=run_directories,
+            expected_contract=contract,
+            output_path=tmp_path / "authorization.json",
+        )
+
+
+def test_calibration_rejects_source_scope_conflict(
+    tmp_path: Path,
+) -> None:
+    contract, run_directories = _build_calibration_fixture(
+        tmp_path,
+        first_selected_source_out_of_scope=True,
+    )
     output_path = tmp_path / "authorization.json"
 
-    with pytest.raises(ValueError, match="source_scope_conflict"):
+    with pytest.raises(ValueError, match="scope conflicts"):
         calibration.build_calibration_authorization(
             run_directories=run_directories,
             expected_contract=contract,
@@ -226,6 +320,23 @@ def test_calibration_rejects_source_scope_conflict(
         )
 
     assert not output_path.exists()
+
+
+def test_calibration_rejects_consensus_not_bound_to_raw_judgments(
+    tmp_path: Path,
+) -> None:
+    contract, run_directories = _build_calibration_fixture(tmp_path)
+    path = run_directories[0] / calibration.CONSENSUS_FILENAME
+    rows = _read_jsonl(path)
+    rows[0]["reviewer_judgments"]["doubao"]["notes"] = "Fabricated consensus."
+    _write_jsonl(path, rows)
+
+    with pytest.raises(ValueError, match="raw response evidence"):
+        calibration.build_calibration_authorization(
+            run_directories=run_directories,
+            expected_contract=contract,
+            output_path=tmp_path / "authorization.json",
+        )
 
 
 def test_calibration_missing_evidence_file_fails_closed(
@@ -290,7 +401,7 @@ def test_authorization_validator_rechecks_persisted_run_evidence(
     _set_reviewer_relation(rows[0], "mimo", "partial")
     _write_jsonl(consensus_path, rows)
 
-    with pytest.raises(ValueError, match="agreement"):
+    with pytest.raises(ValueError, match="raw response evidence"):
         calibration.validate_calibration_authorization(
             output_path,
             contract,
@@ -299,8 +410,32 @@ def test_authorization_validator_rechecks_persisted_run_evidence(
 
 def _build_calibration_fixture(
     tmp_path: Path,
+    *,
+    first_selected_source_out_of_scope: bool = False,
 ) -> tuple[calibration.RelationRunContract, tuple[Path, Path]]:
-    selected_pairs = _selected_pairs()
+    available_pairs = _available_pairs()
+    selected_keys = select_canonical_keys(
+        tuple(
+            (
+                pair["task_id"],
+                pair["target_type"],
+                pair["target_id"],
+                pair["source_id"],
+            )
+            for pair in available_pairs
+        ),
+        limit_pairs=calibration.CALIBRATION_PAIR_COUNT,
+        seed="frozen-selection-seed",
+    )
+    selected_pairs = [
+        {
+            "task_id": key[0],
+            "target_type": key[1],
+            "target_id": key[2],
+            "source_id": key[3],
+        }
+        for key in selected_keys
+    ]
     packet_directory = tmp_path / "packet"
     design_directory = tmp_path / "design"
     packet_manifest_path = packet_directory / "annotation_packet_manifest.json"
@@ -310,15 +445,21 @@ def _build_calibration_fixture(
     _write_synthetic_packet_and_specs(
         packet_directory,
         design_directory,
-        selected_pairs,
+        available_pairs,
     )
     source_scope_rows = [
         {
             "task_id": pair["task_id"],
             "source_id": pair["source_id"],
-            "task_scope": "in_scope",
+            "task_scope": (
+                "out_of_scope"
+                if first_selected_source_out_of_scope
+                and pair["task_id"] == selected_pairs[0]["task_id"]
+                and pair["source_id"] == selected_pairs[0]["source_id"]
+                else "in_scope"
+            ),
         }
-        for pair in selected_pairs
+        for pair in available_pairs
     ]
     source_scope_rows.extend(
         {
@@ -326,7 +467,7 @@ def _build_calibration_fixture(
             "source_id": f"extra_source_{index:03d}",
             "task_scope": "in_scope",
         }
-        for index in range(114)
+        for index in range(144 - len(available_pairs))
     )
     _write_jsonl(source_scope_labels_path, source_scope_rows)
     source_scope_report_path.write_text('{"synthetic":"scope-report"}\n', encoding="utf-8")
@@ -348,7 +489,7 @@ def _build_calibration_fixture(
     )
     contract = calibration.build_current_run_contract(
         reviewers=reviewers,
-        batch_size=10,
+        batch_size=calibration.CALIBRATION_BATCH_SIZE,
         selection_seed="frozen-selection-seed",
         selected_task_split=calibration.FROZEN_DEV_SPLIT,
         selected_pair_limit=calibration.CALIBRATION_PAIR_COUNT,
@@ -367,10 +508,10 @@ def _build_calibration_fixture(
     return contract, run_directories
 
 
-def _selected_pairs() -> list[dict[str, str]]:
+def _available_pairs() -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for task_id in calibration.FROZEN_DEV_TASK_IDS:
-        for index in range(1, 11):
+        for index in range(1, 13):
             rows.append(
                 {
                     "task_id": task_id,
@@ -477,27 +618,79 @@ def _write_calibration_run(
         "contradicted",
         "distractor",
     )
+    relation_by_key = {
+        (
+            pair["task_id"],
+            pair["target_type"],
+            pair["target_id"],
+            pair["source_id"],
+        ): relations[index % len(relations)]
+        for index, pair in enumerate(selected_pairs)
+    }
+    _write_raw_responses(
+        run_directory,
+        contract,
+        {
+            "doubao": dict(relation_by_key),
+            "mimo": dict(relation_by_key),
+        },
+    )
+    request_bundle = calibration_support.load_request_inputs(contract)
+    selected_keys = tuple(relation_by_key)
+    raw_evidence = validate_raw_responses(
+        run_directory / calibration.RAW_RESPONSES_DIRECTORY,
+        contract,
+        request_bundle,
+        selected_keys,
+    )
+    source_scope_by_key = load_source_scope_labels(
+        Path(contract.source_scope_labels_path),
+        expected_count=144,
+    )
     consensus_rows: list[dict[str, Any]] = []
-    for index, pair in enumerate(selected_pairs):
-        relation = relations[index % len(relations)]
-        reviewer_judgments = {
-            binding.reviewer_id: _calibration_lower_summary(
-                binding.reviewer_id,
-                binding.model_id,
-                relation,
+    for pair, key in zip(selected_pairs, selected_keys, strict=True):
+        fixed_scope = source_scope_by_key[SourceScopeKey(task_id=key[0], source_id=key[3])]
+        reviewer_judgments: dict[str, dict[str, object]] = {}
+        reviewer_relations: dict[str, str] = {}
+        reviewer_conflicts: dict[str, bool] = {}
+        for reviewer_id in ("doubao", "mimo"):
+            judgment = raw_evidence.judgments_by_reviewer[reviewer_id][key]
+            relation = derive_relation(
+                target_type=key[1],
+                task_scope=fixed_scope,
+                proposition_checks=judgment.proposition_checks,
             )
-            for binding in contract.reviewer_models
-        }
+            conflict = fixed_scope == "out_of_scope" and any(
+                check.status != "absent" for check in judgment.proposition_checks
+            )
+            reviewer_relations[reviewer_id] = relation
+            reviewer_conflicts[reviewer_id] = conflict
+            reviewer_judgments[reviewer_id] = judgment_summary(
+                judgment,
+                fixed_task_scope=fixed_scope,
+                derived_relation=relation,
+                source_scope_conflict=conflict,
+            )
+        any_conflict = any(reviewer_conflicts.values())
+        agreement = reviewer_relations["doubao"] == reviewer_relations["mimo"]
         consensus_rows.append(
             {
                 **pair,
                 "reviewer_judgments": reviewer_judgments,
-                "source_scope_relation_conflict": False,
-                "relation_agreement": True,
-                "routing_agreement": True,
-                "consensus_relation": relation,
-                "disposition": "dual_model_consensus",
-                "reason": "same_relation_without_context_flag",
+                "source_scope_relation_conflict": any_conflict,
+                "relation_agreement": agreement,
+                "routing_agreement": agreement,
+                "consensus_relation": (None if any_conflict or not agreement else reviewer_relations["doubao"]),
+                "disposition": (
+                    "source_scope_repair_required"
+                    if any_conflict
+                    else ("dual_model_consensus" if agreement else "priority_subagent_required")
+                ),
+                "reason": (
+                    "source_scope_relation_conflict"
+                    if any_conflict
+                    else ("same_relation_without_context_flag" if agreement else "relation_disagreement")
+                ),
             }
         )
     _write_jsonl(
@@ -509,39 +702,6 @@ def _write_calibration_run(
         run_directory / calibration.ANNOTATION_REPORT_FILENAME,
         report,
     )
-    _write_raw_responses(run_directory, contract, consensus_rows)
-
-
-def _calibration_lower_summary(
-    reviewer_id: str,
-    model_id: str,
-    relation: str,
-) -> dict[str, object]:
-    status_by_relation = {
-        "supported": "entailed",
-        "partial": "weaker",
-        "contradicted": "contradicted",
-        "distractor": "absent",
-    }
-    status = status_by_relation[relation]
-    return {
-        "blind_item_id": f"{reviewer_id[0]}_synthetic",
-        "model": model_id,
-        "fixed_task_scope": "in_scope",
-        "source_scope_conflict": False,
-        "proposition_checks": [
-            {
-                "proposition_id": "p1",
-                "status": status,
-                "evidence_quote": None if status == "absent" else "Synthetic excerpt",
-            }
-        ],
-        "relation": relation,
-        "needs_context": False,
-        "notes": "Synthetic lower-model judgment.",
-        "input_sha256": "0" * 64,
-        "response_id": f"response-{reviewer_id}",
-    }
 
 
 def _annotation_report(
@@ -601,12 +761,15 @@ def _refresh_report(run_directory: Path) -> None:
 def _write_raw_responses(
     run_directory: Path,
     contract: calibration.RelationRunContract,
-    consensus_rows: list[dict[str, Any]],
+    relations_by_reviewer: dict[
+        str,
+        dict[tuple[str, str, str, str], str],
+    ],
 ) -> None:
-    request_inputs = calibration_support.load_request_inputs(contract)
+    request_bundle = calibration_support.load_request_inputs(contract)
     for binding in contract.reviewer_models:
         reviewer_directory = run_directory / calibration.RAW_RESPONSES_DIRECTORY / binding.reviewer_id
-        reviewer_directory.mkdir(parents=True)
+        reviewer_directory.mkdir(parents=True, exist_ok=True)
         reviewer = AnnotationReviewerConfig(
             reviewer_id=binding.reviewer_id,
             base_url=binding.base_url,
@@ -615,16 +778,19 @@ def _write_raw_responses(
             disable_thinking=binding.disable_thinking,
         )
         ordered_inputs = tuple(
-            request_inputs[binding.reviewer_id][blind_item_id]
-            for blind_item_id in sorted(request_inputs[binding.reviewer_id])
+            request_bundle.inputs_by_reviewer[binding.reviewer_id][blind_item_id]
+            for blind_item_id in sorted(request_bundle.inputs_by_reviewer[binding.reviewer_id])
+            if request_bundle.canonical_by_blind_id[binding.reviewer_id][blind_item_id]
+            in relations_by_reviewer[binding.reviewer_id]
         )
         relation_by_blind_item_id = {
-            review_input.blind_item_id: _reviewer_relation(row, binding.reviewer_id)
-            for review_input, row in zip(ordered_inputs, consensus_rows, strict=True)
+            review_input.blind_item_id: relations_by_reviewer[binding.reviewer_id][
+                request_bundle.canonical_by_blind_id[binding.reviewer_id][review_input.blind_item_id]
+            ]
+            for review_input in ordered_inputs
         }
-        for batch_index in range(3):
+        for batch_index, start in enumerate(range(0, len(ordered_inputs), contract.batch_size)):
             batch_id = f"batch_{batch_index + 1:03d}"
-            start = batch_index * contract.batch_size
             batch_inputs = ordered_inputs[start : start + contract.batch_size]
             blind_item_ids = [item.blind_item_id for item in batch_inputs]
             response_id = f"{run_directory.name}-{binding.reviewer_id}-{batch_id}"
@@ -651,7 +817,7 @@ def _write_raw_responses(
                                 "evidence_quote": (
                                     None
                                     if status_by_relation[relation_by_blind_item_id[item.blind_item_id]] == "absent"
-                                    else item.source_excerpt
+                                    else "Synthetic excerpt"
                                 ),
                             }
                         ],
@@ -709,6 +875,30 @@ def _write_raw_responses(
                     "parsed_judgments": parsed_judgments,
                 },
             )
+
+
+def _write_raw_responses_for_consensus(
+    run_directory: Path,
+    contract: calibration.RelationRunContract,
+    consensus_rows: list[dict[str, Any]],
+) -> None:
+    relations_by_reviewer = {
+        reviewer_id: {
+            (
+                str(row["task_id"]),
+                str(row["target_type"]),
+                str(row["target_id"]),
+                str(row["source_id"]),
+            ): _reviewer_relation(row, reviewer_id)
+            for row in consensus_rows
+        }
+        for reviewer_id in ("doubao", "mimo")
+    }
+    _write_raw_responses(
+        run_directory,
+        contract,
+        relations_by_reviewer,
+    )
 
 
 def _set_reviewer_relation(
