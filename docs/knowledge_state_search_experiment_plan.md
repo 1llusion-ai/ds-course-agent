@@ -1,8 +1,48 @@
 # Knowledge-State Search Experiment Plan
 
-**Date:** 2026-07-24
+**Date:** 2026-07-25
 **Branch:** `feat/research-knowledge-state-search`
-**Status:** Phase B relation calibration is structurally blocked; no full annotation or method claim is authorized.
+**Status:** Phase B exploratory model-proxy annotation is resuming; the dataset
+is not frozen and no Phase B method claim or closed-loop run is authorized.
+
+## Phase A target-contract factorial amendment (2026-07-25)
+
+A fresh three-repeat Phase A diagnostic compared `M1`, `M2U`, `M2`, `M3U`,
+and `M3` under the frozen v3 pilot. All 90 method cases completed successfully.
+
+The central mechanism check failed for the selective-gate claim:
+
+- `M2` and `M3` received identical learner-obligation payloads in all `18/18`
+  paired task/profile/repeat cases;
+- the counterfactual gate therefore changed the obligation set in `0/18`
+  cases;
+- any M3-vs-M2 evidence difference in this run is attributable to planner
+  sampling and extra counterfactual cost, not demonstrated selective pruning;
+- on gap profiles, M3 used about `+0.778` logical model calls and `+573` tokens
+  per case relative to M2.
+
+The strict target contract remains diagnostically useful: strict M2/M3 achieved
+full target activation for every learner obligation they emitted, while M2U
+and M3U activated only part of their visible learner targets. However, goal
+prediction was still absent in two of three goal repeats, so the contract does
+not repair predictor omission.
+
+Current method decision:
+
+```text
+M3 selective-gate claim:      unsupported
+Phase B provisional candidate: M2 All-Predicted Gap + strict target contract
+Phase B method authorization: blocked until the proxy dataset is frozen
+closed-loop multi-hop:         blocked
+```
+
+Artifacts:
+
+```text
+var/artifacts/knowledge_state_search/confirmatory_v3_factorial_diagnostic_3repeat.json
+var/artifacts/knowledge_state_search/confirmatory_v3_factorial_diagnostic_3repeat_analysis.json
+var/artifacts/knowledge_state_search/confirmatory_v3_factorial_diagnostic_3repeat_analysis.md
+```
 
 ## 2026-07-21 Status Amendment
 
@@ -323,6 +363,14 @@ preserved in a separate retry artifact and sealed journal, so the run can
 finish before priority repair begins. Its lower-model judgments, terminal
 priority actions, and final proxy labels are still pending; therefore no
 dataset-freeze or method claim is authorized yet.
+
+The full dual-model pass completed all 1,440 pairs for both reviewers
+(2,880 judgments), with agreement `0.9201` and Cohen's kappa `0.8369`. The
+terminal priority subagent reviewed all 385 actions and finalized 1,440
+model-proxy relation labels after a separate three-source scope repair. The
+finalization report records 121 priority flips and zero unresolved repairs.
+This is still model-only proxy annotation: `human_verified_count=0`,
+`dataset_frozen=false`, and no method run is authorized.
 
 ### Priority-subagent invalidation of v3 authorization
 

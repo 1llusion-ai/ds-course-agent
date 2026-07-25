@@ -200,3 +200,13 @@ successful batches are never overwritten. Semantic drift within a successful
 retry is retained as provisional lower-model evidence and routed to the
 terminal priority stage after the full run, rather than stopping the run
 midway.
+
+The full dual-model pass then covered all 1,440 pairs for both reviewers
+(2,880 judgments), with agreement `0.9201` and Cohen's kappa `0.8369`.
+The terminal priority subagent independently reviewed all 385 action rows
+(115 adjudications and 270 spot checks), producing 121 priority flips and no
+context-unresolved rows. A separate source-scope repair subagent repaired
+three source-task scope labels; the repaired finalizer produced 1,440
+model-proxy relation labels with zero unresolved repairs. These remain
+model-only proxy labels: `human_verified_count=0`, `dataset_frozen=false`, and
+method runs are not authorized.

@@ -109,13 +109,13 @@ def test_priority_non_absent_evidence_under_out_of_scope_requires_repair(
     packet[1]["fixed_task_scope"] = "out_of_scope"
     action_map[1]["fixed_task_scope"] = "out_of_scope"
     scope_labels[2]["task_scope"] = "out_of_scope"
-    consensus[2]["consensus_relation"] = "unrelated"
+    consensus[2]["consensus_relation"] = None
+    consensus[2]["disposition"] = "source_scope_repair_required"
+    consensus[2]["reason"] = "source_scope_relation_conflict"
+    consensus[2]["source_scope_relation_conflict"] = True
     for summary in consensus[2]["reviewer_judgments"].values():
         summary["fixed_task_scope"] = "out_of_scope"
-        summary["proposition_checks"][0]["status"] = "absent"
-        summary["proposition_checks"][0]["evidence_sentence_ids"] = []
-        summary["proposition_checks"][0]["evidence_quote"] = None
-        summary["relation"] = "unrelated"
+        summary["source_scope_conflict"] = True
     _write_jsonl(paths["packet"], packet)
     _write_jsonl(paths["action_map"], action_map)
     _write_jsonl(paths["consensus"], consensus)

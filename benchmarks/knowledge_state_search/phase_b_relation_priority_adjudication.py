@@ -182,7 +182,10 @@ def finalize_priority_relation_adjudication(
                 raise ValueError(f"priority adjudication action is misrouted: {key}")
             priority_adjudication_count += 1
         elif action_type == "spot_check":
-            if row.get("disposition") != "dual_model_consensus":
+            if row.get("disposition") not in {
+                "dual_model_consensus",
+                "source_scope_repair_required",
+            }:
                 raise ValueError(f"priority spot-check action is misrouted: {key}")
             priority_spot_check_count += 1
         else:

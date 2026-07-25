@@ -1069,6 +1069,15 @@ and any successful semantic-drift result is forced into terminal priority
 review after full coverage. This does not relax either calibration run or call
 any label human verified.
 
+The full lower-model annotation is complete: 1,440 pairs were judged by both
+Doubao and Gemini, yielding 2,880 judgments, agreement `0.9201`, and kappa
+`0.8369`. The terminal priority subagent reviewed 385 actions (115
+adjudications plus 270 spot checks) and finalized all 1,440 relation labels.
+Three source-task scope conflicts were separately repaired by an independent
+source-scope repair subagent. The final model-proxy artifact has 121 priority
+flips and zero unresolved repairs, but it remains unfrozen and
+`human_verified_count=0`; method runs remain unauthorized.
+
 The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future
 human A/B protocol. The active exploratory model-proxy authorization gate was
 separately frozen at overall agreement `0.80`, overall kappa `0.65`, and
