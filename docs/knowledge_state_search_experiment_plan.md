@@ -316,12 +316,13 @@ remains strict and no calibration replacement is permitted.
 
 The full run started automatically only after the machine authorization was
 created. Calibration remains strict and fail-closed, but full-run failures are
-not terminal: the runner starts a fresh request cycle until each batch returns
-a structurally valid judgment. Every failed cycle is preserved in a separate
-retry artifact and sealed journal, so the run can finish before priority
-repair begins. Its lower-model judgments, terminal priority actions, and final
-proxy labels are still pending; therefore no dataset-freeze or method claim is
-authorized yet.
+not terminal: a failed batch moves to the tail of a deferred retry queue while
+later unseen batches continue. Deferred batches then receive fresh request
+cycles until each returns a structurally valid judgment. Every failed cycle is
+preserved in a separate retry artifact and sealed journal, so the run can
+finish before priority repair begins. Its lower-model judgments, terminal
+priority actions, and final proxy labels are still pending; therefore no
+dataset-freeze or method claim is authorized yet.
 
 ### Priority-subagent invalidation of v3 authorization
 

@@ -7,6 +7,7 @@ import json
 import re
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -53,7 +54,7 @@ class BatchFailurePolicy(str, Enum):
     """Control whether a batch failure is terminal or retried by the runner."""
 
     STRICT = "strict"
-    RETRY_UNTIL_SUCCESS = "retry_until_success"
+    DEFER_AND_RETRY_UNTIL_SUCCESS = "defer_and_retry_until_success"
 
 
 @dataclass(frozen=True)
@@ -93,103 +94,86 @@ def run_relation_reviewer(
     raw_directory.mkdir(parents=True, exist_ok=True)
     journal_directory = attempt_journal_directory / reviewer.reviewer_id
     journal_directory.mkdir(parents=True, exist_ok=True)
-    for offset in range(0, len(inputs), batch_size):
+    pending_offsets = deque(range(0, len(inputs), batch_size))
+    while pending_offsets:
+        offset = pending_offsets.popleft()
         batch = inputs[offset : offset + batch_size]
         batch_id = f"batch_{offset // batch_size + 1:03d}"
-        while True:
-            active_raw_path = _latest_batch_artifact(raw_directory, batch_id)
-            resumed = _load_resumable_batch(
-                active_raw_path,
-                reviewer=reviewer,
-                batch_id=batch_id,
-                inputs=batch,
-                failure_policy=failure_policy,
-            )
-            if resumed is not None:
-                all_judgments.extend(resumed.judgments)
-                resumed_batch_count += 1
-                if resumed.requires_priority:
-                    forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in resumed.judgments)
-                break
-            raw_path = _next_batch_artifact_path(raw_directory, batch_id)
-            journal_path = _journal_path_for_artifact(journal_directory, raw_path)
-            request_nonce = str(uuid.uuid4())
-            request_payload = build_relation_request_payload(
+        active_raw_path = _latest_batch_artifact(raw_directory, batch_id)
+        resumed = _load_resumable_batch(
+            active_raw_path,
+            reviewer=reviewer,
+            batch_id=batch_id,
+            inputs=batch,
+            failure_policy=failure_policy,
+        )
+        if resumed is not None:
+            all_judgments.extend(resumed.judgments)
+            resumed_batch_count += 1
+            if resumed.requires_priority:
+                forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in resumed.judgments)
+            continue
+        raw_path = _next_batch_artifact_path(raw_directory, batch_id)
+        journal_path = _journal_path_for_artifact(journal_directory, raw_path)
+        request_nonce = str(uuid.uuid4())
+        request_payload = build_relation_request_payload(
+            reviewer=reviewer,
+            batch_id=batch_id,
+            inputs=batch,
+            request_nonce=request_nonce,
+        )
+        request_fingerprint = json_sha256(
+            {
+                "endpoint": f"{reviewer.base_url.rstrip('/')}/chat/completions",
+                "reviewer_id": reviewer.reviewer_id,
+                "request_payload": request_payload,
+            }
+        )
+        _write_json(
+            raw_path,
+            _batch_audit(
+                status="pending",
                 reviewer=reviewer,
                 batch_id=batch_id,
                 inputs=batch,
                 request_nonce=request_nonce,
+                request_fingerprint=request_fingerprint,
+                attempts=[],
+            ),
+        )
+        try:
+            judgments, audit = _request_annotation_batch(
+                reviewer=reviewer,
+                batch_id=batch_id,
+                inputs=batch,
+                timeout=timeout,
+                max_retries=max_retries,
+                request_nonce=request_nonce,
+                request_fingerprint=request_fingerprint,
+                request_payload=request_payload,
+                failure_policy=failure_policy,
             )
-            request_fingerprint = json_sha256(
-                {
-                    "endpoint": f"{reviewer.base_url.rstrip('/')}/chat/completions",
-                    "reviewer_id": reviewer.reviewer_id,
-                    "request_payload": request_payload,
-                }
-            )
-            _write_json(
-                raw_path,
-                _batch_audit(
-                    status="pending",
-                    reviewer=reviewer,
-                    batch_id=batch_id,
-                    inputs=batch,
-                    request_nonce=request_nonce,
-                    request_fingerprint=request_fingerprint,
-                    attempts=[],
-                ),
-            )
-            try:
-                judgments, audit = _request_annotation_batch(
-                    reviewer=reviewer,
-                    batch_id=batch_id,
-                    inputs=batch,
-                    timeout=timeout,
-                    max_retries=max_retries,
-                    request_nonce=request_nonce,
-                    request_fingerprint=request_fingerprint,
-                    request_payload=request_payload,
-                    failure_policy=failure_policy,
-                )
-            except RuntimeError as exc:
-                failed_audit = _runtime_error_audit(exc)
-                _write_json(raw_path, failed_audit)
-                _write_attempt_journal(
-                    journal_path,
-                    raw_path=raw_path,
-                    payload=failed_audit,
-                )
-                if failure_policy is BatchFailurePolicy.RETRY_UNTIL_SUCCESS:
-                    time.sleep(
-                        retry_delay(
-                            status_code=None,
-                            retry_after=None,
-                            attempt=max_retries,
-                        )
-                    )
-                    continue
-                recovered = _load_resumable_batch(
-                    raw_path,
-                    reviewer=reviewer,
-                    batch_id=batch_id,
-                    inputs=batch,
-                    failure_policy=failure_policy,
-                )
-                if recovered is None:
-                    raise
-                all_judgments.extend(recovered.judgments)
-                forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in recovered.judgments)
-                break
-            _write_json(raw_path, audit)
+        except RuntimeError as exc:
+            failed_audit = _runtime_error_audit(exc)
+            _write_json(raw_path, failed_audit)
             _write_attempt_journal(
                 journal_path,
                 raw_path=raw_path,
-                payload=audit,
+                payload=failed_audit,
             )
-            all_judgments.extend(judgments)
-            if audit.get("status") == "success_requires_priority":
-                forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in judgments)
-            break
+            if failure_policy is BatchFailurePolicy.DEFER_AND_RETRY_UNTIL_SUCCESS:
+                pending_offsets.append(offset)
+                continue
+            raise
+        _write_json(raw_path, audit)
+        _write_attempt_journal(
+            journal_path,
+            raw_path=raw_path,
+            payload=audit,
+        )
+        all_judgments.extend(judgments)
+        if audit.get("status") == "success_requires_priority":
+            forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in judgments)
     ordered = tuple(sorted(all_judgments, key=lambda item: item.blind_item_id))
     _write_jsonl(
         output_directory / f"{reviewer.reviewer_id}_judgments.jsonl",
@@ -440,11 +424,11 @@ def _load_resumable_batch(
     payload = json.loads(path.read_text(encoding="utf-8"))
     status = payload.get("status")
     if status == "pending":
-        if failure_policy is BatchFailurePolicy.RETRY_UNTIL_SUCCESS:
+        if failure_policy is BatchFailurePolicy.DEFER_AND_RETRY_UNTIL_SUCCESS:
             return None
         raise ValueError(f"existing raw response is not resumable: {path}")
     if status == "failed":
-        if failure_policy is BatchFailurePolicy.RETRY_UNTIL_SUCCESS:
+        if failure_policy is BatchFailurePolicy.DEFER_AND_RETRY_UNTIL_SUCCESS:
             return None
         raise ValueError(f"existing raw response is not resumable: {path}")
     if status not in {"success", "success_requires_priority"}:

@@ -203,7 +203,7 @@ def run_dual_model_relation_annotation(
             run_contract=run_contract,
             selected_keys=selected_keys,
         )
-    failure_policy = BatchFailurePolicy.RETRY_UNTIL_SUCCESS if full_annotation else BatchFailurePolicy.STRICT
+    failure_policy = BatchFailurePolicy.DEFER_AND_RETRY_UNTIL_SUCCESS if full_annotation else BatchFailurePolicy.STRICT
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {
             reviewer.reviewer_id: executor.submit(
@@ -653,7 +653,7 @@ def _write_resume_segment(
                 "resume_git_commit": git_output("rev-parse", "HEAD"),
                 "run_contract_sha256": file_sha256(output_directory / RUN_CONTRACT_FILENAME),
                 "execution_seal_sha256": run_contract.execution_seal_sha256,
-                "failure_policy": BatchFailurePolicy.RETRY_UNTIL_SUCCESS.value,
+                "failure_policy": BatchFailurePolicy.DEFER_AND_RETRY_UNTIL_SUCCESS.value,
                 "preserve_existing_successes": True,
                 "replace_existing_batches": False,
             },

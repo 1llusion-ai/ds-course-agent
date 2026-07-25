@@ -191,10 +191,12 @@ independent PASS.
 
 The two v6 calibrations subsequently passed and created the canonical
 authorization. The exploratory full runner is deliberately more tolerant than
-calibration: calibration remains fail-closed, while every full-run batch
-failure starts a fresh request cycle and is retried until that batch returns a
-structurally valid judgment. Each failed cycle is retained as an immutable
-`batch_NNN.retry_MMM.json` artifact with its own sealed journal; successful
-batches are never overwritten. Semantic drift within a successful retry is
-retained as provisional lower-model evidence and routed to the terminal
-priority stage after the full run, rather than stopping the run midway.
+calibration: calibration remains fail-closed, while every failed full-run batch
+is moved to the tail of a deferred retry queue so unseen later batches run
+first. After the pass, deferred batches receive fresh request cycles until they
+return structurally valid judgments. Each failed cycle is retained as an
+immutable `batch_NNN.retry_MMM.json` artifact with its own sealed journal;
+successful batches are never overwritten. Semantic drift within a successful
+retry is retained as provisional lower-model evidence and routed to the
+terminal priority stage after the full run, rather than stopping the run
+midway.

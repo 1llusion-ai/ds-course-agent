@@ -1059,14 +1059,15 @@ with no replacements. The execution seal records the independent FAIL and
 owner override without fabricating an independent PASS.
 
 The two exact v6 calibrations passed and generated canonical authorization.
-The exploratory full-run policy now treats batch failures as retryable work
-rather than terminal run failures. Each failed request cycle is preserved in a
-new immutable retry artifact and sealed journal, then the same batch is retried
-with a fresh request until a structurally valid judgment is obtained. Existing
-successful artifacts are resumed without replacement, and any successful
-semantic-drift result is forced into terminal priority review after full
-coverage. This does not relax either calibration run or call any label human
-verified.
+The exploratory full-run policy now treats batch failures as deferred retry
+work rather than terminal run failures. Each failed request cycle is preserved
+in a new immutable retry artifact and sealed journal, then its batch moves to
+the tail of the queue so later unseen batches run first. Deferred batches are
+retried with fresh requests after the pass until structurally valid judgments
+are obtained. Existing successful artifacts are resumed without replacement,
+and any successful semantic-drift result is forced into terminal priority
+review after full coverage. This does not relax either calibration run or call
+any label human verified.
 
 The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future
 human A/B protocol. The active exploratory model-proxy authorization gate was

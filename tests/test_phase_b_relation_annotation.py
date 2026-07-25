@@ -268,19 +268,19 @@ def test_pair_relation_contract_structurally_excludes_task_scope_output():
         )
 
 
-def test_full_run_retries_failed_batch_without_overwriting_evidence(
+def test_full_run_defers_failed_batch_until_later_batches_finish(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     reviewer = _reviewer("doubao")
-    review_input = _input("d_0001")
-    request_count = 0
+    request_order: list[str] = []
 
     def fake_request_annotation_batch(**kwargs):
-        nonlocal request_count
-        request_count += 1
+        blind_item_id = kwargs["inputs"][0].blind_item_id
+        request_order.append(blind_item_id)
+        first_item_initial_failure = blind_item_id == "d_0001" and request_order.count(blind_item_id) == 1
         audit = relation_client._batch_audit(
-            status="failed" if request_count == 1 else "success",
+            status="failed" if first_item_initial_failure else "success",
             reviewer=kwargs["reviewer"],
             batch_id=kwargs["batch_id"],
             inputs=kwargs["inputs"],
@@ -288,7 +288,7 @@ def test_full_run_retries_failed_batch_without_overwriting_evidence(
             request_fingerprint=kwargs["request_fingerprint"],
             attempts=[],
         )
-        if request_count == 1:
+        if first_item_initial_failure:
             raise RuntimeError(
                 json.dumps(
                     {
@@ -298,7 +298,8 @@ def test_full_run_retries_failed_batch_without_overwriting_evidence(
                 )
             )
         judgment = replace(
-            _judgment("doubao", "d_0001", "supported"),
+            _judgment("doubao", blind_item_id, "supported"),
+            batch_id=kwargs["batch_id"],
             request_nonce=kwargs["request_nonce"],
         )
         return (judgment,), {
@@ -311,27 +312,27 @@ def test_full_run_retries_failed_batch_without_overwriting_evidence(
         "_request_annotation_batch",
         fake_request_annotation_batch,
     )
-    monkeypatch.setattr(relation_client.time, "sleep", lambda _: None)
 
     result = run_relation_reviewer(
         reviewer=reviewer,
-        inputs=(review_input,),
+        inputs=(_input("d_0001"), _input("d_0002")),
         output_directory=tmp_path / "run",
         batch_size=1,
         timeout=1.0,
         max_retries=1,
         attempt_journal_directory=tmp_path / "journals",
-        failure_policy=BatchFailurePolicy.RETRY_UNTIL_SUCCESS,
+        failure_policy=BatchFailurePolicy.DEFER_AND_RETRY_UNTIL_SUCCESS,
     )
 
     raw_directory = tmp_path / "run" / "raw_responses" / "doubao"
-    assert request_count == 2
+    assert request_order == ["d_0001", "d_0002", "d_0001"]
     assert json.loads((raw_directory / "batch_001.json").read_text())["status"] == "failed"
     assert json.loads((raw_directory / "batch_001.retry_001.json").read_text())["status"] == "success"
+    assert json.loads((raw_directory / "batch_002.json").read_text())["status"] == "success"
     assert (tmp_path / "journals" / "doubao" / "batch_001.json").exists()
     assert (tmp_path / "journals" / "doubao" / "batch_001.retry_001.json").exists()
-    assert len(result.judgments) == 1
-    assert result.judgments[0].blind_item_id == "d_0001"
+    assert len(result.judgments) == 2
+    assert [judgment.blind_item_id for judgment in result.judgments] == ["d_0001", "d_0002"]
 
 
 def test_relation_request_and_retry_fingerprints_cover_routing_fields():
