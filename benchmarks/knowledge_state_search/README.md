@@ -190,9 +190,11 @@ the independent FAIL plus the owner override rather than claiming a false
 independent PASS.
 
 The two v6 calibrations subsequently passed and created the canonical
-authorization. During the exploratory full run, semantic retry drift stopped
-Doubao at batch 270 and Gemini at batch 700 after 968 total successful
-judgments. Full-run continuation preserves all prior raw files, resumes only
-unprocessed batches, and forces any recovered structurally valid drift item
-into priority review. It never applies this relaxed continuation policy to the
-two calibration runs.
+authorization. The exploratory full runner is deliberately more tolerant than
+calibration: calibration remains fail-closed, while every full-run batch
+failure starts a fresh request cycle and is retried until that batch returns a
+structurally valid judgment. Each failed cycle is retained as an immutable
+`batch_NNN.retry_MMM.json` artifact with its own sealed journal; successful
+batches are never overwritten. Semantic drift within a successful retry is
+retained as provisional lower-model evidence and routed to the terminal
+priority stage after the full run, rather than stopping the run midway.

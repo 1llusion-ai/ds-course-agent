@@ -50,10 +50,10 @@ class ProviderResponseBody:
 
 
 class BatchFailurePolicy(str, Enum):
-    """Control whether structurally valid retry drift is terminal or reviewed."""
+    """Control whether a batch failure is terminal or retried by the runner."""
 
     STRICT = "strict"
-    ROUTE_SEMANTIC_DRIFT_TO_PRIORITY = "route_semantic_drift_to_priority"
+    RETRY_UNTIL_SUCCESS = "retry_until_success"
 
 
 @dataclass(frozen=True)
@@ -96,87 +96,100 @@ def run_relation_reviewer(
     for offset in range(0, len(inputs), batch_size):
         batch = inputs[offset : offset + batch_size]
         batch_id = f"batch_{offset // batch_size + 1:03d}"
-        raw_path = raw_directory / f"{batch_id}.json"
-        resumed = _load_resumable_batch(
-            raw_path,
-            reviewer=reviewer,
-            batch_id=batch_id,
-            inputs=batch,
-            failure_policy=failure_policy,
-        )
-        if resumed is not None:
-            all_judgments.extend(resumed.judgments)
-            resumed_batch_count += 1
-            if resumed.requires_priority:
-                forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in resumed.judgments)
-            continue
-        request_nonce = str(uuid.uuid4())
-        request_payload = build_relation_request_payload(
-            reviewer=reviewer,
-            batch_id=batch_id,
-            inputs=batch,
-            request_nonce=request_nonce,
-        )
-        request_fingerprint = json_sha256(
-            {
-                "endpoint": f"{reviewer.base_url.rstrip('/')}/chat/completions",
-                "reviewer_id": reviewer.reviewer_id,
-                "request_payload": request_payload,
-            }
-        )
-        _write_json(
-            raw_path,
-            _batch_audit(
-                status="pending",
+        while True:
+            active_raw_path = _latest_batch_artifact(raw_directory, batch_id)
+            resumed = _load_resumable_batch(
+                active_raw_path,
                 reviewer=reviewer,
                 batch_id=batch_id,
                 inputs=batch,
-                request_nonce=request_nonce,
-                request_fingerprint=request_fingerprint,
-                attempts=[],
-            ),
-        )
-        try:
-            judgments, audit = _request_annotation_batch(
-                reviewer=reviewer,
-                batch_id=batch_id,
-                inputs=batch,
-                timeout=timeout,
-                max_retries=max_retries,
-                request_nonce=request_nonce,
-                request_fingerprint=request_fingerprint,
-                request_payload=request_payload,
                 failure_policy=failure_policy,
             )
-        except RuntimeError as exc:
-            failed_audit = _runtime_error_audit(exc)
-            _write_json(raw_path, failed_audit)
-            _write_attempt_journal(
-                journal_directory / f"{batch_id}.json",
-                raw_path=raw_path,
-                payload=failed_audit,
+            if resumed is not None:
+                all_judgments.extend(resumed.judgments)
+                resumed_batch_count += 1
+                if resumed.requires_priority:
+                    forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in resumed.judgments)
+                break
+            raw_path = _next_batch_artifact_path(raw_directory, batch_id)
+            journal_path = _journal_path_for_artifact(journal_directory, raw_path)
+            request_nonce = str(uuid.uuid4())
+            request_payload = build_relation_request_payload(
+                reviewer=reviewer,
+                batch_id=batch_id,
+                inputs=batch,
+                request_nonce=request_nonce,
             )
-            recovered = _load_resumable_batch(
+            request_fingerprint = json_sha256(
+                {
+                    "endpoint": f"{reviewer.base_url.rstrip('/')}/chat/completions",
+                    "reviewer_id": reviewer.reviewer_id,
+                    "request_payload": request_payload,
+                }
+            )
+            _write_json(
                 raw_path,
-                reviewer=reviewer,
-                batch_id=batch_id,
-                inputs=batch,
-                failure_policy=failure_policy,
+                _batch_audit(
+                    status="pending",
+                    reviewer=reviewer,
+                    batch_id=batch_id,
+                    inputs=batch,
+                    request_nonce=request_nonce,
+                    request_fingerprint=request_fingerprint,
+                    attempts=[],
+                ),
             )
-            if recovered is None:
-                raise
-            all_judgments.extend(recovered.judgments)
-            forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in recovered.judgments)
-            continue
-        _write_json(raw_path, audit)
-        _write_attempt_journal(
-            journal_directory / f"{batch_id}.json",
-            raw_path=raw_path,
-            payload=audit,
-        )
-        all_judgments.extend(judgments)
-        if audit.get("status") == "success_requires_priority":
-            forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in judgments)
+            try:
+                judgments, audit = _request_annotation_batch(
+                    reviewer=reviewer,
+                    batch_id=batch_id,
+                    inputs=batch,
+                    timeout=timeout,
+                    max_retries=max_retries,
+                    request_nonce=request_nonce,
+                    request_fingerprint=request_fingerprint,
+                    request_payload=request_payload,
+                    failure_policy=failure_policy,
+                )
+            except RuntimeError as exc:
+                failed_audit = _runtime_error_audit(exc)
+                _write_json(raw_path, failed_audit)
+                _write_attempt_journal(
+                    journal_path,
+                    raw_path=raw_path,
+                    payload=failed_audit,
+                )
+                if failure_policy is BatchFailurePolicy.RETRY_UNTIL_SUCCESS:
+                    time.sleep(
+                        retry_delay(
+                            status_code=None,
+                            retry_after=None,
+                            attempt=max_retries,
+                        )
+                    )
+                    continue
+                recovered = _load_resumable_batch(
+                    raw_path,
+                    reviewer=reviewer,
+                    batch_id=batch_id,
+                    inputs=batch,
+                    failure_policy=failure_policy,
+                )
+                if recovered is None:
+                    raise
+                all_judgments.extend(recovered.judgments)
+                forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in recovered.judgments)
+                break
+            _write_json(raw_path, audit)
+            _write_attempt_journal(
+                journal_path,
+                raw_path=raw_path,
+                payload=audit,
+            )
+            all_judgments.extend(judgments)
+            if audit.get("status") == "success_requires_priority":
+                forced_priority_blind_item_ids.update(judgment.blind_item_id for judgment in judgments)
+            break
     ordered = tuple(sorted(all_judgments, key=lambda item: item.blind_item_id))
     _write_jsonl(
         output_directory / f"{reviewer.reviewer_id}_judgments.jsonl",
@@ -190,6 +203,46 @@ def run_relation_reviewer(
         ),
         resumed_batch_count=resumed_batch_count,
     )
+
+
+def _latest_batch_artifact(raw_directory: Path, batch_id: str) -> Path:
+    """Return the newest persisted artifact for one batch, if any."""
+
+    candidates = [
+        path
+        for path in raw_directory.glob(f"{batch_id}*.json")
+        if path.name == f"{batch_id}.json" or re.fullmatch(rf"{re.escape(batch_id)}\.retry_\d+\.json", path.name)
+    ]
+    if not candidates:
+        return raw_directory / f"{batch_id}.json"
+    return max(candidates, key=lambda path: _batch_artifact_sort_key(path, batch_id))
+
+
+def _next_batch_artifact_path(raw_directory: Path, batch_id: str) -> Path:
+    """Choose an immutable artifact path for the next request cycle."""
+
+    active_path = _latest_batch_artifact(raw_directory, batch_id)
+    if not active_path.exists():
+        return active_path
+    retry_index = _batch_artifact_sort_key(active_path, batch_id)[1] + 1
+    return raw_directory / f"{batch_id}.retry_{retry_index:03d}.json"
+
+
+def _batch_artifact_sort_key(path: Path, batch_id: str) -> tuple[int, int]:
+    """Order the base artifact before monotonically numbered retry artifacts."""
+
+    if path.name == f"{batch_id}.json":
+        return (0, 0)
+    match = re.fullmatch(rf"{re.escape(batch_id)}\.retry_(\d+)\.json", path.name)
+    if match is None:
+        raise ValueError(f"invalid batch artifact path: {path}")
+    return (1, int(match.group(1)))
+
+
+def _journal_path_for_artifact(journal_directory: Path, raw_path: Path) -> Path:
+    """Map each immutable raw artifact to one unique sealed journal."""
+
+    return journal_directory / f"{raw_path.stem}.json"
 
 
 def reviewer_usage(raw_directory: Path) -> dict[str, int]:
@@ -387,17 +440,13 @@ def _load_resumable_batch(
     payload = json.loads(path.read_text(encoding="utf-8"))
     status = payload.get("status")
     if status == "pending":
+        if failure_policy is BatchFailurePolicy.RETRY_UNTIL_SUCCESS:
+            return None
         raise ValueError(f"existing raw response is not resumable: {path}")
     if status == "failed":
-        if failure_policy is not BatchFailurePolicy.ROUTE_SEMANTIC_DRIFT_TO_PRIORITY:
-            raise ValueError(f"existing raw response is not resumable: {path}")
-        return _load_failed_semantic_drift_batch(
-            path,
-            payload=payload,
-            reviewer=reviewer,
-            batch_id=batch_id,
-            inputs=inputs,
-        )
+        if failure_policy is BatchFailurePolicy.RETRY_UNTIL_SUCCESS:
+            return None
+        raise ValueError(f"existing raw response is not resumable: {path}")
     if status not in {"success", "success_requires_priority"}:
         raise ValueError(f"existing raw response status is invalid: {path}")
     _validate_existing_batch_contract(
@@ -531,54 +580,6 @@ def _parse_attempt_judgments(
         response_received_at=required_string(attempt, "response_received_at"),
         inputs=inputs,
     )
-
-
-def _load_failed_semantic_drift_batch(
-    path: Path,
-    *,
-    payload: dict[str, object],
-    reviewer: AnnotationReviewerConfig,
-    batch_id: str,
-    inputs: tuple[RelationAnnotationInput, ...],
-) -> _ResumedBatch:
-    _validate_existing_batch_contract(
-        path,
-        payload=payload,
-        reviewer=reviewer,
-        batch_id=batch_id,
-        inputs=inputs,
-    )
-    if payload.get("error") != "ValueError: semantic judgments changed across retries for the same request":
-        raise ValueError(f"existing failed response is not a semantic-drift repair: {path}")
-    attempts = payload.get("attempts")
-    if not isinstance(attempts, list):
-        raise ValueError(f"existing failed response attempts are invalid: {path}")
-    semantic_fingerprints = {
-        attempt.get("semantic_response_fingerprint")
-        for attempt in attempts
-        if isinstance(attempt, dict) and isinstance(attempt.get("semantic_response_fingerprint"), str)
-    }
-    if len(semantic_fingerprints) < 2:
-        raise ValueError(f"existing failed response lacks semantic drift evidence: {path}")
-    judgments: tuple[ModelRelationJudgment, ...] | None = None
-    for attempt in reversed(attempts):
-        if not isinstance(attempt, dict) or "response_body_hex" not in attempt:
-            continue
-        try:
-            judgments = _parse_attempt_judgments(
-                path,
-                payload=payload,
-                attempt=attempt,
-                reviewer=reviewer,
-                batch_id=batch_id,
-                inputs=inputs,
-            )
-        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
-            continue
-        break
-    if judgments is None:
-        raise ValueError(f"existing failed response has no structurally valid retry: {path}")
-    return _ResumedBatch(judgments=judgments, requires_priority=True)
 
 
 def parse_provider_response_body(response_body: bytes) -> ProviderResponseBody:
