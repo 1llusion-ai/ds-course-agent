@@ -210,3 +210,12 @@ three source-task scope labels; the repaired finalizer produced 1,440
 model-proxy relation labels with zero unresolved repairs. These remain
 model-only proxy labels: `human_verified_count=0`, `dataset_frozen=false`, and
 method runs are not authorized.
+
+The first schema freeze attempt then failed the pre-experiment evidence
+coverage contract. After repairing two duplicate `mastered_concepts` entries
+in the deterministic profile design, the candidate package loaded far enough
+to reveal that only 29/120 targets have any `supported` source; 91 targets
+(48 claims and 43 required edges) lack one, including 8/12 learner claims.
+This is a real dataset-construction blocker, not a runner error. G6a and all
+method experiments remain unauthorized until source coverage is repaired and
+the changed pairs are re-annotated.

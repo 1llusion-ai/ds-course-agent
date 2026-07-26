@@ -63,6 +63,9 @@ def test_phase_b_design_profiles_activate_zero_or_one_learner_claim():
                 active = value == profile["learning_goal"]
             active_counts.append(int(active))
         assert sorted(active_counts) == [0, 1], task_id
+        for profile in profiles:
+            mastered = profile["mastered_concepts"]
+            assert len(mastered) == len(set(mastered)), task_id
 
 
 def test_phase_b_design_paths_are_two_non_branching_chains_and_include_learner_claim():

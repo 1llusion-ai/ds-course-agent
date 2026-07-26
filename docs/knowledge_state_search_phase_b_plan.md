@@ -1078,6 +1078,15 @@ source-scope repair subagent. The final model-proxy artifact has 121 priority
 flips and zero unresolved repairs, but it remains unfrozen and
 `human_verified_count=0`; method runs remain unauthorized.
 
+The first final-schema freeze attempt failed the evidence contract rather than
+an engineering check. Two duplicate profile concepts were repaired
+deterministically, after which the candidate exposed only 29/120 targets with
+any `supported` source. Ninety-one targets remain uncovered (48 claims and 43
+required edges), and 8/12 learner claims lack supported evidence. Therefore
+G5 is not passed, G6a has not run, and the correct next action is source
+coverage repair plus re-annotation of changed pairs—not relaxation of the
+freeze gate.
+
 The per-task kappa `0.55` gate in Section 6.3 belongs to the stronger future
 human A/B protocol. The active exploratory model-proxy authorization gate was
 separately frozen at overall agreement `0.80`, overall kappa `0.65`, and

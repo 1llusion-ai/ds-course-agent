@@ -372,6 +372,15 @@ finalization report records 121 priority flips and zero unresolved repairs.
 This is still model-only proxy annotation: `human_verified_count=0`,
 `dataset_frozen=false`, and no method run is authorized.
 
+The first freeze attempt did not pass G5. The package has the expected
+12/24/72/48/144/1,440 record counts, but only 29/120 targets have at least one
+`supported` source. The remaining 91 targets comprise 48 claims and 43
+required edges; only 4/12 learner claims currently have supported evidence.
+This blocks dataset freeze and G6a. The repair queue is recorded at
+`var/artifacts/knowledge_state_search/phase_b_supported_evidence_repair_queue.jsonl`;
+no method trace may run until the source pool and affected annotations are
+repaired.
+
 ### Priority-subagent invalidation of v3 authorization
 
 The owner-authorized priority subagent independently recomputed both v3 runs

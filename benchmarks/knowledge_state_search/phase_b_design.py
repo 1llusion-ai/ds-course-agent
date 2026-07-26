@@ -156,7 +156,7 @@ def _profiles_for(draft: TaskDraft) -> tuple[dict[str, object], dict[str, object
 
     mastered = list(draft.target_concepts)
     if draft.kind == "prerequisite":
-        mastered.append(draft.trigger)
+        mastered = list(dict.fromkeys((*mastered, draft.trigger)))
     no_gap = {
         "task_id": draft.task_id,
         "profile_id": f"{draft.task_id}_profile_00",
