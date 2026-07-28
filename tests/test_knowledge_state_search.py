@@ -7,7 +7,13 @@ from pathlib import Path
 
 from benchmarks.knowledge_state_search.analyze_probe import analyze
 from benchmarks.knowledge_state_search.gap_planner import KnowledgeStateGapPlanner
-from benchmarks.knowledge_state_search.models import SearchTask, StudentProfile
+from benchmarks.knowledge_state_search.models import (
+    EvidenceRequirement,
+    ProfileCondition,
+    ProfileField,
+    SearchTask,
+    StudentProfile,
+)
 from benchmarks.knowledge_state_search.prompt_probe import (
     _profile_text,
     _profile_view,
@@ -50,6 +56,41 @@ def test_gap_planner_adds_misconception_obligation_without_dropping_core():
     assert {item.requirement_id for item in gap.learner_requirements} == {
         "misconception_global_optimum",
         "prereq_initialization",
+    }
+
+
+def test_gap_planner_uses_explicit_typed_profile_condition() -> None:
+    task = SearchTask(
+        task_id="conditional",
+        question="question",
+        target_concepts=("concept",),
+        evidence_requirements=(
+            EvidenceRequirement(
+                requirement_id="core",
+                kind="core",
+                concept="shared",
+                description="shared evidence",
+                hard=True,
+            ),
+            EvidenceRequirement(
+                requirement_id="goal",
+                kind="goal",
+                concept="threshold",
+                description="learner-specific evidence",
+                profile_condition=ProfileCondition(
+                    ProfileField.LEARNING_GOAL,
+                    "compare thresholds",
+                ),
+            ),
+        ),
+        profiles=(),
+    )
+    no_gap = StudentProfile(student_id="no-gap", level="intermediate", learning_goal="understand curves")
+    active = StudentProfile(student_id="active", level="intermediate", learning_goal="compare thresholds")
+
+    assert KnowledgeStateGapPlanner().plan(task, no_gap).learner_requirements == ()
+    assert {item.requirement_id for item in KnowledgeStateGapPlanner().plan(task, active).learner_requirements} == {
+        "goal"
     }
 
 

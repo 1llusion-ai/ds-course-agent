@@ -3,9 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Literal
 
 RequirementKind = Literal["core", "prerequisite", "misconception", "goal"]
+
+
+class ProfileField(str, Enum):
+    """Typed learner-profile fields that may activate an evidence requirement."""
+
+    MASTERED_CONCEPT = "mastered_concept"
+    WEAK_CONCEPT = "weak_concept"
+    MISCONCEPTION = "misconception"
+    LEARNING_GOAL = "learning_goal"
 
 
 @dataclass(frozen=True)
@@ -46,6 +56,42 @@ class StudentProfile:
 
 
 @dataclass(frozen=True)
+class ProfileCondition:
+    """Explicit learner-profile trigger for one non-core requirement."""
+
+    field: ProfileField
+    value: str
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> ProfileCondition:
+        """Build a typed profile condition."""
+
+        return cls(
+            field=ProfileField(str(payload["field"])),
+            value=str(payload["value"]),
+        )
+
+    def matches(self, profile: StudentProfile) -> bool:
+        """Return whether the profile contains the exact trigger."""
+
+        if self.field is ProfileField.MASTERED_CONCEPT:
+            return self.value in profile.mastered_concepts
+        if self.field is ProfileField.WEAK_CONCEPT:
+            return self.value in profile.weak_concepts
+        if self.field is ProfileField.MISCONCEPTION:
+            return self.value in profile.misconceptions
+        return self.value == profile.learning_goal
+
+    def to_dict(self) -> dict[str, str]:
+        """Return a stable JSON-compatible representation."""
+
+        return {
+            "field": self.field.value,
+            "value": self.value,
+        }
+
+
+@dataclass(frozen=True)
 class EvidenceRequirement:
     """One claim or teaching obligation that a search should cover."""
 
@@ -56,11 +102,15 @@ class EvidenceRequirement:
     search_terms: tuple[str, ...] = ()
     hard: bool = False
     priority: int = 1
+    profile_condition: ProfileCondition | None = None
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> EvidenceRequirement:
         """Build a requirement from JSON-compatible data."""
 
+        raw_condition = payload.get("profile_condition")
+        if raw_condition is not None and not isinstance(raw_condition, dict):
+            raise ValueError("profile_condition must be an object or null")
         return cls(
             requirement_id=str(payload["requirement_id"]),
             kind=payload["kind"],
@@ -69,12 +119,13 @@ class EvidenceRequirement:
             search_terms=tuple(str(item) for item in payload.get("search_terms", [])),
             hard=bool(payload.get("hard", False)),
             priority=int(payload.get("priority", 1)),
+            profile_condition=ProfileCondition.from_dict(raw_condition) if raw_condition is not None else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Return a stable JSON-compatible representation."""
 
-        return {
+        payload = {
             "requirement_id": self.requirement_id,
             "kind": self.kind,
             "concept": self.concept,
@@ -83,6 +134,9 @@ class EvidenceRequirement:
             "hard": self.hard,
             "priority": self.priority,
         }
+        if self.profile_condition is not None:
+            payload["profile_condition"] = self.profile_condition.to_dict()
+        return payload
 
 
 @dataclass(frozen=True)

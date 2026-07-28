@@ -20,6 +20,14 @@ class KnowledgeStateGapPlanner:
         misconceptions = set(profile.misconceptions)
 
         for item in task.evidence_requirements:
+            if item.kind == "core":
+                continue
+            if item.profile_condition is not None:
+                if item.profile_condition.matches(profile):
+                    learner.append(item)
+                elif item.kind == "prerequisite":
+                    satisfied.append(item.concept)
+                continue
             if item.kind == "prerequisite":
                 if item.concept in weak or item.concept in misconceptions or item.concept not in mastered:
                     learner.append(item)

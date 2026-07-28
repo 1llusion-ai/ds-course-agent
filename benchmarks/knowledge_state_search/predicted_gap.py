@@ -81,7 +81,12 @@ def _extract_json(text: str) -> dict[str, Any]:
         return json.loads(raw[start : end + 1])
 
 
-def build_predictor_prompt(task: SearchTask, profile: StudentProfile) -> str:
+def build_predictor_prompt(
+    task: SearchTask,
+    profile: StudentProfile,
+    *,
+    neutral_learning_goal: str | None = None,
+) -> str:
     """Build a predictor prompt that excludes gold learner requirements."""
 
     core = _core_gap(task)
@@ -92,6 +97,15 @@ def build_predictor_prompt(task: SearchTask, profile: StudentProfile) -> str:
         "misconceptions": list(profile.misconceptions),
         "learning_goal": profile.learning_goal,
     }
+    neutral_goal_note = (
+        f"""
+本任务中，学习目标“{neutral_learning_goal}”是所有对照画像共享的基线目标；
+它本身不能触发 goal obligation。只有画像相对该基线新增的明确目标，
+才能作为 learner evidence obligation 的触发条件。
+"""
+        if neutral_learning_goal is not None
+        else ""
+    )
     return f"""问题：
 {task.question}
 
@@ -100,6 +114,7 @@ def build_predictor_prompt(task: SearchTask, profile: StudentProfile) -> str:
 
 学生画像：
 {json.dumps(profile_view, ensure_ascii=False, indent=2)}
+{neutral_goal_note}
 
 请只预测该学生额外需要的 learner evidence obligations。
 """
@@ -235,7 +250,14 @@ def predict_obligations(
         "model": model,
         "messages": [
             {"role": "system", "content": PREDICTOR_SYSTEM_PROMPT},
-            {"role": "user", "content": build_predictor_prompt(task, profile)},
+            {
+                "role": "user",
+                "content": build_predictor_prompt(
+                    task,
+                    profile,
+                    neutral_learning_goal=neutral_learning_goal,
+                ),
+            },
         ],
         "temperature": 0.0,
         "max_tokens": 1200,

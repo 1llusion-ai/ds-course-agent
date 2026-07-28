@@ -14,6 +14,7 @@ from benchmarks.knowledge_state_search.predicted_gap import (
     _retry_delay,
     _validate_prediction,
     _validate_prediction_for_profile,
+    build_predictor_prompt,
     predicted_gap,
     prediction_matches_gold,
 )
@@ -156,6 +157,21 @@ def test_generic_learning_goal_cannot_trigger_goal_obligation():
     )
 
     assert error is not None
+
+
+def test_predictor_prompt_marks_task_neutral_learning_goal():
+    task = _load_tasks()[0]
+    profile = controlled_profiles(task)[1]
+
+    prompt = build_predictor_prompt(
+        task,
+        profile,
+        neutral_learning_goal=profile.learning_goal,
+    )
+
+    assert profile.learning_goal in prompt
+    assert "共享的基线目标" in prompt
+    assert "不能触发 goal obligation" in prompt
 
 
 def test_formula_learning_goal_can_trigger_goal_obligation():
