@@ -10,7 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from benchmarks.knowledge_state_search.evidence import SnapshotSource
-from benchmarks.knowledge_state_search.phase_b_source_qa import validate_source_qa
+from benchmarks.knowledge_state_search.phase_b_source_qa import (
+    excerpt_word_count,
+    validate_source_qa,
+)
 from benchmarks.knowledge_state_search.phase_b_source_shakeout import _PRIOR_SOURCE_FILES
 
 DEFAULT_BATCH_DIRECTORIES = (
@@ -43,6 +46,7 @@ def validate_source_collection(
     catalog_rows: list[dict[str, Any]] = []
     batch_reports: list[dict[str, object]] = []
     access_source_ids: set[str] = set()
+    role_quotas: dict[str, int] | None = None
 
     for directory in batch_directories:
         catalog_payloads = tuple(_read_jsonl(directory / "dev_source_catalog.jsonl"))
@@ -56,6 +60,11 @@ def validate_source_collection(
         )
         source_file = directory / "verbatim_sources_dev.jsonl"
         prior_files.append(source_file)
+        batch_role_quotas = {str(role): int(count) for role, count in dict(report["role_quotas"]).items()}
+        if role_quotas is None:
+            role_quotas = batch_role_quotas
+        elif role_quotas != batch_role_quotas:
+            raise ValueError("Phase B source batches must use one source-role quota contract")
         batch_reports.append(
             {
                 "directory": str(directory),
@@ -63,6 +72,7 @@ def validate_source_collection(
                 "captured_source_count": report["captured_source_count"],
                 "pending_human_verification_count": report["pending_human_verification_count"],
                 "word_counts": report["all_excerpt_word_counts"],
+                "role_quota_pass": report["role_quota_pass"],
             }
         )
         catalog_rows.extend(catalog_payloads)
@@ -105,7 +115,7 @@ def validate_source_collection(
     if errors:
         raise ValueError("; ".join(errors))
 
-    word_counts = [len(source.text.split()) for source in source_rows]
+    word_counts = [excerpt_word_count(source.text) for source in source_rows]
     missing_access_ids = sorted(set(source_ids) - access_source_ids)
     return {
         "status": "pass_pending_human_verification",
@@ -117,6 +127,9 @@ def validate_source_collection(
         "word_count_max": max(word_counts),
         "checksum_valid_count": len(source_rows),
         "excerpt_match_valid_count": len(source_rows),
+        "source_role_composition_audited": True,
+        "role_quotas": role_quotas,
+        "role_quota_pass": True,
         "recorded_http_200_count": len(access_source_ids),
         "http_access_metadata_missing_count": len(missing_access_ids),
         "http_access_metadata_missing_source_ids": missing_access_ids,

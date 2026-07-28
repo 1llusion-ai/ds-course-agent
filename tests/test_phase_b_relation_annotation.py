@@ -513,7 +513,7 @@ def test_relation_target_specs_cover_claims_edges_and_dev_split():
         }
     )
     edge = specs[("edge", "pb_t02_logistic_log_odds_e03")]
-    assert edge.edge_type == "qualifies"
+    assert edge.edge_type == "explains"
     assert edge.propositions[0].proposition_id.startswith("left.")
     assert any(proposition.proposition_id.startswith("right.") for proposition in edge.propositions)
     assert edge.propositions[-1].proposition_id == "relation"

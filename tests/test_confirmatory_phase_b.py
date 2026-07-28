@@ -266,6 +266,25 @@ def test_phase_b_contract_accepts_frozen_balanced_dataset(tmp_path):
     assert len(schema.annotations) == 1440
 
 
+def test_phase_b_contract_does_not_infer_collection_roles_from_pair_labels(tmp_path):
+    _write_phase_b_fixture(tmp_path)
+    annotations_path = tmp_path / "evidence_annotations.jsonl"
+    annotations = [json.loads(line) for line in annotations_path.read_text(encoding="utf-8").splitlines()]
+    for annotation in annotations:
+        if (
+            annotation["task_id"] == "pb_t01"
+            and annotation["source_id"] == "pb_t01_s08"
+            and annotation["target_id"] == "pb_t01_c01"
+        ):
+            annotation["relation"] = "supported"
+            break
+    _write_jsonl(annotations_path, annotations)
+    _rehash_manifest(tmp_path, "evidence_annotations.jsonl")
+
+    schema = ConfirmatorySchema.load(tmp_path)
+    schema.validate_phase_b_contract()
+
+
 def test_phase_b_freeze_report_keeps_method_runs_blocked(tmp_path):
     _write_phase_b_fixture(tmp_path)
 

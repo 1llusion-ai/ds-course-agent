@@ -15,8 +15,8 @@
   "file_sha256": {
     "tasks.jsonl": "9044bcb346e4c9bd7e2157ccfd59d0783b5d7a5b62f9469182afe98da473f39a",
     "profiles.jsonl": "cdb1c99f720286d58a494586ad831c2530c385ebf876ecd3613792467ca50280",
-    "claims.jsonl": "b46e2be17fac07af01b313bdf104f1098c6a01bdf689c14f4df01be1bf7bb4e6",
-    "claim_edges.jsonl": "3428f1498bd682e8527d68a5630dc359408505c2ad50a9bea6aeca7e3fb32a3e",
+    "claims.jsonl": "f97ef5604a66a994c12a50e7ba1727105cda2d06a3a25b7c9452bbb12b2c6e9b",
+    "claim_edges.jsonl": "8b8bccd8410ced63bced169d4b307ce756b146e2585c64ad24c3cdf962dfdc63",
     "splits.json": "cdb5844f31008dad56e085b8f4bf7fd4475e1c1619be2f632dd215ec8354191d"
   }
 }

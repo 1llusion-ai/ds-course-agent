@@ -316,7 +316,7 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 "样本划分的抽样变异为什么会让模型性能估计发生波动？",
             ),
             edges=(
-                EdgeDraft(6, 3, "prerequisite", 1),
+                EdgeDraft(6, 3, "explains", 1),
                 EdgeDraft(3, 4, "qualifies", 1),
                 EdgeDraft(1, 2, "explains", 2),
                 EdgeDraft(2, 4, "causal", 2),
@@ -365,8 +365,8 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
             edges=(
                 EdgeDraft(6, 1, "prerequisite", 1),
                 EdgeDraft(1, 2, "explains", 1),
+                EdgeDraft(2, 3, "explains", 2),
                 EdgeDraft(3, 4, "qualifies", 2),
-                EdgeDraft(4, 5, "causal", 2),
             ),
         ),
         TaskDraft(
@@ -410,10 +410,10 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 "标准误和抽样分布分别如何描述估计的不确定性？",
             ),
             edges=(
-                EdgeDraft(6, 3, "prerequisite", 1),
+                EdgeDraft(6, 3, "explains", 1),
                 EdgeDraft(3, 4, "explains", 1),
                 EdgeDraft(1, 2, "explains", 2),
-                EdgeDraft(2, 5, "causal", 2),
+                EdgeDraft(2, 3, "explains", 2),
             ),
         ),
         TaskDraft(
@@ -447,7 +447,7 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 ),
                 ClaimDraft(
                     "调整条件",
-                    "观察研究中的调整只有在混杂变量被合理测量、模型设定适当且没有引入新的偏倚时才有助于识别效应。",
+                    "观察研究中的调整只有在混杂控制和模型设定等识别假设合理时，才有助于因果解释。",
                     "观察数据中调整混杂变量需要满足哪些条件？",
                 ),
             ),
@@ -457,10 +457,10 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 "混杂变量为什么会让相关关系难以解释为因果关系？",
             ),
             edges=(
-                EdgeDraft(6, 2, "prerequisite", 1),
+                EdgeDraft(6, 2, "explains", 1),
                 EdgeDraft(2, 3, "causal", 1),
-                EdgeDraft(1, 4, "qualifies", 2),
-                EdgeDraft(4, 5, "qualifies", 2),
+                EdgeDraft(1, 4, "contrasts", 2),
+                EdgeDraft(4, 5, "contrasts", 2),
             ),
         ),
         TaskDraft(
@@ -494,7 +494,7 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 ),
                 ClaimDraft(
                     "重复概率边界",
-                    "p 值不能直接给出研究重复时得到显著结果的概率，也不能保证原假设必然错误。",
+                    "p 值不能单独证明原假设必然错误。",
                     "p 值能否直接表示重复实验显著的概率？",
                 ),
             ),
@@ -504,10 +504,10 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 "如何纠正把 p 值当成原假设概率的理解？",
             ),
             edges=(
-                EdgeDraft(6, 2, "contrasts", 1),
+                EdgeDraft(6, 2, "explains", 1),
                 EdgeDraft(2, 3, "explains", 1),
-                EdgeDraft(1, 4, "qualifies", 2),
-                EdgeDraft(4, 5, "qualifies", 2),
+                EdgeDraft(1, 2, "explains", 2),
+                EdgeDraft(2, 4, "qualifies", 2),
             ),
         ),
         TaskDraft(
@@ -541,7 +541,7 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 ),
                 ClaimDraft(
                     "复杂度权衡",
-                    "调整后 R²、正则化或验证误差等方法可以把拟合收益与模型复杂度或泛化表现一起考虑。",
+                    "模型选择应把样本内拟合与模型复杂度或验证表现一起考虑，而不能只最大化训练 R²。",
                     "有哪些方法能同时考虑拟合收益和模型复杂度？",
                 ),
             ),
@@ -551,8 +551,8 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 "为什么训练 R² 越高不一定意味着模型越好？",
             ),
             edges=(
-                EdgeDraft(6, 2, "contrasts", 1),
-                EdgeDraft(2, 3, "causal", 1),
+                EdgeDraft(6, 2, "explains", 1),
+                EdgeDraft(2, 4, "explains", 1),
                 EdgeDraft(1, 4, "qualifies", 2),
                 EdgeDraft(4, 5, "explains", 2),
             ),
@@ -578,17 +578,17 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 ),
                 ClaimDraft(
                     "调查证据",
-                    "删除或修正异常值前应检查原始记录、测量过程、单位、业务背景和数据生成机制。",
+                    "删除或修正异常值前，应调查它是否来自记录或测量错误，还是来自真实的数据生成过程。",
                     "处理异常值前应检查哪些数据和领域证据？",
                 ),
                 ClaimDraft(
                     "删除影响",
-                    "无依据地删除真实极端观测会改变研究对象和目标估计，并可能引入偏倚。",
+                    "无依据地删除真实极端观测会改变目标估计，并可能引入偏倚。",
                     "为什么无依据删除异常值会改变分析结论？",
                 ),
                 ClaimDraft(
                     "稳健与敏感性",
-                    "稳健方法、变换、单独建模和包含/不包含异常值的敏感性分析都可以作为删除之外的选择。",
+                    "稳健方法和比较包含或不包含异常值结果的敏感性分析，都可以作为自动删除之外的选择。",
                     "异常值除了删除之外还可以如何处理？",
                 ),
             ),
@@ -598,10 +598,10 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 "为什么异常值不能直接判定为录入错误？",
             ),
             edges=(
-                EdgeDraft(6, 2, "contrasts", 1),
+                EdgeDraft(6, 2, "qualifies", 1),
                 EdgeDraft(2, 3, "explains", 1),
-                EdgeDraft(1, 4, "causal", 2),
-                EdgeDraft(4, 5, "qualifies", 2),
+                EdgeDraft(1, 6, "qualifies", 2),
+                EdgeDraft(6, 4, "explains", 2),
             ),
         ),
         TaskDraft(
@@ -625,7 +625,7 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 ),
                 ClaimDraft(
                     "编码选择",
-                    "独热编码或对比编码通常能在不引入任意顺序的情况下表示无序类别，但会增加特征维度或带来其他约束。",
+                    "独热编码可以在不引入任意整数顺序的情况下表示无序类别，但会增加特征列数。",
                     "无序类别变量常用哪些不引入顺序的编码方法？",
                 ),
                 ClaimDraft(
@@ -635,7 +635,7 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 ),
                 ClaimDraft(
                     "编码验证",
-                    "编码方案应通过变量语义、模型假设和验证集表现共同检查，而不能只因为代码可以运行就认为正确。",
+                    "编码方案应符合变量语义和下游模型的数值假设。",
                     "如何验证类别变量编码方案是否合适？",
                 ),
             ),
@@ -645,7 +645,7 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 "为什么类别数字编码可能造成虚假的大小关系？",
             ),
             edges=(
-                EdgeDraft(6, 2, "contrasts", 1),
+                EdgeDraft(6, 2, "explains", 1),
                 EdgeDraft(2, 3, "explains", 1),
                 EdgeDraft(1, 4, "qualifies", 2),
                 EdgeDraft(4, 5, "explains", 2),
@@ -682,20 +682,20 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 ),
                 ClaimDraft(
                     "报告选择",
-                    "摘要统计应结合分布形状和分析目的，偏态收入数据通常至少报告中位数与四分位距，并可补充均值等信息。",
+                    "摘要统计应结合分布形状和分析目的；偏态收入数据通常优先报告中位数与四分位距。",
                     "偏态收入数据应如何选择和组合摘要统计量？",
                 ),
             ),
             learner_claim=ClaimDraft(
                 "稳健摘要选择",
-                "在收入这类偏态且有长尾的数据中，中位数和四分位距通常更能代表典型水平和中间变异，但最终选择仍取决于分析目的。",
+                "在偏态且有长尾的收入数据中，中位数和四分位距通常能稳健地描述中心与中间变异。",
                 "为什么偏态收入数据适合优先报告中位数和四分位距？",
             ),
             edges=(
-                EdgeDraft(6, 2, "prerequisite", 1),
-                EdgeDraft(2, 3, "explains", 1),
-                EdgeDraft(1, 4, "explains", 2),
-                EdgeDraft(4, 5, "qualifies", 2),
+                EdgeDraft(6, 2, "explains", 1),
+                EdgeDraft(2, 3, "contrasts", 1),
+                EdgeDraft(1, 6, "explains", 2),
+                EdgeDraft(6, 5, "qualifies", 2),
             ),
         ),
         TaskDraft(
@@ -739,8 +739,8 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 "如何用残差图检查线性回归的主要假设？",
             ),
             edges=(
-                EdgeDraft(6, 2, "prerequisite", 1),
-                EdgeDraft(2, 3, "explains", 1),
+                EdgeDraft(3, 6, "explains", 1),
+                EdgeDraft(6, 5, "qualifies", 1),
                 EdgeDraft(1, 4, "explains", 2),
                 EdgeDraft(4, 5, "qualifies", 2),
             ),
@@ -756,7 +756,7 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
             core_claims=(
                 ClaimDraft(
                     "缺失机制",
-                    "缺失数据处理需要考虑缺失与已观测变量、未观测变量以及结果之间的关系，而不只是缺失比例。",
+                    "缺失数据处理应依据缺失机制及其与分析变量的关系，而不能只依据缺失比例。",
                     "选择缺失数据处理方法为什么要考虑缺失机制？",
                 ),
                 ClaimDraft(
@@ -782,13 +782,13 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
             ),
             learner_claim=ClaimDraft(
                 "缺失策略选择",
-                "删除、简单填补和模型化填补没有对所有数据都最优的固定顺序，应根据缺失机制、分析目标和不确定性要求选择。",
+                "删除、简单填补和模型化填补没有普遍最优的固定顺序，应根据缺失机制和分析目标选择。",
                 "如何根据缺失机制和分析目标选择缺失数据处理策略？",
             ),
             edges=(
-                EdgeDraft(6, 1, "prerequisite", 1),
-                EdgeDraft(1, 2, "qualifies", 1),
-                EdgeDraft(3, 4, "explains", 2),
+                EdgeDraft(1, 6, "prerequisite", 1),
+                EdgeDraft(6, 2, "qualifies", 1),
+                EdgeDraft(3, 4, "contrasts", 2),
                 EdgeDraft(4, 5, "qualifies", 2),
             ),
         ),
@@ -808,33 +808,33 @@ def _task_drafts() -> tuple[TaskDraft, ...]:
                 ),
                 ClaimDraft(
                     "组别与指标",
-                    "实验应预先定义控制版本、处理版本、主要转化指标、观察窗口和分析单位。",
+                    "A/B 测试开始前应预先定义控制版本、处理版本和主要转化指标。",
                     "A/B 测试开始前需要预先定义哪些组别和指标？",
                 ),
                 ClaimDraft(
                     "样本量与功效",
-                    "样本量和实验时长应能支持对预期效应大小的有信息量估计，而不是看到少量数据就停止。",
+                    "样本量应能支持对预期效应的有信息量估计，不能只根据早期少量数据停止实验。",
                     "A/B 测试如何考虑样本量和统计功效？",
                 ),
                 ClaimDraft(
                     "效果与不确定性",
-                    "结果应报告处理组与控制组转化率之差及其不确定性，而不能只报告单组转化率。",
+                    "结果应报告处理组与控制组转化率之差及其不确定性。",
                     "A/B 测试结果应如何报告转化率差异和不确定性？",
                 ),
                 ClaimDraft(
                     "实验有效性",
-                    "分析还应检查干扰、提前窥视、重复检验、执行偏差和其他会削弱因果解释的问题。",
+                    "分析应检查组间干扰、提前窥视和执行偏差，因为这些问题会削弱因果解释。",
                     "哪些执行问题会削弱 A/B 测试的因果解释？",
                 ),
             ),
             learner_claim=ClaimDraft(
                 "随机对照实验解释",
-                "随机分配、预先确定主要指标并报告效应不确定性，是把转化率差异解释为改版因果效果的关键基础。",
+                "随机分配和带不确定性的处理组—控制组比较，是把转化率差异解释为改版因果效果的关键基础。",
                 "如何设计并解释一个能支持因果结论的 A/B 测试？",
             ),
             edges=(
-                EdgeDraft(6, 1, "prerequisite", 1),
-                EdgeDraft(1, 2, "explains", 1),
+                EdgeDraft(1, 6, "prerequisite", 1),
+                EdgeDraft(6, 4, "explains", 1),
                 EdgeDraft(3, 4, "explains", 2),
                 EdgeDraft(4, 5, "qualifies", 2),
             ),

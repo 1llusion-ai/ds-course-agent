@@ -129,6 +129,9 @@ def test_source_collection_validates_144_rows_and_keeps_release_blocked(tmp_path
     assert report["batch_count"] == 4
     assert report["task_count"] == 12
     assert report["source_count"] == 144
+    assert report["source_role_composition_audited"] is True
+    assert report["role_quota_pass"] is True
+    assert report["role_quotas"] == SOURCE_ROLE_QUOTAS
     assert report["recorded_http_200_count"] == 144
     assert report["pending_human_verification_count"] == 144
     assert report["dataset_frozen"] is False

@@ -182,13 +182,7 @@ def validate_phase_b_contract(schema: ConfirmatorySchema) -> None:
             edges=task_edges,
             sources=task_sources,
             annotations=schema.annotations_for_task(task.task_id),
-            minimum_roles={
-                "supported": 5,
-                "partial": 2,
-                "contradicted": 1,
-                "distractor": 3,
-                "unrelated": 1,
-            },
+            minimum_roles=None,
         )
 
     expected_kinds = {
@@ -539,7 +533,7 @@ def _validate_evidence_contract(
     edges: tuple[ClaimEdge, ...],
     sources: tuple[SnapshotSource, ...],
     annotations: tuple[EvidenceAnnotation, ...],
-    minimum_roles: dict[str, int],
+    minimum_roles: dict[str, int] | None,
 ) -> None:
     relation_map: dict[str, set[EvidenceRelation]] = defaultdict(set)
     supported_targets: set[tuple[TargetType, str]] = set()
@@ -554,9 +548,12 @@ def _validate_evidence_contract(
     missing_support = required_targets - supported_targets
     if missing_support:
         raise ValueError(
-            f"pilot targets lack supported evidence in task {task_id}: "
+            f"targets lack supported evidence in task {task_id}: "
             f"{sorted((kind.value, target) for kind, target in missing_support)}"
         )
+    if minimum_roles is None:
+        return
+
     source_roles = defaultdict(int)
     for source in sources:
         relations = relation_map[source.source_id]

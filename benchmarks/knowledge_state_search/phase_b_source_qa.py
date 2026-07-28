@@ -37,6 +37,7 @@ _SOURCE_FIELDS = frozenset(
     }
 )
 _NEAR_DUPLICATE_CONTAINMENT = 0.80
+_SPAN_SEPARATOR = "[...]"
 
 
 @dataclass(frozen=True)
@@ -138,7 +139,7 @@ def validate_source_qa(
     pending_human = sum(
         entry.verification_status is CaptureVerificationStatus.AGENT_VERIFIED_PENDING_HUMAN for entry in audits
     )
-    word_counts = [len(source.text.split()) for source in sources]
+    word_counts = [excerpt_word_count(source.text) for source in sources]
     return {
         "status": "pass",
         "catalog_count": len(candidates),
@@ -165,6 +166,12 @@ def validate_source_qa(
         "method_runs_authorized": False,
         "claim_support_labels": ("not_started; candidate_targets are discovery metadata and are not evidence labels"),
     }
+
+
+def excerpt_word_count(text: str) -> int:
+    """Count excerpt words without treating the two-span separator as source text."""
+
+    return sum(len(span.split()) for span in _excerpt_spans(text))
 
 
 def write_source_qa_report(
@@ -214,7 +221,7 @@ def _load_clean_sources(payloads: tuple[dict[str, Any], ...]) -> tuple[SnapshotS
                 f"{sorted(set(payload) - _SOURCE_FIELDS)}"
             )
         source = SnapshotSource.from_dict(payload)
-        if not 40 <= len(source.text.split()) <= 160:
+        if not 40 <= excerpt_word_count(source.text) <= 160:
             raise ValueError(f"source excerpt must contain 40-160 words: {source.source_id}")
         sources.append(source)
     return tuple(sources)
@@ -264,9 +271,15 @@ def _validate_audit(
         return
     if file_sha256(audit.verification_text_path) != audit.verification_text_sha256:
         errors.append(f"verification text checksum mismatch: {source.source_id}")
-    verification_text = audit.verification_text_path.read_text(encoding="utf-8")
-    if _normalize_text(source.text) not in _normalize_text(verification_text):
-        errors.append(f"excerpt is absent from verification text: {source.source_id}")
+    verification_text = _normalize_text(audit.verification_text_path.read_text(encoding="utf-8"))
+    offset = 0
+    for span in _excerpt_spans(source.text):
+        normalized_span = _normalize_text(span)
+        position = verification_text.find(normalized_span, offset)
+        if position < 0:
+            errors.append(f"excerpt span is absent from verification text: {source.source_id}")
+            return
+        offset = position + len(normalized_span)
 
 
 def _load_prior_sources(paths: tuple[Path, ...]) -> tuple[SnapshotSource, ...]:
@@ -334,6 +347,13 @@ def _normalize_tokens(text: str) -> str:
 
 def _normalize_text(value: str) -> str:
     return " ".join(value.split())
+
+
+def _excerpt_spans(text: str) -> tuple[str, ...]:
+    spans = tuple(span.strip() for span in text.split(_SPAN_SEPARATOR))
+    if len(spans) not in {1, 2} or any(not span for span in spans):
+        raise ValueError("source excerpt must contain one span or two spans separated by literal [...]")
+    return spans
 
 
 def _required_string(payload: dict[str, Any], field: str) -> str:

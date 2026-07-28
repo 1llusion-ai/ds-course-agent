@@ -142,6 +142,44 @@ def test_source_qa_rejects_near_duplicate_excerpts(tmp_path: Path):
         )
 
 
+def test_source_qa_accepts_two_ordered_verbatim_spans(tmp_path: Path):
+    candidates, sources, audits = _qa_payloads(tmp_path)
+    changed = list(sources)
+    words = str(changed[0]["text"]).split()
+    changed[0] = {
+        **changed[0],
+        "text": " ".join(words[:20]) + " [...] " + " ".join(words[-20:]),
+    }
+    changed[0]["sha256"] = _source_sha256(changed[0])
+
+    report = validate_source_qa(
+        candidates,
+        tuple(changed),
+        audits,
+        prior_source_files=(),
+    )
+
+    assert report["all_excerpt_word_counts"]["min"] == 40
+
+
+def test_source_qa_rejects_more_than_two_verbatim_spans(tmp_path: Path):
+    candidates, sources, audits = _qa_payloads(tmp_path)
+    changed = list(sources)
+    changed[0] = {
+        **changed[0],
+        "text": " ".join(str(changed[0]["text"]).split()[:40]) + " [...] extra [...] invalid",
+    }
+    changed[0]["sha256"] = _source_sha256(changed[0])
+
+    with pytest.raises(ValueError, match="one span or two spans"):
+        validate_source_qa(
+            candidates,
+            tuple(changed),
+            audits,
+            prior_source_files=(),
+        )
+
+
 def test_source_qa_writer_accepts_additional_prior_source_pools(tmp_path: Path):
     candidates, sources, audits = _qa_payloads(tmp_path)
     collection = tmp_path / "collection"
