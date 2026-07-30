@@ -7,7 +7,7 @@ class TestAgentGroundedFallback:
     @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
     @patch("ds_course_agent.rag.agent.get_memory_core")
     @patch("ds_course_agent.tools.course_rag.get_rag_service")
-    def test_course_question_falls_back_to_rag_when_agent_skips_retrieval(
+    def test_course_question_uses_grounded_generation_contract(
         self,
         mock_get_rag_service,
         mock_get_memory_core,
@@ -49,7 +49,10 @@ class TestAgentGroundedFallback:
 
         result = service.chat_with_history(question, "test_session")
 
-        assert result == "data science grounded answer"
+        assert result.content == "data science grounded answer"
+        assert result.family.value == "learning"
+        assert result.intent.value == "concept_qa"
+        assert result.execution_mode.value == "grounded_generation"
         mock_service.retrieve.assert_called_once_with(question)
 
     @patch("ds_course_agent.shared.history.get_history")
@@ -95,7 +98,10 @@ class TestAgentGroundedFallback:
 
         result = service.chat_with_history(question, "test_session")
 
-        assert result == "next class answer"
+        assert result.content == "next class answer"
+        assert result.family.value == "course_service"
+        assert result.intent.value == "course_schedule"
+        assert result.execution_mode.value == "deterministic_tool"
         mock_resolve_schedule.assert_called_once()
         assert mock_resolve_schedule.call_args[0][0] == "\u4e0b\u8282\u8bfe\u662f\u4ec0\u4e48\u65f6\u5019\uff1f"
 
@@ -135,5 +141,8 @@ class TestAgentGroundedFallback:
 
         result = service.chat_with_history(question, "test_session")
 
-        assert result == "当前时间：2026-04-14 10:00:00（星期二，UTC+08:00）"
+        assert result.content == "当前时间：2026-04-14 10:00:00（星期二，UTC+08:00）"
+        assert result.family.value == "course_service"
+        assert result.intent.value == "current_datetime"
+        assert result.execution_mode.value == "deterministic_tool"
         mock_datetime_tool.invoke.assert_called_once_with(question)

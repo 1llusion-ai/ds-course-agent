@@ -9,20 +9,54 @@ from enum import Enum
 from typing import Any
 
 
-class RouteType(str, Enum):
-    """路由类型枚举"""
+class RouteFamily(str, Enum):
+    """用户请求所属的稳定产品域。"""
+
+    BOUNDARY = "boundary"
+    COURSE_SERVICE = "course_service"
+    LEARNING = "learning"
+    EXTERNAL_RESEARCH = "external_research"
+
+
+class RouteIntent(str, Enum):
+    """叶子意图；只描述用户目标，不编码具体执行机制。"""
+
+    SMALLTALK = "smalltalk"
+    REFUSAL = "refusal"
+    UNCLASSIFIED = "unclassified"
 
     COURSE_SCHEDULE = "course_schedule"
     CURRENT_DATETIME = "current_datetime"
-    LEARNING_PATH_SKILL = "learning_path_skill"
-    MISCONCEPTION_SKILL = "misconception_skill"
-    PERSONALIZED_EXPLANATION_SKILL = "personalized_explanation_skill"
-    PYTHON_EXEC = "python_exec"
+    KNOWLEDGE_BASE_STATUS = "knowledge_base_status"
+
+    CONCEPT_QA = "concept_qa"
+    COMPARISON = "comparison"
+    FOLLOW_UP = "follow_up"
+    CODE_EXAMPLE = "code_example"
+    CODE_EXPLANATION = "code_explanation"
     CODE_REVIEW = "code_review"
-    GROUNDED_RAG = "grounded_rag"
-    WEB_SEARCH = "web_search"
-    GENERIC_AGENT = "generic_agent"
-    OFF_TOPIC = "off_topic"
+    CODE_EXECUTION = "code_execution"
+    LEARNING_PATH = "learning_path"
+    MISCONCEPTION_REPAIR = "misconception_repair"
+    PERSONALIZED_EXPLANATION = "personalized_explanation"
+    OPEN_LEARNING = "open_learning"
+    NOT_LEARNING = "not_learning"
+    NEEDS_CLARIFICATION = "needs_clarification"
+
+    WEB_RESEARCH = "web_research"
+
+
+class ExecutionMode(str, Enum):
+    """路由选定后的执行机制。"""
+
+    STATIC_RESPONSE = "static_response"
+    DETERMINISTIC_TOOL = "deterministic_tool"
+    DIRECT_MODEL = "direct_model"
+    GROUNDED_GENERATION = "grounded_generation"
+    TEACHING_SKILL = "teaching_skill"
+    PYTHON_SANDBOX = "python_sandbox"
+    WEB_PIPELINE = "web_pipeline"
+    TOOL_AGENT = "tool_agent"
 
 
 class RetrievalPolicy(str, Enum):
@@ -44,6 +78,8 @@ class DetectedConcept:
     concept_id: str
     method: str  # "exact", "fuzzy", "graph", etc.
     confidence: float = 1.0
+    routing_eligible: bool = True
+    event_eligible: bool = True
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -100,6 +136,8 @@ class QueryContext:
     # 由 QueryPipeline 在 preprocess 后注入，供规则表 match_fn 读取。
     web_search_requested: bool = False
     special_case_response: str | None = None
+    scope_action: str = "allow"
+    scope_category: str = ""
 
     # skill 候选键（从现有逻辑迁移）
     skill_candidate_keys: set = field(default_factory=set)
@@ -108,53 +146,50 @@ class QueryContext:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class EnrichmentPlan:
+    """路由完成后需要执行的学习上下文富化步骤。"""
+
+    map_concepts: bool = False
+    load_profile: bool = False
+    rewrite_query: bool = False
+    record_learning_event: bool = False
+
+
 @dataclass
 class RouteDecision:
-    """
-    路由决策
+    """Router 输出；意图、执行方式和工具权限各自只有一个事实源。"""
 
-    Router 的输出，描述应该走哪条路径。
-    """
-
-    route: RouteType
+    family: RouteFamily
+    intent: RouteIntent
+    execution_mode: ExecutionMode
     confidence: float
     reasons: list[str] = field(default_factory=list)
-
-    # 路由相关配置。allowed_tools 是工具门控契约（Contract 3 三态）：
-    #   None = 默认全工具 agent；[] = 直连 LLM，无工具；[...] = 子集 agent。
-    # required_tools 保留给尚未迁移的执行侧强制工具路径；二者不得通过 metadata 隐式传递。
-    allowed_tools: list[str] | None = None
-    required_tools: list[str] = field(default_factory=list)
-    retrieval_policy: RetrievalPolicy = RetrievalPolicy.OPTIONAL
-    skill_name: str | None = None
-
-    # 类型化控制信号：metadata 只承载自由数据。
-    direct_llm_answer: bool = False
-    direct_llm_reason: str | None = None
-    autonomous_tool_choice: bool = False
-
-    # 降级路由
-    fallback_route: RouteType | None = None
-
-    # 元数据
+    retrieval_policy: RetrievalPolicy = RetrievalPolicy.DISABLED
+    allowed_tools: tuple[str, ...] = ()
+    executor_key: str | None = None
+    enrichment: EnrichmentPlan = field(default_factory=EnrichmentPlan)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """规范化控制字段，保留 allowed_tools 三态语义。"""
+        """Normalize serialized enum/sequence inputs and enforce tool-gating invariants."""
+        if not isinstance(self.family, RouteFamily):
+            self.family = RouteFamily(str(self.family))
+        if not isinstance(self.intent, RouteIntent):
+            self.intent = RouteIntent(str(self.intent))
+        if not isinstance(self.execution_mode, ExecutionMode):
+            self.execution_mode = ExecutionMode(str(self.execution_mode))
         if not isinstance(self.retrieval_policy, RetrievalPolicy):
             self.retrieval_policy = RetrievalPolicy(str(self.retrieval_policy))
 
-        self.required_tools = list(self.required_tools or [])
-        if self.allowed_tools is None:
-            # None = 默认全工具；但若只显式给了 required_tools，沿用其作为 allowed_tools
-            # （保留旧契约：只设 required_tools 时推断 allowed_tools）。
-            if self.required_tools:
-                self.allowed_tools = list(self.required_tools)
-            # 否则保持 None → _agent_for_tools 返回默认全工具 agent
-        else:
-            self.allowed_tools = list(self.allowed_tools)
-
+        self.allowed_tools = tuple(self.allowed_tools or ())
+        self.reasons = list(self.reasons or [])
         self.metadata = dict(self.metadata or {})
+
+        if self.execution_mode is ExecutionMode.TOOL_AGENT and not self.allowed_tools:
+            raise ValueError("TOOL_AGENT requires an explicit non-empty allowed_tools allowlist")
+        if self.execution_mode is not ExecutionMode.TOOL_AGENT and self.allowed_tools:
+            raise ValueError(f"{self.execution_mode.value} cannot bind generic-agent tools")
 
 
 @dataclass
@@ -186,8 +221,23 @@ class FinalResponse:
     sources: list[dict[str, Any]] = field(default_factory=list)
 
     # trace 信息
-    route: RouteType = RouteType.GENERIC_AGENT
+    family: RouteFamily = RouteFamily.BOUNDARY
+    intent: RouteIntent = RouteIntent.UNCLASSIFIED
+    execution_mode: ExecutionMode = ExecutionMode.STATIC_RESPONSE
     trace: dict[str, Any] = field(default_factory=dict)
 
     # 元数据
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class RouteExecutionResult:
+    """Typed result returned by route handlers to API/history layers."""
+
+    content: str
+    family: RouteFamily
+    intent: RouteIntent
+    execution_mode: ExecutionMode
+    sources: list[dict[str, Any]] = field(default_factory=list)
+    used_retrieval: bool = False
+    degraded: bool = False

@@ -12,7 +12,7 @@ import logging
 from collections.abc import Iterator
 from typing import Any, Protocol
 
-from ds_course_agent.rag.query_pipeline import RouteState, RouteType
+from ds_course_agent.rag.query_pipeline import ExecutionMode, RouteIntent, RouteState
 from ds_course_agent.rag.taxonomy import (
     LOW_SUCCESS_FETCH_DOMAINS,
     RELIABLE_WEB_DOMAINS,
@@ -43,7 +43,7 @@ class BufferedRouteHandlerMixin:
         # through that path rather than calling execute() directly.  Use the
         # already-selected handler to avoid a second first-match dispatch.
         result = agent._execute_selected_route_handler(self, route_state, stream=True)
-        yield from agent._yield_text_chunks(result)
+        yield from agent._yield_text_chunks(result.content)
 
 
 class SpecialCaseRouteHandler(BufferedRouteHandlerMixin):
@@ -59,7 +59,7 @@ class SpecialCaseRouteHandler(BufferedRouteHandlerMixin):
 
 class CourseScheduleRouteHandler(BufferedRouteHandlerMixin):
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
-        return route_state.decision.route == RouteType.COURSE_SCHEDULE
+        return route_state.decision.intent == RouteIntent.COURSE_SCHEDULE
 
     def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_step
@@ -73,7 +73,7 @@ class CourseScheduleRouteHandler(BufferedRouteHandlerMixin):
 
 class CurrentDatetimeRouteHandler(BufferedRouteHandlerMixin):
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
-        return route_state.decision.route == RouteType.CURRENT_DATETIME
+        return route_state.decision.intent == RouteIntent.CURRENT_DATETIME
 
     def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_step
@@ -87,7 +87,7 @@ class CurrentDatetimeRouteHandler(BufferedRouteHandlerMixin):
 
 class GroundedRagRouteHandler:
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
-        return route_state.decision.route == RouteType.GROUNDED_RAG
+        return route_state.decision.execution_mode == ExecutionMode.GROUNDED_GENERATION
 
     def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_span, trace_step
@@ -118,7 +118,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
     """
 
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
-        return route_state.decision.route == RouteType.WEB_SEARCH
+        return route_state.decision.intent == RouteIntent.WEB_RESEARCH
 
     def _response_sources(self, web_response: Any) -> list[dict[str, Any]]:
         sources = getattr(web_response, "sources", None)
@@ -493,7 +493,9 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             "phase": phase,
             "message": message,
             "stream_id": stream_id,
-            "route": RouteType.WEB_SEARCH.value,
+            "family": route_state.decision.family.value,
+            "intent": route_state.decision.intent.value,
+            "execution_mode": route_state.decision.execution_mode.value,
             "resuming": False,
         }
         if tool:
@@ -1186,7 +1188,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
 
 class PythonExecRouteHandler(BufferedRouteHandlerMixin):
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
-        return route_state.decision.route == RouteType.PYTHON_EXEC
+        return route_state.decision.execution_mode == ExecutionMode.PYTHON_SANDBOX
 
     def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.code_executor import (
@@ -1209,35 +1211,35 @@ class PythonExecRouteHandler(BufferedRouteHandlerMixin):
 
 class SkillRouteHandler(BufferedRouteHandlerMixin):
     _ROUTES = {
-        RouteType.CODE_REVIEW: ("code_review_skill", "code_review"),
-        RouteType.LEARNING_PATH_SKILL: ("learning_path_skill", "learning_path_skill"),
-        RouteType.MISCONCEPTION_SKILL: ("misconception_skill", "misconception_skill"),
-        RouteType.PERSONALIZED_EXPLANATION_SKILL: ("explanation_skill", "explanation_skill"),
+        RouteIntent.CODE_REVIEW: ("code_review_skill", "code_review"),
+        RouteIntent.LEARNING_PATH: ("learning_path_skill", "learning_path_skill"),
+        RouteIntent.MISCONCEPTION_REPAIR: ("misconception_skill", "misconception_skill"),
+        RouteIntent.PERSONALIZED_EXPLANATION: ("explanation_skill", "explanation_skill"),
     }
 
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
-        route = route_state.decision.route
-        if route not in self._ROUTES:
+        intent = route_state.decision.intent
+        if intent not in self._ROUTES:
             return False
-        attr, _branch = self._ROUTES[route]
+        attr, _branch = self._ROUTES[intent]
         return bool(getattr(agent, attr, None))
 
     def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_trace import trace_step
 
         context = route_state.context
-        route = route_state.decision.route
+        intent = route_state.decision.intent
         student_id = route_state.student_id
         session_id = context.session_id
         question = context.original_query
         matched_concepts = route_state.matched_concepts or []
-        attr, branch = self._ROUTES[route]
+        attr, branch = self._ROUTES[intent]
         skill = getattr(agent, attr)
 
         trace_step("agent.branch", branch=branch)
-        if route == RouteType.MISCONCEPTION_SKILL:
+        if intent == RouteIntent.MISCONCEPTION_REPAIR:
             return skill(question, student_id, session_id, "0")
-        if route == RouteType.PERSONALIZED_EXPLANATION_SKILL:
+        if intent == RouteIntent.PERSONALIZED_EXPLANATION:
             if matched_concepts:
                 logger.info(
                     "识别知识点: %s (%s)",
@@ -1265,15 +1267,11 @@ class GenericAgentRouteHandler:
         decision = route_state.decision
         allowed_tools = decision.allowed_tools
 
-        # Contract 3 三态门控：
-        #   []  → 直连 LLM（无工具 agent），无条件走 direct_chat；
-        #   None → 默认全工具 agent；
-        #   [...] → 子集 agent。
-        # direct_llm_answer 是观测/语义信号，不再是门控触发器——[] 本身物理保证无工具。
-        if allowed_tools == []:
+        if decision.execution_mode == ExecutionMode.DIRECT_MODEL:
             trace_step(
                 "agent.tool_gating",
-                route=decision.route.value,
+                family=decision.family.value,
+                intent=decision.intent.value,
                 allowed_tools=[],
                 policy="none",
             )
@@ -1282,14 +1280,15 @@ class GenericAgentRouteHandler:
                 return direct_chat, base_turn_context, True, None
             return agent.chat, base_turn_context, False, None
 
-        graph_agent = getattr(agent, "_agent_for_tools", lambda _allowed_tools: None)(allowed_tools)
-        default_agent = getattr(agent, "agent", None)
-        policy = "default" if graph_agent is default_agent else "allowlist"
+        if decision.execution_mode != ExecutionMode.TOOL_AGENT:
+            raise RuntimeError(f"GenericAgentRouteHandler cannot execute {decision.execution_mode.value}")
+        graph_agent = getattr(agent, "_agent_for_tools", lambda _allowed_tools: None)(list(allowed_tools))
         trace_step(
             "agent.tool_gating",
-            route=decision.route.value,
-            allowed_tools=list(allowed_tools) if allowed_tools else [],
-            policy=policy,
+            family=decision.family.value,
+            intent=decision.intent.value,
+            allowed_tools=list(allowed_tools),
+            policy="allowlist",
         )
         return agent.chat, base_turn_context, False, graph_agent
 
@@ -1373,11 +1372,11 @@ class GenericAgentRouteHandler:
                 return
 
             result = agent._execute_selected_route_handler(self, route_state, stream=False)
-            yield from agent._yield_text_chunks(result)
+            yield from agent._yield_text_chunks(result.content)
             return
 
         result = agent._execute_selected_route_handler(self, route_state, stream=True)
-        yield from agent._yield_text_chunks(result)
+        yield from agent._yield_text_chunks(result.content)
 
 
 def default_route_handlers() -> list[RouteHandler]:

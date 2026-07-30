@@ -41,7 +41,9 @@ def fresh_client(monkeypatch):
             "type": "progress",
             "phase": "generation",
             "message": "正在生成回答...",
-            "route": "generic_agent",
+            "family": "learning",
+            "intent": "concept_qa",
+            "execution_mode": "grounded_generation",
             "stream_id": "s1",
         }
         yield {"type": "delta", "delta": "你"}
@@ -50,6 +52,11 @@ def fresh_client(monkeypatch):
             "type": "final",
             "content": "你好",
             "sources": [{"reference": "《第1章 数据科学简介》第1页"}],
+            "used_retrieval": True,
+            "family": "learning",
+            "intent": "concept_qa",
+            "execution_mode": "grounded_generation",
+            "degraded": False,
         }
 
     # Patch the actual module where chat router imports the function from
@@ -83,6 +90,10 @@ def test_stream_endpoint_returns_real_sse(fresh_client):
     assert '"found_count": 2' in response.text
     assert '"type": "delta"' in response.text
     assert '"type": "final"' in response.text
+    assert '"family": "learning"' in response.text
+    assert '"intent": "concept_qa"' in response.text
+    assert '"execution_mode": "grounded_generation"' in response.text
+    assert '"route"' not in response.text
     assert "你好" in response.text
 
     history_resp = fresh_client.get(f"/api/chat/history/{session_id}?student_id=test")
@@ -94,9 +105,13 @@ def test_stream_endpoint_returns_real_sse(fresh_client):
     assert messages[-1]["role"] == "assistant"
     assert messages[-1]["content"] == "你好"
     assert messages[-1]["sources"] == [{"reference": "《第1章 数据科学简介》第1页"}]
+    assert messages[-1]["family"] == "learning"
+    assert messages[-1]["intent"] == "concept_qa"
+    assert messages[-1]["execution_mode"] == "grounded_generation"
+    assert "route" not in messages[-1]
     assert messages[-1]["progress_events"][0]["phase"] == "routing"
     assert messages[-1]["progress_events"][0]["details"]["found_count"] == 2
-    assert messages[-1]["progress_events"][1]["route"] == "generic_agent"
+    assert messages[-1]["progress_events"][1]["intent"] == "concept_qa"
 
 
 def test_progress_details_are_compacted_for_history():
@@ -137,14 +152,18 @@ def test_stream_records_blocked_web_search_turn_state(monkeypatch):
             "type": "progress",
             "phase": "web_search_scope",
             "message": "联网搜索限于教学相关资料",
-            "route": "web_search",
+            "family": "external_research",
+            "intent": "web_research",
+            "execution_mode": "web_pipeline",
             "stream_id": "blocked-1",
             "tool": "web_search_tool",
         }
         yield {
             "type": "final",
             "content": "这个问题不属于课程助教的回答范围，所以本次不进行通用联网搜索。",
-            "route": "web_search",
+            "family": "external_research",
+            "intent": "web_research",
+            "execution_mode": "web_pipeline",
             "used_retrieval": False,
             "sources": [],
         }
@@ -316,7 +335,9 @@ def test_cancel_preserves_partial_answer_and_marks_it_stopped(monkeypatch):
             "type": "progress",
             "phase": "retrieval_sources",
             "message": "已找到 1 个课程来源",
-            "route": "grounded_rag",
+            "family": "learning",
+            "intent": "concept_qa",
+            "execution_mode": "grounded_generation",
             "tool": "course_rag_tool",
             "stream_id": "cancel-1",
             "details": {"sources": [{"reference": "《第1章》"}]},
@@ -367,7 +388,10 @@ def test_cancel_preserves_partial_answer_and_marks_it_stopped(monkeypatch):
     )
     assistant = history_resp.json()["messages"][-1]
     assert assistant["content"] == "已经生成的部分"
-    assert assistant["route"] == "grounded_rag"
+    assert assistant["family"] == "learning"
+    assert assistant["intent"] == "concept_qa"
+    assert assistant["execution_mode"] == "grounded_generation"
+    assert "route" not in assistant
     assert assistant["sources"] == [{"reference": "《第1章》"}]
     assert assistant["metadata"]["used_retrieval"] is True
     assert assistant["generation_status"] == "stopped"
@@ -398,10 +422,12 @@ def test_continue_stream_replaces_stopped_message_without_visible_user_turn(monk
             role="assistant",
             content="已有内容",
             timestamp=stopped_at,
-            route="grounded_rag",
+            family="learning",
+            intent="concept_qa",
+            execution_mode="grounded_generation",
             sources=[{"reference": "《第1章》"}],
             generation_status="stopped",
-            metadata={"route": "grounded_rag", "used_retrieval": True},
+            metadata={"used_retrieval": True},
         ),
     )
 
@@ -436,7 +462,10 @@ def test_continue_stream_replaces_stopped_message_without_visible_user_turn(monk
     messages = history_resp.json()["messages"]
     assert [message["role"] for message in messages] == ["user", "assistant"]
     assert messages[-1]["content"] == "已有内容，后续内容"
-    assert messages[-1]["route"] == "grounded_rag"
+    assert messages[-1]["family"] == "learning"
+    assert messages[-1]["intent"] == "concept_qa"
+    assert messages[-1]["execution_mode"] == "grounded_generation"
+    assert "route" not in messages[-1]
     assert messages[-1]["sources"] == [{"reference": "《第1章》"}]
     assert messages[-1]["metadata"]["used_retrieval"] is True
     assert messages[-1]["generation_status"] == "completed"

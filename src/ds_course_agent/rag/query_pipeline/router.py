@@ -8,7 +8,10 @@ import logging
 import re
 from typing import Any
 
-from .models import QueryContext, RetrievalPolicy, RouteDecision, RouteType
+import ds_course_agent.shared.config as config
+
+from .models import ExecutionMode, QueryContext, RouteDecision, RouteFamily, RouteIntent
+from .policy import build_learning_decision
 from .preprocessor import (
     _assignment_counts_as_code,
     _has_assignment_signal,
@@ -123,8 +126,9 @@ def _has_hyperparameter_assignment(query: str) -> bool:
 class QueryRouter:
     """查询路由器"""
 
-    def __init__(self):
+    def __init__(self, semantic_router: Any | None = None):
         self._rules = build_route_rules(self)
+        self._semantic_router = semantic_router
 
     def _normalize(self, query: str) -> str:
         """与 query_pipeline.utils.normalize_query_text 保持一致的路由归一化。
@@ -167,22 +171,15 @@ class QueryRouter:
             if rule.match_fn(context):
                 return rule.build_decision(context)
 
-        raise RuntimeError("QueryRouter rules must include a fallback rule")
+        return self._route_semantic_fallback(context)
 
     @property
     def rules(self) -> tuple[RouteRule, ...]:
         """只读规则表，供契约测试确认优先级和覆盖面。"""
         return self._rules
 
-    def _route_autonomous_tool_choice(self, context: QueryContext) -> RouteDecision | None:
-        """Return generic-agent routing for ambiguous code/example requests.
-
-        The goal is not to enumerate every possible query by rules.  Instead we
-        carve out broad ambiguity classes where deterministic RAG is harmful:
-        code payloads, code generation, and Python demonstrations often require
-        the agent to decide among direct explanation, code review, Python
-        execution, and optional course retrieval.
-        """
+    def _route_code_learning(self, context: QueryContext) -> RouteDecision | None:
+        """Return a direct learning intent for explicit code/example requests."""
 
         intents = set(context.detected_intents or [])
         query = self._normalize(context.normalized_query)
@@ -191,29 +188,16 @@ class QueryRouter:
             return None
 
         if self._is_direct_code_example_request(context, query):
-            return RouteDecision(
-                route=RouteType.GENERIC_AGENT,
+            return build_learning_decision(
+                RouteIntent.CODE_EXAMPLE,
                 confidence=0.82,
                 reasons=["代码/示例/演示请求，直接生成示例，不调用执行工具"],
-                allowed_tools=[],
-                retrieval_policy=RetrievalPolicy.OPTIONAL,
-                direct_llm_answer=True,
-                direct_llm_reason="code_example_without_execution",
             )
 
-        allowed_tools = [
-            "course_rag_tool",
-            "python_exec_tool",
-            "course_schedule_tool",
-            "current_datetime_tool",
-        ]
-        return RouteDecision(
-            route=RouteType.GENERIC_AGENT,
+        return build_learning_decision(
+            RouteIntent.CODE_EXPLANATION,
             confidence=0.78,
-            reasons=["代码/示例/实现类请求，交给 agent 自主选择工具"],
-            allowed_tools=allowed_tools,
-            retrieval_policy=RetrievalPolicy.OPTIONAL,
-            autonomous_tool_choice=True,
+            reasons=["代码/示例/实现类请求，使用无工具代码讲解路径"],
         )
 
     def _is_direct_code_example_request(self, context: QueryContext, query: str) -> bool:
@@ -242,35 +226,6 @@ class QueryRouter:
 
         compact = "".join(query.split())
         return bool(_has_strong_python_signal(query) or _assignment_counts_as_code(query, compact))
-
-    def _route_rewritten_followup(self, context: QueryContext) -> RouteDecision | None:
-        rewrite = context.rewrite_trace
-        if rewrite is None:
-            return None
-        if not rewrite.changed:
-            return None
-
-        confidence = float(rewrite.confidence or 0.0)
-        strategy = rewrite.strategy or "unknown"
-        rewritten_query = rewrite.rewritten_query or context.enriched_query or context.normalized_query
-
-        # 只提升高置信、实体级补全；普通 contextual_followup 仍交给原路由。
-        if confidence < 0.75 or strategy not in {"entity_followup", "svm_kernel_followup"}:
-            return None
-
-        return RouteDecision(
-            route=RouteType.GROUNDED_RAG,
-            confidence=max(0.82, min(0.90, confidence)),
-            reasons=["query rewrite 指向课程追问", f"rewrite_strategy={strategy}"],
-            allowed_tools=["course_rag_tool"],
-            retrieval_policy=RetrievalPolicy.REQUIRED,
-            fallback_route=RouteType.GENERIC_AGENT,
-            metadata={
-                "rewrite_strategy": strategy,
-                "rewrite_confidence": confidence,
-                "rewritten_query": rewritten_query,
-            },
-        )
 
     # ========== 教学策略判断 ==========
 
@@ -419,22 +374,9 @@ class QueryRouter:
         if "personalized-explanation" not in context.skill_candidate_keys:
             return False
 
-        if not context.detected_concepts:
-            return self._is_personalization_request(context.normalized_query) and self._has_personalization_context(
-                context
-            )
-
-        primary_score = context.detected_concepts[0].confidence
-        if primary_score < 0.45:
-            return False
-
         if self._is_personalization_request(context.normalized_query):
             return True
-
-        if self._is_judgement_question(context.normalized_query) and primary_score >= 0.7:
-            return True
-
-        return self._has_personalization_context(context) and primary_score >= 0.6
+        return False
 
     def _get_explanation_reasons(self, context: QueryContext) -> list:
         """获取个性化解释路由的原因"""
@@ -466,6 +408,9 @@ class QueryRouter:
             "我已经学过",
             "结合我已经学过",
             "我之前",
+            "结合我之前",
+            "再解释一遍",
+            "换一种方式讲",
             "老是学不会",
             "容易混淆",
             "更直观",
@@ -496,45 +441,32 @@ class QueryRouter:
         不能恒返回 True，否则 GENERIC_AGENT 永远不可达。这里采用保守判断：
         有课程概念、课程相关意图，或命中数据科学/机器学习常见词汇时才走 RAG。
         """
-        if context.detected_concepts:
-            return True
-
         query = self._normalize(context.normalized_query)
         is_hyperparameter_concept = self._is_hyperparameter_concept_question(query)
         assignment_concept_without_course_signal = (
             _has_assignment_signal(query) and _has_concept_question_cue(query) and not is_hyperparameter_concept
         )
 
-        course_related_intents = [
-            "concept_explanation",
-            "comparison",
-            "application",
-        ]
-        if (
-            any(intent in context.detected_intents for intent in course_related_intents)
-            and not assignment_concept_without_course_signal
-        ):
-            return True
-
         if is_hyperparameter_concept:
             return True
 
-        course_keywords = [
+        strong_course_keywords = [
             "数据科学",
             "数据分析",
             "机器学习",
             "深度学习",
-            "统计",
-            "概率",
-            "模型",
-            "算法",
-            "特征",
-            "训练",
             "测试集",
             "验证集",
-            "回归",
-            "分类",
+            "逻辑回归",
+            "线性回归",
+            "回归模型",
             "聚类",
+            "kmeans",
+            "k-means",
+            "knn",
+            "k近邻",
+            "pca",
+            "主成分分析",
             "决策树",
             "随机森林",
             "svm",
@@ -547,7 +479,9 @@ class QueryRouter:
             "贝叶斯",
             "神经网络",
         ]
-        return any(keyword in query for keyword in course_keywords)
+        if assignment_concept_without_course_signal:
+            return False
+        return any(keyword in query for keyword in strong_course_keywords)
 
     def _is_hyperparameter_concept_question(self, query: str) -> bool:
         """Detect natural-language ML hyperparameter questions with ``name=value``.
@@ -563,6 +497,75 @@ class QueryRouter:
             return True
 
         return _has_hyperparameter_assignment(query)
+
+    def _route_semantic_fallback(self, context: QueryContext) -> RouteDecision:
+        """Classify ambiguous candidates without granting tool permissions."""
+
+        semantic_router = self._semantic_router
+        if semantic_router is None:
+            try:
+                from .semantic_router import get_learning_semantic_router
+
+                semantic_router = get_learning_semantic_router()
+            except Exception:
+                semantic_router = None
+
+        if semantic_router is None:
+            return self._clarification_decision(context, "semantic_router_unavailable")
+
+        output = semantic_router.route(context.original_query, context.recent_context)
+        intent = output.intent
+        if float(output.confidence) < float(config.ROUTER_MIN_CONFIDENCE):
+            return self._clarification_decision(context, "semantic_router_low_confidence")
+        if intent is RouteIntent.NOT_LEARNING:
+            context.special_case_response = (
+                "这个问题目前不属于《数据科学导论》课程学习范围。"
+                "你可以换成课程概念、代码练习、学习规划或课程安排相关的问题。"
+            )
+            return RouteDecision(
+                family=RouteFamily.BOUNDARY,
+                intent=RouteIntent.REFUSAL,
+                execution_mode=ExecutionMode.STATIC_RESPONSE,
+                confidence=float(output.confidence),
+                reasons=["semantic_router=not_learning"],
+            )
+        if intent is RouteIntent.NEEDS_CLARIFICATION or output.needs_clarification:
+            return self._clarification_decision(context, "semantic_router_needs_clarification")
+        if intent is RouteIntent.CODE_EXECUTION and "python_execution" not in set(context.detected_intents or []):
+            return self._clarification_decision(context, "code_execution_requires_explicit_signal")
+
+        return build_learning_decision(
+            intent,
+            confidence=float(output.confidence),
+            reasons=["learning semantic router"],
+            requires_course_grounding=self._explicit_course_grounding_requested(context.normalized_query),
+        )
+
+    def _clarification_decision(self, context: QueryContext, reason: str) -> RouteDecision:
+        context.special_case_response = (
+            "我还不确定你是想了解课程概念、检查代码、运行代码，还是规划学习。请补充一个具体知识点、代码片段或学习目标。"
+        )
+        return RouteDecision(
+            family=RouteFamily.BOUNDARY,
+            intent=RouteIntent.NEEDS_CLARIFICATION,
+            execution_mode=ExecutionMode.STATIC_RESPONSE,
+            confidence=0.0,
+            reasons=[reason],
+        )
+
+    def _explicit_course_grounding_requested(self, query: str) -> bool:
+        normalized = self._normalize(query)
+        return any(
+            cue in normalized
+            for cue in (
+                "根据教材",
+                "依据教材",
+                "按照教材",
+                "根据课程资料",
+                "依据课程资料",
+                "课程材料里",
+            )
+        )
 
 
 _router: QueryRouter | None = None

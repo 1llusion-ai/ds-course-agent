@@ -53,7 +53,7 @@ class TestAgentServiceMock:
         service.agent = mock_agent
 
         with patch.object(AgentService, "_format_chat_history", return_value=[]):
-            result = service.chat("test question")
+            result = service.chat("test question", graph_agent=mock_agent)
 
         assert isinstance(result, str)
         assert result == "test answer"
@@ -87,7 +87,15 @@ class TestAgentServiceMock:
 
     def test_chat_with_history_persists_user_before_llm_execution(self, tmp_path, monkeypatch):
         from ds_course_agent.rag.agent import AgentService
-        from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, RouteState, RouteType
+        from ds_course_agent.rag.query_pipeline import (
+            ExecutionMode,
+            QueryContext,
+            RetrievalPolicy,
+            RouteDecision,
+            RouteFamily,
+            RouteIntent,
+            RouteState,
+        )
         from ds_course_agent.shared.history import FileChatMessageHistory, MemoryPolicy
 
         history = FileChatMessageHistory(
@@ -106,7 +114,13 @@ class TestAgentServiceMock:
                 student_id=resolved_student_id,
                 chat_history=[],
             )
-            decision = RouteDecision(route=RouteType.GENERIC_AGENT, confidence=1.0)
+            decision = RouteDecision(
+                family=RouteFamily.LEARNING,
+                intent=RouteIntent.CONCEPT_QA,
+                execution_mode=ExecutionMode.DIRECT_MODEL,
+                confidence=1.0,
+                retrieval_policy=RetrievalPolicy.OPTIONAL,
+            )
             return RouteState(
                 student_id=resolved_student_id,
                 session_id=session_id,
@@ -119,15 +133,25 @@ class TestAgentServiceMock:
             )
 
         def fake_execute(route_state, stream=False):
+            from ds_course_agent.rag.query_pipeline import RouteExecutionResult
+
             assert [message.content for message in history.messages] == ["请解释 PCA"]
-            return "PCA 是一种降维方法。"
+            return RouteExecutionResult(
+                content="PCA 是一种降维方法。",
+                family=route_state.decision.family,
+                intent=route_state.decision.intent,
+                execution_mode=route_state.decision.execution_mode,
+            )
 
         monkeypatch.setattr(service, "_prepare_query_route", fake_prepare)
         monkeypatch.setattr(service, "_execute_route", fake_execute)
 
         result = service.chat_with_history("请解释 PCA", "session-write-first", student_id="stu1")
 
-        assert result == "PCA 是一种降维方法。"
+        assert result.content == "PCA 是一种降维方法。"
+        assert result.family is RouteFamily.LEARNING
+        assert result.intent is RouteIntent.CONCEPT_QA
+        assert result.execution_mode is ExecutionMode.DIRECT_MODEL
         assert [message.content for message in history.messages] == [
             "请解释 PCA",
             "PCA 是一种降维方法。",
@@ -152,7 +176,7 @@ class TestAgentServiceMock:
         service.agent = mock_agent
 
         with patch.object(AgentService, "_format_chat_history", return_value=[]):
-            result = service.chat("test question")
+            result = service.chat("test question", graph_agent=mock_agent)
 
         assert result == "recovered answer"
         assert sleeps == [1, 2]
@@ -176,7 +200,7 @@ class TestAgentServiceMock:
         service.agent = mock_agent
 
         with patch.object(AgentService, "_format_chat_history", return_value=[]):
-            result = service.chat("test question")
+            result = service.chat("test question", graph_agent=mock_agent)
 
         assert "AI服务配置异常" in result
         assert "请稍后重试" not in result
@@ -201,7 +225,7 @@ class TestAgentServiceMock:
         service._invoke_basic_rag_fallback = fallback
 
         with patch.object(AgentService, "_format_chat_history", return_value=[]):
-            result = service.chat("test question")
+            result = service.chat("test question", graph_agent=mock_agent)
 
         assert result == "基础检索回答"
         fallback.assert_called_once_with("test question")
@@ -223,7 +247,7 @@ class TestAgentServiceMock:
         service.agent = mock_agent
 
         with patch.object(AgentService, "_format_chat_history", return_value=[]):
-            chunks = list(service.chat("test question", stream=True))
+            chunks = list(service.chat("test question", stream=True, graph_agent=mock_agent))
 
         assert "".join(chunks) == "recovered stream answer"
         assert sleeps == [1]
@@ -457,9 +481,6 @@ class TestChatWithHistory:
     def test_chat_with_history_calls_file_store(self, mock_get_memory_core, _mock_map, mock_get_history):
         from ds_course_agent.rag.agent import AgentService
 
-        mock_agent = MagicMock()
-        mock_agent.invoke.return_value = {"messages": [AIMessage(content="test answer")]}
-
         mock_history = MagicMock()
         mock_history.messages = []
         mock_get_history.return_value = mock_history
@@ -470,19 +491,20 @@ class TestChatWithHistory:
 
         service = AgentService.__new__(AgentService)
         service.llm = MagicMock()
+        service.llm.invoke.return_value = AIMessage(content="test answer")
         service.tools = []
-        service.agent = mock_agent
         service.explanation_skill = MagicMock()
-        # 这些测试关注 history/file-store，不测工具门控；mock _agent_for_tools 返回 mock_agent。
-        service._agent_for_tools = lambda allowed_tools: mock_agent
 
-        result = service.chat_with_history("test question", "test_session")
+        result = service.chat_with_history("请用 Python 演示交叉验证", "test_session")
 
-        assert isinstance(result, str)
+        assert result.content == "test answer"
+        assert result.family.value == "learning"
+        assert result.intent.value == "code_example"
+        assert result.execution_mode.value == "direct_model"
         mock_get_history.assert_called_once_with("test_session")
         assert mock_history.add_messages.call_count == 2
         assert isinstance(mock_history.add_messages.call_args_list[0][0][0][0], HumanMessage)
-        assert mock_history.add_messages.call_args_list[0][0][0][0].content == "test question"
+        assert mock_history.add_messages.call_args_list[0][0][0][0].content == "请用 Python 演示交叉验证"
         assert isinstance(mock_history.add_messages.call_args_list[1][0][0][0], AIMessage)
         assert mock_history.add_messages.call_args_list[1][0][0][0].content == "test answer"
 
@@ -491,9 +513,6 @@ class TestChatWithHistory:
     @patch("ds_course_agent.rag.agent.get_memory_core")
     def test_chat_with_history_with_existing_messages(self, mock_get_memory_core, _mock_map, mock_get_history):
         from ds_course_agent.rag.agent import AgentService
-
-        mock_agent = MagicMock()
-        mock_agent.invoke.return_value = {"messages": [AIMessage(content="test answer")]}
 
         mock_history = MagicMock()
         mock_history.messages = [
@@ -508,17 +527,16 @@ class TestChatWithHistory:
 
         service = AgentService.__new__(AgentService)
         service.llm = MagicMock()
+        service.llm.invoke.return_value = AIMessage(content="test answer")
         service.tools = []
-        service.agent = mock_agent
         service.explanation_skill = MagicMock()
-        # 这些测试关注 history/file-store，不测工具门控；mock _agent_for_tools 返回 mock_agent。
-        service._agent_for_tools = lambda allowed_tools: mock_agent
 
-        result = service.chat_with_history("new question", "test_session")
+        result = service.chat_with_history("请用 Python 演示交叉验证", "test_session")
 
-        assert isinstance(result, str)
-        invoke_call = mock_agent.invoke.call_args
-        messages = invoke_call[0][0]["messages"]
+        assert result.content == "test answer"
+        assert result.execution_mode.value == "direct_model"
+        invoke_call = service.llm.invoke.call_args
+        messages = invoke_call[0][0]
         assert len(messages) == 3
 
     @pytest.mark.skip(reason="covered by test_agent_grounded_fallback")
@@ -666,7 +684,10 @@ class TestChatWithHistory:
 
         result = service.chat_with_history("下节课是什么时候？", "test_session")
 
-        assert result == "next class answer"
+        assert result.content == "next class answer"
+        assert result.family.value == "course_service"
+        assert result.intent.value == "course_schedule"
+        assert result.execution_mode.value == "deterministic_tool"
         mock_resolve_schedule.assert_called_once()
 
 

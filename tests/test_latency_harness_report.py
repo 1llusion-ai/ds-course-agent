@@ -1,7 +1,7 @@
 from benchmarks.latency_harness import build_latency_report
 
 
-def _result(query_id, latency_ms, route, stage_events):
+def _result(query_id, latency_ms, intent, stage_events):
     durations = {}
     for event in stage_events:
         durations.setdefault(event["stage"], []).append(event["duration_ms"])
@@ -15,9 +15,11 @@ def _result(query_id, latency_ms, route, stage_events):
         "session_id": "sess",
         "student_id": "student",
         "total_latency_ms": latency_ms,
-        "route": route,
-        "used_retrieval": route == "grounded_rag",
-        "sources_count": 1 if route == "grounded_rag" else 0,
+        "family": "learning",
+        "intent": intent,
+        "execution_mode": "grounded_generation" if intent == "concept_qa" else "direct_model",
+        "used_retrieval": intent == "concept_qa",
+        "sources_count": 1 if intent == "concept_qa" else 0,
         "query_trace": {
             "trace_id": f"trace-{query_id}",
             "status": "ok",
@@ -52,7 +54,7 @@ def test_latency_report_includes_slow_query_and_stage_hotspot_diagnostics():
             _result(
                 "task_a#turn1",
                 1000,
-                "generic_agent",
+                "code_explanation",
                 [
                     {"stage": "prepare.router", "status": "ok", "duration_ms": 80, "offset_ms": 90},
                     {"stage": "execute.agent_chat", "status": "ok", "duration_ms": 700, "offset_ms": 900},
@@ -61,7 +63,7 @@ def test_latency_report_includes_slow_query_and_stage_hotspot_diagnostics():
             _result(
                 "task_b#turn1",
                 2500,
-                "grounded_rag",
+                "concept_qa",
                 [
                     {"stage": "retriever.embedding_query", "status": "ok", "duration_ms": 900, "offset_ms": 950},
                     {"stage": "tool.course_rag.answer", "status": "ok", "duration_ms": 1300, "offset_ms": 2450},
@@ -72,6 +74,8 @@ def test_latency_report_includes_slow_query_and_stage_hotspot_diagnostics():
 
     summary = report["summary"]
     assert summary["slow_queries"][0]["query_id"] == "task_b#turn1"
+    assert summary["slow_queries"][0]["intent"] == "concept_qa"
     assert summary["slow_queries"][0]["top_stage_events"][0]["stage"] == "tool.course_rag.answer"
     assert summary["stage_hotspots"][0]["stage"] == "tool.course_rag.answer"
     assert summary["stage_hotspots"][0]["p95"] == 1300
+    assert summary["intents"] == {"code_explanation": 1, "concept_qa": 1}

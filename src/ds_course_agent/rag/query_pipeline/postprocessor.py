@@ -7,7 +7,7 @@ Query Postprocessor
 
 from typing import Any
 
-from .models import FinalResponse, QueryContext, RouteDecision, RouteType
+from .models import ExecutionMode, FinalResponse, QueryContext, RouteDecision
 from .utils import collect_recent_context, is_judgement_question, normalize_query_text
 
 
@@ -25,11 +25,7 @@ class QueryPostprocessor:
         """把 Agent 执行得到的字符串回答标准化为 FinalResponse。"""
         content = str(result or "")
 
-        scope_override = self._scope_guard_override(context.original_query, decision)
-        if scope_override:
-            content = scope_override
-
-        if decision.route == RouteType.GENERIC_AGENT and not scope_override:
+        if decision.execution_mode in {ExecutionMode.DIRECT_MODEL, ExecutionMode.TOOL_AGENT}:
             content = self.postprocess_generic_answer(
                 context.original_query,
                 content,
@@ -37,7 +33,9 @@ class QueryPostprocessor:
             )
 
         trace = {
-            "route": decision.route.value,
+            "family": decision.family.value,
+            "intent": decision.intent.value,
+            "execution_mode": decision.execution_mode.value,
             "confidence": decision.confidence,
             "reasons": list(decision.reasons),
             "success": bool(content),
@@ -45,30 +43,18 @@ class QueryPostprocessor:
 
         metadata = dict(decision.metadata or {})
         metadata.setdefault("retrieval_policy", decision.retrieval_policy.value)
-        if decision.skill_name:
-            metadata.setdefault("skill_name", decision.skill_name)
+        if decision.executor_key:
+            metadata.setdefault("executor_key", decision.executor_key)
 
         return FinalResponse(
             content=content,
             sources=[],
-            route=decision.route,
+            family=decision.family,
+            intent=decision.intent,
+            execution_mode=decision.execution_mode,
             trace=trace,
             metadata=metadata,
         )
-
-    def _scope_guard_override(self, question: str, decision: RouteDecision) -> str:
-        """Final non-streaming safeguard for course-scope violations."""
-        if decision.route in {RouteType.COURSE_SCHEDULE, RouteType.CURRENT_DATETIME}:
-            return ""
-        try:
-            from ds_course_agent.rag.scope_guard import assess_query_scope
-
-            scope = assess_query_scope(question, web_search_requested=decision.route == RouteType.WEB_SEARCH)
-        except Exception:
-            return ""
-        if scope.allowed:
-            return ""
-        return scope.response
 
     def postprocess_generic_answer(
         self,

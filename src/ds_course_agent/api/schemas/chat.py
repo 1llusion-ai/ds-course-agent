@@ -3,13 +3,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from ds_course_agent.rag.query_pipeline.models import ExecutionMode, RouteFamily, RouteIntent
+
 
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
     timestamp: datetime = Field(default_factory=datetime.now)
     sources: list[dict] | None = None
-    route: str | None = None
+    family: RouteFamily | None = None
+    intent: RouteIntent | None = None
+    execution_mode: ExecutionMode | None = None
     progress: dict[str, Any] | None = None
     progress_events: list[dict[str, Any]] | None = None
     web_search_requested: bool = False

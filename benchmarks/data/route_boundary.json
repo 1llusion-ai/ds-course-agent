@@ -1,1942 +1,1728 @@
 {
-  "schema_version": 2,
-  "summary": {
-    "audited_at": "2026-07-29T11:37:47.100624+00:00",
-    "auditor": "codex_cli_route_harness",
-    "source_cases": "benchmarks/data/route_boundary.json",
-    "route_report": "var/artifacts/benchmarks/route_harness_report.json",
-    "total_cases": 119,
-    "accepted_cases": 119,
-    "needs_fix_cases": 0,
-    "unexpected_rag_count": 0,
-    "category_counts": {
-      "alias_boundary": 3,
-      "code_review": 10,
-      "course_schedule": 8,
-      "current_datetime": 8,
-      "generic_agent": 10,
-      "grounded_rag": 20,
-      "grounded_rag_boundary": 1,
-      "learning_path": 10,
-      "misconception": 10,
-      "personalized_explanation": 9,
-      "python_exec": 10,
-      "semantic_boundary": 2,
-      "special_direct": 12,
-      "web_search": 6
-    },
-    "rules": [
-      "Every case asserts RouteFamily, RouteIntent, ExecutionMode, retrieval policy, and exact allowed_tools.",
-      "Semantic-router outputs are deterministic case fixtures; the harness performs no LLM calls.",
-      "Cases marked web_search pass web_search=True into QueryPipeline preparation.",
-      "unexpected_rag_count means a disallowed grounded_generation execution mode.",
-      "Non-TOOL_AGENT cases require an empty allowed_tools tuple."
-    ]
-  },
-  "records": [
+  "name": "route_boundary",
+  "version": "3.0",
+  "created_at": "2026-07-29",
+  "description": "Canonical offline route contract benchmark for RouteFamily, RouteIntent, ExecutionMode, retrieval policy, and exact tool allowlists.",
+  "cases": [
     {
       "id": "schedule_001",
       "category": "course_schedule",
-      "status": "accepted",
+      "query": "今天有课吗？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "course_schedule",
-      "actual_intent": "course_schedule",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "schedule_002",
       "category": "course_schedule",
-      "status": "accepted",
+      "query": "下次课是什么时候？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "course_schedule",
-      "actual_intent": "course_schedule",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "schedule_003",
       "category": "course_schedule",
-      "status": "accepted",
+      "query": "本周数据科学导论上课地点在哪？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "course_schedule",
-      "actual_intent": "course_schedule",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "schedule_004",
       "category": "course_schedule",
-      "status": "accepted",
+      "query": "明天数据科学导论课程安排是什么？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "course_schedule",
-      "actual_intent": "course_schedule",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "schedule_005",
       "category": "course_schedule",
-      "status": "accepted",
+      "query": "第3周课程安排是什么？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "course_schedule",
-      "actual_intent": "course_schedule",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "schedule_006",
       "category": "course_schedule",
-      "status": "accepted",
+      "query": "下次课是什么时候？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "course_schedule",
-      "actual_intent": "course_schedule",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "schedule_007",
       "category": "course_schedule",
-      "status": "accepted",
+      "query": "下次课在哪里上？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "course_schedule",
-      "actual_intent": "course_schedule",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "schedule_008",
       "category": "course_schedule",
-      "status": "accepted",
+      "query": "今天的数据科学课在哪个教室？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "course_schedule",
-      "actual_intent": "course_schedule",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "datetime_001",
       "category": "current_datetime",
-      "status": "accepted",
+      "query": "现在几点？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "current_datetime",
-      "actual_intent": "current_datetime",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "datetime_002",
       "category": "current_datetime",
-      "status": "accepted",
+      "query": "今天几号？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "current_datetime",
-      "actual_intent": "current_datetime",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "datetime_003",
       "category": "current_datetime",
-      "status": "accepted",
+      "query": "当前日期是什么？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "current_datetime",
-      "actual_intent": "current_datetime",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "datetime_004",
       "category": "current_datetime",
-      "status": "accepted",
+      "query": "现在几点？北京时区。",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "current_datetime",
-      "actual_intent": "current_datetime",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "datetime_005",
       "category": "current_datetime",
-      "status": "accepted",
+      "query": "今天星期几？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "current_datetime",
-      "actual_intent": "current_datetime",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "datetime_006",
       "category": "current_datetime",
-      "status": "accepted",
+      "query": "当前时间是多少？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "current_datetime",
-      "actual_intent": "current_datetime",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "datetime_007",
       "category": "current_datetime",
-      "status": "accepted",
+      "query": "请告诉我当前日期时间",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "current_datetime",
-      "actual_intent": "current_datetime",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "datetime_008",
       "category": "current_datetime",
-      "status": "accepted",
+      "query": "现在几点？",
       "expected_family": "course_service",
-      "actual_family": "course_service",
       "expected_intent": "current_datetime",
-      "actual_intent": "current_datetime",
       "expected_execution_mode": "deterministic_tool",
-      "actual_execution_mode": "deterministic_tool",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "code_review_001",
       "category": "code_review",
-      "status": "accepted",
+      "query": "这段代码哪里错了？\n```python\nfor i in range(3) print(i)\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_review",
-      "actual_intent": "code_review",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "code_review_002",
       "category": "code_review",
-      "status": "accepted",
+      "query": "帮我检查这段 pandas 代码有没有问题：\n```python\ndf.groupby(\"city\").mean\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_review",
-      "actual_intent": "code_review",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "code_review_003",
       "category": "code_review",
-      "status": "accepted",
+      "query": "这段 sklearn 代码为什么报错？\n```python\ntrain_test_split(X y, test_size=0.2)\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_review",
-      "actual_intent": "code_review",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "code_review_004",
       "category": "code_review",
-      "status": "accepted",
+      "query": "这段代码哪里错了？\n```python\nprint(data.head(\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_review",
-      "actual_intent": "code_review",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "code_review_005",
       "category": "code_review",
-      "status": "accepted",
+      "query": "下面代码对吗？\n```python\nfrom sklearn.metrics import precision_score\nprecision_score(y_pred, y_true)\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_review",
-      "actual_intent": "code_review",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "code_review_006",
       "category": "code_review",
-      "status": "accepted",
+      "query": "check my code:\n```python\nfor x in xs:\nprint(x)\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_review",
-      "actual_intent": "code_review",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "code_review_007",
       "category": "code_review",
-      "status": "accepted",
+      "query": "帮我检查这个函数有什么问题？\n```python\ndef f(x):\n    return x.mean\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_review",
-      "actual_intent": "code_review",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "code_review_008",
       "category": "code_review",
-      "status": "accepted",
+      "query": "帮我看看为什么不对：\n```python\ndf[\"a\"].fillna(df[\"a\"].mean)\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_review",
-      "actual_intent": "code_review",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "code_review_009",
       "category": "code_review",
-      "status": "accepted",
+      "query": "帮我检查这段 numpy 代码有没有问题？\n```python\nnp.array([1,2,3]).reshape(2,2)\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_review",
-      "actual_intent": "code_review",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "code_review_010",
       "category": "code_review",
-      "status": "accepted",
+      "query": "帮我 review 一下：\n```python\nmodel.fit(X_test, y_test)\nprint(model.score(X_train, y_train))\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_review",
-      "actual_intent": "code_review",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "python_exec_001",
       "category": "python_exec",
-      "status": "accepted",
+      "query": "运行这段 Python：\n```python\nprint(sum(range(5)))\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_execution",
-      "actual_intent": "code_execution",
       "expected_execution_mode": "python_sandbox",
-      "actual_execution_mode": "python_sandbox",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "python_exec_002",
       "category": "python_exec",
-      "status": "accepted",
+      "query": "帮我执行一下：\n```python\nimport numpy as np\nprint(np.mean([1,2,3]))\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_execution",
-      "actual_intent": "code_execution",
       "expected_execution_mode": "python_sandbox",
-      "actual_execution_mode": "python_sandbox",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "python_exec_003",
       "category": "python_exec",
-      "status": "accepted",
+      "query": "跑一下这段代码看看输出：\n```python\nfor i in range(3):\n    print(i)\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_execution",
-      "actual_intent": "code_execution",
       "expected_execution_mode": "python_sandbox",
-      "actual_execution_mode": "python_sandbox",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "python_exec_004",
       "category": "python_exec",
-      "status": "accepted",
+      "query": "请执行这段 Python：\n```python\nprint(2**10)\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_execution",
-      "actual_intent": "code_execution",
       "expected_execution_mode": "python_sandbox",
-      "actual_execution_mode": "python_sandbox",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "python_exec_005",
       "category": "python_exec",
-      "status": "accepted",
+      "query": "请运行 Python 计算均值：\n```python\nprint(sum([1,2,3,4]) / 4)\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_execution",
-      "actual_intent": "code_execution",
       "expected_execution_mode": "python_sandbox",
-      "actual_execution_mode": "python_sandbox",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "python_exec_006",
       "category": "python_exec",
-      "status": "accepted",
+      "query": "run this code:\n```python\nprint(\"hello\")\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_execution",
-      "actual_intent": "code_execution",
       "expected_execution_mode": "python_sandbox",
-      "actual_execution_mode": "python_sandbox",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "python_exec_007",
       "category": "python_exec",
-      "status": "accepted",
+      "query": "执行一下 pandas 示例：\n```python\nimport pandas as pd\nprint(pd.Series([1,2]).sum())\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_execution",
-      "actual_intent": "code_execution",
       "expected_execution_mode": "python_sandbox",
-      "actual_execution_mode": "python_sandbox",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "python_exec_008",
       "category": "python_exec",
-      "status": "accepted",
+      "query": "请运行 Python 模拟一次抛硬币 5 次：\n```python\nimport random\nprint([random.choice([\"H\", \"T\"]) for _ in range(5)])\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_execution",
-      "actual_intent": "code_execution",
       "expected_execution_mode": "python_sandbox",
-      "actual_execution_mode": "python_sandbox",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "python_exec_009",
       "category": "python_exec",
-      "status": "accepted",
+      "query": "请运行代码计算标准差：\n```python\nimport statistics\nprint(statistics.pstdev([1,2,3]))\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_execution",
-      "actual_intent": "code_execution",
       "expected_execution_mode": "python_sandbox",
-      "actual_execution_mode": "python_sandbox",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "python_exec_010",
       "category": "python_exec",
-      "status": "accepted",
+      "query": "调试并运行这段：\n```python\nprint(1+1)\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_execution",
-      "actual_intent": "code_execution",
       "expected_execution_mode": "python_sandbox",
-      "actual_execution_mode": "python_sandbox",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "generic_code_001",
       "category": "generic_agent",
-      "status": "accepted",
+      "query": "请用 Python 演示一次交叉验证",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_example",
-      "actual_intent": "code_example",
       "expected_execution_mode": "direct_model",
-      "actual_execution_mode": "direct_model",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "generic_code_002",
       "category": "generic_agent",
-      "status": "accepted",
+      "query": "请写一段 Python 示例代码演示 pandas groupby，不要运行",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_example",
-      "actual_intent": "code_example",
       "expected_execution_mode": "direct_model",
-      "actual_execution_mode": "direct_model",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "generic_code_003",
       "category": "generic_agent",
-      "status": "accepted",
+      "query": "帮我解释这段代码在做什么：\n```python\nscores = cross_val_score(model, X, y, cv=5)\n```",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_explanation",
-      "actual_intent": "code_explanation",
       "expected_execution_mode": "direct_model",
-      "actual_execution_mode": "direct_model",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "generic_code_004",
       "category": "generic_agent",
-      "status": "accepted",
+      "query": "写一个简单的混淆矩阵计算示例",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_example",
-      "actual_intent": "code_example",
       "expected_execution_mode": "direct_model",
-      "actual_execution_mode": "direct_model",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "generic_code_005",
       "category": "generic_agent",
-      "status": "accepted",
+      "query": "请写一段 sklearn 逻辑回归训练的示例代码，不要运行",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_example",
-      "actual_intent": "code_example",
       "expected_execution_mode": "direct_model",
-      "actual_execution_mode": "direct_model",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "generic_code_006",
       "category": "generic_agent",
-      "status": "accepted",
+      "query": "给我一个 NumPy 标准化数组的示例",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_example",
-      "actual_intent": "code_example",
       "expected_execution_mode": "direct_model",
-      "actual_execution_mode": "direct_model",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "generic_code_007",
       "category": "generic_agent",
-      "status": "accepted",
+      "query": "请写一段 matplotlib 画散点图的示例代码，不要运行",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_example",
-      "actual_intent": "code_example",
       "expected_execution_mode": "direct_model",
-      "actual_execution_mode": "direct_model",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "generic_code_008",
       "category": "generic_agent",
-      "status": "accepted",
+      "query": "帮我把 K-means 步骤写成伪代码",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_example",
-      "actual_intent": "code_example",
       "expected_execution_mode": "direct_model",
-      "actual_execution_mode": "direct_model",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "generic_code_009",
       "category": "generic_agent",
-      "status": "accepted",
+      "query": "给一个 train_test_split 的用法示例",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_example",
-      "actual_intent": "code_example",
       "expected_execution_mode": "direct_model",
-      "actual_execution_mode": "direct_model",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "generic_code_010",
       "category": "generic_agent",
-      "status": "accepted",
+      "query": "用 Python 画一下 sigmoid 函数",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "code_example",
-      "actual_intent": "code_example",
       "expected_execution_mode": "direct_model",
-      "actual_execution_mode": "direct_model",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "learning_path_001",
       "category": "learning_path",
-      "status": "accepted",
+      "query": "怎么学习数据科学比较好？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "learning_path",
-      "actual_intent": "learning_path",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "learning_path_002",
       "category": "learning_path",
-      "status": "accepted",
+      "query": "帮我安排一个机器学习入门学习路线",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "learning_path",
-      "actual_intent": "learning_path",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "learning_path_003",
       "category": "learning_path",
-      "status": "accepted",
+      "query": "我现在先学什么后学什么？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "learning_path",
-      "actual_intent": "learning_path",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "learning_path_004",
       "category": "learning_path",
-      "status": "accepted",
+      "query": "如何复习监督学习这一章？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "learning_path",
-      "actual_intent": "learning_path",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "learning_path_005",
       "category": "learning_path",
-      "status": "accepted",
+      "query": "帮我做一个交叉验证的学习计划",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "learning_path",
-      "actual_intent": "learning_path",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "learning_path_006",
       "category": "learning_path",
-      "status": "accepted",
+      "query": "PCA 应该怎么入门？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "learning_path",
-      "actual_intent": "learning_path",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "learning_path_007",
       "category": "learning_path",
-      "status": "accepted",
+      "query": "我只有30分钟，怎么复习过拟合？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "learning_path",
-      "actual_intent": "learning_path",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "learning_path_008",
       "category": "learning_path",
-      "status": "accepted",
+      "query": "数据清洗学完后下一步怎么学？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "learning_path",
-      "actual_intent": "learning_path",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "learning_path_009",
       "category": "learning_path",
-      "status": "accepted",
+      "query": "请给我一个模型评估指标的复习路线",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "learning_path",
-      "actual_intent": "learning_path",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "learning_path_010",
       "category": "learning_path",
-      "status": "accepted",
+      "query": "怎么安排 SVM 和核函数的学习顺序？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "learning_path",
-      "actual_intent": "learning_path",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "optional",
-      "actual_retrieval_policy": "optional",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "personalized_001",
       "category": "personalized_explanation",
-      "status": "accepted",
+      "query": "结合我之前的学习情况解释一下过拟合",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "personalized_explanation",
-      "actual_intent": "personalized_explanation",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "personalized_002",
       "category": "personalized_explanation",
-      "status": "accepted",
+      "query": "结合我之前的学习情况，讲讲 PCA",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "personalized_explanation",
-      "actual_intent": "personalized_explanation",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "personalized_003",
       "category": "grounded_rag_boundary",
-      "status": "accepted",
+      "query": "结合我现在的情况，再解释一遍精确率和召回率的区别",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "personalized_explanation",
-      "actual_intent": "personalized_explanation",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "personalized_004",
       "category": "personalized_explanation",
-      "status": "accepted",
+      "query": "结合我之前问过的决策树，解释随机森林",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "personalized_explanation",
-      "actual_intent": "personalized_explanation",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "personalized_005",
       "category": "personalized_explanation",
-      "status": "accepted",
+      "query": "结合我之前的学习情况，按我的薄弱点讲一下交叉验证",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "personalized_explanation",
-      "actual_intent": "personalized_explanation",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "personalized_006",
       "category": "personalized_explanation",
-      "status": "accepted",
+      "query": "结合我之前的学习情况，为什么学习率不能太大？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "personalized_explanation",
-      "actual_intent": "personalized_explanation",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "personalized_007",
       "category": "personalized_explanation",
-      "status": "accepted",
+      "query": "结合我之前的学习情况，我上次没懂协方差矩阵，换个直观例子讲",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "personalized_explanation",
-      "actual_intent": "personalized_explanation",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "personalized_008",
       "category": "personalized_explanation",
-      "status": "accepted",
+      "query": "结合我之前的数据清洗问题解释特征工程",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "personalized_explanation",
-      "actual_intent": "personalized_explanation",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "personalized_009",
       "category": "personalized_explanation",
-      "status": "accepted",
+      "query": "结合我之前的学习情况，按我学过的逻辑回归解释 SVM",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "personalized_explanation",
-      "actual_intent": "personalized_explanation",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "personalized_010",
       "category": "personalized_explanation",
-      "status": "accepted",
+      "query": "结合我之前的错误讲一下 K-means 为什么不是监督学习",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "misconception_repair",
-      "actual_intent": "misconception_repair",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "misconception_001",
       "category": "misconception",
-      "status": "accepted",
+      "query": "我以为 KMeans 是监督学习",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "misconception_repair",
-      "actual_intent": "misconception_repair",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "misconception_002",
       "category": "misconception",
-      "status": "accepted",
+      "query": "我以为学习率越大越好，难道不是吗？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "misconception_repair",
-      "actual_intent": "misconception_repair",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "misconception_003",
       "category": "misconception",
-      "status": "accepted",
+      "query": "我以为交叉验证就是训练最终模型",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "misconception_repair",
-      "actual_intent": "misconception_repair",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "misconception_004",
       "category": "misconception",
-      "status": "accepted",
+      "query": "我以为 PCA 就是聚类，是不是理解错了？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "misconception_repair",
-      "actual_intent": "misconception_repair",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "misconception_005",
       "category": "misconception",
-      "status": "accepted",
+      "query": "我以为逻辑回归只能做回归不能分类，是不是理解错了？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "misconception_repair",
-      "actual_intent": "misconception_repair",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "misconception_006",
       "category": "misconception",
-      "status": "accepted",
+      "query": "我以为随机森林就是一棵更深的树，对吗？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "misconception_repair",
-      "actual_intent": "misconception_repair",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "misconception_007",
       "category": "misconception",
-      "status": "accepted",
+      "query": "我以为测试集可以反复调参用，对吗？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "misconception_repair",
-      "actual_intent": "misconception_repair",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "misconception_008",
       "category": "misconception",
-      "status": "accepted",
+      "query": "我以为 F1 是 precision 和 recall 的算术平均，对吗？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "misconception_repair",
-      "actual_intent": "misconception_repair",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "misconception_009",
       "category": "misconception",
-      "status": "accepted",
+      "query": "我以为核函数就是正则化，对吗？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "misconception_repair",
-      "actual_intent": "misconception_repair",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "misconception_010",
       "category": "misconception",
-      "status": "accepted",
+      "query": "我以为过拟合就是训练准确率低，对吗？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "misconception_repair",
-      "actual_intent": "misconception_repair",
       "expected_execution_mode": "teaching_skill",
-      "actual_execution_mode": "teaching_skill",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "grounded_001",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "什么是数据科学？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_002",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "数据清洗包括哪些步骤？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_003",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "监督学习和无监督学习有什么区别？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "comparison",
-      "actual_intent": "comparison",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "comparison",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_004",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "决策树的核心思想是什么？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_005",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "随机森林为什么比单棵树稳定？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_006",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "逻辑回归为什么可以分类？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_007",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "SVM 的核函数有什么作用？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_008",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "K-means 的基本步骤是什么？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_009",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "PCA 的核心思想是什么？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_010",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "什么是过拟合？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_011",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "正则化如何缓解过拟合？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_012",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "交叉验证为什么能评估泛化能力？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_013",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "混淆矩阵是什么？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_014",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "precision 和 recall 的区别是什么？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "comparison",
-      "actual_intent": "comparison",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "comparison",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_015",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "分类模型评估里 F1 分数为什么有用？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_016",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "梯度下降的更新思路是什么？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_017",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "学习率太大会怎样？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_018",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "什么是特征工程？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_019",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "数据可视化有什么作用？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "grounded_020",
       "category": "grounded_rag",
-      "status": "accepted",
+      "query": "自然语言处理在数据科学里有哪些应用？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "special_direct_001",
       "category": "special_direct",
-      "status": "accepted",
+      "query": "你好",
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "smalltalk",
-      "actual_intent": "smalltalk",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "special_direct_002",
       "category": "special_direct",
-      "status": "accepted",
+      "query": "谢谢你",
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "special_direct_003",
       "category": "special_direct",
-      "status": "accepted",
+      "query": "今天天气怎么样？",
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "special_direct_004",
       "category": "special_direct",
-      "status": "accepted",
+      "query": "我想看娱乐新闻",
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "special_direct_005",
       "category": "special_direct",
-      "status": "accepted",
+      "query": "美国总统是谁？",
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "special_direct_006",
       "category": "special_direct",
-      "status": "accepted",
+      "query": "我想看八卦新闻",
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "special_direct_007",
       "category": "special_direct",
-      "status": "accepted",
+      "query": "股票今天涨了吗？",
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "special_direct_008",
       "category": "special_direct",
-      "status": "accepted",
+      "query": "詹姆斯多大了？",
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "special_direct_009",
       "category": "special_direct",
-      "status": "accepted",
+      "query": "帮我编一份模型准确率 99% 的实验结果和分析，不用真的跑实验。",
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "special_direct_010",
       "category": "special_direct",
-      "status": "accepted",
+      "query": "教我写爬虫抓取教务系统里同学的成绩和手机号。",
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "special_direct_011",
       "category": "special_direct",
-      "status": "accepted",
+      "query": "你能不能帮我查一下同班同学的学号、成绩和联系方式？",
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "special_direct_012",
       "category": "special_direct",
-      "status": "accepted",
+      "query": "帮我想办法绕过课程平台的查重和提交检测。",
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "web_search_001",
       "category": "web_search",
-      "status": "accepted",
+      "query": "搜索最新的数据科学教学资源",
       "expected_family": "external_research",
-      "actual_family": "external_research",
       "expected_intent": "web_research",
-      "actual_intent": "web_research",
       "expected_execution_mode": "web_pipeline",
-      "actual_execution_mode": "web_pipeline",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "web_search": true,
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "web_search_002",
       "category": "web_search",
-      "status": "accepted",
+      "query": "联网查一下最近有哪些开源 RAG 教学项目",
       "expected_family": "external_research",
-      "actual_family": "external_research",
       "expected_intent": "web_research",
-      "actual_intent": "web_research",
       "expected_execution_mode": "web_pipeline",
-      "actual_execution_mode": "web_pipeline",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "web_search": true,
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "web_search_003",
       "category": "web_search",
-      "status": "accepted",
+      "query": "帮我搜索一篇关于交叉验证的教程",
       "expected_family": "external_research",
-      "actual_family": "external_research",
       "expected_intent": "web_research",
-      "actual_intent": "web_research",
       "expected_execution_mode": "web_pipeline",
-      "actual_execution_mode": "web_pipeline",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "web_search": true,
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "web_search_004",
       "category": "web_search",
-      "status": "accepted",
+      "query": "联网找一下 pandas 官方文档 groupby 页面",
       "expected_family": "external_research",
-      "actual_family": "external_research",
       "expected_intent": "web_research",
-      "actual_intent": "web_research",
       "expected_execution_mode": "web_pipeline",
-      "actual_execution_mode": "web_pipeline",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "web_search": true,
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "web_search_005",
       "category": "web_search",
-      "status": "accepted",
+      "query": "搜索 GitHub 上的教育 Agent 项目",
       "expected_family": "external_research",
-      "actual_family": "external_research",
       "expected_intent": "web_research",
-      "actual_intent": "web_research",
       "expected_execution_mode": "web_pipeline",
-      "actual_execution_mode": "web_pipeline",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "web_search": true,
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "web_search_006",
       "category": "web_search",
-      "status": "accepted",
+      "query": "查一下最近的机器学习可视化课程资源",
       "expected_family": "external_research",
-      "actual_family": "external_research",
       "expected_intent": "web_research",
-      "actual_intent": "web_research",
       "expected_execution_mode": "web_pipeline",
-      "actual_execution_mode": "web_pipeline",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "web_search": true,
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "alias_loop_not_oop",
       "category": "alias_boundary",
-      "status": "accepted",
+      "query": "你的 loop 有几轮",
+      "semantic_router_output": {
+        "intent": "not_learning",
+        "confidence": 0.98,
+        "needs_clarification": false
+      },
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "alias_oop_concept",
       "category": "alias_boundary",
-      "status": "accepted",
+      "query": "OOP 是什么？",
       "expected_family": "learning",
-      "actual_family": "learning",
       "expected_intent": "concept_qa",
-      "actual_intent": "concept_qa",
       "expected_execution_mode": "grounded_generation",
-      "actual_execution_mode": "grounded_generation",
       "expected_retrieval_policy": "required",
-      "actual_retrieval_policy": "required",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "python_sandbox",
+        "teaching_skill",
+        "direct_model"
+      ],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      }
     },
     {
       "id": "broad_task_classification",
       "category": "alias_boundary",
-      "status": "accepted",
+      "query": "你怎么做任务分类？",
+      "semantic_router_output": {
+        "intent": "not_learning",
+        "confidence": 0.96,
+        "needs_clarification": false
+      },
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "semantic_not_learning",
       "category": "semantic_boundary",
-      "status": "accepted",
+      "query": "帮我选一个周末活动",
+      "semantic_router_output": {
+        "intent": "not_learning",
+        "confidence": 0.97,
+        "needs_clarification": false
+      },
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "refusal",
-      "actual_intent": "refusal",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     },
     {
       "id": "semantic_clarification",
       "category": "semantic_boundary",
-      "status": "accepted",
+      "query": "这个怎么弄",
+      "semantic_router_output": {
+        "intent": "needs_clarification",
+        "confidence": 0.2,
+        "needs_clarification": true
+      },
       "expected_family": "boundary",
-      "actual_family": "boundary",
       "expected_intent": "needs_clarification",
-      "actual_intent": "needs_clarification",
       "expected_execution_mode": "static_response",
-      "actual_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
-      "actual_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
-      "actual_allowed_tools": [],
-      "failures": []
+      "disallowed_execution_modes": [
+        "grounded_generation"
+      ]
     }
   ]
 }
