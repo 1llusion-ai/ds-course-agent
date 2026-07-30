@@ -158,13 +158,23 @@ def _sources_from_progress_events(progress_events: list[dict] | None) -> list[di
     return sources
 
 
-def _route_from_progress_events(progress_events: list[dict] | None) -> str | None:
-    """Return the latest route already established by the active stream."""
+def _routing_fields_from_progress_events(progress_events: list[dict] | None) -> dict[str, str | None]:
+    """Return the latest typed routing fields established by the active stream."""
 
+    routing_fields: dict[str, str | None] = {
+        "family": None,
+        "intent": None,
+        "execution_mode": None,
+    }
     for event in reversed(progress_events or []):
-        if isinstance(event, dict) and event.get("route"):
-            return str(event["route"])
-    return None
+        if not isinstance(event, dict):
+            continue
+        for field_name in routing_fields:
+            if routing_fields[field_name] is None and event.get(field_name):
+                routing_fields[field_name] = str(event[field_name])
+        if all(routing_fields.values()):
+            break
+    return routing_fields
 
 
 def _web_search_turn_fields(
@@ -283,7 +293,9 @@ def _msg_to_dict(msg: ChatMessage) -> dict:
         "content": msg.content,
         "timestamp": msg.timestamp.isoformat() if msg.timestamp else datetime.now().isoformat(),
         "sources": msg.sources or None,
-        "route": msg.route or None,
+        "family": msg.family.value if msg.family else None,
+        "intent": msg.intent.value if msg.intent else None,
+        "execution_mode": msg.execution_mode.value if msg.execution_mode else None,
         "progress": msg.progress or None,
         "progress_events": msg.progress_events or None,
         "web_search_requested": msg.web_search_requested,
@@ -308,7 +320,9 @@ def _msg_from_dict(data: dict) -> ChatMessage:
         content=data.get("content", ""),
         timestamp=ts or datetime.now(),
         sources=data.get("sources"),
-        route=data.get("route"),
+        family=data.get("family"),
+        intent=data.get("intent"),
+        execution_mode=data.get("execution_mode"),
         progress=data.get("progress"),
         progress_events=data.get("progress_events") or data.get("progressEvents"),
         web_search_requested=web_search_requested,
@@ -657,19 +671,19 @@ async def send_message(
         )
         assistant_sources = assistant_result.get("sources") if isinstance(assistant_result, dict) else None
         query_trace = assistant_result.get("query_trace") if isinstance(assistant_result, dict) else None
-        assistant_route = None
-        if isinstance(query_trace, dict):
-            for event in reversed(query_trace.get("events", [])):
-                event_data = event.get("data") or {}
-                assistant_route = event_data.get("route") or event_data.get("final_route")
-                if assistant_route:
-                    break
+        assistant_family = assistant_result.get("family") if isinstance(assistant_result, dict) else None
+        assistant_intent = assistant_result.get("intent") if isinstance(assistant_result, dict) else None
+        assistant_execution_mode = (
+            assistant_result.get("execution_mode") if isinstance(assistant_result, dict) else None
+        )
 
         assistant_msg = ChatMessage(
             role="assistant",
             content=assistant_content,
             sources=assistant_sources or None,
-            route=assistant_route,
+            family=assistant_family,
+            intent=assistant_intent,
+            execution_mode=assistant_execution_mode,
             **_web_search_turn_fields(
                 requested=bool(data.web_search),
                 used_retrieval=assistant_result.get("used_retrieval") if isinstance(assistant_result, dict) else False,
@@ -677,12 +691,11 @@ async def send_message(
                 sources=assistant_sources,
             ),
             metadata={
-                "route": assistant_route,
                 "used_retrieval": assistant_result.get("used_retrieval"),
+                "degraded": bool(assistant_result.get("degraded", False)),
                 "web_search": bool(data.web_search),
             }
             if isinstance(assistant_result, dict)
-            and (assistant_route or assistant_result.get("used_retrieval") is not None)
             else None,
         )
         with _history_lock(data.session_id):
@@ -808,21 +821,32 @@ def _launch_stream_worker(
         assistant_sources = (
             event.get("sources") or (base_message.sources if base_message else None) or progress_sources or None
         )
-        route = (
-            event.get("route")
-            or (base_message.route if base_message else None)
-            or _route_from_progress_events(snapshot.progress_events)
+        progress_routing = _routing_fields_from_progress_events(snapshot.progress_events)
+        family = (
+            event.get("family")
+            or (base_message.family.value if base_message and base_message.family else None)
+            or progress_routing["family"]
+        )
+        intent = (
+            event.get("intent")
+            or (base_message.intent.value if base_message and base_message.intent else None)
+            or progress_routing["intent"]
+        )
+        execution_mode = (
+            event.get("execution_mode")
+            or (base_message.execution_mode.value if base_message and base_message.execution_mode else None)
+            or progress_routing["execution_mode"]
         )
         used_retrieval = bool(
             event.get("used_retrieval")
             or base_metadata.get("used_retrieval")
             or progress_sources
-            or route == "grounded_rag"
+            or execution_mode == "grounded_generation"
         )
         metadata = {
             **base_metadata,
-            "route": route,
             "used_retrieval": used_retrieval,
+            "degraded": bool(event.get("degraded", base_metadata.get("degraded", False))),
             "web_search": bool(web_search),
         }
 
@@ -848,7 +872,9 @@ def _launch_stream_worker(
             content=content,
             timestamp=message_timestamp,
             sources=assistant_sources,
-            route=route,
+            family=family,
+            intent=intent,
+            execution_mode=execution_mode,
             progress=snapshot.progress,
             progress_events=snapshot.progress_events or None,
             generation_status=generation_status,
@@ -877,7 +903,9 @@ def _launch_stream_worker(
                 "type": "final",
                 "session_id": session_id,
                 "stream_id": event.get("stream_id") or snapshot.stream_id,
-                "route": saved_message.route,
+                "family": saved_message.family.value if saved_message.family else None,
+                "intent": saved_message.intent.value if saved_message.intent else None,
+                "execution_mode": saved_message.execution_mode.value if saved_message.execution_mode else None,
                 "error": generation_error,
                 "message": _msg_to_dict(saved_message),
             }
@@ -897,7 +925,9 @@ def _launch_stream_worker(
                     base_progress_event = {
                         "phase": event.get("phase"),
                         "message": event.get("message", ""),
-                        "route": event.get("route"),
+                        "family": event.get("family"),
+                        "intent": event.get("intent"),
+                        "execution_mode": event.get("execution_mode"),
                         "tool": event.get("tool"),
                         "stream_id": event.get("stream_id"),
                         "resuming": bool(event.get("resuming", False)),

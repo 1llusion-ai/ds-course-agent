@@ -9,6 +9,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass, replace
+from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 
@@ -19,6 +20,45 @@ from ds_course_agent.shared.embeddings import create_embedding_model, embed_quer
 from ds_course_agent.shared.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
+
+
+class AliasMatchMode(str, Enum):
+    """别名文本的匹配方式。"""
+
+    TOKEN = "token"
+    SUBSTRING = "substring"
+    CONTEXTUAL = "contextual"
+
+
+class ConceptMatchStrength(str, Enum):
+    """知识点匹配对后续控制流的证据强度。"""
+
+    STRONG = "strong"
+    SUPPORTING = "supporting"
+
+
+@dataclass(frozen=True)
+class AliasPolicy:
+    """知识图谱中单个别名的声明式匹配策略。"""
+
+    match_mode: AliasMatchMode
+    match_strength: ConceptMatchStrength
+
+    @property
+    def independently_emits_match(self) -> bool:
+        """是否允许该别名单独生成知识点匹配。"""
+        return self.match_mode is not AliasMatchMode.CONTEXTUAL and self.match_strength is ConceptMatchStrength.STRONG
+
+
+@dataclass(frozen=True)
+class AliasSpec:
+    """归一化后的别名及其所属知识点和匹配策略。"""
+
+    text: str
+    normalized_text: str
+    concept_id: str
+    policy: AliasPolicy
+    token_pattern: re.Pattern[str] | None = None
 
 
 def _trace_concept_map(stage: str, **data) -> None:
@@ -39,6 +79,9 @@ class MatchedConcept:
     chapter: str
     method: str  # exact_alias / regex_rule / embedding
     score: float
+    match_strength: ConceptMatchStrength = ConceptMatchStrength.STRONG
+    routing_eligible: bool = True
+    event_eligible: bool = True
 
 
 class KnowledgeGraph:
@@ -53,6 +96,8 @@ class KnowledgeGraph:
 
         self.concepts: dict[str, dict] = {}
         self.alias_to_concept: dict[str, str] = {}  # alias -> canonical_id
+        self.alias_specs: dict[str, AliasSpec] = {}
+        self.alias_policies = self._parse_alias_policies(data.get("alias_policies", {}))
         self.embeddings: dict[str, np.ndarray] = {}  # canonical_id -> embedding vector
 
         for concept in data["concepts"]:
@@ -63,6 +108,23 @@ class KnowledgeGraph:
             for alias in concept["aliases"]:
                 normalized_alias = self._normalize_text(alias)
                 self.alias_to_concept[normalized_alias] = cid
+                policy = self.alias_policies.get(
+                    normalized_alias,
+                    self._default_alias_policy(normalized_alias),
+                )
+                token_pattern = None
+                if policy.match_mode is AliasMatchMode.TOKEN:
+                    token_pattern = re.compile(
+                        rf"(?<![A-Za-z0-9_]){re.escape(normalized_alias)}(?![A-Za-z0-9_])",
+                        re.I,
+                    )
+                self.alias_specs[normalized_alias] = AliasSpec(
+                    text=alias,
+                    normalized_text=normalized_alias,
+                    concept_id=cid,
+                    policy=policy,
+                    token_pattern=token_pattern,
+                )
 
         # 预编译正则规则（在精确匹配之后应用）
         self.regex_rules = self._build_regex_rules()
@@ -75,6 +137,44 @@ class KnowledgeGraph:
         text = re.sub(r"[^\w\s]", "", text.lower())
         text = re.sub(r"\s+", " ", text).strip()
         return text
+
+    def _parse_alias_policies(self, raw_policies: object) -> dict[str, AliasPolicy]:
+        """解析并校验知识图谱顶层别名策略。"""
+        if not isinstance(raw_policies, dict):
+            raise ValueError("alias_policies must be an object")
+
+        policies: dict[str, AliasPolicy] = {}
+        for alias, raw_policy in raw_policies.items():
+            if not isinstance(alias, str) or not alias.strip():
+                raise ValueError("alias_policies keys must be non-empty strings")
+            if not isinstance(raw_policy, dict):
+                raise ValueError(f"alias policy for {alias!r} must be an object")
+
+            try:
+                policy = AliasPolicy(
+                    match_mode=AliasMatchMode(raw_policy["match_mode"]),
+                    match_strength=ConceptMatchStrength(raw_policy["match_strength"]),
+                )
+            except KeyError as exc:
+                raise ValueError(f"alias policy for {alias!r} is missing {exc.args[0]!r}") from exc
+            except ValueError as exc:
+                raise ValueError(f"alias policy for {alias!r} has an invalid enum value") from exc
+
+            normalized_alias = self._normalize_text(alias)
+            if not normalized_alias:
+                raise ValueError(f"alias policy key {alias!r} is empty after normalization")
+            policies[normalized_alias] = policy
+
+        return policies
+
+    @staticmethod
+    def _default_alias_policy(normalized_alias: str) -> AliasPolicy:
+        """ASCII 别名默认按 token 匹配，中文等别名默认按子串匹配。"""
+        match_mode = AliasMatchMode.TOKEN if normalized_alias.isascii() else AliasMatchMode.SUBSTRING
+        return AliasPolicy(
+            match_mode=match_mode,
+            match_strength=ConceptMatchStrength.STRONG,
+        )
 
     def _build_regex_rules(self) -> list[tuple[re.Pattern, str]]:
         """
@@ -253,22 +353,25 @@ class KnowledgeMapper:
             return 0.0
         return float(np.dot(v1, v2) / (norm1 * norm2))
 
-    def _score_substring_match(self, alias: str, normalized: str) -> float:
-        """对子串命中做更稳健的打分，避免长问句压低概念命中分。"""
-        if not alias or not normalized:
+    def _score_alias_match(self, alias_spec: AliasSpec, normalized: str) -> float:
+        """按别名策略评分，contextual/supporting 别名不独立产生命中。"""
+        alias = alias_spec.normalized_text
+        if not alias or not normalized or not alias_spec.policy.independently_emits_match:
             return 0.0
 
         if alias == normalized:
             return 1.0
 
+        if alias_spec.policy.match_mode is AliasMatchMode.TOKEN:
+            if alias_spec.token_pattern is None or alias_spec.token_pattern.search(normalized) is None:
+                return 0.0
+            coverage = len(alias) / max(len(normalized), 1)
+            return round(min(0.99, 0.72 + 0.25 * coverage), 3)
+
         # 问句包含完整概念别名时，应视为较强命中。
         if alias in normalized and len(alias) >= 2:
             coverage = len(alias) / max(len(normalized), 1)
             return round(min(0.99, 0.72 + 0.25 * coverage), 3)
-
-        # 用户问题是概念别名的截断或简写时，保留原有比例分。
-        if normalized in alias and len(normalized) >= 2:
-            return round(min(0.9, len(normalized) / max(len(alias), 1)), 3)
 
         return 0.0
 
@@ -292,10 +395,16 @@ class KnowledgeMapper:
 
         # ===== Layer 1: 别名精确匹配 =====
         normalized = self.graph._normalize_text(question)
+        alias_candidates: dict[str, tuple[float, AliasSpec]] = {}
+        for alias_spec in self.graph.alias_specs.values():
+            score = self._score_alias_match(alias_spec, normalized)
+            if score < 0.55:
+                continue
+            previous = alias_candidates.get(alias_spec.concept_id)
+            if previous is None or score > previous[0]:
+                alias_candidates[alias_spec.concept_id] = (score, alias_spec)
 
-        # 直接匹配
-        if normalized in self.graph.alias_to_concept:
-            cid = self.graph.alias_to_concept[normalized]
+        for cid, (score, alias_spec) in alias_candidates.items():
             concept = self.graph.get_concept(cid)
             matches.append(
                 MatchedConcept(
@@ -303,28 +412,13 @@ class KnowledgeMapper:
                     display_name=concept["display_name"],
                     chapter=concept["chapter"],
                     method="exact_alias",
-                    score=1.0,
+                    score=score,
+                    match_strength=alias_spec.policy.match_strength,
+                    routing_eligible=True,
+                    event_eligible=True,
                 )
             )
             matched_ids.add(cid)
-
-        # 子串匹配（用于长问题中提取概念）
-        for alias, cid in self.graph.alias_to_concept.items():
-            if cid in matched_ids:
-                continue
-            score = self._score_substring_match(alias, normalized)
-            if score >= 0.55:
-                concept = self.graph.get_concept(cid)
-                matches.append(
-                    MatchedConcept(
-                        concept_id=cid,
-                        display_name=concept["display_name"],
-                        chapter=concept["chapter"],
-                        method="exact_alias",
-                        score=score,
-                    )
-                )
-                matched_ids.add(cid)
 
         # ===== Layer 2: 正则规则匹配 =====
         for pattern, cid in self.graph.regex_rules:
@@ -339,6 +433,9 @@ class KnowledgeMapper:
                         chapter=concept["chapter"],
                         method="regex_rule",
                         score=0.95,
+                        match_strength=ConceptMatchStrength.STRONG,
+                        routing_eligible=True,
+                        event_eligible=True,
                     )
                 )
                 matched_ids.add(cid)
@@ -404,6 +501,9 @@ class KnowledgeMapper:
                                 chapter=concept["chapter"],
                                 method="embedding",
                                 score=round(sim, 3),
+                                match_strength=ConceptMatchStrength.SUPPORTING,
+                                routing_eligible=False,
+                                event_eligible=True,
                             )
                         )
 

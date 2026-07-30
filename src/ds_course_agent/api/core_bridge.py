@@ -89,22 +89,27 @@ def chat_with_history(message: str, session_id: str, student_id: str, web_search
             # service implementations unless the explicit web-search switch is on.
             if web_search:
                 kwargs["web_search"] = True
-            content = service.chat_with_history(**kwargs)
+            execution_result = service.chat_with_history(**kwargs)
+            content = execution_result.content
     except Exception as e:
         logger.error("Agent调用出错: %s", e, exc_info=True)
         trace_error("core_bridge.chat", e)
         end_query_trace(q_token, status="error")
         raise
     finally:
-        trace = end_retrieval_trace(token)
+        end_retrieval_trace(token)
 
     q_trace = end_query_trace(q_token, status="error" if not content else "ok")
     logger.info("QueryTrace: %s", q_trace)
 
     return {
         "content": content,
-        "used_retrieval": trace.used_retrieval,
-        "sources": trace.sources,
+        "used_retrieval": execution_result.used_retrieval,
+        "sources": execution_result.sources,
+        "family": execution_result.family.value,
+        "intent": execution_result.intent.value,
+        "execution_mode": execution_result.execution_mode.value,
+        "degraded": execution_result.degraded,
         "query_trace": q_trace,
     }
 
@@ -124,7 +129,9 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
     final_content = ""
     accumulated_content = ""
     stream_id = None
-    final_route = None
+    final_family = None
+    final_intent = None
+    final_execution_mode = None
     stream_error: str | None = None
 
     try:
@@ -148,7 +155,9 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
                 elif event_type == "done":
                     final_content = event.get("content", "") or accumulated_content
                     stream_id = event.get("stream_id")
-                    final_route = event.get("route")
+                    final_family = event.get("family")
+                    final_intent = event.get("intent")
+                    final_execution_mode = event.get("execution_mode")
     except Exception as e:
         logger.error("流式Agent调用出错: %s", e, exc_info=True)
         trace_error("core_bridge.stream", e)
@@ -167,7 +176,9 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
         "sources": trace.sources,
         "query_trace": q_trace,
         "stream_id": stream_id,
-        "route": final_route,
+        "family": final_family,
+        "intent": final_intent,
+        "execution_mode": final_execution_mode,
     }
     if stream_error:
         final_event["error"] = stream_error

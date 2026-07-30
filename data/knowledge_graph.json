@@ -1,6 +1,20 @@
 {
   "course_name": "数据科学导论",
   "version": "1.1",
+  "alias_policies": {
+    "分类": {
+      "match_mode": "contextual",
+      "match_strength": "supporting"
+    },
+    "模型": {
+      "match_mode": "contextual",
+      "match_strength": "supporting"
+    },
+    "训练": {
+      "match_mode": "contextual",
+      "match_strength": "supporting"
+    }
+  },
   "concepts": [
     {
       "canonical_id": "data_literacy",

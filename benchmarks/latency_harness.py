@@ -148,7 +148,9 @@ def _slow_query_diagnostics(results: list[dict[str, Any]], *, limit: int = 5) ->
                 "query_id": result.get("query_id"),
                 "task_id": result.get("task_id"),
                 "category": result.get("category", ""),
-                "route": result.get("route") or "unknown",
+                "family": result.get("family") or "unknown",
+                "intent": result.get("intent") or "unknown",
+                "execution_mode": result.get("execution_mode") or "unknown",
                 "used_retrieval": bool(result.get("used_retrieval")),
                 "total_latency_ms": _round_ms(result.get("total_latency_ms")),
                 "query_trace_duration_ms": _round_ms(result.get("query_trace_duration_ms")),
@@ -240,22 +242,30 @@ def _query_trace_events(query_trace: Any) -> list[dict[str, Any]]:
 
 
 def extract_query_trace_metrics(query_trace: Any) -> dict[str, Any]:
-    """Extract route, force flags, and per-stage durations from query trace."""
+    """Extract typed route fields, force flags, and per-stage durations."""
     if not isinstance(query_trace, dict):
         query_trace = {}
 
     events = _query_trace_events(query_trace)
     stage_durations_ms: dict[str, list[float]] = defaultdict(list)
     stage_duration_events: list[dict[str, Any]] = []
-    route: str | None = None
+    family: str | None = None
+    intent: str | None = None
+    execution_mode: str | None = None
 
     for event in events:
         stage = str(event.get("stage") or "")
         data = event.get("data") if isinstance(event.get("data"), dict) else {}
 
-        event_route = data.get("route")
-        if event_route:
-            route = str(event_route)
+        for key in ("family", "intent", "execution_mode"):
+            value = data.get(key)
+            if value:
+                if key == "family":
+                    family = str(value)
+                elif key == "intent":
+                    intent = str(value)
+                else:
+                    execution_mode = str(value)
 
         duration_ms = _round_ms(data.get("duration_ms"))
         if duration_ms is not None:
@@ -276,7 +286,9 @@ def extract_query_trace_metrics(query_trace: Any) -> dict[str, Any]:
         "event_count": len(events),
         "error_count": len(query_trace.get("errors") or []),
         "errors": query_trace.get("errors") or [],
-        "route": route or "unknown",
+        "family": family or "unknown",
+        "intent": intent or "unknown",
+        "execution_mode": execution_mode or "unknown",
         "stage_durations_ms": dict(stage_durations_ms),
         "stage_duration_events": stage_duration_events,
         "agent_force_grounded": any(event.get("stage") == FORCE_GROUNDED_STAGE for event in events),
@@ -349,7 +361,9 @@ def run_single_query(
         "session_id": session_id,
         "student_id": student_id,
         "total_latency_ms": total_latency_ms,
-        "route": trace_metrics["route"],
+        "family": trace_metrics["family"],
+        "intent": trace_metrics["intent"],
+        "execution_mode": trace_metrics["execution_mode"],
         "used_retrieval": bool(response.get("used_retrieval")) if isinstance(response, dict) else False,
         "sources_count": len(sources),
         "query_trace": {
@@ -385,7 +399,7 @@ def build_latency_report(
     results: list[dict[str, Any]],
 ) -> dict[str, Any]:
     total_queries = len(results)
-    route_counts = Counter(result.get("route") or "unknown" for result in results)
+    intent_counts = Counter(result.get("intent") or "unknown" for result in results)
     stage_values: dict[str, list[float]] = defaultdict(list)
     for result in results:
         for stage, durations in result["query_trace"]["stage_durations_ms"].items():
@@ -431,7 +445,7 @@ def build_latency_report(
                     if result["query_trace"].get("duration_ms") is not None
                 ]
             ),
-            "routes": dict(route_counts),
+            "intents": dict(intent_counts),
             "used_retrieval_count": sum(1 for result in results if result.get("used_retrieval")),
             "used_retrieval_rate": (
                 sum(1 for result in results if result.get("used_retrieval")) / total_queries if total_queries else 0.0
@@ -486,7 +500,8 @@ def run_latency_harness(
             status = "ERROR" if result.get("error") else "OK"
             safe_print(
                 f"[{index}/{len(queries)}] {query_spec['query_id']} {status} | "
-                f"{result['total_latency_ms']:.1f} ms | route={result['route']} | "
+                f"{result['total_latency_ms']:.1f} ms | "
+                f"{result['family']}/{result['intent']}/{result['execution_mode']} | "
                 f"retrieval={result['used_retrieval']}"
             )
 
@@ -511,7 +526,7 @@ def run_latency_harness(
     safe_print("=" * 60)
     safe_print(f"Latency p50: {report['summary']['latency_ms']['p50']} ms")
     safe_print(f"Latency p95: {report['summary']['latency_ms']['p95']} ms")
-    safe_print(f"Routes: {report['summary']['routes']}")
+    safe_print(f"Intents: {report['summary']['intents']}")
     hotspots = report["summary"].get("stage_hotspots") or []
     if hotspots:
         safe_print("Top stage hotspots by p95:")
@@ -523,7 +538,10 @@ def run_latency_harness(
     if slow_queries:
         safe_print("Slowest queries:")
         for item in slow_queries[:3]:
-            safe_print(f"  - {item['query_id']}: {item['total_latency_ms']} ms, route={item['route']}")
+            safe_print(
+                f"  - {item['query_id']}: {item['total_latency_ms']} ms, "
+                f"{item['family']}/{item['intent']}/{item['execution_mode']}"
+            )
     safe_print(f"Saved report to: {output_file}")
 
     return report

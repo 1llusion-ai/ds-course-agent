@@ -67,6 +67,12 @@ def _coerce_legacy_message(raw: dict, fallback_ts: datetime) -> dict | None:
             "content": raw.get("content", ""),
             "timestamp": raw.get("timestamp") or fallback_ts.isoformat(),
             "sources": raw.get("sources"),
+            "family": raw.get("family"),
+            "intent": raw.get("intent"),
+            "execution_mode": raw.get("execution_mode"),
+            "progress": raw.get("progress"),
+            "progress_events": raw.get("progress_events") or raw.get("progressEvents"),
+            "metadata": raw.get("metadata"),
         }
 
     message_type = raw.get("type")

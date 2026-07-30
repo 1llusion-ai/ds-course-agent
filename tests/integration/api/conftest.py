@@ -33,11 +33,25 @@ def isolated_backend_runtime(monkeypatch):
             "content": f"测试回答：{message}",
             "used_retrieval": False,
             "sources": [],
+            "family": "learning",
+            "intent": "concept_qa",
+            "execution_mode": "grounded_generation",
+            "degraded": False,
+            "query_trace": {},
         }
 
     def fake_stream_chat_with_history(message: str, session_id: str, student_id: str):
         yield {"type": "delta", "delta": "测试"}
-        yield {"type": "final", "content": f"测试回答：{message}", "sources": []}
+        yield {
+            "type": "final",
+            "content": f"测试回答：{message}",
+            "sources": [],
+            "used_retrieval": False,
+            "family": "learning",
+            "intent": "concept_qa",
+            "execution_mode": "grounded_generation",
+            "degraded": False,
+        }
 
     monkeypatch.setattr(chat_module, "_generate_session_title", fake_generate_session_title)
     monkeypatch.setattr(chat_module, "chat_with_history", fake_chat_with_history)

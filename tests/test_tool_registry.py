@@ -276,17 +276,18 @@ def test_agent_progress_label_uses_registry_when_available():
 
 
 def test_router_required_tools_resolve_in_registry():
-    from ds_course_agent.rag.query_pipeline import get_preprocessor, get_router
+    from ds_course_agent.rag.query_pipeline import ExecutionMode, get_preprocessor, get_router
 
     registry = build_default_tool_registry()
     preprocessor = get_preprocessor(enable_concept_detection=False)
     router = get_router()
 
-    for question in [
-        "请运行这段代码：print(1 + 1)",
-        "现在几点？",
-        "下次课是什么时候？",
-    ]:
+    expected = [
+        ("请运行这段代码：print(1 + 1)", ExecutionMode.PYTHON_SANDBOX, "python_sandbox", None),
+        ("现在几点？", ExecutionMode.DETERMINISTIC_TOOL, "current_datetime_tool", "current_datetime_tool"),
+        ("下次课是什么时候？", ExecutionMode.DETERMINISTIC_TOOL, "course_schedule_tool", "course_schedule_tool"),
+    ]
+    for question, expected_mode, expected_executor, expected_tool in expected:
         context = preprocessor.process(
             user_input=question,
             session_id="registry-route-test",
@@ -294,9 +295,10 @@ def test_router_required_tools_resolve_in_registry():
             chat_history=[],
         )
         decision = router.route(context)
-        assert decision.required_tools, f"expected required_tools for {question!r}"
-        for tool_name in decision.required_tools:
-            assert tool_name in registry.names
+        assert decision.execution_mode is expected_mode
+        assert decision.executor_key == expected_executor
+        if expected_tool:
+            assert expected_tool in registry.names
 
 
 def test_agent_fast_path_required_tools_use_registry_names(tmp_path, monkeypatch):
@@ -311,6 +313,5 @@ def test_agent_fast_path_required_tools_use_registry_names(tmp_path, monkeypatch
 
     for question in ["现在几点？", "下次课是什么时候？"]:
         state = service._prepare_query_route(question, "registry-fast-path", "student-1")
-        assert state.decision.required_tools
-        for tool_name in state.decision.required_tools:
-            assert tool_name in registry.names
+        assert state.decision.execution_mode.value == "deterministic_tool"
+        assert state.decision.executor_key in registry.names

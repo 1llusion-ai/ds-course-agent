@@ -138,8 +138,8 @@ class QueryPreprocessor:
         is_clarification = self._is_clarification_signal(normalized_query)
         is_mastery = self._is_mastery_signal(normalized_query)
 
-        # 6. skill 候选键（从现有逻辑迁移）
-        skill_candidate_keys = self._select_skill_candidates(normalized_query)
+        # 6. Skill 候选由 QueryPipeline 的惰性 enricher 在确有需要时选择。
+        skill_candidate_keys: set[str] = set()
 
         # 7. 判断是否是 follow-up
         is_followup = self._is_followup_question(normalized_query, chat_history)

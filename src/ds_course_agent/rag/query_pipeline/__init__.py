@@ -7,13 +7,17 @@ Query Pipeline 模块
 
 from .models import (
     DetectedConcept,
+    EnrichmentPlan,
+    ExecutionMode,
     FinalResponse,
     QueryContext,
     QueryRewriteTrace,
     RetrievalPolicy,
     RouteDecision,
+    RouteExecutionResult,
+    RouteFamily,
+    RouteIntent,
     RouteState,
-    RouteType,
 )
 from .pipeline import QueryPipeline
 from .postprocessor import QueryPostprocessor, get_postprocessor
@@ -25,9 +29,13 @@ __all__ = [
     "QueryContext",
     "RouteDecision",
     "RouteState",
+    "RouteExecutionResult",
     "FinalResponse",
     "QueryRewriteTrace",
-    "RouteType",
+    "RouteFamily",
+    "RouteIntent",
+    "ExecutionMode",
+    "EnrichmentPlan",
     "RetrievalPolicy",
     "DetectedConcept",
     "QueryPipeline",

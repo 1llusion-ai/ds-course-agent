@@ -31,6 +31,12 @@ _SETTING_NAMES = [
     "CHAT_MAX_RETRIES",
     "CHAT_DISABLE_THINKING",
     "CHAT_SYSTEM_SUFFIX",
+    "ROUTER_MODEL_NAME",
+    "ROUTER_MAX_TOKENS",
+    "ROUTER_TIMEOUT_SECONDS",
+    "ROUTER_MAX_RETRIES",
+    "ROUTER_RECENT_CONTEXT_MAX_CHARS",
+    "ROUTER_MIN_CONFIDENCE",
     "QUERY_CACHE_ENABLED",
     "QUERY_CACHE_SIZE",
     "CONCEPT_MAP_EMBEDDING_MODE",
@@ -157,6 +163,12 @@ chat_timeout_seconds = CHAT_TIMEOUT_SECONDS
 chat_max_retries = CHAT_MAX_RETRIES
 chat_disable_thinking = CHAT_DISABLE_THINKING
 chat_system_suffix = CHAT_SYSTEM_SUFFIX
+router_model_name = ROUTER_MODEL_NAME
+router_max_tokens = ROUTER_MAX_TOKENS
+router_timeout_seconds = ROUTER_TIMEOUT_SECONDS
+router_max_retries = ROUTER_MAX_RETRIES
+router_recent_context_max_chars = ROUTER_RECENT_CONTEXT_MAX_CHARS
+router_min_confidence = ROUTER_MIN_CONFIDENCE
 query_cache_enabled = QUERY_CACHE_ENABLED
 query_cache_size = QUERY_CACHE_SIZE
 concept_map_embedding_mode = CONCEPT_MAP_EMBEDDING_MODE
@@ -258,6 +270,12 @@ __all__ = [
     "chat_max_retries",
     "chat_disable_thinking",
     "chat_system_suffix",
+    "router_model_name",
+    "router_max_tokens",
+    "router_timeout_seconds",
+    "router_max_retries",
+    "router_recent_context_max_chars",
+    "router_min_confidence",
     "query_cache_enabled",
     "query_cache_size",
     "concept_map_embedding_mode",

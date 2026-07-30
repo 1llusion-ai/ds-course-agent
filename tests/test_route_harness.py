@@ -1,18 +1,31 @@
+"""Tests for the typed, offline route-boundary harness."""
+
+from __future__ import annotations
+
 import json
 from types import SimpleNamespace
 
-from benchmarks.route_harness import build_route_report, evaluate_case, load_route_cases
-from ds_course_agent.rag.query_pipeline import RouteDecision, RouteType
+from benchmarks.route_harness import (
+    DEFAULT_CASE_PATH,
+    build_route_report,
+    evaluate_case,
+    load_route_cases,
+)
+from ds_course_agent.rag.query_pipeline import (
+    ExecutionMode,
+    RetrievalPolicy,
+    RouteDecision,
+    RouteFamily,
+    RouteIntent,
+)
 
 
 class _FakeService:
-    def __init__(self, decision):
+    def __init__(self, decision: RouteDecision):
         self.decision = decision
         self.calls = []
 
     def _prepare_query_route(self, query, session_id, student_id, web_search=False):
-        # QueryPipeline.prepare returns a typed RouteState; the harness reads
-        # state.decision directly (the old dict compat shim was removed).
         self.calls.append(
             {
                 "query": query,
@@ -24,13 +37,15 @@ class _FakeService:
         return SimpleNamespace(decision=self.decision)
 
 
-def test_route_harness_evaluate_case_flags_unexpected_rag():
+def test_route_harness_flags_unexpected_grounded_generation_as_unexpected_rag():
     service = _FakeService(
         RouteDecision(
-            route=RouteType.GROUNDED_RAG,
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.CONCEPT_QA,
+            execution_mode=ExecutionMode.GROUNDED_GENERATION,
             confidence=0.8,
             reasons=["课程相关知识问答"],
-            retrieval_policy="required",
+            retrieval_policy=RetrievalPolicy.REQUIRED,
         )
     )
 
@@ -39,24 +54,28 @@ def test_route_harness_evaluate_case_flags_unexpected_rag():
         {
             "id": "code_explain",
             "query": "帮我解析这段代码",
-            "expected_route": "generic_agent",
+            "expected_family": "learning",
+            "expected_intent": "code_explanation",
+            "expected_execution_mode": "direct_model",
             "expected_retrieval_policy": "optional",
-            "disallowed_routes": ["grounded_rag"],
+            "expected_allowed_tools": [],
+            "disallowed_execution_modes": ["grounded_generation"],
         },
         student_id="student",
     )
 
     assert result["passed"] is False
-    assert "expected_route=generic_agent" in result["failures"]
-    assert "disallowed_route=grounded_rag" in result["failures"]
+    assert "expected_intent=code_explanation" in result["failures"]
+    assert "expected_execution_mode=direct_model" in result["failures"]
+    assert "disallowed_execution_mode=grounded_generation" in result["failures"]
 
     report = build_route_report(
         metadata={"name": "unit"},
         case_path="cases.json",
         output_path="report.json",
         student_id="student",
-        started_at="2026-07-16T00:00:00+08:00",
-        finished_at="2026-07-16T00:00:01+08:00",
+        started_at="2026-07-29T00:00:00+08:00",
+        finished_at="2026-07-29T00:00:01+08:00",
         results=[result],
     )
 
@@ -64,13 +83,14 @@ def test_route_harness_evaluate_case_flags_unexpected_rag():
     assert report["summary"]["unexpected_rag_count"] == 1
 
 
-def test_route_harness_passes_web_search_flag_to_pipeline():
+def test_route_harness_checks_exact_tool_allowlist_and_web_flag():
     service = _FakeService(
         RouteDecision(
-            route=RouteType.GENERIC_AGENT,
+            family=RouteFamily.EXTERNAL_RESEARCH,
+            intent=RouteIntent.WEB_RESEARCH,
+            execution_mode=ExecutionMode.WEB_PIPELINE,
             confidence=1.0,
-            reasons=["显式联网搜索"],
-            retrieval_policy="optional",
+            retrieval_policy=RetrievalPolicy.REQUIRED,
         )
     )
 
@@ -78,37 +98,53 @@ def test_route_harness_passes_web_search_flag_to_pipeline():
         service,
         {
             "id": "web",
-            "query": "请联网搜索最近的 AI 新闻",
+            "query": "请联网搜索最近的 AI 教学资源",
             "web_search": True,
-            "expected_route": "generic_agent",
+            "expected_family": "external_research",
+            "expected_intent": "web_research",
+            "expected_execution_mode": "web_pipeline",
+            "expected_retrieval_policy": "required",
+            "expected_allowed_tools": [],
         },
         student_id="student",
     )
 
     assert result["passed"] is True
-    assert result["web_search"] is True
+    assert result["allowed_tools"] == []
     assert service.calls[0]["web_search"] is True
 
 
-def test_route_boundary_v2_dataset_shape():
-    metadata, cases = load_route_cases("benchmarks/data/route_boundary_v2.json")
+def test_canonical_route_dataset_uses_new_contract_and_required_regressions():
+    metadata, cases = load_route_cases(DEFAULT_CASE_PATH)
 
-    counts = {}
-    for case in cases:
-        counts[case["category"]] = counts.get(case["category"], 0) + 1
+    assert metadata["version"] == "3.0"
+    assert len(cases) >= 119
+    assert all("expected_family" in case for case in cases)
+    assert all("expected_intent" in case for case in cases)
+    assert all("expected_execution_mode" in case for case in cases)
+    assert all(isinstance(case["expected_allowed_tools"], list) for case in cases)
+    assert not any("expected_route" in case for case in cases)
+    assert not any("expected_direct_llm_answer" in case for case in cases)
 
-    assert metadata["version"] == "2.0"
-    assert len(cases) == 114
-    assert counts["grounded_rag"] == 20
-    assert counts["special_direct"] == 12
-    assert counts["web_search"] == 6
-    assert any(case.get("expected_direct_llm_answer") for case in cases)
+    case_ids = {case["id"] for case in cases}
+    assert {
+        "alias_loop_not_oop",
+        "alias_oop_concept",
+        "broad_task_classification",
+        "semantic_not_learning",
+        "semantic_clarification",
+        "generic_code_001",
+        "code_review_001",
+        "python_exec_001",
+    } <= case_ids
 
 
-def test_route_boundary_v2_audit_metadata():
-    with open("benchmarks/data/route_boundary_v2_audit.json", encoding="utf-8") as f:
-        audit = json.load(f)
+def test_route_boundary_audit_tracks_canonical_contract():
+    with open("benchmarks/data/route_boundary_v2_audit.json", encoding="utf-8") as file:
+        audit = json.load(file)
 
-    assert audit["summary"]["total_cases"] == 114
-    assert audit["summary"]["accepted_cases"] == 114
+    assert audit["schema_version"] == 2
+    assert audit["summary"]["source_cases"] == "benchmarks/data/route_boundary.json"
+    assert audit["summary"]["total_cases"] >= 119
+    assert audit["summary"]["accepted_cases"] == audit["summary"]["total_cases"]
     assert audit["summary"]["unexpected_rag_count"] == 0

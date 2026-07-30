@@ -11,7 +11,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ds_course_agent.rag.knowledge_mapper import KnowledgeGraph, KnowledgeMapper, map_question_to_concepts
+from ds_course_agent.rag.knowledge_mapper import (
+    AliasMatchMode,
+    ConceptMatchStrength,
+    KnowledgeGraph,
+    KnowledgeMapper,
+    map_question_to_concepts,
+)
 from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 
 QUESTION_CASES = [
@@ -119,6 +125,91 @@ def test_edge_cases():
             print("      未匹配到任何概念（符合预期）")
 
 
+def test_ascii_alias_uses_token_boundaries(monkeypatch):
+    """ASCII 别名只能按完整 token 命中，不能匹配其他单词内部。"""
+    import ds_course_agent.shared.config as config
+
+    monkeypatch.setattr(config, "CONCEPT_MAP_EMBEDDING_MODE", "disabled")
+    mapper = KnowledgeMapper()
+
+    for question in ("你的 loop 有几轮？", "for loop 怎么写？", "用 while-loop 实现"):
+        matches = mapper.map_question(question)
+        assert "object_oriented_programming" not in {match.concept_id for match in matches}
+
+    matches = mapper.map_question("OOP 是什么？")
+    oop_match = next(match for match in matches if match.concept_id == "object_oriented_programming")
+    assert oop_match.method == "exact_alias"
+    assert oop_match.match_strength is ConceptMatchStrength.STRONG
+    assert oop_match.routing_eligible is True
+
+
+def test_contextual_alias_policy_does_not_emit_independent_match(monkeypatch):
+    """宽泛 contextual 别名保留在公开 aliases 中，但不能单独生成知识点。"""
+    import ds_course_agent.shared.config as config
+
+    monkeypatch.setattr(config, "CONCEPT_MAP_EMBEDDING_MODE", "disabled")
+    graph = KnowledgeGraph()
+    mapper = KnowledgeMapper(graph=graph)
+
+    for alias in ("分类", "模型", "训练"):
+        policy = graph.alias_policies[alias]
+        assert policy.match_mode is AliasMatchMode.CONTEXTUAL
+        assert policy.match_strength is ConceptMatchStrength.SUPPORTING
+    assert "分类" in graph.get_concept("logistic_regression")["aliases"]
+
+    for question in ("分类", "任务分类", "这个任务怎么分类？"):
+        matches = mapper.map_question(question)
+        assert "logistic_regression" not in {match.concept_id for match in matches}
+
+    matches = mapper.map_question("分类问题能用逻辑回归吗？")
+    logistic_match = next(match for match in matches if match.concept_id == "logistic_regression")
+    assert logistic_match.match_strength is ConceptMatchStrength.STRONG
+    assert logistic_match.routing_eligible is True
+
+
+def test_regex_and_embedding_matches_expose_routing_strength(monkeypatch):
+    """正则命中可驱动路由，Embedding 只提供 supporting 语义信号。"""
+    import ds_course_agent.shared.config as config
+
+    monkeypatch.setattr(config, "CONCEPT_MAP_EMBEDDING_MODE", "disabled")
+    mapper = KnowledgeMapper()
+    regex_matches = mapper.map_question("支持向量机该怎么选择核？")
+    regex_match = next(match for match in regex_matches if match.concept_id == "svm_kernel")
+
+    assert regex_match.method == "regex_rule"
+    assert regex_match.match_strength is ConceptMatchStrength.STRONG
+    assert regex_match.routing_eligible is True
+
+    class FakeGraph:
+        alias_specs = {}
+        regex_rules = []
+        embeddings = {
+            "overfitting": np.array([1.0, 0.0]),
+        }
+
+        def _normalize_text(self, text):
+            return text
+
+        def get_concept(self, concept_id):
+            return {
+                "display_name": concept_id,
+                "chapter": "unit",
+            }
+
+    monkeypatch.setattr(config, "CONCEPT_MAP_EMBEDDING_MODE", "offline_first")
+    embedding_mapper = KnowledgeMapper(graph=FakeGraph())
+    monkeypatch.setattr(embedding_mapper, "_embed_text", lambda text: np.array([1.0, 0.0]))
+
+    embedding_match = embedding_mapper.map_question(
+        "没有规则命中的语义问题",
+        top_k=1,
+        embedding_threshold=0.8,
+    )[0]
+    assert embedding_match.method == "embedding"
+    assert embedding_match.match_strength is ConceptMatchStrength.SUPPORTING
+    assert embedding_match.routing_eligible is False
+
+
 def test_rule_match_skips_query_embedding(monkeypatch):
     """高置信规则/别名命中后不再在线 query embedding 补满 top_k。"""
     import ds_course_agent.shared.config as config
@@ -154,7 +245,7 @@ def test_embedding_fallback_uses_offline_cache_only_when_rules_miss(monkeypatch)
     monkeypatch.setattr(config, "CONCEPT_MAP_SKIP_EMBEDDING_IF_RULE_MATCH", True)
 
     class FakeGraph:
-        alias_to_concept = {}
+        alias_specs = {}
         regex_rules = []
         embeddings = {
             "overfitting": np.array([1.0, 0.0]),

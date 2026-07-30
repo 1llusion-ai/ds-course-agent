@@ -46,7 +46,9 @@ def test_chat_with_history_routes_to_learning_path_skill(
 
     result = service.chat_with_history("PCA怎么学比较好？", "session_001")
 
-    assert result == "学习路线结果"
+    assert result.content == "学习路线结果"
+    assert result.intent.value == "learning_path"
+    assert result.execution_mode.value == "teaching_skill"
     service.learning_path_skill.assert_called_once_with("PCA怎么学比较好？", "session_001", "session_001")
     service.explanation_skill.assert_not_called()
     service.chat.assert_not_called()
