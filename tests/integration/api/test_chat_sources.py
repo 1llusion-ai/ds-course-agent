@@ -68,7 +68,7 @@ def test_send_message_keeps_sources_from_agent_retrieval(mock_chat_with_history)
         "sources": [{"reference": "《第7章 无监督学习算法》第123页"}],
         "family": "learning",
         "intent": "concept_qa",
-        "execution_mode": "grounded_generation",
+        "execution_mode": "learning_answer",
         "degraded": False,
         "query_trace": {},
     }
@@ -88,11 +88,11 @@ def test_send_message_keeps_sources_from_agent_retrieval(mock_chat_with_history)
     assert payload["message"]["sources"] == [{"reference": "《第7章 无监督学习算法》第123页"}]
     assert payload["message"]["family"] == "learning"
     assert payload["message"]["intent"] == "concept_qa"
-    assert payload["message"]["execution_mode"] == "grounded_generation"
+    assert payload["message"]["execution_mode"] == "learning_answer"
 
     history_response = client.get(f"/api/chat/history/{session_id}?student_id=student001")
     history_message = history_response.json()["messages"][-1]
     assert history_message["family"] == "learning"
     assert history_message["intent"] == "concept_qa"
-    assert history_message["execution_mode"] == "grounded_generation"
+    assert history_message["execution_mode"] == "learning_answer"
     assert "route" not in history_message

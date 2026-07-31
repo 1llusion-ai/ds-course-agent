@@ -7,7 +7,7 @@ class TestAgentGroundedFallback:
     @patch("ds_course_agent.rag.agent.map_question_to_concepts", return_value=[])
     @patch("ds_course_agent.rag.agent.get_memory_core")
     @patch("ds_course_agent.tools.course_rag.get_rag_service")
-    def test_course_question_uses_grounded_generation_contract(
+    def test_course_question_uses_learning_answer_contract(
         self,
         mock_get_rag_service,
         mock_get_memory_core,
@@ -52,7 +52,7 @@ class TestAgentGroundedFallback:
         assert result.content == "data science grounded answer"
         assert result.family.value == "learning"
         assert result.intent.value == "concept_qa"
-        assert result.execution_mode.value == "grounded_generation"
+        assert result.execution_mode.value == "learning_answer"
         mock_service.retrieve.assert_called_once_with(question)
 
     @patch("ds_course_agent.shared.history.get_history")

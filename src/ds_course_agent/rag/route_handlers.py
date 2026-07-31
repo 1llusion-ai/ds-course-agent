@@ -12,7 +12,7 @@ import logging
 from collections.abc import Iterator
 from typing import Any, Protocol
 
-from ds_course_agent.rag.query_pipeline import ExecutionMode, RouteIntent, RouteState
+from ds_course_agent.rag.query_pipeline import ExecutionMode, RetrievalPolicy, RouteIntent, RouteState
 from ds_course_agent.rag.taxonomy import (
     LOW_SUCCESS_FETCH_DOMAINS,
     RELIABLE_WEB_DOMAINS,
@@ -85,27 +85,70 @@ class CurrentDatetimeRouteHandler(BufferedRouteHandlerMixin):
         return result
 
 
-class GroundedRagRouteHandler:
+class LearningAnswerRouteHandler:
+    def _direct_answer(self, agent: Any, route_state: RouteState) -> str:
+        from ds_course_agent.rag.prompt import learning_style_instruction
+
+        base_context = agent._build_turn_system_context(route_state)
+        style_context = "# Learning Answer Style\n" + learning_style_instruction(route_state.decision.style_hint)
+        turn_context = "\n\n".join(part for part in (base_context, style_context) if part)
+        return agent.direct_chat(
+            route_state.context.original_query,
+            route_state.chat_history,
+            stream=False,
+            turn_context=turn_context,
+        )
+
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
-        return route_state.decision.execution_mode == ExecutionMode.GROUNDED_GENERATION
+        return route_state.decision.execution_mode == ExecutionMode.LEARNING_ANSWER
 
     def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
-        from ds_course_agent.rag.query_trace import trace_span, trace_step
-        from ds_course_agent.tools.course_rag import course_rag_tool
+        from ds_course_agent.rag.prompt import build_learning_answer_question
+        from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
+        from ds_course_agent.tools._shared import _track_retrieval
+        from ds_course_agent.tools.course_rag import (
+            answer_retrieval_result,
+            build_sources_from_documents,
+            get_rag_service,
+        )
 
         context = route_state.context
         decision = route_state.decision
         execution_query = agent._route_execution_query(context, decision)
 
-        trace_step("agent.branch", branch="grounded_rag_direct")
-        # When QueryPipeline has already made a required grounded-RAG decision,
-        # avoid a second generic-agent LLM round just to decide whether to call
-        # the RAG tool.  The tool still records retrieval/source telemetry.
-        with trace_span("execute.grounded_rag_tool"):
-            return course_rag_tool.invoke(execution_query)
+        trace_step("agent.branch", branch="learning_answer")
+        try:
+            service = get_rag_service()
+            with trace_span("learning_answer.retrieve"):
+                result = service.retrieve(execution_query)
+        except Exception as exc:
+            trace_error("learning_answer.retrieve", exc)
+            if decision.retrieval_policy is RetrievalPolicy.OPTIONAL:
+                trace_step("learning_answer.result", status="direct_fallback", reason="retrieval_error")
+                return self._direct_answer(agent, route_state)
+            raise
+
+        sources = build_sources_from_documents(result.documents)
+        _track_retrieval(sources, used=True)
+        trace_step(
+            "learning_answer.retrieval",
+            status="ok" if result.has_results else "empty",
+            source_count=len(sources),
+            style_hint=decision.style_hint.value,
+        )
+        if not result.has_results:
+            if decision.retrieval_policy is RetrievalPolicy.OPTIONAL:
+                trace_step("learning_answer.result", status="direct_fallback", reason="no_results")
+                return self._direct_answer(agent, route_state)
+
+        answer_question = build_learning_answer_question(execution_query, decision.style_hint)
+        with trace_span("learning_answer.answer"):
+            answer = answer_retrieval_result(service, answer_question, result)
+        trace_step("learning_answer.result", status=answer.status)
+        return answer.content
 
     def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str]:
-        yield from agent._iter_grounded_rag_response(route_state)
+        yield from agent._iter_learning_answer_response(route_state)
 
 
 class WebSearchRouteHandler(BufferedRouteHandlerMixin):
@@ -1386,7 +1429,7 @@ def default_route_handlers() -> list[RouteHandler]:
         SpecialCaseRouteHandler(),
         CourseScheduleRouteHandler(),
         CurrentDatetimeRouteHandler(),
-        GroundedRagRouteHandler(),
+        LearningAnswerRouteHandler(),
         WebSearchRouteHandler(),
         PythonExecRouteHandler(),
         SkillRouteHandler(),
@@ -1401,7 +1444,7 @@ __all__ = [
     "SpecialCaseRouteHandler",
     "CourseScheduleRouteHandler",
     "CurrentDatetimeRouteHandler",
-    "GroundedRagRouteHandler",
+    "LearningAnswerRouteHandler",
     "WebSearchRouteHandler",
     "PythonExecRouteHandler",
     "SkillRouteHandler",

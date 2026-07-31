@@ -36,6 +36,7 @@ class QueryPostprocessor:
             "family": decision.family.value,
             "intent": decision.intent.value,
             "execution_mode": decision.execution_mode.value,
+            "style_hint": decision.style_hint.value,
             "confidence": decision.confidence,
             "reasons": list(decision.reasons),
             "success": bool(content),

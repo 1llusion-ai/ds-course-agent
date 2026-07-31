@@ -120,7 +120,7 @@ def test_retrieval_guard_hook_preserves_result_when_skipped():
 def test_retrieval_guard_hook_skips_grounded_rag_route_without_agent_callbacks():
     state = _route_state(
         intent=RouteIntent.CONCEPT_QA,
-        execution_mode=ExecutionMode.GROUNDED_GENERATION,
+        execution_mode=ExecutionMode.LEARNING_ANSWER,
         retrieval_policy=RetrievalPolicy.REQUIRED,
     )
 

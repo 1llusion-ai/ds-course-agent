@@ -35,7 +35,7 @@ def isolated_backend_runtime(monkeypatch):
             "sources": [],
             "family": "learning",
             "intent": "concept_qa",
-            "execution_mode": "grounded_generation",
+            "execution_mode": "learning_answer",
             "degraded": False,
             "query_trace": {},
         }
@@ -49,7 +49,7 @@ def isolated_backend_runtime(monkeypatch):
             "used_retrieval": False,
             "family": "learning",
             "intent": "concept_qa",
-            "execution_mode": "grounded_generation",
+            "execution_mode": "learning_answer",
             "degraded": False,
         }
 

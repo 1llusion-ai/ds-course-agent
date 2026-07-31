@@ -17,7 +17,7 @@ def _result(query_id, latency_ms, intent, stage_events):
         "total_latency_ms": latency_ms,
         "family": "learning",
         "intent": intent,
-        "execution_mode": "grounded_generation" if intent == "concept_qa" else "direct_model",
+        "execution_mode": "learning_answer" if intent == "concept_qa" else "direct_model",
         "used_retrieval": intent == "concept_qa",
         "sources_count": 1 if intent == "concept_qa" else 0,
         "query_trace": {

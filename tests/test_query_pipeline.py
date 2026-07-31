@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from types import SimpleNamespace
 
 import pytest
@@ -21,30 +20,6 @@ from ds_course_agent.rag.query_pipeline import (
 from ds_course_agent.rag.query_pipeline.router import QueryRouter
 
 
-@dataclass(frozen=True)
-class _SemanticOutput:
-    intent: RouteIntent
-    confidence: float = 0.9
-    needs_clarification: bool = False
-
-
-class _SemanticRouterStub:
-    def __init__(self, outputs: dict[str, _SemanticOutput] | None = None):
-        self.outputs = outputs or {}
-        self.calls: list[tuple[str, str]] = []
-
-    def route(self, query: str, recent_context: str = "") -> _SemanticOutput:
-        self.calls.append((query, recent_context))
-        return self.outputs.get(
-            query,
-            _SemanticOutput(
-                RouteIntent.NEEDS_CLARIFICATION,
-                confidence=0.0,
-                needs_clarification=True,
-            ),
-        )
-
-
 def _context(query: str, *, history: list | None = None) -> QueryContext:
     return get_preprocessor(enable_concept_detection=False).process(
         user_input=query,
@@ -54,11 +29,19 @@ def _context(query: str, *, history: list | None = None) -> QueryContext:
     )
 
 
-def _router(
-    outputs: dict[str, _SemanticOutput] | None = None,
-) -> tuple[QueryRouter, _SemanticRouterStub]:
-    semantic = _SemanticRouterStub(outputs)
-    return QueryRouter(semantic_router=semantic), semantic
+def _context_with_scope(query: str, *, history: list | None = None) -> QueryContext:
+    from ds_course_agent.rag.scope_guard import assess_query_scope
+
+    context = _context(query, history=history)
+    scope = assess_query_scope(query)
+    context.scope_action = scope.action
+    context.scope_category = scope.category
+    context.special_case_response = scope.response
+    return context
+
+
+def _router() -> QueryRouter:
+    return QueryRouter()
 
 
 def _assert_route(
@@ -122,7 +105,7 @@ class TestFastRouter:
                 "什么是过拟合？",
                 RouteFamily.LEARNING,
                 RouteIntent.CONCEPT_QA,
-                ExecutionMode.GROUNDED_GENERATION,
+                ExecutionMode.LEARNING_ANSWER,
                 RetrievalPolicy.REQUIRED,
             ),
             (
@@ -155,7 +138,7 @@ class TestFastRouter:
             ),
         ],
     )
-    def test_high_confidence_routes_do_not_call_semantic_router(
+    def test_high_confidence_routes_use_hard_rules(
         self,
         query,
         family,
@@ -163,15 +146,14 @@ class TestFastRouter:
         mode,
         policy,
     ):
-        router, semantic = _router()
+        router = _router()
 
         decision = router.route(_context(query))
 
         _assert_route(decision, family=family, intent=intent, mode=mode, policy=policy)
-        assert semantic.calls == []
 
     def test_learning_path_and_teaching_strategies_are_typed(self):
-        router, semantic = _router()
+        router = _router()
 
         learning_path = _context("帮我安排一个机器学习入门学习路线")
         learning_path.skill_candidate_keys.add("learning-path")
@@ -209,10 +191,9 @@ class TestFastRouter:
             policy=RetrievalPolicy.REQUIRED,
         )
         assert decision.enrichment.load_profile is True
-        assert semantic.calls == []
 
     def test_course_service_precedes_explicit_web_button(self):
-        router, semantic = _router()
+        router = _router()
         context = _context("现在几点？")
         context.web_search_requested = True
 
@@ -225,10 +206,9 @@ class TestFastRouter:
             mode=ExecutionMode.DETERMINISTIC_TOOL,
             policy=RetrievalPolicy.DISABLED,
         )
-        assert semantic.calls == []
 
     def test_web_button_selects_external_research_for_learning_query(self):
-        router, semantic = _router()
+        router = _router()
         context = _context("搜索最新的数据科学教学资源")
         context.web_search_requested = True
 
@@ -241,7 +221,6 @@ class TestFastRouter:
             mode=ExecutionMode.WEB_PIPELINE,
             policy=RetrievalPolicy.REQUIRED,
         )
-        assert semantic.calls == []
 
     @pytest.mark.parametrize(
         "query",
@@ -253,24 +232,18 @@ class TestFastRouter:
         ],
     )
     def test_hyperparameter_assignments_are_concept_questions(self, query):
-        router, semantic = _router()
+        router = _router()
 
         decision = router.route(_context(query))
 
         assert decision.family is RouteFamily.LEARNING
-        assert decision.execution_mode is ExecutionMode.GROUNDED_GENERATION
+        assert decision.execution_mode is ExecutionMode.LEARNING_ANSWER
         assert decision.intent in {RouteIntent.CONCEPT_QA, RouteIntent.COMPARISON}
-        assert semantic.calls == []
 
 
-class TestSemanticRouterFallback:
+class TestLearningRoutingFallback:
     def test_not_learning_exits_to_boundary_without_tools(self):
-        query = "帮我推荐今晚吃什么"
-        router, semantic = _router({query: _SemanticOutput(RouteIntent.NOT_LEARNING, 0.97)})
-        context = _context(query)
-
-        decision = router.route(context)
-
+        decision = _router().route(_context_with_scope("帮我推荐今晚吃什么"))
         _assert_route(
             decision,
             family=RouteFamily.BOUNDARY,
@@ -278,24 +251,10 @@ class TestSemanticRouterFallback:
             mode=ExecutionMode.STATIC_RESPONSE,
             policy=RetrievalPolicy.DISABLED,
         )
-        assert len(semantic.calls) == 1
-        assert context.special_case_response
 
     def test_ambiguous_query_requests_clarification(self):
-        query = "这个怎么弄"
-        router, semantic = _router(
-            {
-                query: _SemanticOutput(
-                    RouteIntent.NEEDS_CLARIFICATION,
-                    confidence=0.2,
-                    needs_clarification=True,
-                )
-            }
-        )
-        context = _context(query)
-
-        decision = router.route(context)
-
+        context = _context("这个怎么弄")
+        decision = _router().route(context)
         _assert_route(
             decision,
             family=RouteFamily.BOUNDARY,
@@ -303,76 +262,39 @@ class TestSemanticRouterFallback:
             mode=ExecutionMode.STATIC_RESPONSE,
             policy=RetrievalPolicy.DISABLED,
         )
-        assert len(semantic.calls) == 1
         assert context.special_case_response
 
-    def test_semantic_learning_intent_uses_deterministic_policy(self):
-        query = "这段逻辑没报错但结果很奇怪"
-        router, semantic = _router({query: _SemanticOutput(RouteIntent.CODE_REVIEW, 0.86)})
-
-        decision = router.route(_context(query))
-
-        _assert_route(
-            decision,
-            family=RouteFamily.LEARNING,
-            intent=RouteIntent.CODE_REVIEW,
-            mode=ExecutionMode.TEACHING_SKILL,
-            policy=RetrievalPolicy.DISABLED,
-        )
-        assert decision.executor_key == "code-review"
-        assert len(semantic.calls) == 1
-
-    def test_semantic_comparison_uses_grounded_policy(self):
-        query = "监督学习和无监督学习有什么区别？"
-        router, semantic = _router({query: _SemanticOutput(RouteIntent.COMPARISON, 0.93)})
-
-        decision = router.route(_context(query))
-
+    def test_learning_comparison_uses_learning_answer_and_style_hint(self):
+        decision = _router().route(_context("监督学习和无监督学习有什么区别？"))
         _assert_route(
             decision,
             family=RouteFamily.LEARNING,
             intent=RouteIntent.COMPARISON,
-            mode=ExecutionMode.GROUNDED_GENERATION,
+            mode=ExecutionMode.LEARNING_ANSWER,
             policy=RetrievalPolicy.REQUIRED,
         )
-        assert len(semantic.calls) == 1
+        assert decision.style_hint.value == "comparison"
 
-    def test_loop_query_does_not_become_oop_or_grounded_rag(self):
-        query = "你的 loop 有几轮"
-        router, semantic = _router({query: _SemanticOutput(RouteIntent.NOT_LEARNING, 0.98)})
-
-        decision = router.route(_context(query))
-
+    def test_loop_query_does_not_become_oop_or_learning(self):
+        decision = _router().route(_context_with_scope("你的 loop 有几轮"))
         assert decision.family is RouteFamily.BOUNDARY
         assert decision.intent is RouteIntent.REFUSAL
         assert decision.execution_mode is ExecutionMode.STATIC_RESPONSE
-        assert len(semantic.calls) == 1
 
     def test_oop_query_remains_a_learning_concept_question(self):
-        query = "OOP 是什么？"
-        router, semantic = _router({query: _SemanticOutput(RouteIntent.CONCEPT_QA, 0.94)})
-
-        decision = router.route(_context(query))
-
+        decision = _router().route(_context("OOP 是什么？"))
         _assert_route(
             decision,
             family=RouteFamily.LEARNING,
             intent=RouteIntent.CONCEPT_QA,
-            mode=ExecutionMode.GROUNDED_GENERATION,
+            mode=ExecutionMode.LEARNING_ANSWER,
             policy=RetrievalPolicy.REQUIRED,
         )
-        assert len(semantic.calls) == 1
 
-    def test_agent_task_classification_is_not_logic_regression_course_rag(self):
-        query = "你怎么做任务分类？"
-        router, semantic = _router({query: _SemanticOutput(RouteIntent.NOT_LEARNING, 0.96)})
-
-        decision = router.route(_context(query))
-
+    def test_agent_task_classification_is_not_course_rag(self):
+        decision = _router().route(_context_with_scope("你怎么做任务分类？"))
         assert decision.family is RouteFamily.BOUNDARY
         assert decision.intent is RouteIntent.REFUSAL
-        assert decision.execution_mode is ExecutionMode.STATIC_RESPONSE
-        assert len(semantic.calls) == 1
 
 
 class _NoopHooks:
@@ -383,7 +305,7 @@ class _NoopHooks:
         del state, decision
 
 
-def _make_pipeline_service(monkeypatch, semantic: _SemanticRouterStub):
+def _make_pipeline_service(monkeypatch):
     import ds_course_agent.rag.query_pipeline.router as router_module
     from ds_course_agent.rag.agent import AgentService
     from ds_course_agent.rag.profile_models import StudentProfile
@@ -403,7 +325,7 @@ def _make_pipeline_service(monkeypatch, semantic: _SemanticRouterStub):
         def get_profile(self, student_id):
             return StudentProfile(student_id=student_id)
 
-    router_module._router = QueryRouter(semantic_router=semantic)
+    router_module._router = QueryRouter()
     monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: FakeHistory())
     monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", lambda: FakeMemory())
     monkeypatch.setattr(service, "_warn_context_budget", lambda *args, **kwargs: None)
@@ -414,9 +336,8 @@ def _make_pipeline_service(monkeypatch, semantic: _SemanticRouterStub):
 
 
 class TestQueryPipelineEnrichment:
-    def test_course_service_skips_semantic_router_concepts_and_profile(self, monkeypatch):
-        semantic = _SemanticRouterStub()
-        service = _make_pipeline_service(monkeypatch, semantic)
+    def test_course_service_skips_concepts_and_profile(self, monkeypatch):
+        service = _make_pipeline_service(monkeypatch)
         calls = {"concepts": 0, "profile": 0}
 
         def fail_concepts(question, top_k=3):
@@ -435,11 +356,9 @@ class TestQueryPipelineEnrichment:
         assert state.decision.intent is RouteIntent.CURRENT_DATETIME
         assert state.context.fast_path is True
         assert calls == {"concepts": 0, "profile": 0}
-        assert semantic.calls == []
 
     def test_code_example_maps_concepts_after_routing_but_does_not_load_profile(self, monkeypatch):
-        semantic = _SemanticRouterStub()
-        service = _make_pipeline_service(monkeypatch, semantic)
+        service = _make_pipeline_service(monkeypatch)
         calls = {"concepts": 0, "profile": 0}
 
         match = SimpleNamespace(
@@ -470,12 +389,10 @@ class TestQueryPipelineEnrichment:
         assert calls == {"concepts": 1, "profile": 0}
         assert state.context.detected_concepts[0].concept_id == "cross_validation"
         assert state.context.fast_path is False
-        assert semantic.calls == []
 
-    def test_semantic_not_learning_skips_concept_mapping_and_learning_events(self, monkeypatch):
+    def test_not_learning_skips_concept_mapping_and_learning_events(self, monkeypatch):
         query = "帮我推荐今晚吃什么"
-        semantic = _SemanticRouterStub({query: _SemanticOutput(RouteIntent.NOT_LEARNING, 0.97)})
-        service = _make_pipeline_service(monkeypatch, semantic)
+        service = _make_pipeline_service(monkeypatch)
         calls = {"concepts": 0, "events": 0}
 
         def concept_map(question, top_k=3):
@@ -493,11 +410,9 @@ class TestQueryPipelineEnrichment:
         assert state.decision.family is RouteFamily.BOUNDARY
         assert state.decision.intent is RouteIntent.REFUSAL
         assert calls == {"concepts": 0, "events": 0}
-        assert len(semantic.calls) == 1
 
     def test_only_event_eligible_concepts_are_recorded(self, monkeypatch):
-        semantic = _SemanticRouterStub()
-        service = _make_pipeline_service(monkeypatch, semantic)
+        service = _make_pipeline_service(monkeypatch)
         recorded = []
         matches = [
             SimpleNamespace(
@@ -532,7 +447,7 @@ class TestQueryPipelineEnrichment:
 
         state = service._prepare_query_route("什么是过拟合？", "session", "student")
 
-        assert state.decision.execution_mode is ExecutionMode.GROUNDED_GENERATION
+        assert state.decision.execution_mode is ExecutionMode.LEARNING_ANSWER
         assert [item.concept_id for item in recorded] == ["overfitting"]
 
 
@@ -558,6 +473,7 @@ class TestPostprocessorAndRewrite:
             "family": "learning",
             "intent": "code_example",
             "execution_mode": "direct_model",
+            "style_hint": "general_learning",
             "confidence": 0.82,
             "reasons": ["代码示例"],
             "success": True,
@@ -627,7 +543,7 @@ def test_grounded_rag_stream_emits_sources_before_answer_completion(monkeypatch)
         decision=RouteDecision(
             family=RouteFamily.LEARNING,
             intent=RouteIntent.CONCEPT_QA,
-            execution_mode=ExecutionMode.GROUNDED_GENERATION,
+            execution_mode=ExecutionMode.LEARNING_ANSWER,
             confidence=0.8,
             reasons=["课程相关知识问答"],
             retrieval_policy=RetrievalPolicy.REQUIRED,
@@ -652,15 +568,18 @@ def test_grounded_rag_stream_emits_sources_before_answer_completion(monkeypatch)
         def stream_answer_with_context(self, question, context):
             yield "课程回答"
 
+        def answer_with_context(self, question, context):
+            raise AssertionError("LearningAnswer must not issue a second answer LLM call")
+
     monkeypatch.setattr("ds_course_agent.tools.course_rag.get_rag_service", lambda: FakeRagService())
 
-    events = list(service._iter_grounded_rag_response(state))
+    events = list(service._iter_learning_answer_response(state))
 
     assert events[0]["type"] == "progress"
     assert events[0]["phase"] == "retrieval_sources"
     assert events[0]["family"] == "learning"
     assert events[0]["intent"] == "concept_qa"
-    assert events[0]["execution_mode"] == "grounded_generation"
+    assert events[0]["execution_mode"] == "learning_answer"
     assert events[0]["details"]["sources"] == [{"reference": "course.pdf"}]
     assert events[1] == "课程回答"
 

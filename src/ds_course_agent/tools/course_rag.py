@@ -10,6 +10,7 @@ import re
 import threading
 import time
 from collections import OrderedDict
+from dataclasses import dataclass
 
 from langchain_core.documents import Document
 from langchain_core.tools import tool
@@ -62,6 +63,15 @@ def _get_chapter_start_pages() -> dict[str, int]:
 _CHAPTER_START_PAGES: dict[str, int] = {}
 _ANSWER_CACHE_LOCK = threading.RLock()
 _ANSWER_CACHE: OrderedDict[str, tuple[float, str]] = OrderedDict()
+
+
+@dataclass(frozen=True)
+class CourseRagAnswer:
+    """Normalized answer produced from one already-retrieved course context."""
+
+    content: str
+    status: str
+    degraded: bool = False
 
 
 def _normalize_excerpt_text(text: str, *, max_chars: int = 360) -> str:
@@ -381,6 +391,34 @@ def _answer_with_context_timeout_guard(service, question: str, context: str):
         executor.shutdown(wait=False, cancel_futures=True)
 
 
+def answer_retrieval_result(service, question: str, result) -> CourseRagAnswer:
+    """Answer one retrieval result with cache, timeout, and extractive fallback."""
+
+    if not result.has_results:
+        return CourseRagAnswer(build_no_results_message(), "no_results")
+
+    cached_answer = _get_cached_answer(question, result.formatted_context)
+    if cached_answer is not None:
+        return CourseRagAnswer(cached_answer, "cache_hit")
+
+    try:
+        answer_result = _answer_with_context_timeout_guard(
+            service,
+            question,
+            result.formatted_context,
+        )
+        _store_cached_answer(question, result.formatted_context, answer_result.answer)
+        return CourseRagAnswer(answer_result.answer, "ok")
+    except Exception as answer_exc:
+        trace_answer_degraded(answer_exc, mode="sync")
+        fallback = build_extractive_rag_fallback(
+            question,
+            result.documents,
+            error=answer_exc,
+        )
+        return CourseRagAnswer(fallback, "degraded", degraded=True)
+
+
 @tool
 def course_rag_tool(question: str) -> str:
     """课程资料检索与问答工具。用于基于教材内容回答课程相关问题。"""
@@ -394,39 +432,11 @@ def course_rag_tool(question: str) -> str:
         sources = build_sources_from_documents(result.documents)
         _track_retrieval(sources, used=True)
 
-        if not result.has_results:
-            trace_step("tool.result", tool="course_rag_tool", status="no_results")
-            no_results_message = build_no_results_message()
-            _warn_large_tool_result("course_rag_tool", no_results_message, status="no_results")
-            return no_results_message
-
-        cached_answer = _get_cached_answer(question, result.formatted_context)
-        if cached_answer is not None:
-            trace_step("tool.result", tool="course_rag_tool", status="cache_hit")
-            _warn_large_tool_result("course_rag_tool", cached_answer, status="cache_hit")
-            return cached_answer
-
-        try:
-            with trace_span("tool.course_rag.answer"):
-                answer_result = _answer_with_context_timeout_guard(
-                    service,
-                    question,
-                    result.formatted_context,
-                )
-            trace_step("tool.result", tool="course_rag_tool", status="ok")
-            _warn_large_tool_result("course_rag_tool", answer_result.answer, status="ok")
-            _store_cached_answer(question, result.formatted_context, answer_result.answer)
-            return answer_result.answer
-        except Exception as answer_exc:
-            trace_answer_degraded(answer_exc, mode="sync")
-            fallback = build_extractive_rag_fallback(
-                question,
-                result.documents,
-                error=answer_exc,
-            )
-            trace_step("tool.result", tool="course_rag_tool", status="degraded")
-            _warn_large_tool_result("course_rag_tool", fallback, status="degraded")
-            return fallback
+        with trace_span("tool.course_rag.answer"):
+            answer = answer_retrieval_result(service, question, result)
+        trace_step("tool.result", tool="course_rag_tool", status=answer.status)
+        _warn_large_tool_result("course_rag_tool", answer.content, status=answer.status)
+        return answer.content
     except Exception as exc:
         trace_error("tool.invoke", exc, tool="course_rag_tool")
         return f"检索过程中发生错误：{exc}。请稍后重试。"
@@ -434,6 +444,8 @@ def course_rag_tool(question: str) -> str:
 
 __all__ = [
     "RetrievalTrace",
+    "CourseRagAnswer",
+    "answer_retrieval_result",
     "begin_retrieval_trace",
     "end_retrieval_trace",
     "get_retrieval_trace",

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import pytest
 
 from ds_course_agent.rag.query_pipeline import (
@@ -20,27 +18,6 @@ from ds_course_agent.rag.query_pipeline import (
 from ds_course_agent.rag.query_pipeline.router import QueryRouter
 
 
-@dataclass(frozen=True)
-class _SemanticOutput:
-    intent: RouteIntent
-    confidence: float = 0.9
-    needs_clarification: bool = False
-
-
-class _SemanticRouterStub:
-    def __init__(self, output: _SemanticOutput | None = None):
-        self.output = output or _SemanticOutput(
-            RouteIntent.NEEDS_CLARIFICATION,
-            confidence=0.0,
-            needs_clarification=True,
-        )
-        self.calls = []
-
-    def route(self, query: str, recent_context: str = "") -> _SemanticOutput:
-        self.calls.append((query, recent_context))
-        return self.output
-
-
 def _context(query: str) -> QueryContext:
     return get_preprocessor(enable_concept_detection=False).process(
         user_input=query,
@@ -50,16 +27,15 @@ def _context(query: str) -> QueryContext:
     )
 
 
-def _router(output: _SemanticOutput | None = None) -> tuple[QueryRouter, _SemanticRouterStub]:
-    semantic = _SemanticRouterStub(output)
-    return QueryRouter(semantic_router=semantic), semantic
+def _router() -> QueryRouter:
+    return QueryRouter()
 
 
 def test_route_decision_normalizes_enums_sequences_and_metadata():
     decision = RouteDecision(
         family="learning",
         intent="concept_qa",
-        execution_mode="grounded_generation",
+        execution_mode="learning_answer",
         confidence=0.9,
         reasons=("课程问答",),
         retrieval_policy="required",
@@ -69,7 +45,7 @@ def test_route_decision_normalizes_enums_sequences_and_metadata():
 
     assert decision.family is RouteFamily.LEARNING
     assert decision.intent is RouteIntent.CONCEPT_QA
-    assert decision.execution_mode is ExecutionMode.GROUNDED_GENERATION
+    assert decision.execution_mode is ExecutionMode.LEARNING_ANSWER
     assert decision.retrieval_policy is RetrievalPolicy.REQUIRED
     assert decision.allowed_tools == ()
     assert decision.reasons == ["课程问答"]
@@ -142,7 +118,7 @@ def test_route_decision_enforces_structural_tool_gating():
             "什么是过拟合？",
             RouteFamily.LEARNING,
             RouteIntent.CONCEPT_QA,
-            ExecutionMode.GROUNDED_GENERATION,
+            ExecutionMode.LEARNING_ANSWER,
             RetrievalPolicy.REQUIRED,
             "course_rag",
         ),
@@ -164,7 +140,7 @@ def test_fast_router_populates_the_typed_contract(
     expected_policy,
     expected_executor,
 ):
-    router, semantic = _router()
+    router = _router()
     decision = router.route(_context(query))
 
     assert decision.family is expected_family
@@ -173,11 +149,10 @@ def test_fast_router_populates_the_typed_contract(
     assert decision.retrieval_policy is expected_policy
     assert decision.executor_key == expected_executor
     assert decision.allowed_tools == ()
-    assert semantic.calls == []
 
 
-def test_rule_table_is_priority_ordered_and_semantic_fallback_is_not_a_rule():
-    router, _semantic = _router()
+def test_rule_table_is_priority_ordered_and_has_clarification_fallback():
+    router = _router()
     rules = router.rules
 
     assert [rule.priority for rule in rules] == sorted(rule.priority for rule in rules)
@@ -187,7 +162,7 @@ def test_rule_table_is_priority_ordered_and_semantic_fallback_is_not_a_rule():
         "course_schedule",
         "web_research",
     ]
-    assert rules[-1].name == "grounded_learning"
+    assert rules[-1].name == "clarification"
     assert {rule.name for rule in rules} >= {
         "code_review",
         "code_execution",
@@ -199,7 +174,7 @@ def test_rule_table_is_priority_ordered_and_semantic_fallback_is_not_a_rule():
 
 
 def test_boundary_and_course_service_precede_explicit_web_research():
-    router, semantic = _router()
+    router = _router()
 
     boundary = _context("现在几点？")
     boundary.special_case_response = "固定边界响应"
@@ -228,11 +203,10 @@ def test_boundary_and_course_service_precede_explicit_web_research():
         RouteIntent.CURRENT_DATETIME,
         ExecutionMode.DETERMINISTIC_TOOL,
     )
-    assert semantic.calls == []
 
 
 def test_web_research_is_explicit_and_has_no_generic_agent_tools():
-    router, semantic = _router()
+    router = _router()
     context = _context("搜索最新的数据科学教学资源")
     context.web_search_requested = True
 
@@ -243,45 +217,23 @@ def test_web_research_is_explicit_and_has_no_generic_agent_tools():
     assert decision.execution_mode is ExecutionMode.WEB_PIPELINE
     assert decision.retrieval_policy is RetrievalPolicy.REQUIRED
     assert decision.allowed_tools == ()
-    assert semantic.calls == []
 
 
-def test_semantic_router_only_classifies_and_policy_resolver_grants_no_tools():
-    router, semantic = _router(_SemanticOutput(RouteIntent.CODE_EXPLANATION, confidence=0.84))
-
-    decision = router.route(_context("这个流程能帮我解释一下吗"))
-
-    assert len(semantic.calls) == 1
+def test_learning_answer_is_direct_and_tool_free():
+    decision = _router().route(_context("监督学习和无监督学习有什么区别？"))
     assert decision.family is RouteFamily.LEARNING
-    assert decision.intent is RouteIntent.CODE_EXPLANATION
-    assert decision.execution_mode is ExecutionMode.DIRECT_MODEL
-    assert decision.retrieval_policy is RetrievalPolicy.OPTIONAL
+    assert decision.intent is RouteIntent.COMPARISON
+    assert decision.execution_mode is ExecutionMode.LEARNING_ANSWER
+    assert decision.retrieval_policy is RetrievalPolicy.REQUIRED
     assert decision.allowed_tools == ()
+    assert decision.style_hint.value == "comparison"
 
 
-@pytest.mark.parametrize(
-    ("semantic_output", "expected_intent"),
-    [
-        (_SemanticOutput(RouteIntent.NOT_LEARNING, confidence=0.95), RouteIntent.REFUSAL),
-        (
-            _SemanticOutput(
-                RouteIntent.NEEDS_CLARIFICATION,
-                confidence=0.2,
-                needs_clarification=True,
-            ),
-            RouteIntent.NEEDS_CLARIFICATION,
-        ),
-    ],
-)
-def test_semantic_boundary_exits_are_static_and_tool_free(semantic_output, expected_intent):
-    router, semantic = _router(semantic_output)
+def test_ambiguous_boundary_is_static_and_tool_free():
     context = _context("这个怎么弄")
-
-    decision = router.route(context)
-
-    assert len(semantic.calls) == 1
+    decision = _router().route(context)
     assert decision.family is RouteFamily.BOUNDARY
-    assert decision.intent is expected_intent
+    assert decision.intent is RouteIntent.NEEDS_CLARIFICATION
     assert decision.execution_mode is ExecutionMode.STATIC_RESPONSE
     assert decision.retrieval_policy is RetrievalPolicy.DISABLED
     assert decision.allowed_tools == ()
@@ -377,7 +329,7 @@ def test_route_state_carries_decision_and_enrichment_without_metadata_control_si
     decision = RouteDecision(
         family=RouteFamily.LEARNING,
         intent=RouteIntent.CONCEPT_QA,
-        execution_mode=ExecutionMode.GROUNDED_GENERATION,
+        execution_mode=ExecutionMode.LEARNING_ANSWER,
         confidence=0.8,
         retrieval_policy=RetrievalPolicy.REQUIRED,
         enrichment=EnrichmentPlan(

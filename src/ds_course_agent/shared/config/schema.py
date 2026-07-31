@@ -53,15 +53,6 @@ class Settings(BaseSettings):
     CHAT_DISABLE_THINKING: bool = True
     CHAT_SYSTEM_SUFFIX: str = "/no_think"
 
-    # Learning semantic router.  An empty model name reuses the active chat
-    # model for the selected local/remote backend.
-    ROUTER_MODEL_NAME: str = ""
-    ROUTER_MAX_TOKENS: int = Field(default=128, ge=16)
-    ROUTER_TIMEOUT_SECONDS: float = Field(default=5.0, gt=0.0)
-    ROUTER_MAX_RETRIES: int = Field(default=0, ge=0)
-    ROUTER_RECENT_CONTEXT_MAX_CHARS: int = Field(default=1200, ge=0)
-    ROUTER_MIN_CONFIDENCE: float = Field(default=0.65, ge=0.0, le=1.0)
-
     # Lightweight in-process caches.
     QUERY_CACHE_ENABLED: bool = True
     QUERY_CACHE_SIZE: int = 512

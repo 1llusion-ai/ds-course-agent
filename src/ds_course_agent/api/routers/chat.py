@@ -841,7 +841,7 @@ def _launch_stream_worker(
             event.get("used_retrieval")
             or base_metadata.get("used_retrieval")
             or progress_sources
-            or execution_mode == "grounded_generation"
+            or execution_mode == "learning_answer"
         )
         metadata = {
             **base_metadata,

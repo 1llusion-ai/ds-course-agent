@@ -8,9 +8,7 @@ import logging
 import re
 from typing import Any
 
-import ds_course_agent.shared.config as config
-
-from .models import ExecutionMode, QueryContext, RouteDecision, RouteFamily, RouteIntent
+from .models import ExecutionMode, LearningStyleHint, QueryContext, RouteDecision, RouteFamily, RouteIntent
 from .policy import build_learning_decision
 from .preprocessor import (
     _assignment_counts_as_code,
@@ -126,9 +124,8 @@ def _has_hyperparameter_assignment(query: str) -> bool:
 class QueryRouter:
     """查询路由器"""
 
-    def __init__(self, semantic_router: Any | None = None):
+    def __init__(self):
         self._rules = build_route_rules(self)
-        self._semantic_router = semantic_router
 
     def _normalize(self, query: str) -> str:
         """与 query_pipeline.utils.normalize_query_text 保持一致的路由归一化。
@@ -150,9 +147,9 @@ class QueryRouter:
           concept_map + rewrite + profile）。
 
         高置信 fast-path 规则（二者皆 False）在富化前命中并短路——datetime/
-        schedule/code/python 不触发任何富化；autonomous(p60) 与纯 skill 路由只触发
+        schedule/code/python 不触发任何富化；direct-model 与纯 skill 路由只触发
         廉价 skill_select，不跑 concept_map。无 ``enricher`` 时（契约测试/独立调用）
-        规则在裸 context 上求值，保持向后兼容。
+        规则在裸 context 上求值。
 
         Args:
             context: 查询上下文
@@ -171,7 +168,7 @@ class QueryRouter:
             if rule.match_fn(context):
                 return rule.build_decision(context)
 
-        return self._route_semantic_fallback(context)
+        return self._clarification_decision(context, "no_matching_route_rule")
 
     @property
     def rules(self) -> tuple[RouteRule, ...]:
@@ -192,12 +189,14 @@ class QueryRouter:
                 RouteIntent.CODE_EXAMPLE,
                 confidence=0.82,
                 reasons=["代码/示例/演示请求，直接生成示例，不调用执行工具"],
+                style_hint=LearningStyleHint.CODE_EXAMPLE,
             )
 
         return build_learning_decision(
             RouteIntent.CODE_EXPLANATION,
             confidence=0.78,
             reasons=["代码/示例/实现类请求，使用无工具代码讲解路径"],
+            style_hint=LearningStyleHint.CODE_EXPLANATION,
         )
 
     def _is_direct_code_example_request(self, context: QueryContext, query: str) -> bool:
@@ -454,7 +453,20 @@ class QueryRouter:
             "数据科学",
             "数据分析",
             "机器学习",
+            "监督学习",
+            "无监督学习",
             "深度学习",
+            "数据清洗",
+            "混淆矩阵",
+            "precision",
+            "recall",
+            "f1",
+            "特征工程",
+            "数据可视化",
+            "自然语言处理",
+            "泛化能力",
+            "模型评估",
+            "学习率",
             "测试集",
             "验证集",
             "逻辑回归",
@@ -483,6 +495,67 @@ class QueryRouter:
             return False
         return any(keyword in query for keyword in strong_course_keywords)
 
+    def _is_learning_signal(self, context: QueryContext) -> bool:
+        """Return whether the bounded LearningAnswer route is safe to use."""
+
+        query = self._normalize(context.normalized_query)
+        if context.scope_category == "course_or_data_science":
+            return True
+        if self._is_likely_course_question(context):
+            return True
+        if re.search(r"(?<![a-z])oop(?![a-z])", query) or any(
+            alias in query
+            for alias in (
+                "面向对象",
+                "objectoriented",
+                "数据科学导论",
+                "课程资料",
+                "教材",
+            )
+        ):
+            return True
+        if context.is_followup and any(
+            term in self._normalize(context.recent_context)
+            for term in ("机器学习", "数据科学", "过拟合", "梯度下降", "oop", "面向对象")
+        ):
+            return True
+        return False
+
+    def _learning_intent(self, context: QueryContext) -> RouteIntent:
+        """Choose a deterministic leaf label without changing execution mode."""
+
+        intents = set(context.detected_intents or [])
+        if "comparison" in intents:
+            return RouteIntent.COMPARISON
+        if context.is_followup:
+            return RouteIntent.FOLLOW_UP
+        if self._is_likely_course_question(context) or any(
+            cue in self._normalize(context.normalized_query) for cue in ("什么是", "是什么", "定义", "含义", "解释")
+        ):
+            return RouteIntent.CONCEPT_QA
+        return RouteIntent.CONCEPT_QA
+
+    def _learning_retrieval_policy(self, context: QueryContext):
+        """Return whether the unified learning answer must use course material."""
+
+        from .models import RetrievalPolicy
+
+        query = self._normalize(context.normalized_query)
+        if self._is_likely_course_question(context):
+            return RetrievalPolicy.REQUIRED
+        if context.is_followup:
+            return RetrievalPolicy.REQUIRED
+        if re.search(r"(?<![a-z])oop(?![a-z])", query) or "面向对象" in query:
+            return RetrievalPolicy.REQUIRED
+        if any(cue in query for cue in ("根据教材", "依据教材", "课程资料", "课程材料", "教材")):
+            return RetrievalPolicy.REQUIRED
+        return RetrievalPolicy.OPTIONAL
+
+    def _needs_clarification(self, context: QueryContext) -> bool:
+        """Return whether no safe learning or explicit action route matched."""
+
+        return not self._is_learning_signal(context)
+
     def _is_hyperparameter_concept_question(self, query: str) -> bool:
         """Detect natural-language ML hyperparameter questions with ``name=value``.
 
@@ -498,49 +571,6 @@ class QueryRouter:
 
         return _has_hyperparameter_assignment(query)
 
-    def _route_semantic_fallback(self, context: QueryContext) -> RouteDecision:
-        """Classify ambiguous candidates without granting tool permissions."""
-
-        semantic_router = self._semantic_router
-        if semantic_router is None:
-            try:
-                from .semantic_router import get_learning_semantic_router
-
-                semantic_router = get_learning_semantic_router()
-            except Exception:
-                semantic_router = None
-
-        if semantic_router is None:
-            return self._clarification_decision(context, "semantic_router_unavailable")
-
-        output = semantic_router.route(context.original_query, context.recent_context)
-        intent = output.intent
-        if float(output.confidence) < float(config.ROUTER_MIN_CONFIDENCE):
-            return self._clarification_decision(context, "semantic_router_low_confidence")
-        if intent is RouteIntent.NOT_LEARNING:
-            context.special_case_response = (
-                "这个问题目前不属于《数据科学导论》课程学习范围。"
-                "你可以换成课程概念、代码练习、学习规划或课程安排相关的问题。"
-            )
-            return RouteDecision(
-                family=RouteFamily.BOUNDARY,
-                intent=RouteIntent.REFUSAL,
-                execution_mode=ExecutionMode.STATIC_RESPONSE,
-                confidence=float(output.confidence),
-                reasons=["semantic_router=not_learning"],
-            )
-        if intent is RouteIntent.NEEDS_CLARIFICATION or output.needs_clarification:
-            return self._clarification_decision(context, "semantic_router_needs_clarification")
-        if intent is RouteIntent.CODE_EXECUTION and "python_execution" not in set(context.detected_intents or []):
-            return self._clarification_decision(context, "code_execution_requires_explicit_signal")
-
-        return build_learning_decision(
-            intent,
-            confidence=float(output.confidence),
-            reasons=["learning semantic router"],
-            requires_course_grounding=self._explicit_course_grounding_requested(context.normalized_query),
-        )
-
     def _clarification_decision(self, context: QueryContext, reason: str) -> RouteDecision:
         context.special_case_response = (
             "我还不确定你是想了解课程概念、检查代码、运行代码，还是规划学习。请补充一个具体知识点、代码片段或学习目标。"
@@ -551,20 +581,6 @@ class QueryRouter:
             execution_mode=ExecutionMode.STATIC_RESPONSE,
             confidence=0.0,
             reasons=[reason],
-        )
-
-    def _explicit_course_grounding_requested(self, query: str) -> bool:
-        normalized = self._normalize(query)
-        return any(
-            cue in normalized
-            for cue in (
-                "根据教材",
-                "依据教材",
-                "按照教材",
-                "根据课程资料",
-                "依据课程资料",
-                "课程材料里",
-            )
         )
 
 

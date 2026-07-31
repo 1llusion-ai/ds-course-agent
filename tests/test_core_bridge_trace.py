@@ -18,7 +18,7 @@ class _FakeService:
             content="assistant reply",
             family=RouteFamily.LEARNING,
             intent=RouteIntent.CONCEPT_QA,
-            execution_mode=ExecutionMode.GROUNDED_GENERATION,
+            execution_mode=ExecutionMode.LEARNING_ANSWER,
             sources=[{"title": "课程资料"}],
             used_retrieval=True,
         )
@@ -34,7 +34,7 @@ class _FakeService:
             "content": "AB",
             "family": RouteFamily.LEARNING.value,
             "intent": RouteIntent.CONCEPT_QA.value,
-            "execution_mode": ExecutionMode.GROUNDED_GENERATION.value,
+            "execution_mode": ExecutionMode.LEARNING_ANSWER.value,
         }
 
 
@@ -46,7 +46,7 @@ def test_core_bridge_chat_includes_query_trace(monkeypatch):
     assert result["content"] == "assistant reply"
     assert result["family"] == "learning"
     assert result["intent"] == "concept_qa"
-    assert result["execution_mode"] == "grounded_generation"
+    assert result["execution_mode"] == "learning_answer"
     assert result["used_retrieval"] is True
     assert result["sources"] == [{"title": "课程资料"}]
     assert "query_trace" in result
@@ -78,6 +78,6 @@ def test_core_bridge_stream_final_includes_query_trace(monkeypatch):
     assert events[-1]["content"] == "AB"
     assert events[-1]["family"] == "learning"
     assert events[-1]["intent"] == "concept_qa"
-    assert events[-1]["execution_mode"] == "grounded_generation"
+    assert events[-1]["execution_mode"] == "learning_answer"
     assert "query_trace" in events[-1]
     assert events[-1]["query_trace"]["meta"]["session_id"] == "sess_1"

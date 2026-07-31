@@ -84,33 +84,3 @@ def get_summary_model():
     """
 
     return get_chat_model()
-
-
-def get_router_model() -> Any:
-    """Return the short-budget model used only for semantic route classification."""
-
-    configured_name = str(config.ROUTER_MODEL_NAME or "").strip()
-    if config.USE_REMOTE_LLM:
-        from langchain_openai import ChatOpenAI
-
-        return ChatOpenAI(
-            **_remote_chat_kwargs(
-                model_name=configured_name or config.REMOTE_MODEL_NAME,
-                max_tokens=config.ROUTER_MAX_TOKENS,
-                timeout_seconds=config.ROUTER_TIMEOUT_SECONDS,
-                temperature=0.0,
-                max_retries=config.ROUTER_MAX_RETRIES,
-                streaming=False,
-            )
-        )
-
-    from langchain_ollama import ChatOllama
-
-    return ChatOllama(
-        model=configured_name or config.MODEL_CHAT,
-        base_url=config.BASE_URL_CHAT,
-        temperature=0.0,
-        num_predict=config.ROUTER_MAX_TOKENS,
-        reasoning=False,
-        sync_client_kwargs={"timeout": config.ROUTER_TIMEOUT_SECONDS},
-    )

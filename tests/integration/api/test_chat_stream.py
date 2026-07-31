@@ -43,7 +43,7 @@ def fresh_client(monkeypatch):
             "message": "正在生成回答...",
             "family": "learning",
             "intent": "concept_qa",
-            "execution_mode": "grounded_generation",
+            "execution_mode": "learning_answer",
             "stream_id": "s1",
         }
         yield {"type": "delta", "delta": "你"}
@@ -55,7 +55,7 @@ def fresh_client(monkeypatch):
             "used_retrieval": True,
             "family": "learning",
             "intent": "concept_qa",
-            "execution_mode": "grounded_generation",
+            "execution_mode": "learning_answer",
             "degraded": False,
         }
 
@@ -92,7 +92,7 @@ def test_stream_endpoint_returns_real_sse(fresh_client):
     assert '"type": "final"' in response.text
     assert '"family": "learning"' in response.text
     assert '"intent": "concept_qa"' in response.text
-    assert '"execution_mode": "grounded_generation"' in response.text
+    assert '"execution_mode": "learning_answer"' in response.text
     assert '"route"' not in response.text
     assert "你好" in response.text
 
@@ -107,7 +107,7 @@ def test_stream_endpoint_returns_real_sse(fresh_client):
     assert messages[-1]["sources"] == [{"reference": "《第1章 数据科学简介》第1页"}]
     assert messages[-1]["family"] == "learning"
     assert messages[-1]["intent"] == "concept_qa"
-    assert messages[-1]["execution_mode"] == "grounded_generation"
+    assert messages[-1]["execution_mode"] == "learning_answer"
     assert "route" not in messages[-1]
     assert messages[-1]["progress_events"][0]["phase"] == "routing"
     assert messages[-1]["progress_events"][0]["details"]["found_count"] == 2
@@ -337,7 +337,7 @@ def test_cancel_preserves_partial_answer_and_marks_it_stopped(monkeypatch):
             "message": "已找到 1 个课程来源",
             "family": "learning",
             "intent": "concept_qa",
-            "execution_mode": "grounded_generation",
+            "execution_mode": "learning_answer",
             "tool": "course_rag_tool",
             "stream_id": "cancel-1",
             "details": {"sources": [{"reference": "《第1章》"}]},
@@ -390,7 +390,7 @@ def test_cancel_preserves_partial_answer_and_marks_it_stopped(monkeypatch):
     assert assistant["content"] == "已经生成的部分"
     assert assistant["family"] == "learning"
     assert assistant["intent"] == "concept_qa"
-    assert assistant["execution_mode"] == "grounded_generation"
+    assert assistant["execution_mode"] == "learning_answer"
     assert "route" not in assistant
     assert assistant["sources"] == [{"reference": "《第1章》"}]
     assert assistant["metadata"]["used_retrieval"] is True
@@ -424,7 +424,7 @@ def test_continue_stream_replaces_stopped_message_without_visible_user_turn(monk
             timestamp=stopped_at,
             family="learning",
             intent="concept_qa",
-            execution_mode="grounded_generation",
+            execution_mode="learning_answer",
             sources=[{"reference": "《第1章》"}],
             generation_status="stopped",
             metadata={"used_retrieval": True},
@@ -464,7 +464,7 @@ def test_continue_stream_replaces_stopped_message_without_visible_user_turn(monk
     assert messages[-1]["content"] == "已有内容，后续内容"
     assert messages[-1]["family"] == "learning"
     assert messages[-1]["intent"] == "concept_qa"
-    assert messages[-1]["execution_mode"] == "grounded_generation"
+    assert messages[-1]["execution_mode"] == "learning_answer"
     assert "route" not in messages[-1]
     assert messages[-1]["sources"] == [{"reference": "《第1章》"}]
     assert messages[-1]["metadata"]["used_retrieval"] is True

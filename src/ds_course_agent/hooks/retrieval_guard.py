@@ -30,13 +30,13 @@ class RetrievalGuardHook:
         user_input = context.original_query
         chat_history = state.chat_history
 
-        if decision.execution_mode == ExecutionMode.GROUNDED_GENERATION:
+        if decision.execution_mode == ExecutionMode.LEARNING_ANSWER:
             trace_step(
                 "retrieval_guard.skip",
                 family=decision.family.value,
                 intent=decision.intent.value,
                 retrieval_policy=decision.retrieval_policy,
-                reason="grounded_rag_route",
+                reason="learning_answer_route",
             )
             return result
 

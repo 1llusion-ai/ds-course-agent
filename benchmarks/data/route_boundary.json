@@ -1,8 +1,8 @@
 {
   "name": "route_boundary",
-  "version": "3.0",
+  "version": "4.0",
   "created_at": "2026-07-29",
-  "description": "Canonical offline route contract benchmark for RouteFamily, RouteIntent, ExecutionMode, retrieval policy, and exact tool allowlists.",
+  "description": "Canonical offline route contract benchmark for hard gates, LearningAnswer, teaching style hints, retrieval policy, and exact tool allowlists.",
   "cases": [
     {
       "id": "schedule_001",
@@ -14,8 +14,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "schedule_002",
@@ -27,8 +30,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "schedule_003",
@@ -40,8 +46,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "schedule_004",
@@ -53,8 +62,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "schedule_005",
@@ -66,8 +78,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "schedule_006",
@@ -79,8 +94,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "schedule_007",
@@ -92,8 +110,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "schedule_008",
@@ -105,8 +126,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "datetime_001",
@@ -118,8 +142,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "datetime_002",
@@ -131,8 +158,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "datetime_003",
@@ -144,8 +174,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "datetime_004",
@@ -157,8 +190,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "datetime_005",
@@ -170,8 +206,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "datetime_006",
@@ -183,8 +222,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "datetime_007",
@@ -196,8 +238,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "datetime_008",
@@ -209,8 +254,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "code_review_001",
@@ -222,8 +270,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "code_review_002",
@@ -235,8 +286,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "code_review_003",
@@ -248,8 +302,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "code_review_004",
@@ -261,8 +318,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "code_review_005",
@@ -274,8 +334,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "code_review_006",
@@ -287,8 +350,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "code_review_007",
@@ -300,8 +366,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "code_review_008",
@@ -313,8 +382,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "code_review_009",
@@ -326,8 +398,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "code_review_010",
@@ -339,8 +414,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "python_exec_001",
@@ -352,8 +430,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "python_exec_002",
@@ -365,8 +446,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "python_exec_003",
@@ -378,8 +462,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "python_exec_004",
@@ -391,8 +478,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "python_exec_005",
@@ -404,8 +494,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "python_exec_006",
@@ -417,8 +510,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "python_exec_007",
@@ -430,8 +526,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "python_exec_008",
@@ -443,8 +542,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "python_exec_009",
@@ -456,8 +558,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "python_exec_010",
@@ -469,8 +574,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "generic_code_001",
@@ -482,8 +590,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "code_example",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 0
     },
     {
       "id": "generic_code_002",
@@ -495,8 +606,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "code_example",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 0
     },
     {
       "id": "generic_code_003",
@@ -508,8 +622,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "code_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 0
     },
     {
       "id": "generic_code_004",
@@ -521,8 +638,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "code_example",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 0
     },
     {
       "id": "generic_code_005",
@@ -534,8 +654,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "code_example",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 0
     },
     {
       "id": "generic_code_006",
@@ -547,8 +670,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "code_example",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 0
     },
     {
       "id": "generic_code_007",
@@ -560,8 +686,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "code_example",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 0
     },
     {
       "id": "generic_code_008",
@@ -573,8 +702,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "code_example",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 0
     },
     {
       "id": "generic_code_009",
@@ -586,8 +718,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "code_example",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 0
     },
     {
       "id": "generic_code_010",
@@ -599,8 +734,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "code_example",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 0
     },
     {
       "id": "learning_path_001",
@@ -612,8 +750,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "learning_path_002",
@@ -625,8 +766,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "learning_path_003",
@@ -638,8 +782,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "learning_path_004",
@@ -651,8 +798,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "learning_path_005",
@@ -664,8 +814,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "learning_path_006",
@@ -677,8 +830,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "learning_path_007",
@@ -690,8 +846,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "learning_path_008",
@@ -703,8 +862,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "learning_path_009",
@@ -716,8 +878,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "learning_path_010",
@@ -729,8 +894,11 @@
       "expected_retrieval_policy": "optional",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 1
     },
     {
       "id": "personalized_001",
@@ -742,8 +910,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "personalized_002",
@@ -755,8 +926,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "personalized_003",
@@ -768,8 +942,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "personalized_004",
@@ -781,8 +958,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "personalized_005",
@@ -794,8 +974,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "personalized_006",
@@ -807,8 +990,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "personalized_007",
@@ -820,8 +1006,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "personalized_008",
@@ -833,8 +1022,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "personalized_009",
@@ -846,8 +1038,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "personalized_010",
@@ -859,8 +1054,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "misconception_001",
@@ -872,8 +1070,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "misconception_002",
@@ -885,8 +1086,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "misconception_003",
@@ -898,8 +1102,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "misconception_004",
@@ -911,8 +1118,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "misconception_005",
@@ -924,8 +1134,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "misconception_006",
@@ -937,8 +1150,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "misconception_007",
@@ -950,8 +1166,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "misconception_008",
@@ -963,8 +1182,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "misconception_009",
@@ -976,8 +1198,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "misconception_010",
@@ -989,8 +1214,11 @@
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "grounded_001",
@@ -998,7 +1226,7 @@
       "query": "什么是数据科学？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1006,11 +1234,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_002",
@@ -1018,7 +1244,7 @@
       "query": "数据清洗包括哪些步骤？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1026,11 +1252,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_003",
@@ -1038,7 +1262,7 @@
       "query": "监督学习和无监督学习有什么区别？",
       "expected_family": "learning",
       "expected_intent": "comparison",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1046,11 +1270,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "comparison",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "comparison",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_004",
@@ -1058,7 +1280,7 @@
       "query": "决策树的核心思想是什么？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1066,11 +1288,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_005",
@@ -1078,7 +1298,7 @@
       "query": "随机森林为什么比单棵树稳定？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1086,11 +1306,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_006",
@@ -1098,7 +1316,7 @@
       "query": "逻辑回归为什么可以分类？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1106,11 +1324,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_007",
@@ -1118,7 +1334,7 @@
       "query": "SVM 的核函数有什么作用？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1126,11 +1342,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_008",
@@ -1138,7 +1352,7 @@
       "query": "K-means 的基本步骤是什么？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1146,11 +1360,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_009",
@@ -1158,7 +1370,7 @@
       "query": "PCA 的核心思想是什么？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1166,11 +1378,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_010",
@@ -1178,7 +1388,7 @@
       "query": "什么是过拟合？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1186,11 +1396,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_011",
@@ -1198,7 +1406,7 @@
       "query": "正则化如何缓解过拟合？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1206,11 +1414,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_012",
@@ -1218,7 +1424,7 @@
       "query": "交叉验证为什么能评估泛化能力？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1226,11 +1432,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_013",
@@ -1238,7 +1442,7 @@
       "query": "混淆矩阵是什么？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1246,11 +1450,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_014",
@@ -1258,7 +1460,7 @@
       "query": "precision 和 recall 的区别是什么？",
       "expected_family": "learning",
       "expected_intent": "comparison",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1266,11 +1468,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "comparison",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "comparison",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_015",
@@ -1278,7 +1478,7 @@
       "query": "分类模型评估里 F1 分数为什么有用？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1286,11 +1486,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_016",
@@ -1298,7 +1496,7 @@
       "query": "梯度下降的更新思路是什么？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1306,11 +1504,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_017",
@@ -1318,7 +1514,7 @@
       "query": "学习率太大会怎样？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1326,11 +1522,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_018",
@@ -1338,7 +1532,7 @@
       "query": "什么是特征工程？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1346,11 +1540,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_019",
@@ -1358,7 +1550,7 @@
       "query": "数据可视化有什么作用？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1366,11 +1558,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "grounded_020",
@@ -1378,7 +1568,7 @@
       "query": "自然语言处理在数据科学里有哪些应用？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1386,11 +1576,9 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "special_direct_001",
@@ -1402,8 +1590,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "special_direct_002",
@@ -1415,8 +1606,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "special_direct_003",
@@ -1428,8 +1622,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "special_direct_004",
@@ -1441,8 +1638,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "special_direct_005",
@@ -1454,8 +1654,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "special_direct_006",
@@ -1467,8 +1670,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "special_direct_007",
@@ -1480,8 +1686,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "special_direct_008",
@@ -1493,8 +1702,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "special_direct_009",
@@ -1506,8 +1718,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "special_direct_010",
@@ -1519,8 +1734,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "special_direct_011",
@@ -1532,8 +1750,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "special_direct_012",
@@ -1545,8 +1766,11 @@
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "web_search_001",
@@ -1559,8 +1783,11 @@
       "expected_allowed_tools": [],
       "web_search": true,
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "web_search_002",
@@ -1573,8 +1800,11 @@
       "expected_allowed_tools": [],
       "web_search": true,
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "web_search_003",
@@ -1587,8 +1817,11 @@
       "expected_allowed_tools": [],
       "web_search": true,
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "web_search_004",
@@ -1601,8 +1834,11 @@
       "expected_allowed_tools": [],
       "web_search": true,
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "web_search_005",
@@ -1615,8 +1851,11 @@
       "expected_allowed_tools": [],
       "web_search": true,
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "web_search_006",
@@ -1629,26 +1868,27 @@
       "expected_allowed_tools": [],
       "web_search": true,
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 1,
+      "expected_llm_call_count": 1
     },
     {
       "id": "alias_loop_not_oop",
       "category": "alias_boundary",
       "query": "你的 loop 有几轮",
-      "semantic_router_output": {
-        "intent": "not_learning",
-        "confidence": 0.98,
-        "needs_clarification": false
-      },
       "expected_family": "boundary",
       "expected_intent": "refusal",
       "expected_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
       "id": "alias_oop_concept",
@@ -1656,7 +1896,7 @@
       "query": "OOP 是什么？",
       "expected_family": "learning",
       "expected_intent": "concept_qa",
-      "expected_execution_mode": "grounded_generation",
+      "expected_execution_mode": "learning_answer",
       "expected_retrieval_policy": "required",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
@@ -1664,65 +1904,57 @@
         "teaching_skill",
         "direct_model"
       ],
-      "semantic_router_output": {
-        "intent": "concept_qa",
-        "confidence": 0.93,
-        "needs_clarification": false
-      }
+      "expected_style_hint": "concept_explanation",
+      "expected_llm_call_count": 1,
+      "expected_retrieval_count": 1
     },
     {
       "id": "broad_task_classification",
       "category": "alias_boundary",
       "query": "你怎么做任务分类？",
-      "semantic_router_output": {
-        "intent": "not_learning",
-        "confidence": 0.96,
-        "needs_clarification": false
-      },
       "expected_family": "boundary",
       "expected_intent": "refusal",
       "expected_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
-      "id": "semantic_not_learning",
-      "category": "semantic_boundary",
+      "id": "not_learning",
+      "category": "alias_boundary",
       "query": "帮我选一个周末活动",
-      "semantic_router_output": {
-        "intent": "not_learning",
-        "confidence": 0.97,
-        "needs_clarification": false
-      },
       "expected_family": "boundary",
       "expected_intent": "refusal",
       "expected_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     },
     {
-      "id": "semantic_clarification",
-      "category": "semantic_boundary",
+      "id": "ambiguous_learning",
+      "category": "alias_boundary",
       "query": "这个怎么弄",
-      "semantic_router_output": {
-        "intent": "needs_clarification",
-        "confidence": 0.2,
-        "needs_clarification": true
-      },
       "expected_family": "boundary",
       "expected_intent": "needs_clarification",
       "expected_execution_mode": "static_response",
       "expected_retrieval_policy": "disabled",
       "expected_allowed_tools": [],
       "disallowed_execution_modes": [
-        "grounded_generation"
-      ]
+        "learning_answer"
+      ],
+      "expected_style_hint": "general_learning",
+      "expected_retrieval_count": 0,
+      "expected_llm_call_count": 0
     }
   ]
 }

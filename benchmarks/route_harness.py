@@ -1,8 +1,8 @@
 """Offline route-boundary harness for the teaching agent.
 
 The harness exercises ``QueryPipeline.prepare`` and the production router, but
-stubs concept/profile enrichment and semantic-router outputs so it never calls
-an LLM, embedding service, RAG retriever, or executable tool.
+stubs concept/profile enrichment so it never calls an LLM, embedding service,
+RAG retriever, or executable tool.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -78,13 +77,10 @@ def evaluate_case(service: Any, case: dict[str, Any], *, student_id: str) -> dic
     intent = "unknown"
     execution_mode = "unknown"
     retrieval_policy = "unknown"
+    style_hint = "unknown"
     allowed_tools: list[str] = []
     confidence = None
     reasons: list[str] = []
-
-    configure_semantic = getattr(service, "configure_semantic_output", None)
-    if callable(configure_semantic):
-        configure_semantic(case.get("semantic_router_output"))
 
     try:
         state = service._prepare_query_route(
@@ -98,6 +94,7 @@ def evaluate_case(service: Any, case: dict[str, Any], *, student_id: str) -> dic
         intent = _enum_value(decision.intent)
         execution_mode = _enum_value(decision.execution_mode)
         retrieval_policy = _enum_value(decision.retrieval_policy)
+        style_hint = _enum_value(decision.style_hint)
         allowed_tools = list(decision.allowed_tools)
         confidence = decision.confidence
         reasons = list(decision.reasons or [])
@@ -109,6 +106,9 @@ def evaluate_case(service: Any, case: dict[str, Any], *, student_id: str) -> dic
     expected_execution_mode = case.get("expected_execution_mode")
     expected_policy = case.get("expected_retrieval_policy")
     expected_allowed_tools = list(case.get("expected_allowed_tools") or [])
+    expected_style_hint = case.get("expected_style_hint")
+    expected_llm_call_count = case.get("expected_llm_call_count")
+    expected_retrieval_count = case.get("expected_retrieval_count")
     disallowed_modes = set(case.get("disallowed_execution_modes") or [])
 
     failures = []
@@ -124,6 +124,18 @@ def evaluate_case(service: Any, case: dict[str, Any], *, student_id: str) -> dic
         failures.append(f"expected_retrieval_policy={expected_policy}")
     if allowed_tools != expected_allowed_tools:
         failures.append(f"expected_allowed_tools={expected_allowed_tools}")
+    if expected_style_hint and style_hint != expected_style_hint:
+        failures.append(f"expected_style_hint={expected_style_hint}")
+    if expected_llm_call_count is not None:
+        actual_llm_call_count = (
+            1 if execution_mode in {"learning_answer", "direct_model", "teaching_skill", "web_pipeline"} else 0
+        )
+        if actual_llm_call_count != expected_llm_call_count:
+            failures.append(f"expected_llm_call_count={expected_llm_call_count}")
+    if expected_retrieval_count is not None:
+        actual_retrieval_count = 1 if retrieval_policy == "required" else 0
+        if actual_retrieval_count != expected_retrieval_count:
+            failures.append(f"expected_retrieval_count={expected_retrieval_count}")
     if execution_mode in disallowed_modes:
         failures.append(f"disallowed_execution_mode={execution_mode}")
 
@@ -132,7 +144,6 @@ def evaluate_case(service: Any, case: dict[str, Any], *, student_id: str) -> dic
         "category": case.get("category"),
         "query": case.get("query"),
         "web_search": bool(case.get("web_search", False)),
-        "semantic_router_output": case.get("semantic_router_output"),
         "expected_family": expected_family,
         "expected_intent": expected_intent,
         "expected_execution_mode": expected_execution_mode,
@@ -143,6 +154,7 @@ def evaluate_case(service: Any, case: dict[str, Any], *, student_id: str) -> dic
         "intent": intent,
         "execution_mode": execution_mode,
         "retrieval_policy": retrieval_policy,
+        "style_hint": style_hint,
         "allowed_tools": allowed_tools,
         "confidence": confidence,
         "reasons": reasons,
@@ -169,8 +181,8 @@ def build_route_report(
     unexpected_rag = sum(
         1
         for item in results
-        if item.get("execution_mode") == "grounded_generation"
-        and "grounded_generation" in set(item.get("disallowed_execution_modes") or [])
+        if item.get("execution_mode") == "learning_answer"
+        and "learning_answer" in set(item.get("disallowed_execution_modes") or [])
     )
     return {
         "metadata": {
@@ -197,38 +209,6 @@ def build_route_report(
     }
 
 
-@dataclass(frozen=True)
-class _SemanticOutput:
-    intent: Any
-    confidence: float
-    needs_clarification: bool
-
-
-class _HarnessSemanticRouter:
-    """Deterministic semantic-router stub configured by each benchmark case."""
-
-    def __init__(self) -> None:
-        self._payload: dict[str, Any] | None = None
-
-    def configure(self, payload: dict[str, Any] | None) -> None:
-        self._payload = dict(payload) if payload else None
-
-    def route(self, query: str, recent_context: str = "") -> _SemanticOutput:
-        del query, recent_context
-        from ds_course_agent.rag.query_pipeline import RouteIntent
-
-        payload = self._payload or {
-            "intent": RouteIntent.NEEDS_CLARIFICATION.value,
-            "confidence": 0.0,
-            "needs_clarification": True,
-        }
-        return _SemanticOutput(
-            intent=RouteIntent(str(payload["intent"])),
-            confidence=float(payload.get("confidence", 1.0)),
-            needs_clarification=bool(payload.get("needs_clarification", False)),
-        )
-
-
 class _NoopHooks:
     def before_route(self, state: Any) -> None:
         del state
@@ -244,13 +224,9 @@ class _OfflineRouteService:
         import ds_course_agent.rag.query_pipeline.router as router_module
         from ds_course_agent.rag.query_pipeline.router import QueryRouter
 
-        self._semantic_router = _HarnessSemanticRouter()
-        router_module._router = QueryRouter(semantic_router=self._semantic_router)
+        router_module._router = QueryRouter()
         self.system_prompt = ""
         self.hooks = _NoopHooks()
-
-    def configure_semantic_output(self, payload: dict[str, Any] | None) -> None:
-        self._semantic_router.configure(payload)
 
     def _prepare_query_route(
         self,

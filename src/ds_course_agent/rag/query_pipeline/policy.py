@@ -1,4 +1,4 @@
-"""Deterministic execution policies for classified learning intents."""
+"""Deterministic execution policies for explicit direct-model learning intents."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from .models import (
     EnrichmentPlan,
     ExecutionMode,
+    LearningStyleHint,
     RetrievalPolicy,
     RouteDecision,
     RouteFamily,
@@ -16,7 +17,7 @@ from .models import (
 
 @dataclass(frozen=True)
 class LearningExecutionPolicy:
-    """Execution contract selected after semantic intent classification."""
+    """Execution contract selected from a deterministic learning intent."""
 
     execution_mode: ExecutionMode
     retrieval_policy: RetrievalPolicy
@@ -25,24 +26,6 @@ class LearningExecutionPolicy:
 
 
 _LEARNING_POLICIES: dict[RouteIntent, LearningExecutionPolicy] = {
-    RouteIntent.CONCEPT_QA: LearningExecutionPolicy(
-        ExecutionMode.GROUNDED_GENERATION,
-        RetrievalPolicy.REQUIRED,
-        "course_rag",
-        EnrichmentPlan(map_concepts=True, rewrite_query=True, record_learning_event=True),
-    ),
-    RouteIntent.COMPARISON: LearningExecutionPolicy(
-        ExecutionMode.GROUNDED_GENERATION,
-        RetrievalPolicy.REQUIRED,
-        "course_rag",
-        EnrichmentPlan(map_concepts=True, rewrite_query=True, record_learning_event=True),
-    ),
-    RouteIntent.FOLLOW_UP: LearningExecutionPolicy(
-        ExecutionMode.GROUNDED_GENERATION,
-        RetrievalPolicy.REQUIRED,
-        "course_rag",
-        EnrichmentPlan(map_concepts=True, rewrite_query=True, record_learning_event=True),
-    ),
     RouteIntent.CODE_EXAMPLE: LearningExecutionPolicy(
         ExecutionMode.DIRECT_MODEL,
         RetrievalPolicy.OPTIONAL,
@@ -55,48 +38,23 @@ _LEARNING_POLICIES: dict[RouteIntent, LearningExecutionPolicy] = {
         None,
         EnrichmentPlan(map_concepts=True, record_learning_event=True),
     ),
-    RouteIntent.CODE_REVIEW: LearningExecutionPolicy(
-        ExecutionMode.TEACHING_SKILL,
-        RetrievalPolicy.DISABLED,
-        "code-review",
-        EnrichmentPlan(map_concepts=True, record_learning_event=True),
-    ),
-    RouteIntent.CODE_EXECUTION: LearningExecutionPolicy(
-        ExecutionMode.PYTHON_SANDBOX,
-        RetrievalPolicy.DISABLED,
-        "python_sandbox",
-        EnrichmentPlan(map_concepts=True, record_learning_event=True),
-    ),
-    RouteIntent.LEARNING_PATH: LearningExecutionPolicy(
-        ExecutionMode.TEACHING_SKILL,
-        RetrievalPolicy.OPTIONAL,
-        "learning-path",
-        EnrichmentPlan(map_concepts=True, load_profile=True),
-    ),
-    RouteIntent.MISCONCEPTION_REPAIR: LearningExecutionPolicy(
-        ExecutionMode.TEACHING_SKILL,
-        RetrievalPolicy.REQUIRED,
-        "misconception-handling",
-        EnrichmentPlan(map_concepts=True, rewrite_query=True),
-    ),
-    RouteIntent.PERSONALIZED_EXPLANATION: LearningExecutionPolicy(
-        ExecutionMode.TEACHING_SKILL,
-        RetrievalPolicy.REQUIRED,
-        "personalized-explanation",
-        EnrichmentPlan(
-            map_concepts=True,
-            load_profile=True,
-            rewrite_query=True,
-            record_learning_event=True,
-        ),
-    ),
-    RouteIntent.OPEN_LEARNING: LearningExecutionPolicy(
-        ExecutionMode.TOOL_AGENT,
-        RetrievalPolicy.OPTIONAL,
-        "learning_tool_agent",
-        EnrichmentPlan(map_concepts=True, record_learning_event=True),
-    ),
 }
+
+
+def learning_style_hint_for(context, intent: RouteIntent) -> LearningStyleHint:
+    """Return a non-authoritative presentation hint from deterministic signals."""
+
+    if intent is RouteIntent.CODE_EXAMPLE:
+        return LearningStyleHint.CODE_EXAMPLE
+    if intent is RouteIntent.CODE_EXPLANATION:
+        return LearningStyleHint.CODE_EXPLANATION
+    if "comparison" in set(context.detected_intents or []):
+        return LearningStyleHint.COMPARISON
+    if context.is_followup:
+        return LearningStyleHint.FOLLOW_UP
+    if intent is RouteIntent.CONCEPT_QA:
+        return LearningStyleHint.CONCEPT_EXPLANATION
+    return LearningStyleHint.GENERAL_LEARNING
 
 
 def build_learning_decision(
@@ -104,19 +62,11 @@ def build_learning_decision(
     *,
     confidence: float,
     reasons: list[str],
-    requires_course_grounding: bool = False,
+    style_hint: LearningStyleHint | None = None,
 ) -> RouteDecision:
     """Resolve a learning intent into an immutable execution policy."""
 
     policy = _LEARNING_POLICIES[intent]
-    if requires_course_grounding and intent in {RouteIntent.CODE_EXAMPLE, RouteIntent.CODE_EXPLANATION}:
-        policy = LearningExecutionPolicy(
-            ExecutionMode.GROUNDED_GENERATION,
-            RetrievalPolicy.REQUIRED,
-            "course_rag",
-            EnrichmentPlan(map_concepts=True, rewrite_query=True, record_learning_event=True),
-        )
-
     return RouteDecision(
         family=RouteFamily.LEARNING,
         intent=intent,
@@ -124,7 +74,7 @@ def build_learning_decision(
         confidence=confidence,
         reasons=reasons,
         retrieval_policy=policy.retrieval_policy,
-        allowed_tools=("course_rag_tool",) if policy.execution_mode is ExecutionMode.TOOL_AGENT else (),
+        style_hint=style_hint or LearningStyleHint.GENERAL_LEARNING,
         executor_key=policy.executor_key,
         enrichment=policy.enrichment,
     )
@@ -136,4 +86,9 @@ def learning_policy_for(intent: RouteIntent) -> LearningExecutionPolicy:
     return _LEARNING_POLICIES[intent]
 
 
-__all__ = ["LearningExecutionPolicy", "build_learning_decision", "learning_policy_for"]
+__all__ = [
+    "LearningExecutionPolicy",
+    "build_learning_decision",
+    "learning_policy_for",
+    "learning_style_hint_for",
+]

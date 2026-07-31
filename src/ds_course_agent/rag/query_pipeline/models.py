@@ -39,7 +39,6 @@ class RouteIntent(str, Enum):
     LEARNING_PATH = "learning_path"
     MISCONCEPTION_REPAIR = "misconception_repair"
     PERSONALIZED_EXPLANATION = "personalized_explanation"
-    OPEN_LEARNING = "open_learning"
     NOT_LEARNING = "not_learning"
     NEEDS_CLARIFICATION = "needs_clarification"
 
@@ -52,11 +51,22 @@ class ExecutionMode(str, Enum):
     STATIC_RESPONSE = "static_response"
     DETERMINISTIC_TOOL = "deterministic_tool"
     DIRECT_MODEL = "direct_model"
-    GROUNDED_GENERATION = "grounded_generation"
+    LEARNING_ANSWER = "learning_answer"
     TEACHING_SKILL = "teaching_skill"
     PYTHON_SANDBOX = "python_sandbox"
     WEB_PIPELINE = "web_pipeline"
     TOOL_AGENT = "tool_agent"
+
+
+class LearningStyleHint(str, Enum):
+    """Non-authoritative teaching style hint for a learning answer."""
+
+    CONCEPT_EXPLANATION = "concept_explanation"
+    COMPARISON = "comparison"
+    FOLLOW_UP = "follow_up"
+    CODE_EXAMPLE = "code_example"
+    CODE_EXPLANATION = "code_explanation"
+    GENERAL_LEARNING = "general_learning"
 
 
 class RetrievalPolicy(str, Enum):
@@ -167,6 +177,7 @@ class RouteDecision:
     reasons: list[str] = field(default_factory=list)
     retrieval_policy: RetrievalPolicy = RetrievalPolicy.DISABLED
     allowed_tools: tuple[str, ...] = ()
+    style_hint: LearningStyleHint = LearningStyleHint.GENERAL_LEARNING
     executor_key: str | None = None
     enrichment: EnrichmentPlan = field(default_factory=EnrichmentPlan)
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -181,6 +192,8 @@ class RouteDecision:
             self.execution_mode = ExecutionMode(str(self.execution_mode))
         if not isinstance(self.retrieval_policy, RetrievalPolicy):
             self.retrieval_policy = RetrievalPolicy(str(self.retrieval_policy))
+        if not isinstance(self.style_hint, LearningStyleHint):
+            self.style_hint = LearningStyleHint(str(self.style_hint))
 
         self.allowed_tools = tuple(self.allowed_tools or ())
         self.reasons = list(self.reasons or [])

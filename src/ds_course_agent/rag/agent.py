@@ -22,8 +22,18 @@ from ds_course_agent.hooks.learning_event import LearningEventHook
 from ds_course_agent.hooks.retrieval_guard import RetrievalGuardHook
 from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
 from ds_course_agent.rag.memory_core import get_memory_core, record_event
-from ds_course_agent.rag.prompt import get_system_prompt
-from ds_course_agent.rag.query_pipeline import ExecutionMode, RouteExecutionResult, RouteFamily, RouteState
+from ds_course_agent.rag.prompt import (
+    build_learning_answer_question,
+    get_system_prompt,
+    learning_style_instruction,
+)
+from ds_course_agent.rag.query_pipeline import (
+    ExecutionMode,
+    RetrievalPolicy,
+    RouteExecutionResult,
+    RouteFamily,
+    RouteState,
+)
 from ds_course_agent.rag.query_pipeline.utils import (
     build_grounded_query_from_history,
     collect_recent_context,
@@ -884,7 +894,7 @@ class AgentService:
         postprocessing, but grounded RAG routes must execute against the
         rewritten/enriched tool query produced by the pipeline.
         """
-        if decision.execution_mode != ExecutionMode.GROUNDED_GENERATION:
+        if decision.execution_mode != ExecutionMode.LEARNING_ANSWER:
             return context.original_query
 
         return (
@@ -964,8 +974,8 @@ class AgentService:
         if route_state.special_case_response:
             return "special_case_response"
 
-        if decision.execution_mode == ExecutionMode.GROUNDED_GENERATION and isinstance(result, str) and result.strip():
-            return "grounded_rag_already_executed"
+        if decision.execution_mode == ExecutionMode.LEARNING_ANSWER and isinstance(result, str) and result.strip():
+            return "learning_answer_already_executed"
 
         if decision.retrieval_policy != "required":
             return f"retrieval_policy={decision.retrieval_policy}"
@@ -1124,9 +1134,10 @@ class AgentService:
                 result = ""
 
         if not result or not isinstance(result, str) or not result.strip():
-            may_ground = route_state.decision.family is RouteFamily.LEARNING and (
-                route_state.decision.execution_mode is ExecutionMode.GROUNDED_GENERATION
-                or route_state.decision.retrieval_policy == "required"
+            may_ground = (
+                route_state.decision.family is RouteFamily.LEARNING
+                and route_state.decision.retrieval_policy == "required"
+                and route_state.decision.execution_mode is not ExecutionMode.LEARNING_ANSWER
             )
             if may_ground:
                 try:
@@ -1252,8 +1263,8 @@ class AgentService:
             logger.error("agent.stream_generate failed: %s", exc, exc_info=True)
             raise
 
-    def _iter_grounded_rag_response(self, route_state: RouteState) -> Iterator[str | dict[str, Any]]:
-        """Stream the common grounded-RAG route directly from the RAG model call."""
+    def _iter_learning_answer_response(self, route_state: RouteState) -> Iterator[str | dict[str, Any]]:
+        """Stream one bounded LearningAnswer retrieval/answer pass."""
         from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
         from ds_course_agent.tools._shared import _track_retrieval
         from ds_course_agent.tools.course_rag import (
@@ -1265,8 +1276,9 @@ class AgentService:
         )
 
         question = self._route_execution_query(route_state.context, route_state.decision)
+        decision = route_state.decision
 
-        trace_step("agent.branch", branch="grounded_rag_stream")
+        trace_step("agent.branch", branch="learning_answer_stream")
         trace_step("tool.invoke", tool="course_rag_tool", question=question)
 
         try:
@@ -1289,21 +1301,44 @@ class AgentService:
 
             if not result.has_results:
                 trace_step("tool.result", tool="course_rag_tool", status="no_results")
-                yield from self._yield_text_chunks(build_no_results_message())
+                if decision.retrieval_policy is RetrievalPolicy.OPTIONAL:
+                    turn_context = self._build_turn_system_context(route_state)
+                    style_context = "# Learning Answer Style\n" + learning_style_instruction(decision.style_hint)
+                    turn_context = "\n\n".join(part for part in (turn_context, style_context) if part)
+                    try:
+                        for chunk in self.direct_chat(
+                            route_state.context.original_query,
+                            route_state.chat_history,
+                            stream=True,
+                            turn_context=turn_context,
+                        ):
+                            if chunk:
+                                yield chunk
+                    except Exception as exc:
+                        trace_error("learning_answer.direct_fallback", exc)
+                        yield from self._yield_text_chunks(build_no_results_message())
+                else:
+                    yield from self._yield_text_chunks(build_no_results_message())
                 return
 
             yielded = False
             try:
+                answer_question = build_learning_answer_question(question, decision.style_hint)
                 with trace_span("tool.course_rag.answer_stream"):
-                    for chunk in service.stream_answer_with_context(question, result.formatted_context):
+                    for chunk in service.stream_answer_with_context(answer_question, result.formatted_context):
                         if chunk:
                             yielded = True
                             yield chunk
 
                 if not yielded:
-                    with trace_span("tool.course_rag.answer"):
-                        answer_result = service.answer_with_context(question, result.formatted_context)
-                    yield from self._yield_text_chunks(answer_result.answer)
+                    trace_step("tool.result", tool="course_rag_tool", status="degraded_empty_stream")
+                    yield from self._yield_text_chunks(
+                        build_extractive_rag_fallback(
+                            question,
+                            result.documents,
+                            error="empty_stream",
+                        )
+                    )
             except Exception as answer_exc:
                 trace_answer_degraded(answer_exc, mode="stream")
                 fallback = build_extractive_rag_fallback(
@@ -1320,6 +1355,22 @@ class AgentService:
             trace_step("tool.result", tool="course_rag_tool", status="ok")
         except Exception as exc:
             trace_error("tool.invoke", exc, tool="course_rag_tool")
+            if decision.retrieval_policy is RetrievalPolicy.OPTIONAL:
+                turn_context = self._build_turn_system_context(route_state)
+                style_context = "# Learning Answer Style\n" + learning_style_instruction(decision.style_hint)
+                turn_context = "\n\n".join(part for part in (turn_context, style_context) if part)
+                try:
+                    for chunk in self.direct_chat(
+                        route_state.context.original_query,
+                        route_state.chat_history,
+                        stream=True,
+                        turn_context=turn_context,
+                    ):
+                        if chunk:
+                            yield chunk
+                    return
+                except Exception as direct_exc:
+                    trace_error("learning_answer.direct_fallback", direct_exc)
             yield f"检索过程中发生错误：{exc}。请稍后重试。"
 
     def chat_with_history(
@@ -1414,7 +1465,7 @@ class AgentService:
                 tool="web_search_tool",
                 resuming=False,
             )
-        elif decision.execution_mode == ExecutionMode.GROUNDED_GENERATION:
+        elif decision.execution_mode == ExecutionMode.LEARNING_ANSWER:
             yield self._progress_event(
                 "retrieval",
                 self._tool_progress_label("course_rag_tool", "正在检索课程资料..."),

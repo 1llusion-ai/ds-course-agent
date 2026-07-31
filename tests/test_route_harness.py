@@ -37,12 +37,12 @@ class _FakeService:
         return SimpleNamespace(decision=self.decision)
 
 
-def test_route_harness_flags_unexpected_grounded_generation_as_unexpected_rag():
+def test_route_harness_flags_unexpected_learning_answer_as_unexpected_rag():
     service = _FakeService(
         RouteDecision(
             family=RouteFamily.LEARNING,
             intent=RouteIntent.CONCEPT_QA,
-            execution_mode=ExecutionMode.GROUNDED_GENERATION,
+            execution_mode=ExecutionMode.LEARNING_ANSWER,
             confidence=0.8,
             reasons=["课程相关知识问答"],
             retrieval_policy=RetrievalPolicy.REQUIRED,
@@ -59,7 +59,7 @@ def test_route_harness_flags_unexpected_grounded_generation_as_unexpected_rag():
             "expected_execution_mode": "direct_model",
             "expected_retrieval_policy": "optional",
             "expected_allowed_tools": [],
-            "disallowed_execution_modes": ["grounded_generation"],
+            "disallowed_execution_modes": ["learning_answer"],
         },
         student_id="student",
     )
@@ -67,7 +67,7 @@ def test_route_harness_flags_unexpected_grounded_generation_as_unexpected_rag():
     assert result["passed"] is False
     assert "expected_intent=code_explanation" in result["failures"]
     assert "expected_execution_mode=direct_model" in result["failures"]
-    assert "disallowed_execution_mode=grounded_generation" in result["failures"]
+    assert "disallowed_execution_mode=learning_answer" in result["failures"]
 
     report = build_route_report(
         metadata={"name": "unit"},
@@ -117,7 +117,7 @@ def test_route_harness_checks_exact_tool_allowlist_and_web_flag():
 def test_canonical_route_dataset_uses_new_contract_and_required_regressions():
     metadata, cases = load_route_cases(DEFAULT_CASE_PATH)
 
-    assert metadata["version"] == "3.0"
+    assert metadata["version"] == "4.0"
     assert len(cases) >= 119
     assert all("expected_family" in case for case in cases)
     assert all("expected_intent" in case for case in cases)
@@ -131,8 +131,8 @@ def test_canonical_route_dataset_uses_new_contract_and_required_regressions():
         "alias_loop_not_oop",
         "alias_oop_concept",
         "broad_task_classification",
-        "semantic_not_learning",
-        "semantic_clarification",
+        "ambiguous_learning",
+        "not_learning",
         "generic_code_001",
         "code_review_001",
         "python_exec_001",

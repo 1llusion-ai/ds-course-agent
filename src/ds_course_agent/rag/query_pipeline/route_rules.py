@@ -15,6 +15,7 @@ from .models import (
     RouteFamily,
     RouteIntent,
 )
+from .policy import learning_style_hint_for
 from .utils import is_datetime_request, is_schedule_request
 
 
@@ -33,8 +34,8 @@ class RouteRule:
 def build_route_rules(router: Any) -> tuple[RouteRule, ...]:
     """Build the deterministic fast-rule table.
 
-    Ambiguous fallthrough is resolved by ``QueryRouter``'s semantic learning
-    router rather than by a generic all-tools agent.
+    Ambiguous in-scope learning fallthrough uses the bounded LearningAnswer
+    handler rather than a semantic router or generic tool agent.
     """
 
     rules = [
@@ -80,10 +81,11 @@ def build_route_rules(router: Any) -> tuple[RouteRule, ...]:
         _bind(
             router,
             110,
-            "grounded_learning",
-            _match_grounded_learning,
-            _build_grounded_learning,
+            "learning_default",
+            _match_learning_default,
+            _build_learning_default,
         ),
+        _bind(router, 120, "clarification", _match_clarification, _build_clarification),
     ]
     return tuple(sorted(rules, key=lambda rule: rule.priority))
 
@@ -230,7 +232,7 @@ def _build_explicit_misconception(router: Any, context: QueryContext) -> RouteDe
         execution_mode=ExecutionMode.TEACHING_SKILL,
         confidence=0.89,
         reasons=router._get_misconception_reasons(context) + ["明确误认知信号"],
-        retrieval_policy=RetrievalPolicy.REQUIRED,
+        retrieval_policy=router._learning_retrieval_policy(context),
         executor_key="misconception-handling",
         enrichment=EnrichmentPlan(map_concepts=True, rewrite_query=True),
     )
@@ -292,22 +294,31 @@ def _build_personalized_explanation(router: Any, context: QueryContext) -> Route
     )
 
 
-def _match_grounded_learning(router: Any, context: QueryContext) -> bool:
-    return router._is_likely_course_question(context)
+def _match_learning_default(router: Any, context: QueryContext) -> bool:
+    return router._is_learning_signal(context)
 
 
-def _build_grounded_learning(router: Any, context: QueryContext) -> RouteDecision:
-    intent = RouteIntent.COMPARISON if "comparison" in context.detected_intents else RouteIntent.CONCEPT_QA
+def _build_learning_default(router: Any, context: QueryContext) -> RouteDecision:
+    intent = router._learning_intent(context)
     return RouteDecision(
         family=RouteFamily.LEARNING,
         intent=intent,
-        execution_mode=ExecutionMode.GROUNDED_GENERATION,
+        execution_mode=ExecutionMode.LEARNING_ANSWER,
         confidence=0.80,
-        reasons=["课程相关知识问答"],
+        reasons=["课程相关学习问题，使用统一学习回答路径"],
         retrieval_policy=RetrievalPolicy.REQUIRED,
         executor_key="course_rag",
         enrichment=EnrichmentPlan(map_concepts=True, rewrite_query=True, record_learning_event=True),
+        style_hint=learning_style_hint_for(context, intent),
     )
+
+
+def _match_clarification(router: Any, context: QueryContext) -> bool:
+    return router._needs_clarification(context)
+
+
+def _build_clarification(router: Any, context: QueryContext) -> RouteDecision:
+    return router._clarification_decision(context, "no_learning_signal")
 
 
 __all__ = ["RouteRule", "build_route_rules"]

@@ -300,6 +300,14 @@ _OFF_TOPIC_TERMS = (
     "旅游攻略",
 )
 
+_NON_TEACHING_META_TERMS = (
+    "任务分类",
+    "怎么做路由",
+    "semantic router",
+    "路由器怎么判断",
+    "你的loop",
+)
+
 _SPORTS_OR_CELEBRITY_TERMS = (
     "詹姆斯",
     "勒布朗",
@@ -395,6 +403,15 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
         lowered, _DATA_ANALYSIS_BRIDGE_TERMS
     )
 
+    if _contains_any(compact_lowered, _NON_TEACHING_META_TERMS):
+        return ScopeDecision(
+            "refuse",
+            "agent_meta_question",
+            0.92,
+            "question targets internal agent routing rather than course learning",
+            _scope_response(category="agent_meta_question"),
+        )
+
     # Data-analysis framing makes otherwise general-world subjects acceptable.
     if has_learning_signal or has_bridge_signal:
         return ScopeDecision(
@@ -444,6 +461,15 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
             0.90,
             "explicit off-topic keyword without data-science framing",
             _scope_response(category="off_topic_general"),
+        )
+
+    if ("推荐" in compact_lowered or "周末活动" in compact_lowered) and not has_learning_signal:
+        return ScopeDecision(
+            "refuse",
+            "general_recommendation",
+            0.88,
+            "general recommendation outside course scope",
+            _scope_response(category="general_recommendation"),
         )
 
     if web_search_requested and _matches_any(compact_lowered, _GENERAL_FACT_PATTERNS):
