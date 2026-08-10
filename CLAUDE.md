@@ -19,6 +19,8 @@ cd web && npm install
 python main.py build data/
 python main.py api --reload
 cd web && npm run dev
+bash scripts/wsl/start.sh   # 一键启动前后端 (WSL, 推荐)
+bash scripts/wsl/stop.sh    # 停止前后端
 
 python -m pytest -q
 PYTHONPATH=src python -c "import ds_course_agent"
