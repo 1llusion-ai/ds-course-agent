@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from ds_course_agent.rag.learner_state import LearnerStateSnapshot, LearnerStateSummary
+
 
 class RouteFamily(str, Enum):
     """用户请求所属的稳定产品域。"""
@@ -120,8 +122,8 @@ class QueryContext:
     rewrite_trace: QueryRewriteTrace | None = None
     fast_path: bool | None = None
 
-    # 学生画像快照
-    profile_snapshot: dict[str, Any] | None = None
+    # 路由只读取精简状态，完整学习状态保留在 RouteState。
+    learner_state_summary: LearnerStateSummary | None = None
 
     # 概念识别
     detected_concepts: list[DetectedConcept] = field(default_factory=list)
@@ -151,7 +153,7 @@ class EnrichmentPlan:
     """路由完成后需要执行的学习上下文富化步骤。"""
 
     map_concepts: bool = False
-    load_profile: bool = False
+    load_learner_state: bool = False
     rewrite_query: bool = False
     record_learning_event: bool = False
 
@@ -201,7 +203,7 @@ class RouteState:
     chat_history: list[Any]
     student_id: str
     session_id: str
-    profile: dict[str, Any] | None = None
+    learner_state: LearnerStateSnapshot | None = None
     matched_concepts: list[Any] = field(default_factory=list)
     skill_candidate_keys: set = field(default_factory=set)
     special_case_response: str | None = None

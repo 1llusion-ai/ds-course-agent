@@ -278,7 +278,7 @@ class QueryRouter:
             concepts = [c.concept_id for c in context.detected_concepts[:2]]
             reasons.append(f"识别到概念: {', '.join(concepts)}")
 
-        if context.profile_snapshot and context.profile_snapshot.get("weak_spots", 0) > 0:
+        if context.learner_state_summary and context.learner_state_summary.active_weak_spot_count > 0:
             reasons.append("学生画像存在薄弱点")
 
         return reasons
@@ -421,13 +421,8 @@ class QueryRouter:
 
     def _has_personalization_context(self, context: QueryContext) -> bool:
         """判断是否存在可用于个性化的画像上下文。"""
-        snapshot = context.profile_snapshot or {}
-        return bool(
-            snapshot.get("current_chapter")
-            or snapshot.get("recent_concepts")
-            or snapshot.get("weak_spots", 0)
-            or snapshot.get("pending_weak_spots", 0)
-        )
+        summary = context.learner_state_summary
+        return bool(summary and summary.has_personalization_context)
 
     def _is_judgement_question(self, query: str) -> bool:
         """判断是否是判断型问题。"""

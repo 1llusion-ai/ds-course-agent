@@ -249,7 +249,7 @@ def _build_learning_path(router: Any, context: QueryContext) -> RouteDecision:
         reasons=router._get_learning_path_reasons(context),
         retrieval_policy=RetrievalPolicy.OPTIONAL,
         executor_key="learning-path",
-        enrichment=EnrichmentPlan(map_concepts=True, load_profile=True),
+        enrichment=EnrichmentPlan(map_concepts=True, load_learner_state=True),
     )
 
 
@@ -285,7 +285,7 @@ def _build_personalized_explanation(router: Any, context: QueryContext) -> Route
         executor_key="personalized-explanation",
         enrichment=EnrichmentPlan(
             map_concepts=True,
-            load_profile=True,
+            load_learner_state=True,
             rewrite_query=True,
             record_learning_event=True,
         ),

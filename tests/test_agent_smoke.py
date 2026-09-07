@@ -126,7 +126,7 @@ class TestAgentServiceMock:
                 session_id=session_id,
                 history=history,
                 chat_history=[],
-                profile=None,
+                learner_state=None,
                 special_case_response=None,
                 context=context,
                 decision=decision,

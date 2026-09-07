@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from ds_course_agent.rag.profile_models import ProgressInfo, StudentProfile
+
 
 @patch("ds_course_agent.shared.history.get_history")
 @patch("ds_course_agent.rag.agent.map_question_to_concepts")
@@ -29,10 +31,9 @@ def test_chat_with_history_routes_to_learning_path_skill(
     ]
 
     mock_memory = MagicMock()
-    mock_memory.get_profile.return_value = SimpleNamespace(
-        progress=SimpleNamespace(current_chapter="第7章"),
-        recent_concepts={},
-        weak_spot_candidates=[],
+    mock_memory.get_profile.return_value = StudentProfile(
+        student_id="session_001",
+        progress=ProgressInfo(current_chapter="第7章"),
     )
     mock_get_memory_core.return_value = mock_memory
 

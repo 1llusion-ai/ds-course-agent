@@ -71,7 +71,7 @@ _LEARNING_POLICIES: dict[RouteIntent, LearningExecutionPolicy] = {
         ExecutionMode.TEACHING_SKILL,
         RetrievalPolicy.OPTIONAL,
         "learning-path",
-        EnrichmentPlan(map_concepts=True, load_profile=True),
+        EnrichmentPlan(map_concepts=True, load_learner_state=True),
     ),
     RouteIntent.MISCONCEPTION_REPAIR: LearningExecutionPolicy(
         ExecutionMode.TEACHING_SKILL,
@@ -85,7 +85,7 @@ _LEARNING_POLICIES: dict[RouteIntent, LearningExecutionPolicy] = {
         "personalized-explanation",
         EnrichmentPlan(
             map_concepts=True,
-            load_profile=True,
+            load_learner_state=True,
             rewrite_query=True,
             record_learning_event=True,
         ),
