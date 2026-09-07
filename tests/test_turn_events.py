@@ -21,6 +21,7 @@ from ds_course_agent.rag.turn_events import (
     TurnErrorEvent,
     TurnStartEvent,
 )
+from ds_course_agent.rag.turn_runner import iter_turn_events
 
 
 class _History:
@@ -74,7 +75,8 @@ def test_sync_turn_emits_typed_lifecycle_and_persists_once() -> None:
     service._execute_route = lambda route_state, stream=False: _result("同步回答")
 
     events = list(
-        service.iter_turn_events(
+        iter_turn_events(
+            service,
             "解释 PCA",
             "session-events",
             student_id="student-events",
@@ -92,15 +94,18 @@ def test_sync_turn_emits_typed_lifecycle_and_persists_once() -> None:
     assert [message.type for message in history.messages] == ["human", "ai"]
 
 
-def test_sync_and_stream_public_methods_consume_shared_executor() -> None:
+def test_sync_and_stream_public_methods_consume_shared_executor(monkeypatch) -> None:
+    import ds_course_agent.rag.agent as agent_module
+
     service = AgentService.__new__(AgentService)
     calls: list[bool] = []
 
-    def iter_events(user_input, session_id, *, student_id=None, web_search=False, stream):
+    def fake_iter_turn_events(agent, user_input, session_id, *, student_id=None, web_search=False, stream):
+        assert agent is service
         calls.append(stream)
         yield TurnEndEvent(stream_id="stream-events", result=_result("统一回答"))
 
-    service.iter_turn_events = iter_events
+    monkeypatch.setattr(agent_module, "iter_turn_events", fake_iter_turn_events)
 
     sync_result = service.chat_with_history("问题", "session-events", student_id="student-events")
     stream_events = list(service.stream_chat_with_history("问题", "session-events", student_id="student-events"))
@@ -145,7 +150,8 @@ def test_stream_failure_emits_turn_error_and_does_not_persist_assistant() -> Non
     events = []
     try:
         events.extend(
-            service.iter_turn_events(
+            iter_turn_events(
+                service,
                 "解释 PCA",
                 "session-events",
                 student_id="student-events",
