@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import html
 import re
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -103,18 +103,21 @@ def get_rag_service() -> RAGService:
     return _rag_service
 
 
-def begin_retrieval_trace():
-    existing = _retrieval_trace.get()
-    if existing is not None:
-        return None
+def begin_retrieval_trace() -> Token:
+    """Start an isolated retrieval scope that will merge into its parent."""
+
     return _retrieval_trace.set(RetrievalTrace())
 
 
-def end_retrieval_trace(token) -> RetrievalTrace:
-    if token is None:
-        return _retrieval_trace.get() or RetrievalTrace()
+def end_retrieval_trace(token: Token) -> RetrievalTrace:
+    """Close one retrieval scope and propagate its facts to the parent scope."""
+
     trace = _retrieval_trace.get() or RetrievalTrace()
     _retrieval_trace.reset(token)
+    parent = _retrieval_trace.get()
+    if parent is not None:
+        parent.used_retrieval = parent.used_retrieval or trace.used_retrieval
+        parent.sources = _merge_sources(parent.sources, trace.sources)
     return trace
 
 

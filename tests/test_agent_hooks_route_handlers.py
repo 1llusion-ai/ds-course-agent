@@ -9,6 +9,7 @@ from ds_course_agent.rag.query_pipeline import (
     QueryContext,
     RetrievalPolicy,
     RouteDecision,
+    RouteExecutionResult,
     RouteFamily,
     RouteIntent,
     RouteState,
@@ -60,6 +61,19 @@ def _web_route_state():
         intent=RouteIntent.WEB_RESEARCH,
         execution_mode=ExecutionMode.WEB_PIPELINE,
         retrieval_policy=RetrievalPolicy.DISABLED,
+    )
+
+
+def _execution_result(route_state, content, *, sources=None, used_retrieval=False, degraded=False):
+    decision = route_state.decision
+    return RouteExecutionResult(
+        content=content,
+        family=decision.family,
+        intent=decision.intent,
+        execution_mode=decision.execution_mode,
+        sources=list(sources or []),
+        used_retrieval=used_retrieval,
+        degraded=degraded,
     )
 
 
@@ -148,7 +162,12 @@ def test_execute_route_dispatches_to_route_handler_without_if_ladder():
 
         def execute(self, agent, route_state, *, stream=False):
             calls.append(("execute", stream))
-            return "handled by route handler"
+            return _execution_result(
+                route_state,
+                "handled by route handler",
+                sources=[{"reference": "handler source"}],
+                used_retrieval=True,
+            )
 
     service = AgentService.__new__(AgentService)
     service.route_handlers = [FakeHandler()]
@@ -168,7 +187,45 @@ def test_execute_route_dispatches_to_route_handler_without_if_ladder():
     assert result.family is RouteFamily.COURSE_SERVICE
     assert result.intent is RouteIntent.COURSE_SCHEDULE
     assert result.execution_mode is ExecutionMode.DETERMINISTIC_TOOL
+    assert result.sources == [{"reference": "handler source"}]
+    assert result.used_retrieval is True
     assert calls == [("can", "course_schedule"), ("execute", True)]
+
+
+def test_execute_route_does_not_force_second_retrieval_after_handler_retrieval():
+    from ds_course_agent.rag.agent import AgentService
+
+    state = _route_state(
+        intent=RouteIntent.CONCEPT_QA,
+        execution_mode=ExecutionMode.TOOL_AGENT,
+        retrieval_policy=RetrievalPolicy.REQUIRED,
+        allowed_tools=("course_rag_tool",),
+    )
+
+    class RetrievedHandler:
+        def can_handle(self, agent, route_state):
+            return True
+
+        def execute(self, agent, route_state, *, stream=False):
+            return _execution_result(
+                route_state,
+                "grounded answer",
+                sources=[{"reference": "《第1章》"}],
+                used_retrieval=True,
+            )
+
+    service = AgentService.__new__(AgentService)
+    service.route_handlers = [RetrievedHandler()]
+    service.hooks = HookManager([RetrievalGuardHook()])
+    service._maybe_force_grounded_answer = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("must not force a second retrieval")
+    )
+
+    result = service._execute_route(state)
+
+    assert result.content == "grounded answer"
+    assert result.sources == [{"reference": "《第1章》"}]
+    assert result.used_retrieval is True
 
 
 def test_stream_route_dispatches_to_route_handler_stream_contract():
@@ -249,7 +306,7 @@ def test_buffered_stream_handler_uses_selected_handler_without_second_dispatch()
 
         def execute(self, agent, route_state, *, stream=False):
             calls.append(("execute", stream))
-            return "buffered result"
+            return _execution_result(route_state, "buffered result")
 
     service = AgentService.__new__(AgentService)
     service.route_handlers = [FakeBufferedHandler()]
@@ -311,7 +368,9 @@ def test_web_search_route_handler_compacts_evidence_and_tracks_sources(monkeypat
     result = WebSearchRouteHandler().execute(service, _web_route_state(), stream=False)
     trace = end_retrieval_trace(token)
 
-    assert result == "联网回答 [1]"
+    assert result.content == "联网回答 [1]"
+    assert result.used_retrieval is True
+    assert result.sources[0]["url"] == "https://example.com/overfitting"
     assert captured["stream"] is False
     assert "外部资料摘要" in captured["turn_context"]
     assert "Overfitting overview" in captured["turn_context"]
@@ -340,8 +399,9 @@ def test_web_search_route_rejects_obvious_non_teaching_queries_without_search(mo
 
     result = WebSearchRouteHandler().execute(service, state, stream=False)
 
-    assert "本次不进行通用联网搜索" in result
-    assert "学习" in result
+    assert "本次不进行通用联网搜索" in result.content
+    assert result.degraded is False
+    assert "学习" in result.content
 
 
 def test_web_search_route_rejects_general_fact_queries_without_search(monkeypatch):
@@ -364,14 +424,15 @@ def test_web_search_route_rejects_general_fact_queries_without_search(monkeypatc
     state = _web_route_state()
     state.context.original_query = "詹姆斯多大了？"
     result = WebSearchRouteHandler().execute(service, state, stream=False)
-    assert "本次不进行通用联网搜索" in result
-    assert "体育数据科学项目" in result
+    assert "本次不进行通用联网搜索" in result.content
+    assert result.degraded is False
+    assert "体育数据科学项目" in result.content
 
     state = _web_route_state()
     state.context.original_query = "美国总统是谁？"
     result = WebSearchRouteHandler().execute(service, state, stream=False)
-    assert "本次不进行通用联网搜索" in result
-    assert "历任总统年龄" in result
+    assert "本次不进行通用联网搜索" in result.content
+    assert "历任总统年龄" in result.content
 
 
 def test_web_search_adaptive_plan_searches_broadly_but_reads_fewer_pages(monkeypatch):
@@ -644,7 +705,8 @@ def test_web_search_route_handler_adds_deep_fetch_context_and_metadata(monkeypat
     result = WebSearchRouteHandler().execute(service, _web_route_state(), stream=False)
     trace = end_retrieval_trace(token)
 
-    assert result == "联网深读回答 [1]"
+    assert result.content == "联网深读回答 [1]"
+    assert result.used_retrieval is True
     assert "# Web Page Reading Evidence" in captured["turn_context"]
     assert "网页全文证据" in captured["turn_context"]
     assert trace.sources[0]["fetched"] is True
@@ -708,7 +770,7 @@ def test_web_search_deep_fetch_keeps_original_source_number(monkeypatch):
 
     result = WebSearchRouteHandler().execute(service, _web_route_state(), stream=False)
 
-    assert result == "answer [2]"
+    assert result.content == "answer [2]"
     assert "[2] 网页：Second full page" in captured["turn_context"]
     assert "[1] 网页：Second full page" not in captured["turn_context"]
     assert "不要把所有句子都机械地标成 [1]" in captured["turn_context"]
@@ -723,7 +785,7 @@ def test_execute_route_hook_failure_still_reaches_empty_result_fallback(monkeypa
             return True
 
         def execute(self, agent, route_state, *, stream=False):
-            return ""
+            return _execution_result(route_state, "")
 
     class BrokenAfterLlmHook:
         def after_llm(self, state, result, **kwargs):
@@ -905,7 +967,8 @@ def test_tool_agent_route_uses_only_explicit_non_empty_allowlist():
     finally:
         query_pipeline.get_postprocessor = original
 
-    assert result == "tool answer"
+    assert result.content == "tool answer"
+    assert result.used_retrieval is False
     assert captured == {
         "allowed_tools": ["course_rag_tool"],
         "graph_agent": graph_agent,
@@ -945,7 +1008,10 @@ def test_skill_route_handler_dispatches_by_intent(intent, skill_attr):
     handler = SkillRouteHandler()
 
     assert handler.can_handle(agent, state) is True
-    assert handler.execute(agent, state) == f"{intent.value} answer"
+    result = handler.execute(agent, state)
+    assert result.content == f"{intent.value} answer"
+    assert result.family is state.decision.family
+    assert result.intent is intent
     assert calls
     if learner_state is not None:
         assert calls == [("什么是过拟合？", learner_state, [])]
@@ -1098,7 +1164,8 @@ def test_direct_model_route_passes_turn_context_without_graph_agent(monkeypatch)
 
     result = GenericAgentRouteHandler().execute(FakeAgent(), state, stream=False)
 
-    assert result == "answer"
+    assert result.content == "answer"
+    assert result.used_retrieval is False
     assert captured["turn_context"] == "turn profile context"
 
 
