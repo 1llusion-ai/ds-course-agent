@@ -21,6 +21,7 @@ from ds_course_agent.hooks.clarification import ClarificationDetectorHook
 from ds_course_agent.hooks.learning_event import LearningEventHook
 from ds_course_agent.hooks.retrieval_guard import RetrievalGuardHook
 from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
+from ds_course_agent.rag.learner_state import LearnerStateProvider, RuleBasedLearnerStateProvider
 from ds_course_agent.rag.memory_core import get_memory_core, record_event
 from ds_course_agent.rag.prompt import get_system_prompt
 from ds_course_agent.rag.query_pipeline import ExecutionMode, RouteExecutionResult, RouteFamily, RouteState
@@ -54,7 +55,7 @@ _AGENT_STREAM_ASSISTANT_TYPES = {"ai", "aimessagechunk"}
 class AgentService:
     """Single-agent teaching assistant service."""
 
-    def __init__(self):
+    def __init__(self, learner_state_provider: LearnerStateProvider | None = None):
         self.llm = get_chat_model()
         self.tool_registry = get_rag_tool_registry()
         self.tools = self.tool_registry.as_langchain_tools(exposed_only=True)
@@ -63,6 +64,7 @@ class AgentService:
         self.learning_event_hook = LearningEventHook(self.clarification_detector)
         self.hooks = HookManager([RetrievalGuardHook(), self.learning_event_hook])
         self.route_handlers = default_route_handlers()
+        self.learner_state_provider = learner_state_provider or RuleBasedLearnerStateProvider(get_memory_core)
 
         # Load skill executors after the core registry is initialized.
         self.skill_loader = get_skill_loader()
@@ -112,6 +114,15 @@ class AgentService:
             handlers = default_route_handlers()
             self.route_handlers = handlers
         return handlers
+
+    def _get_learner_state_provider(self) -> LearnerStateProvider:
+        """Return the configured learner-state provider."""
+
+        provider = getattr(self, "learner_state_provider", None)
+        if provider is None:
+            provider = RuleBasedLearnerStateProvider(get_memory_core)
+            self.learner_state_provider = provider
+        return provider
 
     def _select_route_handler(self, route_state: RouteState):
         """Return the first route handler that accepts the route state."""
@@ -789,9 +800,9 @@ class AgentService:
         """Build per-turn system context for the generic agent branch."""
 
         sections: list[str] = []
-        profile_summary = self._format_student_profile_for_prompt(route_state.profile)
-        if profile_summary:
-            sections.append(profile_summary)
+        learner_state_summary = self._format_learner_state_for_prompt(route_state.learner_state)
+        if learner_state_summary:
+            sections.append(learner_state_summary)
 
         skill_keys = sorted(route_state.skill_candidate_keys or [])
         if skill_keys:
@@ -816,15 +827,15 @@ class AgentService:
 
         return "\n\n".join(sections)
 
-    def _format_student_profile_for_prompt(self, profile) -> str:
-        """Render a compact natural-language student profile for LLM context."""
+    def _format_learner_state_for_prompt(self, learner_state) -> str:
+        """Render compact learner state for LLM context."""
 
-        if profile is None:
+        if learner_state is None:
             return ""
 
         lines: list[str] = []
 
-        progress = getattr(profile, "progress", None)
+        progress = learner_state.progress
         current_chapter = getattr(progress, "current_chapter", None)
         covered_chapters = list(getattr(progress, "covered_chapters", []) or [])
         if current_chapter:
@@ -832,7 +843,7 @@ class AgentService:
         if covered_chapters:
             lines.append("已覆盖章节：" + "、".join(map(str, covered_chapters[:6])))
 
-        recent_concepts = list((getattr(profile, "recent_concepts", {}) or {}).values())
+        recent_concepts = list(learner_state.recent_concepts.values())
         recent_concepts.sort(key=lambda item: getattr(item, "last_mentioned_at", 0) or 0, reverse=True)
         if recent_concepts:
             labels = []
@@ -848,8 +859,8 @@ class AgentService:
                 labels.append(label)
             lines.append("最近关注概念：" + "、".join(labels))
 
-        active_weak = list(getattr(profile, "weak_spot_candidates", []) or [])
-        pending_weak = list(getattr(profile, "pending_weak_spots", []) or [])
+        active_weak = list(learner_state.weak_spot_candidates)
+        pending_weak = list(learner_state.pending_weak_spots)
         if active_weak:
             labels = [getattr(item, "display_name", "") or getattr(item, "concept_id", "") for item in active_weak[:5]]
             lines.append("当前薄弱点：" + "、".join(filter(None, labels)))
@@ -861,8 +872,8 @@ class AgentService:
             return ""
 
         return (
-            "# Student Profile Context\n"
-            "以下是学生当前学习画像摘要，只用于调整讲解粒度和例子选择，不要逐字暴露内部标签：\n"
+            "# Learner State Context\n"
+            "以下是学生当前学习状态摘要，只用于调整讲解粒度和例子选择，不要逐字暴露内部标签：\n"
             + "\n".join(f"- {line}" for line in lines if line)
         )
 
@@ -1052,15 +1063,14 @@ class AgentService:
         ]
         return matched_concepts
 
-    def _load_learning_profile(self, context, student_id: str):
-        """Load a student profile only for profile-dependent learning intents."""
-        from ds_course_agent.rag.query_pipeline import get_preprocessor
+    def _load_learner_state(self, context, student_id: str):
+        """Load typed learner state only for profile-dependent learning intents."""
         from ds_course_agent.rag.query_trace import trace_span
 
         with trace_span("prepare.profile_load"):
-            profile = get_memory_core().get_profile(student_id)
-        context.profile_snapshot = get_preprocessor(enable_concept_detection=False)._build_profile_snapshot(profile)
-        return profile
+            learner_state = self._get_learner_state_provider().get_state(student_id)
+        context.learner_state_summary = learner_state.summary()
+        return learner_state
 
     def _rewrite_learning_query(self, context):
         """Rewrite a confirmed Learning query without influencing route selection."""
@@ -1081,7 +1091,7 @@ class AgentService:
         student_id: str,
         session_id: str,
         history,
-        profile,
+        learner_state,
         matched_concepts,
         skill_candidate_keys,
         special_case_response,
@@ -1091,7 +1101,7 @@ class AgentService:
 
         Replaces the former lightweight_state/full-path dual construction so all
         routes——fast-path included——produce the same field set. Empty enrichment
-        results (``profile=None``, ``matched_concepts=[]``) are passed through for
+        results (``learner_state=None``, ``matched_concepts=[]``) are passed through for
         fast-path turns that skipped enrichment.
         """
         return RouteState(
@@ -1101,7 +1111,7 @@ class AgentService:
             student_id=student_id,
             session_id=session_id,
             history=history,
-            profile=profile,
+            learner_state=learner_state,
             matched_concepts=matched_concepts or [],
             skill_candidate_keys=skill_candidate_keys or set(),
             special_case_response=special_case_response,

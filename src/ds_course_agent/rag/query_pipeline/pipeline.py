@@ -42,9 +42,9 @@ class _LazyEnricher:
         self._student_id = student_id
         self.skills_ran = False
         self.concepts_ran = False
-        self.profile_ran = False
+        self.learner_state_ran = False
         self.rewrite_ran = False
-        self.profile: Any = None
+        self.learner_state: Any = None
         self.matched_concepts: list = []
         self.skill_candidate_keys: set = set()
         self.rewrite_result: Any = None
@@ -52,7 +52,7 @@ class _LazyEnricher:
     @property
     def ran(self) -> bool:
         """Whether any enrichment stage has run (kept for observability callers)."""
-        return self.skills_ran or self.concepts_ran or self.profile_ran or self.rewrite_ran
+        return self.skills_ran or self.concepts_ran or self.learner_state_ran or self.rewrite_ran
 
     def ensure_skills(self) -> None:
         """Stage A: cheap keyword skill_select (no embedding). Memoized.
@@ -72,12 +72,12 @@ class _LazyEnricher:
         self.concepts_ran = True
         self.matched_concepts = self._agent._map_learning_concepts(self._context, self._user_input)
 
-    def ensure_profile(self) -> None:
+    def ensure_learner_state(self) -> None:
         """Load the student profile only for profile-dependent teaching intents."""
-        if self.profile_ran:
+        if self.learner_state_ran:
             return
-        self.profile_ran = True
-        self.profile = self._agent._load_learning_profile(self._context, self._student_id)
+        self.learner_state_ran = True
+        self.learner_state = self._agent._load_learner_state(self._context, self._student_id)
 
     def ensure_rewrite(self) -> None:
         """Rewrite contextual learning queries after concept mapping."""
@@ -92,8 +92,8 @@ class _LazyEnricher:
         """Execute a typed enrichment plan in dependency order."""
         if plan.map_concepts:
             self.ensure_concepts()
-        if plan.load_profile:
-            self.ensure_profile()
+        if plan.load_learner_state:
+            self.ensure_learner_state()
         if plan.rewrite_query:
             self.ensure_rewrite()
 
@@ -209,7 +209,7 @@ class QueryPipeline:
             student_id=student_id,
             session_id=session_id,
             history=history,
-            profile=enricher.profile,
+            learner_state=enricher.learner_state,
             matched_concepts=enricher.matched_concepts,
             skill_candidate_keys=enricher.skill_candidate_keys,
             special_case_response=context.special_case_response,

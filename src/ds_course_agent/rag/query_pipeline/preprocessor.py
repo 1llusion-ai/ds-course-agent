@@ -9,6 +9,8 @@ import re
 import threading
 from typing import Any
 
+from ds_course_agent.rag.learner_state import LearnerStateSnapshot
+
 from .models import DetectedConcept, QueryContext
 from .utils import collect_recent_context, is_contextual_followup
 
@@ -105,7 +107,7 @@ class QueryPreprocessor:
         session_id: str,
         student_id: str,
         chat_history: list[Any],
-        profile: Any | None = None,
+        learner_state: LearnerStateSnapshot | None = None,
     ) -> QueryContext:
         """
         处理查询，生成 QueryContext
@@ -115,7 +117,7 @@ class QueryPreprocessor:
             session_id: 会话ID
             student_id: 学生ID
             chat_history: 对话历史
-            profile: 学生画像
+            learner_state: 当前学习状态
 
         Returns:
             QueryContext
@@ -129,7 +131,7 @@ class QueryPreprocessor:
         # 3. 概念识别（可选，较重）
         detected_concepts = []
         if self.enable_concept_detection:
-            detected_concepts = self._detect_concepts(normalized_query, profile)
+            detected_concepts = self._detect_concepts(normalized_query, learner_state)
 
         # 4. 意图识别
         detected_intents = self._detect_intents(normalized_query)
@@ -144,8 +146,8 @@ class QueryPreprocessor:
         # 7. 判断是否是 follow-up
         is_followup = self._is_followup_question(normalized_query, chat_history)
 
-        # 8. 画像快照
-        profile_snapshot = self._build_profile_snapshot(profile)
+        # 8. 路由使用的学习状态摘要
+        learner_state_summary = learner_state.summary() if learner_state is not None else None
 
         return QueryContext(
             original_query=user_input,
@@ -155,7 +157,7 @@ class QueryPreprocessor:
             enriched_query=normalized_query,
             chat_history=chat_history,
             recent_context=recent_context,
-            profile_snapshot=profile_snapshot,
+            learner_state_summary=learner_state_summary,
             detected_concepts=detected_concepts,
             detected_intents=detected_intents,
             is_followup=is_followup,
@@ -400,26 +402,6 @@ class QueryPreprocessor:
     def _is_followup_question(self, query: str, chat_history: list[Any]) -> bool:
         """判断是否是后续问题"""
         return bool(chat_history) and is_contextual_followup(query, allow_short_question=False)
-
-    def _build_profile_snapshot(self, profile: Any | None) -> dict[str, Any] | None:
-        """构建画像快照"""
-        if profile is None:
-            return None
-
-        try:
-            return {
-                "student_id": getattr(profile, "student_id", "unknown"),
-                "recent_concepts": getattr(profile, "recent_concepts", {}),
-                "weak_spots": len(getattr(profile, "weak_spot_candidates", [])),
-                "pending_weak_spots": len(getattr(profile, "pending_weak_spots", [])),
-                "resolved_weak_spots": len(getattr(profile, "resolved_weak_spots", [])),
-                "current_chapter": getattr(profile.progress, "current_chapter", None)
-                if hasattr(profile, "progress")
-                else None,
-            }
-        except Exception as e:
-            logger.warning("构建画像快照失败: %s", e)
-            return None
 
 
 _preprocessor: QueryPreprocessor | None = None

@@ -43,7 +43,7 @@ def _route_state(
         session_id="session-hooks",
         history=None,
         chat_history=[],
-        profile=None,
+        learner_state=None,
         special_case_response=None,
         matched_concepts=[],
         skill_candidate_keys=set(),
@@ -1012,8 +1012,9 @@ def test_context_governor_compaction_failure_records_trace_error(monkeypatch):
     assert any(event["stage"] == "context_governor.compaction_failed" for event in trace["events"])
 
 
-def test_student_profile_context_is_natural_language_summary():
+def test_learner_state_context_is_natural_language_summary():
     from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.rag.learner_state import learner_state_from_profile
     from ds_course_agent.rag.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
 
     service = AgentService.__new__(AgentService)
@@ -1033,9 +1034,9 @@ def test_student_profile_context_is_natural_language_summary():
         )
     )
 
-    summary = service._format_student_profile_for_prompt(profile)
+    summary = service._format_learner_state_for_prompt(learner_state_from_profile(profile))
 
-    assert "Student Profile Context" in summary
+    assert "Learner State Context" in summary
     assert "最近关注概念：决策树（第6章）x3" in summary
     assert "当前薄弱点：特征选择" in summary
 

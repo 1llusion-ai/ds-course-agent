@@ -13,7 +13,6 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -291,10 +290,12 @@ class _OfflineRouteService:
         return []
 
     @staticmethod
-    def _load_learning_profile(context: Any, student_id: str) -> Any:
-        profile = SimpleNamespace(student_id=student_id)
-        context.profile_snapshot = {"student_id": student_id}
-        return profile
+    def _load_learner_state(context: Any, student_id: str) -> Any:
+        from ds_course_agent.rag.learner_state import LearnerStateSnapshot
+
+        learner_state = LearnerStateSnapshot(student_id=student_id)
+        context.learner_state_summary = learner_state.summary()
+        return learner_state
 
     @staticmethod
     def _rewrite_learning_query(context: Any) -> Any:
@@ -319,7 +320,7 @@ class _OfflineRouteService:
             student_id=kwargs["student_id"],
             session_id=kwargs["session_id"],
             history=kwargs["history"],
-            profile=kwargs["profile"],
+            learner_state=kwargs["learner_state"],
             matched_concepts=kwargs["matched_concepts"],
             skill_candidate_keys=kwargs["skill_candidate_keys"],
             special_case_response=kwargs["special_case_response"],

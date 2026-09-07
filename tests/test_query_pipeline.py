@@ -184,7 +184,7 @@ class TestFastRouter:
             policy=RetrievalPolicy.OPTIONAL,
         )
         assert decision.executor_key == "learning-path"
-        assert decision.enrichment.load_profile is True
+        assert decision.enrichment.load_learner_state is True
 
         misconception = _context("我以为 KMeans 是监督学习")
         misconception.skill_candidate_keys.add("misconception-handling")
@@ -208,7 +208,7 @@ class TestFastRouter:
             mode=ExecutionMode.TEACHING_SKILL,
             policy=RetrievalPolicy.REQUIRED,
         )
-        assert decision.enrichment.load_profile is True
+        assert decision.enrichment.load_learner_state is True
         assert semantic.calls == []
 
     def test_course_service_precedes_explicit_web_button(self):
@@ -437,7 +437,7 @@ class TestQueryPipelineEnrichment:
         assert calls == {"concepts": 0, "profile": 0}
         assert semantic.calls == []
 
-    def test_code_example_maps_concepts_after_routing_but_does_not_load_profile(self, monkeypatch):
+    def test_code_example_maps_concepts_after_routing_but_does_not_load_learner_state(self, monkeypatch):
         semantic = _SemanticRouterStub()
         service = _make_pipeline_service(monkeypatch, semantic)
         calls = {"concepts": 0, "profile": 0}
@@ -619,7 +619,7 @@ def test_grounded_rag_stream_emits_sources_before_answer_completion(monkeypatch)
         session_id="session-rag-sources",
         history=None,
         chat_history=[],
-        profile=None,
+        learner_state=None,
         special_case_response=None,
         matched_concepts=[],
         skill_candidate_keys=set(),
