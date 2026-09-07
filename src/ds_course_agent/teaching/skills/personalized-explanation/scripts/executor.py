@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 project_root = Path(__file__).parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
-from ds_course_agent.rag.memory_core import get_memory_core
-from ds_course_agent.rag.profile_models import StudentProfile
+from ds_course_agent.rag.learner_state import LearnerStateSnapshot
 from ds_course_agent.tools.course_rag import course_rag_tool
 
 
@@ -64,19 +64,21 @@ def _make_concept_proxy(concept_id: str, display_name: str, chapter: str, method
 class PersonalizedExplanationSkill:
     """Generate grounded explanations with light personalization."""
 
-    def execute(self, question: str, student_id: str, session_id: str) -> str:
-        del session_id
-
-        profile = get_memory_core().get_profile(student_id)
-        matched_concepts = map_question_to_concepts(question, top_k=3)
+    def execute(
+        self,
+        question: str,
+        learner_state: LearnerStateSnapshot,
+        matched_concepts: Sequence[Any],
+    ) -> str:
+        matched_concepts = list(matched_concepts)
 
         if not matched_concepts:
-            matched_concepts = self._infer_from_profile(question, profile)
+            matched_concepts = self._infer_from_learner_state(question, learner_state)
 
         if not matched_concepts:
             return self._fallback(question)
 
-        strategy = build_strategy(matched_concepts, profile, question)
+        strategy = build_strategy(matched_concepts, learner_state, question)
         knowledge = course_rag_tool.invoke(question)
         prompt = self._build_prompt(
             question=question,
@@ -88,11 +90,11 @@ class PersonalizedExplanationSkill:
         scaffold = self._build_scaffold(strategy, matched_concepts)
         return self._merge_response(response, scaffold)
 
-    def _infer_from_profile(self, question: str, profile: StudentProfile) -> list:
+    def _infer_from_learner_state(self, question: str, learner_state: LearnerStateSnapshot) -> list:
         inferred = []
         seen = set()
 
-        for concept in profile.weak_spot_candidates:
+        for concept in learner_state.weak_spot_candidates:
             if concept.display_name and concept.display_name in question and concept.concept_id not in seen:
                 inferred.append(
                     _make_concept_proxy(
@@ -105,7 +107,7 @@ class PersonalizedExplanationSkill:
                 )
                 seen.add(concept.concept_id)
 
-        for concept in profile.recent_concepts.values():
+        for concept in learner_state.recent_concepts.values():
             if concept.display_name and concept.display_name in question and concept.concept_id not in seen:
                 inferred.append(
                     _make_concept_proxy(
@@ -216,10 +218,18 @@ class PersonalizedExplanationSkill:
             return f"抱歉，检索课程资料时出了点问题，请稍后重试。({str(exc)[:80]})"
 
 
-def explain(question: str, student_id: str, session_id: str) -> str:
-    return PersonalizedExplanationSkill().execute(question, student_id, session_id)
+def explain(
+    question: str,
+    learner_state: LearnerStateSnapshot,
+    matched_concepts: Sequence[Any],
+) -> str:
+    return PersonalizedExplanationSkill().execute(question, learner_state, matched_concepts)
 
 
-def execute(question: str, student_id: str, session_id: str) -> str:
+def execute(
+    question: str,
+    learner_state: LearnerStateSnapshot,
+    matched_concepts: Sequence[Any],
+) -> str:
     """Claude-style skill entrypoint."""
-    return explain(question, student_id, session_id)
+    return explain(question, learner_state, matched_concepts)

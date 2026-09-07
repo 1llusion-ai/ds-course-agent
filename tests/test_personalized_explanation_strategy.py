@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from ds_course_agent.rag.learner_state import learner_state_from_profile
 from ds_course_agent.rag.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
 from ds_course_agent.rag.skill_system import SkillRegistry
 
@@ -48,7 +49,7 @@ def _build_profile() -> StudentProfile:
 
 def test_build_strategy_only_keeps_strong_related_context():
     strategy_module = SkillRegistry().load_module("personalized-explanation", "scripts/strategy.py")
-    profile = _build_profile()
+    learner_state = learner_state_from_profile(_build_profile())
 
     with patch("ds_course_agent.rag.knowledge_mapper.get_knowledge_mapper") as mock_get_mapper:
         mock_mapper = MagicMock()
@@ -65,7 +66,7 @@ def test_build_strategy_only_keeps_strong_related_context():
             )
         ]
 
-        strategy = strategy_module.build_strategy(matched, profile, "PCA是什么意思？")
+        strategy = strategy_module.build_strategy(matched, learner_state, "PCA是什么意思？")
 
     assert strategy.relevant_known_concepts == ["协方差矩阵"]
     assert strategy.relevant_weak_spots == ["协方差矩阵"]

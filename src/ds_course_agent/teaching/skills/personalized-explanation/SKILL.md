@@ -46,13 +46,13 @@ avoid_keywords:
 | 参数 | 类型 | 说明 |
 | --- | --- | --- |
 | question | string | 学生当前问题 |
-| student_id | string | 学生 ID，用于读取画像 |
-| session_id | string | 会话 ID |
+| learner_state | LearnerStateSnapshot | 路由阶段生成的本轮学习状态快照 |
+| matched_concepts | Sequence | 路由阶段生成的本轮概念匹配结果 |
 
 ## Steps
 
-1. 读取学生画像
-2. 识别当前问题涉及的知识点
+1. 使用路由阶段提供的学习状态
+2. 使用路由阶段提供的当前问题知识点
 3. 只保留和当前知识点强相关的旧知识点与薄弱点
 4. 检索教材内容
 5. 生成 grounded explanation
@@ -65,5 +65,5 @@ avoid_keywords:
 
 - `scripts/executor.py`
 - `scripts/strategy.py`
-- `references/profile_schema.md`
+- `references/learner_state_schema.md`
 - `references/event_types.md`

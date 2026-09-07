@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from ds_course_agent.rag.learner_state import LearnerStateSnapshot
 from ds_course_agent.rag.profile_models import ProgressInfo, StudentProfile
 
 
@@ -50,6 +51,11 @@ def test_chat_with_history_routes_to_learning_path_skill(
     assert result.content == "学习路线结果"
     assert result.intent.value == "learning_path"
     assert result.execution_mode.value == "teaching_skill"
-    service.learning_path_skill.assert_called_once_with("PCA怎么学比较好？", "session_001", "session_001")
+    service.learning_path_skill.assert_called_once()
+    skill_args = service.learning_path_skill.call_args.args
+    assert skill_args[0] == "PCA怎么学比较好？"
+    assert isinstance(skill_args[1], LearnerStateSnapshot)
+    assert skill_args[1].progress.current_chapter == "第7章"
+    assert skill_args[2] == mock_map_question.return_value
     service.explanation_skill.assert_not_called()
     service.chat.assert_not_called()

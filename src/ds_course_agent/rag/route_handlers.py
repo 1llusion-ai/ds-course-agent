@@ -1239,14 +1239,17 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
         trace_step("agent.branch", branch=branch)
         if intent == RouteIntent.MISCONCEPTION_REPAIR:
             return skill(question, student_id, session_id, "0")
-        if intent == RouteIntent.PERSONALIZED_EXPLANATION:
+        if intent in {RouteIntent.LEARNING_PATH, RouteIntent.PERSONALIZED_EXPLANATION}:
+            learner_state = route_state.learner_state
+            if learner_state is None:
+                raise RuntimeError(f"{intent.value} requires learner state enrichment")
             if matched_concepts:
                 logger.info(
                     "识别知识点: %s (%s)",
                     matched_concepts[0].concept_id,
                     matched_concepts[0].method,
                 )
-            return skill(question, student_id, session_id)
+            return skill(question, learner_state, matched_concepts)
         return skill(question, student_id, session_id)
 
 

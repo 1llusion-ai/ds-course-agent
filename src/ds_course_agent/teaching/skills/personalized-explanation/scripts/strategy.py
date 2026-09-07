@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Any
+
+from ds_course_agent.rag.learner_state import LearnerStateSnapshot
 
 
 @dataclass
@@ -25,7 +28,11 @@ def _dedupe_keep_order(items: Sequence[str]) -> list[str]:
     return result
 
 
-def build_strategy(matched_concepts: list, profile, question: str) -> TeachingStrategy:
+def build_strategy(
+    matched_concepts: list[Any],
+    learner_state: LearnerStateSnapshot,
+    question: str,
+) -> TeachingStrategy:
     """Build a focused teaching strategy for the current question."""
     del question
 
@@ -44,7 +51,7 @@ def build_strategy(matched_concepts: list, profile, question: str) -> TeachingSt
     related_name_set = set(_dedupe_keep_order(related_names))
 
     recent_concepts = sorted(
-        profile.recent_concepts.values(),
+        learner_state.recent_concepts.values(),
         key=lambda item: (item.last_mentioned_at or 0, item.mention_count),
         reverse=True,
     )
@@ -55,8 +62,8 @@ def build_strategy(matched_concepts: list, profile, question: str) -> TeachingSt
     ]
 
     weak_spots = sorted(
-        profile.weak_spot_candidates,
-        key=lambda item: (item.confidence, item.last_triggered_at or 0),
+        learner_state.weak_spot_candidates,
+        key=lambda item: (item.evidence_confidence, item.last_triggered_at or 0),
         reverse=True,
     )
     relevant_weak = [
