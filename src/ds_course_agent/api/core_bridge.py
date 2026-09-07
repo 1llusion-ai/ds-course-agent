@@ -132,6 +132,9 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
     final_family = None
     final_intent = None
     final_execution_mode = None
+    final_sources: list[dict] = []
+    final_used_retrieval = False
+    final_degraded = False
     stream_error: str | None = None
 
     try:
@@ -152,12 +155,17 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
                     yield event
                 elif event_type == "progress":
                     yield event
+                elif event_type == "error":
+                    stream_error = str(event.get("message") or event.get("error") or "流式调用失败")
                 elif event_type == "done":
                     final_content = event.get("content", "") or accumulated_content
                     stream_id = event.get("stream_id")
                     final_family = event.get("family")
                     final_intent = event.get("intent")
                     final_execution_mode = event.get("execution_mode")
+                    final_sources = list(event.get("sources") or [])
+                    final_used_retrieval = bool(event.get("used_retrieval", False))
+                    final_degraded = bool(event.get("degraded", False))
     except Exception as e:
         logger.error("流式Agent调用出错: %s", e, exc_info=True)
         trace_error("core_bridge.stream", e)
@@ -172,8 +180,9 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
     final_event = {
         "type": "final",
         "content": final_content,
-        "used_retrieval": trace.used_retrieval,
-        "sources": trace.sources,
+        "used_retrieval": final_used_retrieval or trace.used_retrieval,
+        "sources": final_sources or trace.sources,
+        "degraded": final_degraded,
         "query_trace": q_trace,
         "stream_id": stream_id,
         "family": final_family,
