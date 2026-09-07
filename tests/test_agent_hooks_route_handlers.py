@@ -3,6 +3,7 @@
 import pytest
 
 from ds_course_agent.hooks import HookManager, RetrievalGuardHook
+from ds_course_agent.rag.learner_state import LearnerStateSnapshot
 from ds_course_agent.rag.query_pipeline import (
     ExecutionMode,
     QueryContext,
@@ -21,6 +22,7 @@ def _route_state(
     execution_mode=ExecutionMode.DIRECT_MODEL,
     retrieval_policy=RetrievalPolicy.OPTIONAL,
     allowed_tools=(),
+    learner_state=None,
 ):
     context = QueryContext(
         original_query="什么是过拟合？",
@@ -43,7 +45,7 @@ def _route_state(
         session_id="session-hooks",
         history=None,
         chat_history=[],
-        learner_state=None,
+        learner_state=learner_state,
         special_case_response=None,
         matched_concepts=[],
         skill_candidate_keys=set(),
@@ -922,10 +924,16 @@ def test_tool_agent_route_uses_only_explicit_non_empty_allowlist():
 def test_skill_route_handler_dispatches_by_intent(intent, skill_attr):
     from ds_course_agent.rag.route_handlers import SkillRouteHandler
 
+    learner_state = (
+        LearnerStateSnapshot(student_id="student-hooks")
+        if intent in {RouteIntent.LEARNING_PATH, RouteIntent.PERSONALIZED_EXPLANATION}
+        else None
+    )
     state = _route_state(
         intent=intent,
         execution_mode=ExecutionMode.TEACHING_SKILL,
         retrieval_policy=RetrievalPolicy.OPTIONAL,
+        learner_state=learner_state,
     )
     calls = []
 
@@ -939,6 +947,20 @@ def test_skill_route_handler_dispatches_by_intent(intent, skill_attr):
     assert handler.can_handle(agent, state) is True
     assert handler.execute(agent, state) == f"{intent.value} answer"
     assert calls
+    if learner_state is not None:
+        assert calls == [("什么是过拟合？", learner_state, [])]
+
+
+@pytest.mark.parametrize("intent", [RouteIntent.LEARNING_PATH, RouteIntent.PERSONALIZED_EXPLANATION])
+def test_personalized_skill_routes_require_learner_state(intent):
+    from ds_course_agent.rag.route_handlers import SkillRouteHandler
+
+    state = _route_state(intent=intent, execution_mode=ExecutionMode.TEACHING_SKILL)
+    skill_attr = SkillRouteHandler._ROUTES[intent][0]
+    agent = type("FakeAgent", (), {skill_attr: staticmethod(lambda *_args: "unexpected")})()
+
+    with pytest.raises(RuntimeError, match=f"{intent.value} requires learner state enrichment"):
+        SkillRouteHandler().execute(agent, state)
 
 
 def test_agent_stream_messages_accepts_langgraph_model_node():

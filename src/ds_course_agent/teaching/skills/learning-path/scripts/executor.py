@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 project_root = Path(__file__).parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from ds_course_agent.rag.knowledge_mapper import get_knowledge_mapper, map_question_to_concepts
-from ds_course_agent.rag.memory_core import get_memory_core
+from ds_course_agent.rag.knowledge_mapper import get_knowledge_mapper
+from ds_course_agent.rag.learner_state import LearnerStateSnapshot
 
 
 def _load_local_module(filename: str, module_suffix: str):
@@ -34,17 +36,18 @@ build_learning_path_plan = _planner_module.build_learning_path_plan
 class LearningPathSkill:
     """Generate actionable learning paths for course questions."""
 
-    def execute(self, question: str, student_id: str, session_id: str) -> str:
-        del session_id
-
-        profile = get_memory_core().get_profile(student_id)
-        matched_concepts = map_question_to_concepts(question, top_k=3)
+    def execute(
+        self,
+        question: str,
+        learner_state: LearnerStateSnapshot,
+        matched_concepts: Sequence[Any],
+    ) -> str:
         mapper = get_knowledge_mapper()
 
         plan = build_learning_path_plan(
             question=question,
             matched_concepts=matched_concepts,
-            profile=profile,
+            learner_state=learner_state,
             mapper=mapper,
         )
         return self._render_plan(plan)
@@ -96,10 +99,18 @@ class LearningPathSkill:
         return "\n".join(lines).strip()
 
 
-def recommend_learning_path(question: str, student_id: str, session_id: str) -> str:
-    return LearningPathSkill().execute(question, student_id, session_id)
+def recommend_learning_path(
+    question: str,
+    learner_state: LearnerStateSnapshot,
+    matched_concepts: Sequence[Any],
+) -> str:
+    return LearningPathSkill().execute(question, learner_state, matched_concepts)
 
 
-def execute(question: str, student_id: str, session_id: str) -> str:
+def execute(
+    question: str,
+    learner_state: LearnerStateSnapshot,
+    matched_concepts: Sequence[Any],
+) -> str:
     """Claude-style skill entrypoint."""
-    return recommend_learning_path(question, student_id, session_id)
+    return recommend_learning_path(question, learner_state, matched_concepts)

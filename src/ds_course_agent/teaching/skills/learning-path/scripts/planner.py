@@ -5,6 +5,9 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from typing import Any
+
+from ds_course_agent.rag.learner_state import LearnerStateSnapshot
 
 
 @dataclass
@@ -46,19 +49,19 @@ def _chapter_number(chapter: str | None) -> int | None:
     return int(match.group(1))
 
 
-def _pick_recent_focuses(profile, limit: int = 3) -> list[str]:
+def _pick_recent_focuses(learner_state: LearnerStateSnapshot, limit: int = 3) -> list[str]:
     concepts = sorted(
-        profile.recent_concepts.values(),
+        learner_state.recent_concepts.values(),
         key=lambda item: (item.last_mentioned_at or 0, item.mention_count),
         reverse=True,
     )
     return [item.display_name for item in concepts[:limit] if item.display_name]
 
 
-def _pick_active_weak_spots(profile, limit: int = 3) -> list[str]:
+def _pick_active_weak_spots(learner_state: LearnerStateSnapshot, limit: int = 3) -> list[str]:
     spots = sorted(
-        profile.weak_spot_candidates,
-        key=lambda item: (item.confidence, item.last_triggered_at or 0),
+        learner_state.weak_spot_candidates,
+        key=lambda item: (item.evidence_confidence, item.last_triggered_at or 0),
         reverse=True,
     )
     return [item.display_name for item in spots[:limit] if item.display_name]
@@ -102,13 +105,18 @@ def _related_concepts(mapper, matched_concepts: Sequence, limit: int = 4) -> lis
     return unique[:limit]
 
 
-def build_learning_path_plan(question: str, matched_concepts: Sequence, profile, mapper) -> LearningPathPlan:
+def build_learning_path_plan(
+    question: str,
+    matched_concepts: Sequence[Any],
+    learner_state: LearnerStateSnapshot,
+    mapper: Any,
+) -> LearningPathPlan:
     del question
 
-    recent_focuses = _pick_recent_focuses(profile)
-    weak_spots = _pick_active_weak_spots(profile)
+    recent_focuses = _pick_recent_focuses(learner_state)
+    weak_spots = _pick_active_weak_spots(learner_state)
     targets = _target_names(matched_concepts)
-    current_chapter = profile.progress.current_chapter or None
+    current_chapter = learner_state.progress.current_chapter or None
     related = _related_concepts(mapper, matched_concepts)
 
     primary_target_chapter = (

@@ -88,6 +88,16 @@ pi-agent 值得借鉴的不是 TypeScript 目录本身，而是职责分离：
 所有 `RouteState` 测试构造器和 `benchmarks/route_harness.py` 已迁移到新契约。
 残缺的 `SimpleNamespace` 画像测试桩已替换为真实 `StudentProfile`，生产代码没有为测试桩增加兼容特判。
 
+### 3.5 Teaching skills 使用同一 turn 状态
+
+`learning-path` 和 `personalized-explanation` 已删除对 `MemoryCore` 与概念映射器的二次调用。
+`SkillRouteHandler` 现在把 `RouteState.learner_state` 和 `RouteState.matched_concepts` 显式传给 skill：
+
+- 同一 turn 只有一份学习状态事实源。
+- 同一 turn 只执行一次概念映射。
+- skill 缺少 learner state 时明确失败，不静默回退读取旧画像。
+- planner 和 strategy 直接消费 `LearnerStateSnapshot`，并使用 `evidence_confidence` 的正确语义。
+
 ## 4. 验证结果
 
 ```bash
@@ -121,7 +131,6 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 
 ## 5. 当前边界和未完成项
 
-- 教学 skills 仍直接调用 `get_memory_core()` 并消费 `StudentProfile`，尚未统一使用 `LearnerStateProvider`。
 - `RouteHandler.execute()` 的声明结果仍偏弱，来源、检索使用情况和降级状态没有完全在 handler 边界产生。
 - 同步和流式执行仍有两种返回形态，部分路径使用字符串，部分路径使用事件字典。
 - `rag/agent.py`、`rag/route_handlers.py`、`api/routers/chat.py` 仍然过大，需要按职责拆分。
@@ -134,9 +143,9 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 
 每一项应作为独立提交，完成定向测试、路由 harness 和必要的全量测试后再进入下一项。
 
-### P1：Teaching skills 改用 LearnerStateProvider
+### P1：Teaching skills 改用 LearnerStateProvider（已完成）
 
-目标：`learning-path`、`personalized-explanation` 等 skill 不再直接依赖 `MemoryCore`。
+结果：`learning-path`、`personalized-explanation` 已不再直接依赖 `MemoryCore`，并复用路由阶段的概念结果。
 
 实施原则：
 
@@ -145,7 +154,7 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 - planner/strategy 仅消费它们真正需要的字段。
 - 增加 provider 替换测试，为 MetaMonitor 接入做准备。
 
-建议提交：`refactor: route teaching skills through learner state provider`
+提交目标：`refactor: route teaching skills through learner state provider`
 
 ### P2：RouteHandler 返回完整类型化结果
 
@@ -230,10 +239,12 @@ git log -1 --oneline
 git status --short
 ```
 
-期望代码起点为 `0b153f3`，工作区除用户自己的 `cw3458.html` 外应干净。下一步从 P1 开始，先审计：
+学习者状态基础提交为 `0b153f3`。工作区除用户自己的 `cw3458.html` 外应干净。下一步从 P2 开始，先审计：
 
 ```bash
-rg -n "get_memory_core|StudentProfile|profile" src/ds_course_agent/teaching
+rg -n "class .*RouteHandler|def execute|RouteExecutionResult|retrieval_trace" \
+  src/ds_course_agent/rag/route_handlers.py \
+  src/ds_course_agent/rag/agent.py
 ```
 
 然后按 `AGENTS.md` 的测试门槛完成一个独立提交。

@@ -46,13 +46,13 @@ avoid_keywords:
 | 参数 | 类型 | 说明 |
 | --- | --- | --- |
 | question | string | 学生当前问题 |
-| student_id | string | 学生 ID，用于读取画像 |
-| session_id | string | 会话 ID |
+| learner_state | LearnerStateSnapshot | 路由阶段生成的本轮学习状态快照 |
+| matched_concepts | Sequence | 路由阶段生成的本轮概念匹配结果 |
 
 ## Steps
 
-1. 读取当前画像
-2. 识别本轮核心知识点
+1. 使用路由阶段提供的学习状态
+2. 使用路由阶段提供的本轮核心知识点
 3. 根据薄弱程度、知识点前后关系和章节顺序计算优先级
 4. 输出可执行的学习路线
 

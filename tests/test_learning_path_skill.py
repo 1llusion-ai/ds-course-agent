@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from ds_course_agent.rag.learner_state import learner_state_from_profile
 from ds_course_agent.rag.profile_models import ConceptFocus, ProgressInfo, StudentProfile, WeakSpotCandidate
 from ds_course_agent.rag.skill_system import SkillRegistry
 
@@ -31,33 +32,30 @@ def _build_profile() -> StudentProfile:
 
 def test_learning_path_skill_builds_targeted_plan():
     module = SkillRegistry().load_module("learning-path")
-    profile = _build_profile()
+    learner_state = learner_state_from_profile(_build_profile())
+    matched_concepts = [
+        SimpleNamespace(
+            concept_id="pca",
+            display_name="PCA",
+            chapter="第7章",
+            method="exact_alias",
+            score=0.93,
+        )
+    ]
 
     with (
-        patch.object(module, "get_memory_core") as mock_get_memory_core,
-        patch.object(module, "map_question_to_concepts") as mock_map_question,
         patch.object(module, "get_knowledge_mapper") as mock_get_mapper,
     ):
-        mock_memory = MagicMock()
-        mock_memory.get_profile.return_value = profile
-        mock_get_memory_core.return_value = mock_memory
-
-        mock_map_question.return_value = [
-            SimpleNamespace(
-                concept_id="pca",
-                display_name="PCA",
-                chapter="第7章",
-                method="exact_alias",
-                score=0.93,
-            )
-        ]
-
         mock_mapper = MagicMock()
         mock_mapper.get_related_concepts.return_value = ["协方差矩阵", "特征值", "降维"]
         mock_mapper.graph.concepts = {}
         mock_get_mapper.return_value = mock_mapper
 
-        result = module.LearningPathSkill().execute("按我现在的情况，PCA怎么学比较好？", "student_001", "session_001")
+        result = module.LearningPathSkill().execute(
+            "按我现在的情况，PCA怎么学比较好？",
+            learner_state,
+            matched_concepts,
+        )
 
     assert "PCA" in result
     assert "建议优先级" in result
@@ -67,23 +65,21 @@ def test_learning_path_skill_builds_targeted_plan():
 
 def test_learning_path_skill_uses_profile_when_no_concept_match():
     module = SkillRegistry().load_module("learning-path")
-    profile = _build_profile()
+    learner_state = learner_state_from_profile(_build_profile())
 
     with (
-        patch.object(module, "get_memory_core") as mock_get_memory_core,
-        patch.object(module, "map_question_to_concepts", return_value=[]),
         patch.object(module, "get_knowledge_mapper") as mock_get_mapper,
     ):
-        mock_memory = MagicMock()
-        mock_memory.get_profile.return_value = profile
-        mock_get_memory_core.return_value = mock_memory
-
         mock_mapper = MagicMock()
         mock_mapper.get_related_concepts.return_value = []
         mock_mapper.graph.concepts = {}
         mock_get_mapper.return_value = mock_mapper
 
-        result = module.LearningPathSkill().execute("帮我安排一下接下来的复习计划", "student_001", "session_001")
+        result = module.LearningPathSkill().execute(
+            "帮我安排一下接下来的复习计划",
+            learner_state,
+            [],
+        )
 
     assert "过拟合" in result
     assert "推荐路线" in result
