@@ -14,6 +14,7 @@ from ds_course_agent.rag.query_pipeline import (
     RouteIntent,
     RouteState,
 )
+from ds_course_agent.rag.turn_events import ToolEndEvent, ToolStartEvent
 
 
 def _route_state(
@@ -639,19 +640,19 @@ def test_web_search_route_handler_stream_emits_detailed_progress_with_stream_id(
     state.stream_id = "stream-1"
 
     chunks = list(WebSearchRouteHandler().stream_execute(service, state))
-    progress_events = [item for item in chunks if isinstance(item, dict) and item.get("type") == "progress"]
+    progress_events = [item for item in chunks if isinstance(item, (ToolStartEvent, ToolEndEvent))]
     text = "".join(item for item in chunks if isinstance(item, str))
-    phases = [item["phase"] for item in progress_events]
+    phases = [item.phase for item in progress_events]
 
     assert text == "answer"
     assert "web_search_start" in phases
     assert "web_search_results" in phases
     assert "web_fetch_page_done" in phases
     assert "web_answer_start" in phases
-    result_event = next(item for item in progress_events if item["phase"] == "web_search_results")
-    assert result_event["details"]["found_count"] == 1
-    fetch_event = next(item for item in progress_events if item["phase"] == "web_fetch_page_done")
-    assert fetch_event["details"]["domain"] == "example.com"
+    result_event = next(item for item in progress_events if item.phase == "web_search_results")
+    assert result_event.details["found_count"] == 1
+    fetch_event = next(item for item in progress_events if item.phase == "web_fetch_page_done")
+    assert fetch_event.details["domain"] == "example.com"
 
 
 def test_web_search_route_handler_adds_deep_fetch_context_and_metadata(monkeypatch):

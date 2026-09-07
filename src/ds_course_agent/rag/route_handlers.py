@@ -20,6 +20,7 @@ from ds_course_agent.rag.taxonomy import (
     domain_matches,
     web_query_traits,
 )
+from ds_course_agent.rag.turn_events import ToolEndEvent, ToolStartEvent, TurnEvent
 from ds_course_agent.shared.config_utils import config_bool, config_float, config_int
 from ds_course_agent.shared.error_response import truncate_error
 from ds_course_agent.tools._shared import RetrievalTrace, begin_retrieval_trace, end_retrieval_trace
@@ -65,7 +66,7 @@ class RouteHandler(Protocol):
 
     def can_handle(self, agent: Any, route_state: RouteState) -> bool: ...
     def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> RouteExecutionResult: ...
-    def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[Any]: ...
+    def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str | TurnEvent]: ...
 
 
 class BufferedRouteHandlerMixin:
@@ -523,26 +524,21 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         tool: str | None = None,
         details: dict[str, Any] | None = None,
         **metadata: Any,
-    ) -> dict[str, Any] | None:
+    ) -> ToolStartEvent | ToolEndEvent | None:
         stream_id = route_state.stream_id
         if not stream_id:
             return None
-        event: dict[str, Any] = {
-            "type": "progress",
-            "phase": phase,
-            "message": message,
-            "stream_id": stream_id,
-            "family": route_state.decision.family.value,
-            "intent": route_state.decision.intent.value,
-            "execution_mode": route_state.decision.execution_mode.value,
-            "resuming": False,
-        }
-        if tool:
-            event["tool"] = tool
-        if details is not None:
-            event["details"] = details
-        event.update(metadata)
-        return event
+        event_details = dict(details or {})
+        event_details.update(metadata)
+        event_type = ToolStartEvent if phase.endswith("_start") else ToolEndEvent
+        return event_type(
+            stream_id=stream_id,
+            tool=tool or "web_search_tool",
+            phase=phase,
+            message=message,
+            details=event_details or None,
+            **({"failed": True} if event_type is ToolEndEvent and phase.endswith("_error") else {}),
+        )
 
     def _choose_chat_fn(self, agent: Any):
         direct_chat = getattr(agent, "direct_chat", None)
@@ -906,7 +902,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
                                 if event:
                                     yielded_events.append(event)
 
-                        yielded_events: list[dict[str, Any]] = []
+                        yielded_events: list[TurnEvent] = []
                         executor = ThreadPoolExecutor(max_workers=max_fetch_workers)
                         try:
                             while (
@@ -1030,7 +1026,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             "fetch_pages": fetch_pages,
         }
 
-    def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[Any]:
+    def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str | TurnEvent]:
         from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
         from ds_course_agent.tools._shared import _track_retrieval
 

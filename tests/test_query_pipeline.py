@@ -604,6 +604,7 @@ def test_grounded_rag_stream_emits_sources_before_answer_completion(monkeypatch)
 
     from ds_course_agent.rag.agent import AgentService
     from ds_course_agent.rag.query_pipeline import RouteState
+    from ds_course_agent.rag.turn_events import RetrievalEndEvent
 
     service = object.__new__(AgentService)
     context = QueryContext(
@@ -656,12 +657,9 @@ def test_grounded_rag_stream_emits_sources_before_answer_completion(monkeypatch)
 
     events = list(service._iter_grounded_rag_response(state))
 
-    assert events[0]["type"] == "progress"
-    assert events[0]["phase"] == "retrieval_sources"
-    assert events[0]["family"] == "learning"
-    assert events[0]["intent"] == "concept_qa"
-    assert events[0]["execution_mode"] == "grounded_generation"
-    assert events[0]["details"]["sources"] == [{"reference": "course.pdf"}]
+    assert isinstance(events[0], RetrievalEndEvent)
+    assert events[0].phase == "retrieval_sources"
+    assert list(events[0].sources) == [{"reference": "course.pdf"}]
     assert events[1] == "课程回答"
 
 
