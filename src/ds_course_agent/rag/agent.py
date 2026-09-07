@@ -10,6 +10,7 @@ import re
 import time
 import uuid
 from collections.abc import Iterator, Mapping
+from dataclasses import replace
 from typing import Any
 
 from langchain.agents import create_agent
@@ -1118,22 +1119,34 @@ class AgentService:
             stream_id=stream_id,
         )
 
-    def _finalize_route_result(self, route_state: RouteState, result, *, stream: bool = False) -> str:
+    def _finalize_route_result(
+        self,
+        route_state: RouteState,
+        result: RouteExecutionResult,
+        *,
+        stream: bool = False,
+    ) -> RouteExecutionResult:
         """Apply route-level hooks and empty-result fallback to a handler result."""
         from ds_course_agent.rag.query_trace import trace_error
+        from ds_course_agent.tools._shared import _track_retrieval, begin_retrieval_trace, end_retrieval_trace
 
         user_input = route_state.context.original_query
         chat_history = route_state.chat_history
+        content = result.content
+        degraded = result.degraded
+        token = begin_retrieval_trace()
+        _track_retrieval(result.sources, used=result.used_retrieval)
 
         try:
-            result = self._get_hooks().after_llm(route_state, result, agent=self, stream=stream)
+            content = self._get_hooks().after_llm(route_state, content, agent=self, stream=stream)
         except Exception as e:
             trace_error("hook.after_llm", e)
             logger.error("after_llm hook failed: %s", e, exc_info=True)
-            if result is None:
-                result = ""
+            if content is None:
+                content = ""
 
-        if not result or not isinstance(result, str) or not result.strip():
+        if not content or not isinstance(content, str) or not content.strip():
+            degraded = True
             may_ground = route_state.decision.family is RouteFamily.LEARNING and (
                 route_state.decision.execution_mode is ExecutionMode.GROUNDED_GENERATION
                 or route_state.decision.retrieval_policy == "required"
@@ -1145,27 +1158,44 @@ class AgentService:
                     fallback_query = build_grounded_query_from_history(user_input, chat_history)
                     fallback = course_rag_tool.invoke(fallback_query)
                     if fallback and fallback.strip() and fallback != "无相关资料":
-                        result = f"{fallback}\n\n[注：使用基础检索模式回答]"
+                        content = f"{fallback}\n\n[注：使用基础检索模式回答]"
                     else:
-                        result = self._build_error_response(
+                        content = self._build_error_response(
                             "无法生成回答",
                             "抱歉，课程资料中暂时没有找到足够内容，或回答服务暂时不可用。",
                             is_retryable=True,
                         )
                 except Exception as e:
-                    result = self._build_error_response(
+                    content = self._build_error_response(
                         "服务暂时不可用",
                         f"生成回答时遇到错误，请稍后重试。\n({str(e)[:80]})",
                         is_retryable=True,
                     )
             else:
-                result = self._build_error_response(
+                content = self._build_error_response(
                     "无法生成回答",
                     "本次请求未能生成有效回复，请补充更具体的信息后重试。",
                     is_retryable=True,
                 )
 
-        return result
+        retrieval = end_retrieval_trace(token)
+        sources = list(result.sources)
+        seen = {
+            item.get("url") or item.get("href") or item.get("reference") for item in sources if isinstance(item, dict)
+        }
+        for item in retrieval.sources:
+            key = item.get("url") or item.get("href") or item.get("reference")
+            if key and key not in seen:
+                sources.append(dict(item))
+                seen.add(key)
+
+        return replace(
+            result,
+            content=content,
+            sources=sources,
+            used_retrieval=result.used_retrieval or retrieval.used_retrieval,
+            degraded=degraded,
+        )
 
     def _observe_stream_end(self, route_state: RouteState, result: str, *, stream: bool = True) -> None:
         """Run observational stream-end hooks after direct streaming completes.
@@ -1199,10 +1229,15 @@ class AgentService:
             stage = "agent.stream_generate" if stream else "agent.generate"
             trace_error(stage, e)
             logger.error("%s failed: %s", stage, e, exc_info=stream)
-            result = ""
+            result = RouteExecutionResult(
+                content="",
+                family=route_state.decision.family,
+                intent=route_state.decision.intent,
+                execution_mode=route_state.decision.execution_mode,
+                degraded=True,
+            )
 
-        content = self._finalize_route_result(route_state, result, stream=stream)
-        return self._build_route_execution_result(route_state, content)
+        return self._finalize_route_result(route_state, result, stream=stream)
 
     def _execute_route(self, route_state: RouteState, stream: bool = False) -> RouteExecutionResult:
         """按统一 RouteDecision 执行回答；sync/stream 共享此执行核心。"""
@@ -1214,40 +1249,16 @@ class AgentService:
             stage = "agent.stream_generate" if stream else "agent.generate"
             trace_error(stage, e)
             logger.error("%s failed: %s", stage, e, exc_info=stream)
-            content = self._finalize_route_result(route_state, "", stream=stream)
-            return self._build_route_execution_result(route_state, content, degraded=True)
+            failed_result = RouteExecutionResult(
+                content="",
+                family=route_state.decision.family,
+                intent=route_state.decision.intent,
+                execution_mode=route_state.decision.execution_mode,
+                degraded=True,
+            )
+            return self._finalize_route_result(route_state, failed_result, stream=stream)
 
         return self._execute_selected_route_handler(handler, route_state, stream=stream)
-
-    def _build_route_execution_result(
-        self,
-        route_state: RouteState,
-        content: str,
-        *,
-        degraded: bool = False,
-    ) -> RouteExecutionResult:
-        """Build the typed handler-to-API result contract."""
-        sources: list[dict[str, Any]] = []
-        used_retrieval = False
-        try:
-            from ds_course_agent.tools.course_rag import get_retrieval_trace
-
-            retrieval_trace = get_retrieval_trace()
-            sources = list(retrieval_trace.sources or [])
-            used_retrieval = bool(retrieval_trace.used_retrieval)
-        except Exception:
-            pass
-
-        decision = route_state.decision
-        return RouteExecutionResult(
-            content=content,
-            family=decision.family,
-            intent=decision.intent,
-            execution_mode=decision.execution_mode,
-            sources=sources,
-            used_retrieval=used_retrieval,
-            degraded=degraded,
-        )
 
     def _iter_route_response(self, route_state: RouteState) -> Iterator[str]:
         """Delegate streaming route execution to the selected RouteHandler."""

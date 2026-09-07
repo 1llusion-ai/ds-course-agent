@@ -9,10 +9,10 @@ skill executor contracts.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
-from typing import Any, Protocol
+from collections.abc import Callable, Iterator
+from typing import Any, Protocol, TypeVar
 
-from ds_course_agent.rag.query_pipeline import ExecutionMode, RouteIntent, RouteState
+from ds_course_agent.rag.query_pipeline import ExecutionMode, RouteExecutionResult, RouteIntent, RouteState
 from ds_course_agent.rag.taxonomy import (
     LOW_SUCCESS_FETCH_DOMAINS,
     RELIABLE_WEB_DOMAINS,
@@ -22,15 +22,49 @@ from ds_course_agent.rag.taxonomy import (
 )
 from ds_course_agent.shared.config_utils import config_bool, config_float, config_int
 from ds_course_agent.shared.error_response import truncate_error
+from ds_course_agent.tools._shared import RetrievalTrace, begin_retrieval_trace, end_retrieval_trace
 
 logger = logging.getLogger(__name__)
+_T = TypeVar("_T")
+
+
+def _route_result(
+    route_state: RouteState,
+    content: str,
+    *,
+    retrieval: RetrievalTrace | None = None,
+    degraded: bool = False,
+) -> RouteExecutionResult:
+    """Build the result owned by one route handler execution."""
+
+    decision = route_state.decision
+    return RouteExecutionResult(
+        content=str(content or ""),
+        family=decision.family,
+        intent=decision.intent,
+        execution_mode=decision.execution_mode,
+        sources=list(retrieval.sources) if retrieval else [],
+        used_retrieval=bool(retrieval and retrieval.used_retrieval),
+        degraded=degraded,
+    )
+
+
+def _capture_retrieval(callback: Callable[[], _T]) -> tuple[_T, RetrievalTrace]:
+    """Run one handler body and return retrieval facts recorded by its tools."""
+
+    token = begin_retrieval_trace()
+    try:
+        result = callback()
+    finally:
+        retrieval = end_retrieval_trace(token)
+    return result, retrieval
 
 
 class RouteHandler(Protocol):
     """Execute one RouteDecision branch in sync or streaming mode."""
 
     def can_handle(self, agent: Any, route_state: RouteState) -> bool: ...
-    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str: ...
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> RouteExecutionResult: ...
     def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[Any]: ...
 
 
@@ -50,46 +84,46 @@ class SpecialCaseRouteHandler(BufferedRouteHandlerMixin):
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
         return bool(route_state.special_case_response)
 
-    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> RouteExecutionResult:
         from ds_course_agent.rag.query_trace import trace_step
 
         trace_step("agent.branch", branch="special_case")
-        return str(route_state.special_case_response)
+        return _route_result(route_state, str(route_state.special_case_response))
 
 
 class CourseScheduleRouteHandler(BufferedRouteHandlerMixin):
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
         return route_state.decision.intent == RouteIntent.COURSE_SCHEDULE
 
-    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> RouteExecutionResult:
         from ds_course_agent.rag.query_trace import trace_step
         from ds_course_agent.tools.course_schedule import course_schedule_tool
 
         question = route_state.context.original_query
         trace_step("agent.branch", branch="schedule")
         result = course_schedule_tool.invoke(agent._build_schedule_tool_query(question))
-        return result
+        return _route_result(route_state, result)
 
 
 class CurrentDatetimeRouteHandler(BufferedRouteHandlerMixin):
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
         return route_state.decision.intent == RouteIntent.CURRENT_DATETIME
 
-    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> RouteExecutionResult:
         from ds_course_agent.rag.query_trace import trace_step
         from ds_course_agent.tools.datetime_tool import current_datetime_tool
 
         question = route_state.context.original_query
         trace_step("agent.branch", branch="datetime")
         result = current_datetime_tool.invoke(question)
-        return result
+        return _route_result(route_state, result)
 
 
 class GroundedRagRouteHandler:
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
         return route_state.decision.execution_mode == ExecutionMode.GROUNDED_GENERATION
 
-    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> RouteExecutionResult:
         from ds_course_agent.rag.query_trace import trace_span, trace_step
         from ds_course_agent.tools.course_rag import course_rag_tool
 
@@ -98,11 +132,16 @@ class GroundedRagRouteHandler:
         execution_query = agent._route_execution_query(context, decision)
 
         trace_step("agent.branch", branch="grounded_rag_direct")
+
         # When QueryPipeline has already made a required grounded-RAG decision,
         # avoid a second generic-agent LLM round just to decide whether to call
         # the RAG tool.  The tool still records retrieval/source telemetry.
-        with trace_span("execute.grounded_rag_tool"):
-            return course_rag_tool.invoke(execution_query)
+        def invoke() -> str:
+            with trace_span("execute.grounded_rag_tool"):
+                return course_rag_tool.invoke(execution_query)
+
+        content, retrieval = _capture_retrieval(invoke)
+        return _route_result(route_state, content, retrieval=retrieval)
 
     def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str]:
         yield from agent._iter_grounded_rag_response(route_state)
@@ -569,7 +608,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
         scope_response = self._web_search_scope_response(question)
         if scope_response:
             trace_step("web_search.scope_blocked", status="blocked", reason="teaching_scope")
-            return {"fallback": scope_response}
+            return {"fallback": scope_response, "degraded": False}
 
         try:
             from ds_course_agent.tools.web_search import search_web
@@ -582,7 +621,8 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
                 "fallback": (
                     "联网搜索暂时不可用。请稍后重试，或关闭“联网搜索”后继续使用课程资料问答。\n\n"
                     f"（错误信息：{truncate_error(exc)}）"
-                )
+                ),
+                "degraded": True,
             }
 
         sources = getattr(web_response, "sources", None)
@@ -607,7 +647,8 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
                     "联网搜索暂时不可用，未获得可用搜索结果。\n\n"
                     f"原因：{response_error}\n\n"
                     "你可以稍后重试，或关闭“联网搜索”后继续使用课程资料问答。"
-                )
+                ),
+                "degraded": True,
             }
         if not response_results:
             trace_step(
@@ -615,7 +656,10 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
                 status="degraded",
                 provider=str(getattr(web_response, "provider", "") or "").strip(),
             )
-            return {"fallback": ("我已尝试联网搜索，但没有搜索到可用结果。你可以换一个更具体的关键词，或稍后再试。")}
+            return {
+                "fallback": "我已尝试联网搜索，但没有搜索到可用结果。你可以换一个更具体的关键词，或稍后再试。",
+                "degraded": True,
+            }
 
         evidence_context = (
             getattr(web_response, "evidence_context", None)
@@ -687,7 +731,8 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
 
         if not evidence_context or not str(evidence_context).strip():
             return {
-                "fallback": ("我已尝试联网搜索，但没有获得可用的搜索摘要。你可以换一个更具体的关键词，或稍后再试。")
+                "fallback": "我已尝试联网搜索，但没有获得可用的搜索摘要。你可以换一个更具体的关键词，或稍后再试。",
+                "degraded": True,
             }
 
         web_turn_context = self._build_web_turn_context(
@@ -703,13 +748,13 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             "turn_context": web_turn_context,
         }
 
-    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
+    def _execute_content(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> tuple[str, bool]:
         from ds_course_agent.rag.query_trace import trace_span
 
         prepared = self._prepare_web_answer_context(agent, route_state)
         fallback = prepared.get("fallback")
         if fallback:
-            return str(fallback)
+            return str(fallback), bool(prepared.get("degraded", False))
 
         question = prepared["question"]
         chat_history = prepared["chat_history"]
@@ -731,7 +776,7 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
                 ]
             result = "".join(parts)
             if result:
-                return result
+                return result, False
 
         with trace_span("execute.web_search_answer"):
             result = chat_fn(
@@ -742,7 +787,12 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             )
         if hasattr(result, "__iter__") and not isinstance(result, str):
             result = "".join(result)
-        return result
+        return result, False
+
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> RouteExecutionResult:
+        execution, retrieval = _capture_retrieval(lambda: self._execute_content(agent, route_state, stream=stream))
+        content, degraded = execution
+        return _route_result(route_state, content, retrieval=retrieval, degraded=degraded)
 
     def _stream_fetch_context(
         self,
@@ -1182,15 +1232,15 @@ class WebSearchRouteHandler(BufferedRouteHandlerMixin):
             )
         if hasattr(result, "__iter__") and not isinstance(result, str):
             result = "".join(result)
-        result = agent._finalize_route_result(route_state, result, stream=True)
-        yield from agent._yield_text_chunks(result)
+        finalized = agent._finalize_route_result(route_state, _route_result(route_state, result), stream=True)
+        yield from agent._yield_text_chunks(finalized.content)
 
 
 class PythonExecRouteHandler(BufferedRouteHandlerMixin):
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
         return route_state.decision.execution_mode == ExecutionMode.PYTHON_SANDBOX
 
-    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> RouteExecutionResult:
         from ds_course_agent.rag.code_executor import (
             PythonSandbox,
             extract_python_code,
@@ -1202,11 +1252,14 @@ class PythonExecRouteHandler(BufferedRouteHandlerMixin):
         trace_step("agent.branch", branch="python_exec")
         code = extract_python_code(question)
         if not code:
-            return "没有检测到可执行的 Python 代码。请把代码放在 ```python ... ``` 代码块中，或直接发送要运行的代码。"
+            return _route_result(
+                route_state,
+                "没有检测到可执行的 Python 代码。请把代码放在 ```python ... ``` 代码块中，或直接发送要运行的代码。",
+            )
 
         with trace_span("execute.python_sandbox"):
             execution_result = PythonSandbox().execute(code)
-        return format_python_execution_answer(code, execution_result)
+        return _route_result(route_state, format_python_execution_answer(code, execution_result))
 
 
 class SkillRouteHandler(BufferedRouteHandlerMixin):
@@ -1224,7 +1277,7 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
         attr, _branch = self._ROUTES[intent]
         return bool(getattr(agent, attr, None))
 
-    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> RouteExecutionResult:
         from ds_course_agent.rag.query_trace import trace_step
 
         context = route_state.context
@@ -1238,7 +1291,7 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
 
         trace_step("agent.branch", branch=branch)
         if intent == RouteIntent.MISCONCEPTION_REPAIR:
-            return skill(question, student_id, session_id, "0")
+            return _route_result(route_state, skill(question, student_id, session_id, "0"))
         if intent in {RouteIntent.LEARNING_PATH, RouteIntent.PERSONALIZED_EXPLANATION}:
             learner_state = route_state.learner_state
             if learner_state is None:
@@ -1249,8 +1302,8 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
                     matched_concepts[0].concept_id,
                     matched_concepts[0].method,
                 )
-            return skill(question, learner_state, matched_concepts)
-        return skill(question, student_id, session_id)
+            return _route_result(route_state, skill(question, learner_state, matched_concepts))
+        return _route_result(route_state, skill(question, student_id, session_id))
 
 
 class GenericAgentRouteHandler:
@@ -1295,7 +1348,7 @@ class GenericAgentRouteHandler:
         )
         return agent.chat, base_turn_context, False, graph_agent
 
-    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
+    def _execute_content(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> str:
         from ds_course_agent.rag.query_pipeline import get_postprocessor
         from ds_course_agent.rag.query_trace import trace_span, trace_step
 
@@ -1335,6 +1388,10 @@ class GenericAgentRouteHandler:
             chat_history=chat_history,
         )
         return final_response.content
+
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> RouteExecutionResult:
+        content, retrieval = _capture_retrieval(lambda: self._execute_content(agent, route_state, stream=stream))
+        return _route_result(route_state, content, retrieval=retrieval)
 
     def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str]:
         """Stream generic-agent routes where safe; otherwise return buffered text.

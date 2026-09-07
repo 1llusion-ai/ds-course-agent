@@ -98,6 +98,28 @@ pi-agent 值得借鉴的不是 TypeScript 目录本身，而是职责分离：
 - skill 缺少 learner state 时明确失败，不静默回退读取旧画像。
 - planner 和 strategy 直接消费 `LearnerStateSnapshot`，并使用 `evidence_confidence` 的正确语义。
 
+### 3.6 RouteHandler 返回类型化执行结果
+
+所有同步 `RouteHandler.execute()` 现在直接返回 `RouteExecutionResult`，由 handler 填写：
+
+- `content`
+- `family` / `intent` / `execution_mode`
+- `sources`
+- `used_retrieval`
+- `degraded`
+
+`AgentService._build_route_execution_result()` 已删除。AgentService 只在 hook 或空结果兜底实际产生新检索时，
+把该阶段的检索事实合并进已有结果。
+
+retrieval trace 现在支持嵌套作用域：handler 获得独立子 trace，结束后合并到 API 父 trace。
+这既保证 handler 能准确报告自己的来源，也保留 core bridge 的整轮统计。
+
+新增不变量覆盖：
+
+- handler 返回的来源和检索标记不会被 AgentService 丢失。
+- 已完成检索的 required TOOL_AGENT 不会触发第二次 RAG。
+- 子 retrieval trace 相互隔离，并向父 trace 合并。
+
 ## 4. 验证结果
 
 ```bash
@@ -127,11 +149,10 @@ PYTHONPATH=src .venv/bin/python benchmarks/route_harness.py
 PYTHONPATH=src .venv/bin/python -m pytest -q
 ```
 
-结果：`460 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
+当前结果：`464 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
 
 ## 5. 当前边界和未完成项
 
-- `RouteHandler.execute()` 的声明结果仍偏弱，来源、检索使用情况和降级状态没有完全在 handler 边界产生。
 - 同步和流式执行仍有两种返回形态，部分路径使用字符串，部分路径使用事件字典。
 - `rag/agent.py`、`rag/route_handlers.py`、`api/routers/chat.py` 仍然过大，需要按职责拆分。
 - Web research handler 同时承担搜索、抓取、整理、生成和流式事件组织，职责过多。
@@ -156,9 +177,9 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 
 提交目标：`refactor: route teaching skills through learner state provider`
 
-### P2：RouteHandler 返回完整类型化结果
+### P2：RouteHandler 返回完整类型化结果（已完成）
 
-目标：每个 handler 直接返回 `RouteExecutionResult`，其中包含：
+结果：每个同步 handler 已直接返回 `RouteExecutionResult`，其中包含：
 
 - `content`
 - `family` / `intent` / `execution_mode`
@@ -166,9 +187,9 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 - `used_retrieval`
 - `degraded`
 
-删除 AgentService 根据全局 retrieval trace 反推来源和检索状态的逻辑。handler 是执行事实的唯一来源。
+已删除 AgentService 在 handler 执行后统一反推结果的 builder；嵌套 retrieval scope 保留 API 整轮汇总。
 
-建议提交：`refactor: make route execution results explicit`
+提交目标：`refactor: make route execution results explicit`
 
 ### P3：统一 turn event 协议
 
@@ -239,12 +260,13 @@ git log -1 --oneline
 git status --short
 ```
 
-学习者状态基础提交为 `0b153f3`。工作区除用户自己的 `cw3458.html` 外应干净。下一步从 P2 开始，先审计：
+学习者状态基础提交为 `0b153f3`。工作区除用户自己的 `cw3458.html` 外应干净。下一步从 P3 开始，先审计：
 
 ```bash
-rg -n "class .*RouteHandler|def execute|RouteExecutionResult|retrieval_trace" \
+rg -n "stream_execute|_iter_route_response|stream_chat_with_history|type.*progress|type.*delta" \
   src/ds_course_agent/rag/route_handlers.py \
-  src/ds_course_agent/rag/agent.py
+  src/ds_course_agent/rag/agent.py \
+  src/ds_course_agent/api/core_bridge.py
 ```
 
 然后按 `AGENTS.md` 的测试门槛完成一个独立提交。

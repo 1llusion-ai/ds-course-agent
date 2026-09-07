@@ -105,6 +105,24 @@ class TestCourseRAGTool:
         assert trace.used_retrieval is True
         assert trace.sources == [{"reference": "《第7章 无监督学习算法》第123页"}]
 
+    def test_nested_retrieval_trace_isolated_and_merged_to_parent(self):
+        from ds_course_agent.tools._shared import _track_retrieval
+
+        parent_token = begin_retrieval_trace()
+        try:
+            _track_retrieval([{"reference": "父来源"}], used=True)
+            child_token = begin_retrieval_trace()
+            try:
+                _track_retrieval([{"reference": "子来源"}], used=True)
+            finally:
+                child_trace = end_retrieval_trace(child_token)
+        finally:
+            parent_trace = end_retrieval_trace(parent_token)
+
+        assert child_trace.sources == [{"reference": "子来源"}]
+        assert parent_trace.sources == [{"reference": "父来源"}, {"reference": "子来源"}]
+        assert parent_trace.used_retrieval is True
+
     @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_tool_degrades_to_extractive_fallback_when_answer_llm_fails(self, mock_get_service):
         """检索成功但回答 LLM 失败时，应降级为教材片段而不是整轮报错。"""
