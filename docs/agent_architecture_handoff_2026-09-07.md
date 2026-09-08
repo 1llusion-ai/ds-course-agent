@@ -1,6 +1,6 @@
 # Agent 架构优化交接（2026-09-07）
 
-最近续作：2026-09-08（P4-D message context builder 已完成）
+最近续作：2026-09-08（P4-E result finalizer 已完成）
 
 ## 1. 本轮目标
 
@@ -236,6 +236,21 @@ Web research policy 直接调用 message context 模块，不再把该职责作�
 新增不变量覆盖消息顺序、短期记忆 summary 对象保留、turn context 组成，以及 AgentService 不再拥有旧私有方法。
 `rag/agent.py` 从 1402 行进一步降至 1282 行。
 
+### 3.12 从 AgentService 拆出 result finalizer
+
+新增 `src/ds_course_agent/rag/result_finalizer.py`，集中负责 handler 返回结果之后的稳定收尾契约：
+
+- 按既有顺序执行 `after_llm` hooks。
+- 只在空结果且路由允许 grounding 时执行一次基础检索兜底。
+- 合并 handler、hook 和 fallback 阶段产生的 retrieval trace 与来源，并按来源标识去重。
+- 保留 `RouteExecutionResult` 的 family、intent、execution mode 和 degraded 语义。
+
+`AgentService._finalize_route_result()` 已直接删除，没有保留转发方法。同步 handler 执行、handler 选择失败和
+Web research 流式空结果兜底均直接调用模块函数 `finalize_route_result()`。新增不变量测试确认 AgentService
+不再持有旧私有方法，且 hook 新增的检索来源不会覆盖或重复 handler 已报告的来源。
+
+`rag/agent.py` 从 1282 行进一步降至 1204 行。
+
 ## 4. 验证结果
 
 ```bash
@@ -272,7 +287,7 @@ PYTHONPATH=src .venv/bin/python benchmarks/route_harness.py
 PYTHONPATH=src .venv/bin/python -m pytest -q
 ```
 
-当前结果：`474 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
+当前结果：`476 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
 
 ## 5. 当前边界和未完成项
 
@@ -283,6 +298,8 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
   及 runner 所需的执行能力。
 - message context 已迁移到 `rag/message_context.py`；AgentService 和 route handler 不再拥有历史格式化或
   turn-level prompt context 构造职责。
+- result finalizer 已迁移到 `rag/result_finalizer.py`；AgentService 不再拥有 hook、空结果 fallback 和
+  retrieval trace 合并实现。
 - API 对外仍使用现有 `progress` / `delta` / `final` SSE 表示；领域层已经类型化。后续若切换 wire protocol，
   应作为单独契约变更同步修改 API、Pinia store 和集成测试，不在 P4 文件拆分中夹带。
 - 当前没有多 Agent 调度器、共享黑板或 agent-to-agent 消息协议；这是有意为之。
@@ -337,7 +354,7 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 
 提交：`d70d782 refactor: unify turn execution events`
 
-### P4：拆分大文件（进行中）
+### P4：拆分大文件（已完成）
 
 在前三个契约稳定后再拆文件：
 
@@ -355,7 +372,7 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 - P4-B Web research pipeline：已完成，提交 `dabdb38 refactor: extract web research pipeline`。
 - P4-C API SSE/session service：已完成，提交 `c7ce120 refactor: extract chat application services`。
 - P4-D message context builder：已完成，提交主题为 `refactor: extract message context builder`。
-- result finalizer：仍在 `rag/agent.py`，应作为下一项独立提交处理。
+- P4-E result finalizer：已完成，独立提交主题为 `refactor: extract route result finalizer`。
 
 ### P5：多 Agent 基础设施
 
@@ -398,17 +415,16 @@ git log -1 --oneline
 git status --short
 ```
 
-P4-D message context builder 已按独立提交完成；`cw3458.html` 仍是与本任务无关的未跟踪用户文件。
+P4-E result finalizer 已完成；`cw3458.html` 仍是与本任务无关的未跟踪用户文件。
 
-下一步是把 `src/ds_course_agent/rag/agent.py` 中的 result finalizer 拆成独立模块。应继续保持类型化
-`RouteExecutionResult` 契约，不改变 hook 顺序、空结果 fallback、retrieval trace 合并、history 写入时机或 SSE wire protocol。
+本项变更文件：
 
-继续前先审计：
+- `src/ds_course_agent/rag/result_finalizer.py`
+- `src/ds_course_agent/rag/agent.py`
+- `src/ds_course_agent/rag/route_handlers.py`
+- `src/ds_course_agent/rag/web_research.py`
+- `tests/test_result_finalizer.py`
+- `docs/agent_architecture_handoff_2026-09-07.md`
 
-```bash
-rg -n "_finalize_route_result|_execute_selected_route_handler|_execute_route" \
-  src/ds_course_agent/rag/agent.py \
-  tests/test_agent_hooks_route_handlers.py
-```
-
-下一项 result finalizer 应作为独立提交；继续修改时保持提交粒度，`cw3458.html` 仍是用户自己的未跟踪文件。
+P4 文件拆分至此完成；进入 P5 前应另开单一任务，先定义角色/工具权限和单 Agent baseline，不应夹带到
+result finalizer 提交中。

@@ -66,8 +66,8 @@ class BufferedRouteHandlerMixin:
     """Default streaming behavior for handlers that only produce buffered text."""
 
     def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str]:
-        # Route-level hooks (notably RetrievalGuardHook) live in
-        # AgentService's route finalization, so buffered streaming must go
+        # Route-level hooks (notably RetrievalGuardHook) live in the shared
+        # result finalizer, so buffered streaming must go
         # through that path rather than calling execute() directly.  Use the
         # already-selected handler to avoid a second first-match dispatch.
         result = agent._execute_selected_route_handler(self, route_state, stream=True)

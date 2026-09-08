@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterator
 from typing import Any, TypeVar
 
 from ds_course_agent.rag.query_pipeline import RouteExecutionResult, RouteState
+from ds_course_agent.rag.result_finalizer import finalize_route_result
 from ds_course_agent.rag.turn_events import TurnEvent
 from ds_course_agent.rag.web_research_fetch import WebPageFetchPipeline
 from ds_course_agent.rag.web_research_models import PreparedWebAnswer
@@ -466,7 +467,7 @@ class WebResearchPipeline(WebResearchPolicy):
             )
         if hasattr(result, "__iter__") and not isinstance(result, str):
             result = "".join(result)
-        finalized = agent._finalize_route_result(route_state, _route_result(route_state, result), stream=True)
+        finalized = finalize_route_result(agent, route_state, _route_result(route_state, result), stream=True)
         yield from agent._yield_text_chunks(finalized.content)
 
 
