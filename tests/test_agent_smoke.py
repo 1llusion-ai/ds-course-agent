@@ -52,8 +52,7 @@ class TestAgentServiceMock:
         service.tools = []
         service.agent = mock_agent
 
-        with patch.object(AgentService, "_format_chat_history", return_value=[]):
-            result = service.chat("test question", graph_agent=mock_agent)
+        result = service.chat("test question", graph_agent=mock_agent)
 
         assert isinstance(result, str)
         assert result == "test answer"
@@ -175,8 +174,7 @@ class TestAgentServiceMock:
         service = AgentService.__new__(AgentService)
         service.agent = mock_agent
 
-        with patch.object(AgentService, "_format_chat_history", return_value=[]):
-            result = service.chat("test question", graph_agent=mock_agent)
+        result = service.chat("test question", graph_agent=mock_agent)
 
         assert result == "recovered answer"
         assert sleeps == [1, 2]
@@ -199,8 +197,7 @@ class TestAgentServiceMock:
         service = AgentService.__new__(AgentService)
         service.agent = mock_agent
 
-        with patch.object(AgentService, "_format_chat_history", return_value=[]):
-            result = service.chat("test question", graph_agent=mock_agent)
+        result = service.chat("test question", graph_agent=mock_agent)
 
         assert "AI服务配置异常" in result
         assert "请稍后重试" not in result
@@ -224,8 +221,7 @@ class TestAgentServiceMock:
         fallback = MagicMock(return_value="基础检索回答")
         service._invoke_basic_rag_fallback = fallback
 
-        with patch.object(AgentService, "_format_chat_history", return_value=[]):
-            result = service.chat("test question", graph_agent=mock_agent)
+        result = service.chat("test question", graph_agent=mock_agent)
 
         assert result == "基础检索回答"
         fallback.assert_called_once_with("test question")
@@ -246,8 +242,7 @@ class TestAgentServiceMock:
         service = AgentService.__new__(AgentService)
         service.agent = mock_agent
 
-        with patch.object(AgentService, "_format_chat_history", return_value=[]):
-            chunks = list(service.chat("test question", stream=True, graph_agent=mock_agent))
+        chunks = list(service.chat("test question", stream=True, graph_agent=mock_agent))
 
         assert "".join(chunks) == "recovered stream answer"
         assert sleeps == [1]
@@ -389,19 +384,14 @@ class TestConfigIntegration:
 
 class TestFormatChatHistory:
     def test_format_dict_messages(self):
-        from ds_course_agent.rag.agent import AgentService
-
-        service = AgentService.__new__(AgentService)
-        service.llm = MagicMock()
-        service.tools = []
-        service.agent = MagicMock()
+        from ds_course_agent.rag.message_context import format_chat_history
 
         dict_history = [
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "hi there"},
         ]
 
-        result = service._format_chat_history(dict_history)
+        result = format_chat_history(dict_history)
 
         assert len(result) == 2
         assert isinstance(result[0], HumanMessage)
@@ -410,31 +400,21 @@ class TestFormatChatHistory:
         assert result[1].content == "hi there"
 
     def test_format_base_message_input(self):
-        from ds_course_agent.rag.agent import AgentService
-
-        service = AgentService.__new__(AgentService)
-        service.llm = MagicMock()
-        service.tools = []
-        service.agent = MagicMock()
+        from ds_course_agent.rag.message_context import format_chat_history
 
         base_message_history = [
             HumanMessage(content="hello"),
             AIMessage(content="hi there"),
         ]
 
-        result = service._format_chat_history(base_message_history)
+        result = format_chat_history(base_message_history)
 
         assert len(result) == 2
         assert result[0] is base_message_history[0]
         assert result[1] is base_message_history[1]
 
     def test_format_mixed_messages(self):
-        from ds_course_agent.rag.agent import AgentService
-
-        service = AgentService.__new__(AgentService)
-        service.llm = MagicMock()
-        service.tools = []
-        service.agent = MagicMock()
+        from ds_course_agent.rag.message_context import format_chat_history
 
         mixed_history = [
             {"role": "user", "content": "q1"},
@@ -442,7 +422,7 @@ class TestFormatChatHistory:
             {"role": "user", "content": "q2"},
         ]
 
-        result = service._format_chat_history(mixed_history)
+        result = format_chat_history(mixed_history)
 
         assert len(result) == 3
         assert isinstance(result[0], HumanMessage)
@@ -695,9 +675,8 @@ class TestAgentShortTermMemory:
     def test_format_chat_history_keeps_summary_before_recent_window(self):
         from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-        from ds_course_agent.rag.agent import AgentService
+        from ds_course_agent.rag.message_context import format_chat_history
 
-        service = AgentService.__new__(AgentService)
         summary = SystemMessage(
             content="短期记忆摘要：之前讨论了 SVM 核函数。",
             additional_kwargs={"short_memory_summary": True},
@@ -708,7 +687,7 @@ class TestAgentShortTermMemory:
             AIMessage(content="上一答"),
         ]
 
-        result = service._format_chat_history(history)
+        result = format_chat_history(history)
 
         assert result[0] is summary
         assert isinstance(result[1], HumanMessage)

@@ -1,6 +1,6 @@
 # Agent 架构优化交接（2026-09-07）
 
-最近续作：2026-09-08（P4-C API SSE/session service 已完成，当前工作区尚未提交）
+最近续作：2026-09-08（P4-D message context builder 已完成）
 
 ## 1. 本轮目标
 
@@ -24,6 +24,7 @@
 - `d70d782 refactor: unify turn execution events`
 - `97d6668 refactor: extract turn runner`
 - `dabdb38 refactor: extract web research pipeline`
+- `c7ce120 refactor: extract chat application services`
 
 ## 2. 从 pi-agent 借鉴了什么
 
@@ -219,6 +220,22 @@ application service 不直接读写 `_chat_history`，统一通过 session servi
 - SSE encoder 保持 Unicode JSON frame wire format 不变。
 - 非 owner 的流式请求在打开 SSE 前返回 JSON 403。
 
+### 3.11 从 AgentService 拆出 message context builder
+
+新增 `src/ds_course_agent/rag/message_context.py`，统一负责：
+
+- 把持久化历史字典和 LangChain message 转换为模型消息。
+- 按 `turn system context -> history -> current user` 的固定顺序构造单次 LLM 调用消息。
+- 把 `LearnerStateSnapshot` 渲染为自然语言学习状态摘要。
+- 把 learner state、skill hints 和当前概念组合为 turn-level system context。
+
+`AgentService._format_chat_history()`、`AgentService._build_turn_system_context()` 和
+`AgentService._format_learner_state_for_prompt()` 已直接删除，没有保留转发方法。通用 route handler 和
+Web research policy 直接调用 message context 模块，不再把该职责作为 Agent 私有协议的一部分。
+
+新增不变量覆盖消息顺序、短期记忆 summary 对象保留、turn context 组成，以及 AgentService 不再拥有旧私有方法。
+`rag/agent.py` 从 1402 行进一步降至 1282 行。
+
 ## 4. 验证结果
 
 ```bash
@@ -226,7 +243,7 @@ application service 不直接读写 `_chat_history`，统一通过 session servi
 .venv/bin/ruff format --check src tests scripts benchmarks
 ```
 
-结果：全部通过，197 个文件格式符合要求。
+结果：全部通过，199 个文件格式符合要求。
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest \
@@ -255,7 +272,7 @@ PYTHONPATH=src .venv/bin/python benchmarks/route_harness.py
 PYTHONPATH=src .venv/bin/python -m pytest -q
 ```
 
-当前结果：`471 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
+当前结果：`474 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
 
 ## 5. 当前边界和未完成项
 
@@ -264,6 +281,8 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 - Chat router 已迁移为薄 FastAPI 适配层；SSE、session、stream worker 和 application use cases 各有独立所有者。
 - turn orchestration 和 API payload 投影已迁移到 `rag/turn_runner.py`；`AgentService` 只保留公开聊天入口
   及 runner 所需的执行能力。
+- message context 已迁移到 `rag/message_context.py`；AgentService 和 route handler 不再拥有历史格式化或
+  turn-level prompt context 构造职责。
 - API 对外仍使用现有 `progress` / `delta` / `final` SSE 表示；领域层已经类型化。后续若切换 wire protocol，
   应作为单独契约变更同步修改 API、Pinia store 和集成测试，不在 P4 文件拆分中夹带。
 - 当前没有多 Agent 调度器、共享黑板或 agent-to-agent 消息协议；这是有意为之。
@@ -334,8 +353,9 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 
 - P4-A turn runner：已完成，提交 `97d6668 refactor: extract turn runner`。
 - P4-B Web research pipeline：已完成，提交 `dabdb38 refactor: extract web research pipeline`。
-- P4-C API SSE/session service：已完成，当前工作区尚未提交。
-- message context builder 与 result finalizer：仍在 `rag/agent.py`，应在 Web pipeline 之后按独立提交处理。
+- P4-C API SSE/session service：已完成，提交 `c7ce120 refactor: extract chat application services`。
+- P4-D message context builder：已完成，提交主题为 `refactor: extract message context builder`。
+- result finalizer：仍在 `rag/agent.py`，应作为下一项独立提交处理。
 
 ### P5：多 Agent 基础设施
 
@@ -378,18 +398,17 @@ git log -1 --oneline
 git status --short
 ```
 
-最新代码提交为 `dabdb38 refactor: extract web research pipeline`。P4-C 改动当前仍在工作区，尚未提交；
-`cw3458.html` 仍是与本任务无关的未跟踪用户文件。
+P4-D message context builder 已按独立提交完成；`cw3458.html` 仍是与本任务无关的未跟踪用户文件。
 
-下一步是继续拆分 `src/ds_course_agent/rag/agent.py` 中的 message context builder 与 result finalizer。
-两项应继续按清晰契约分别提交，不在拆分中改变 `QueryPipeline`、history 写入时机或 SSE wire protocol。
+下一步是把 `src/ds_course_agent/rag/agent.py` 中的 result finalizer 拆成独立模块。应继续保持类型化
+`RouteExecutionResult` 契约，不改变 hook 顺序、空结果 fallback、retrieval trace 合并、history 写入时机或 SSE wire protocol。
 
 继续前先审计：
 
 ```bash
-rg -n "^    def |_build_turn_system_context|_format_learner_state_for_prompt|_finalize_route_result" \
+rg -n "_finalize_route_result|_execute_selected_route_handler|_execute_route" \
   src/ds_course_agent/rag/agent.py \
   tests/test_agent_hooks_route_handlers.py
 ```
 
-P4-C 应作为独立提交；继续修改时保持提交粒度，`cw3458.html` 仍是用户自己的未跟踪文件。
+下一项 result finalizer 应作为独立提交；继续修改时保持提交粒度，`cw3458.html` 仍是用户自己的未跟踪文件。

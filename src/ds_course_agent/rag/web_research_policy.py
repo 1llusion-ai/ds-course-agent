@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ds_course_agent.rag.message_context import build_turn_system_context
 from ds_course_agent.rag.query_pipeline import RouteState
 from ds_course_agent.rag.taxonomy import (
     LOW_SUCCESS_FETCH_DOMAINS,
@@ -364,7 +365,7 @@ class WebResearchPolicy:
         evidence_context: str,
         response_results: list[Any],
     ) -> str:
-        base_turn_context = agent._build_turn_system_context(route_state)
+        base_turn_context = build_turn_system_context(route_state)
         return "\n\n".join(
             section
             for section in [
