@@ -9,7 +9,6 @@ import logging
 import re
 import time
 from collections.abc import Iterator, Mapping
-from dataclasses import replace
 from typing import Any
 
 from langchain.agents import create_agent
@@ -25,13 +24,14 @@ from ds_course_agent.rag.learner_state import LearnerStateProvider, RuleBasedLea
 from ds_course_agent.rag.memory_core import get_memory_core, record_event
 from ds_course_agent.rag.message_context import build_chat_messages
 from ds_course_agent.rag.prompt import get_system_prompt
-from ds_course_agent.rag.query_pipeline import ExecutionMode, RouteExecutionResult, RouteFamily, RouteState
+from ds_course_agent.rag.query_pipeline import ExecutionMode, RouteExecutionResult, RouteState
 from ds_course_agent.rag.query_pipeline.utils import (
     build_grounded_query_from_history,
     collect_recent_context,
     is_judgement_question,
     normalize_query_text,
 )
+from ds_course_agent.rag.result_finalizer import finalize_route_result
 from ds_course_agent.rag.route_handlers import default_route_handlers
 from ds_course_agent.rag.skill_system import get_skill_loader
 from ds_course_agent.rag.taxonomy import (
@@ -987,84 +987,6 @@ class AgentService:
             stream_id=stream_id,
         )
 
-    def _finalize_route_result(
-        self,
-        route_state: RouteState,
-        result: RouteExecutionResult,
-        *,
-        stream: bool = False,
-    ) -> RouteExecutionResult:
-        """Apply route-level hooks and empty-result fallback to a handler result."""
-        from ds_course_agent.rag.query_trace import trace_error
-        from ds_course_agent.tools._shared import _track_retrieval, begin_retrieval_trace, end_retrieval_trace
-
-        user_input = route_state.context.original_query
-        chat_history = route_state.chat_history
-        content = result.content
-        degraded = result.degraded
-        token = begin_retrieval_trace()
-        _track_retrieval(result.sources, used=result.used_retrieval)
-
-        try:
-            content = self._get_hooks().after_llm(route_state, content, agent=self, stream=stream)
-        except Exception as e:
-            trace_error("hook.after_llm", e)
-            logger.error("after_llm hook failed: %s", e, exc_info=True)
-            if content is None:
-                content = ""
-
-        if not content or not isinstance(content, str) or not content.strip():
-            degraded = True
-            may_ground = route_state.decision.family is RouteFamily.LEARNING and (
-                route_state.decision.execution_mode is ExecutionMode.GROUNDED_GENERATION
-                or route_state.decision.retrieval_policy == "required"
-            )
-            if may_ground:
-                try:
-                    from ds_course_agent.tools.course_rag import course_rag_tool
-
-                    fallback_query = build_grounded_query_from_history(user_input, chat_history)
-                    fallback = course_rag_tool.invoke(fallback_query)
-                    if fallback and fallback.strip() and fallback != "无相关资料":
-                        content = f"{fallback}\n\n[注：使用基础检索模式回答]"
-                    else:
-                        content = self._build_error_response(
-                            "无法生成回答",
-                            "抱歉，课程资料中暂时没有找到足够内容，或回答服务暂时不可用。",
-                            is_retryable=True,
-                        )
-                except Exception as e:
-                    content = self._build_error_response(
-                        "服务暂时不可用",
-                        f"生成回答时遇到错误，请稍后重试。\n({str(e)[:80]})",
-                        is_retryable=True,
-                    )
-            else:
-                content = self._build_error_response(
-                    "无法生成回答",
-                    "本次请求未能生成有效回复，请补充更具体的信息后重试。",
-                    is_retryable=True,
-                )
-
-        retrieval = end_retrieval_trace(token)
-        sources = list(result.sources)
-        seen = {
-            item.get("url") or item.get("href") or item.get("reference") for item in sources if isinstance(item, dict)
-        }
-        for item in retrieval.sources:
-            key = item.get("url") or item.get("href") or item.get("reference")
-            if key and key not in seen:
-                sources.append(dict(item))
-                seen.add(key)
-
-        return replace(
-            result,
-            content=content,
-            sources=sources,
-            used_retrieval=result.used_retrieval or retrieval.used_retrieval,
-            degraded=degraded,
-        )
-
     def _observe_stream_end(self, route_state: RouteState, result: str, *, stream: bool = True) -> None:
         """Run observational stream-end hooks after direct streaming completes.
 
@@ -1105,7 +1027,7 @@ class AgentService:
                 degraded=True,
             )
 
-        return self._finalize_route_result(route_state, result, stream=stream)
+        return finalize_route_result(self, route_state, result, stream=stream)
 
     def _execute_route(self, route_state: RouteState, stream: bool = False) -> RouteExecutionResult:
         """按统一 RouteDecision 执行回答；sync/stream 共享此执行核心。"""
@@ -1124,7 +1046,7 @@ class AgentService:
                 execution_mode=route_state.decision.execution_mode,
                 degraded=True,
             )
-            return self._finalize_route_result(route_state, failed_result, stream=stream)
+            return finalize_route_result(self, route_state, failed_result, stream=stream)
 
         return self._execute_selected_route_handler(handler, route_state, stream=stream)
 
