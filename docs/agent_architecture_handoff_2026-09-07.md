@@ -25,6 +25,8 @@
 - `97d6668 refactor: extract turn runner`
 - `dabdb38 refactor: extract web research pipeline`
 - `c7ce120 refactor: extract chat application services`
+- `15d9697 refactor: extract message context builder`
+- `9e029e1 refactor: extract route result finalizer`
 
 ## 2. 从 pi-agent 借鉴了什么
 
@@ -247,7 +249,8 @@ Web research policy 直接调用 message context 模块，不再把该职责作�
 
 `AgentService._finalize_route_result()` 已直接删除，没有保留转发方法。同步 handler 执行、handler 选择失败和
 Web research 流式空结果兜底均直接调用模块函数 `finalize_route_result()`。新增不变量测试确认 AgentService
-不再持有旧私有方法，且 hook 新增的检索来源不会覆盖或重复 handler 已报告的来源。
+不再持有旧私有方法，且 hook 新增的检索来源不会覆盖或重复 handler 已报告的来源；学习类 required 空结果
+只执行一次基础检索并合并其来源，非学习路由的空结果不会隐式触发 RAG。
 
 `rag/agent.py` 从 1282 行进一步降至 1204 行。
 
@@ -287,7 +290,7 @@ PYTHONPATH=src .venv/bin/python benchmarks/route_harness.py
 PYTHONPATH=src .venv/bin/python -m pytest -q
 ```
 
-当前结果：`476 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
+当前结果：`478 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
 
 ## 5. 当前边界和未完成项
 
