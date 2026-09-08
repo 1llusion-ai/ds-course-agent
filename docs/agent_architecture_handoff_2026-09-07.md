@@ -1,6 +1,6 @@
 # Agent 架构优化交接（2026-09-07）
 
-最近续作：2026-09-07（P4-B Web research pipeline 已完成，当前工作区尚未提交）
+最近续作：2026-09-08（P4-C API SSE/session service 已完成，当前工作区尚未提交）
 
 ## 1. 本轮目标
 
@@ -23,6 +23,7 @@
 - `83b985b refactor: make route execution results explicit`
 - `d70d782 refactor: unify turn execution events`
 - `97d6668 refactor: extract turn runner`
+- `dabdb38 refactor: extract web research pipeline`
 
 ## 2. 从 pi-agent 借鉴了什么
 
@@ -198,6 +199,26 @@ grounded RAG 的来源事件已迁移为 `RetrievalEndEvent`。`core_bridge` 最
 新增不变量测试确认 handler 不再拥有 `_fetch_plan` / `_prepare_web_answer_context`，且只做 pipeline 适配。
 现有搜索来源、深度抓取、引用编号、流式进度和降级行为保持不变。
 
+### 3.10 从 API router 拆出 SSE 与 chat application service
+
+`src/ds_course_agent/api/routers/chat.py` 现在只保留 FastAPI 路由声明、依赖注入和响应适配，
+从 1161 行降至 100 行。原有业务职责按边界迁移为：
+
+- `api/sse.py`：JSON SSE frame 编码、stream job replay 和稳定响应头。
+- `api/chat_sessions.py`：消息序列化、会话归属、历史锁、状态持久化和异步标题任务。
+- `api/chat_streaming.py`：progress 压缩、Web search turn 状态、来源/路由投影和后台 stream worker。
+- `api/chat_application.py`：同步发送、流式发送、续写、恢复、取消、历史读取和清空用例。
+
+旧 router 私有函数已直接删除；测试 monkeypatch 点迁移到真实所有者模块，没有保留 router 转发 shim。
+application service 不直接读写 `_chat_history`，统一通过 session service 的显式接口访问状态。
+公开 stream 方法在创建 `StreamingResponse` 前同步完成会话归属校验，避免把 403/404 降级成流内异常。
+
+新增不变量覆盖：
+
+- router 不再暴露 `_sse`、`_launch_stream_worker`、`_append_message_locked` 或标题调度私有实现。
+- SSE encoder 保持 Unicode JSON frame wire format 不变。
+- 非 owner 的流式请求在打开 SSE 前返回 JSON 403。
+
 ## 4. 验证结果
 
 ```bash
@@ -205,18 +226,16 @@ grounded RAG 的来源事件已迁移为 `RetrievalEndEvent`。`core_bridge` 最
 .venv/bin/ruff format --check src tests scripts benchmarks
 ```
 
-结果：全部通过，193 个文件格式符合要求。
+结果：全部通过，197 个文件格式符合要求。
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest \
-  tests/test_agent_hooks_route_handlers.py \
-  tests/test_query_pipeline.py \
-  tests/test_route_harness.py \
+  tests/integration/api \
   tests/test_core_bridge_trace.py \
-  tests/integration/api/test_chat_stream.py -q
+  tests/test_turn_events.py -q
 ```
 
-结果：`86 passed`。
+结果：`64 passed`。
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest \
@@ -236,12 +255,13 @@ PYTHONPATH=src .venv/bin/python benchmarks/route_harness.py
 PYTHONPATH=src .venv/bin/python -m pytest -q
 ```
 
-当前结果：`468 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
+当前结果：`471 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
 
 ## 5. 当前边界和未完成项
 
-- `rag/agent.py` 与 `api/routers/chat.py` 仍然过大，需要按职责拆分。
+- `rag/agent.py` 仍然过大，需要继续按职责拆分。
 - Web research 已迁移到独立 pipeline；`WebSearchRouteHandler` 只保留路由适配职责。
+- Chat router 已迁移为薄 FastAPI 适配层；SSE、session、stream worker 和 application use cases 各有独立所有者。
 - turn orchestration 和 API payload 投影已迁移到 `rag/turn_runner.py`；`AgentService` 只保留公开聊天入口
   及 runner 所需的执行能力。
 - API 对外仍使用现有 `progress` / `delta` / `final` SSE 表示；领域层已经类型化。后续若切换 wire protocol，
@@ -313,8 +333,8 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 当前进度：
 
 - P4-A turn runner：已完成，提交 `97d6668 refactor: extract turn runner`。
-- P4-B Web research pipeline：已完成，当前工作区尚未提交。
-- P4-C API SSE/session service：未开始。
+- P4-B Web research pipeline：已完成，提交 `dabdb38 refactor: extract web research pipeline`。
+- P4-C API SSE/session service：已完成，当前工作区尚未提交。
 - message context builder 与 result finalizer：仍在 `rag/agent.py`，应在 Web pipeline 之后按独立提交处理。
 
 ### P5：多 Agent 基础设施
@@ -358,18 +378,18 @@ git log -1 --oneline
 git status --short
 ```
 
-最新代码提交为 `4d982ec docs: update agent architecture handoff`。P4-B 改动当前仍在工作区，尚未提交；
+最新代码提交为 `dabdb38 refactor: extract web research pipeline`。P4-C 改动当前仍在工作区，尚未提交；
 `cw3458.html` 仍是与本任务无关的未跟踪用户文件。
 
-下一步是 P4-C：从 `src/ds_course_agent/api/routers/chat.py` 拆出 SSE encoder 和 session/application service。
-继续保持现有 API wire protocol，不在文件拆分中夹带前端协议变更。
+下一步是继续拆分 `src/ds_course_agent/rag/agent.py` 中的 message context builder 与 result finalizer。
+两项应继续按清晰契约分别提交，不在拆分中改变 `QueryPipeline`、history 写入时机或 SSE wire protocol。
 
 继续前先审计：
 
 ```bash
-rg -n "^async def |^def |StreamingResponse|_sessions|_chat_history|stream_job" \
-  src/ds_course_agent/api/routers/chat.py \
-  tests/integration/api
+rg -n "^    def |_build_turn_system_context|_format_learner_state_for_prompt|_finalize_route_result" \
+  src/ds_course_agent/rag/agent.py \
+  tests/test_agent_hooks_route_handlers.py
 ```
 
-P4-B 应作为独立提交；继续修改时保持提交粒度，`cw3458.html` 仍是用户自己的未跟踪文件。
+P4-C 应作为独立提交；继续修改时保持提交粒度，`cw3458.html` 仍是用户自己的未跟踪文件。

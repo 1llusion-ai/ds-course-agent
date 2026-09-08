@@ -60,9 +60,9 @@ def fresh_client(monkeypatch):
         }
 
     # Patch the actual module where chat router imports the function from
-    import ds_course_agent.api.routers.chat as chat_module
+    import ds_course_agent.api.chat_application as chat_application
 
-    monkeypatch.setattr(chat_module, "stream_chat_with_history", fake_stream_chat_with_history)
+    monkeypatch.setattr(chat_application, "stream_chat_with_history", fake_stream_chat_with_history)
     return TestClient(app)
 
 
@@ -115,7 +115,7 @@ def test_stream_endpoint_returns_real_sse(fresh_client):
 
 
 def test_progress_details_are_compacted_for_history():
-    from ds_course_agent.api.routers.chat import _compact_progress_details_for_history
+    from ds_course_agent.api.chat_streaming import compact_progress_details_for_history
 
     details = {
         "found_count": 10,
@@ -129,13 +129,28 @@ def test_progress_details_are_compacted_for_history():
         ],
     }
 
-    compacted = _compact_progress_details_for_history(details)
+    compacted = compact_progress_details_for_history(details)
 
     assert compacted["found_count"] == 10
     assert len(compacted["results"]) == 6
     assert compacted["results"][-1]["_truncated_items"] == 5
     assert len(compacted["results"][0]["title"]) <= 500
     assert len(compacted["results"][0]["snippet"]) <= 500
+
+
+def test_chat_router_is_only_an_http_adapter():
+    import ds_course_agent.api.routers.chat as chat_router
+
+    assert not hasattr(chat_router, "_sse")
+    assert not hasattr(chat_router, "_launch_stream_worker")
+    assert not hasattr(chat_router, "_append_message_locked")
+    assert not hasattr(chat_router, "_schedule_title_generation")
+
+
+def test_sse_encoder_preserves_unicode_json_frame():
+    from ds_course_agent.api.sse import encode_sse
+
+    assert encode_sse({"type": "delta", "delta": "你好"}) == 'data: {"type": "delta", "delta": "你好"}\n\n'
 
 
 def test_stream_records_blocked_web_search_turn_state(monkeypatch):
@@ -168,9 +183,9 @@ def test_stream_records_blocked_web_search_turn_state(monkeypatch):
             "sources": [],
         }
 
-    import ds_course_agent.api.routers.chat as chat_module
+    import ds_course_agent.api.chat_application as chat_application
 
-    monkeypatch.setattr(chat_module, "stream_chat_with_history", fake_stream_chat_with_history)
+    monkeypatch.setattr(chat_application, "stream_chat_with_history", fake_stream_chat_with_history)
     client = TestClient(app)
 
     session_resp = client.post(
@@ -205,9 +220,9 @@ def test_stream_records_blocked_web_search_turn_state(monkeypatch):
 
 
 def test_web_search_turn_state_records_stream_search_error():
-    from ds_course_agent.api.routers.chat import _web_search_turn_fields
+    from ds_course_agent.api.chat_streaming import web_search_turn_fields
 
-    fields = _web_search_turn_fields(
+    fields = web_search_turn_fields(
         requested=True,
         used_retrieval=False,
         progress_events=[{"phase": "web_search_error", "message": "联网搜索未获得可用结果"}],
@@ -348,9 +363,9 @@ def test_cancel_preserves_partial_answer_and_marks_it_stopped(monkeypatch):
             time.sleep(0.01)
         yield {"type": "delta", "delta": "不应出现", "stream_id": "cancel-1"}
 
-    import ds_course_agent.api.routers.chat as chat_module
+    import ds_course_agent.api.chat_application as chat_application
 
-    monkeypatch.setattr(chat_module, "stream_chat_with_history", fake_stream_chat_with_history)
+    monkeypatch.setattr(chat_application, "stream_chat_with_history", fake_stream_chat_with_history)
     session_client = TestClient(app)
     session_resp = session_client.post(
         "/api/sessions",
@@ -401,7 +416,7 @@ def test_cancel_preserves_partial_answer_and_marks_it_stopped(monkeypatch):
 def test_continue_stream_replaces_stopped_message_without_visible_user_turn(monkeypatch):
     from datetime import datetime
 
-    from ds_course_agent.api.routers.chat import _append_message_locked
+    from ds_course_agent.api.chat_sessions import append_message_locked
     from ds_course_agent.api.schemas.chat import ChatMessage
     from ds_course_agent.api.state import _chat_history, _sessions
 
@@ -415,8 +430,8 @@ def test_continue_stream_replaces_stopped_message_without_visible_user_turn(monk
     )
     session_id = session_resp.json()["id"]
     stopped_at = datetime.now()
-    _append_message_locked(session_id, ChatMessage(role="user", content="请详细解释"), save=False)
-    _append_message_locked(
+    append_message_locked(session_id, ChatMessage(role="user", content="请详细解释"), save=False)
+    append_message_locked(
         session_id,
         ChatMessage(
             role="assistant",
@@ -443,9 +458,9 @@ def test_continue_stream_replaces_stopped_message_without_visible_user_turn(monk
             "sources": [],
         }
 
-    import ds_course_agent.api.routers.chat as chat_module
+    import ds_course_agent.api.chat_application as chat_application
 
-    monkeypatch.setattr(chat_module, "stream_continue_with_history", fake_continue)
+    monkeypatch.setattr(chat_application, "stream_continue_with_history", fake_continue)
     response = client.post(
         "/api/chat/continue/stream",
         headers={"x-test-student-id": "test"},

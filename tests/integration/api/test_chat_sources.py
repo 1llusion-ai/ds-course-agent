@@ -26,7 +26,7 @@ def _create_session(student_id: str = "student001") -> str:
     return response.json()["id"]
 
 
-@patch("ds_course_agent.api.routers.chat.chat_with_history")
+@patch("ds_course_agent.api.chat_application.chat_with_history")
 def test_send_message_omits_sources_when_agent_skips_retrieval(mock_chat_with_history):
     mock_chat_with_history.return_value = {
         "content": "你好！我是课程助教。",
@@ -60,7 +60,7 @@ def test_send_message_omits_sources_when_agent_skips_retrieval(mock_chat_with_hi
     assert "route" not in (payload["message"]["metadata"] or {})
 
 
-@patch("ds_course_agent.api.routers.chat.chat_with_history")
+@patch("ds_course_agent.api.chat_application.chat_with_history")
 def test_send_message_keeps_sources_from_agent_retrieval(mock_chat_with_history):
     mock_chat_with_history.return_value = {
         "content": "PCA 通过协方差矩阵的特征分解找到主成分。",
