@@ -25,12 +25,10 @@
 
 ### 工作区与安全边界
 
-- 仓库：`/home/xiaofan/Projects/ds-course-agent`。
-- 分支：`refactor/agent-architecture-foundation`；当前 HEAD：`ce5d399 test: strengthen route result finalizer contracts`。
-- P4-F、M1-M4、后续缺陷修复、reset 防误删和恢复脚本均在工作区，**尚未提交或推送**。
-- `git status` 中旧 rag/hooks 路径的 D 与新领域文件对应，是有意迁移；不要 checkout/reset 回旧布局。
-- 新目录、新脚本、新测试和事故文档有未跟踪文件，审查时不能只看 `git diff`。
-- `cw3458.html` 是无关用户文件，未修改、未暂存。`var/`、`.env`、恢复库和缓存不提交。
+- 仓库位置以当前 checkout 根目录为准，不在文档中固化个人机器路径。
+- 分支：`refactor/agent-architecture-foundation`。P4-F、M1-M4、后续缺陷修复、reset 防误删和恢复脚本均已提交到本地分支，尚未推送。
+- 旧 `rag/`、顶层 `hooks/` 与对应新领域包已作为同一棵一致代码树提交；不要 checkout/reset 回旧布局，也不要恢复兼容转发。
+- `var/`、`.env`、恢复库、缓存、构建输出和其他本地文件不得提交。
 - 不再执行目录迁移；不要新建兼容 shim，不要重复恢复知识库。所有下一步变更先遵守 AGENTS.md。
 
 ### 当前代码目录
@@ -81,14 +79,14 @@ SDK 重试还是生成本身。15 秒无新事件时前端显示长等待提示�
 
 ### 建议下一步
 
-1. 先审查当前工作区并征得用户授权后按逻辑分组提交，不要混入运行时数据或改写现有提交历史。
+1. 推送或合并前复核 `main..HEAD`、工作树和 CI 门禁，不要混入运行时数据或改写现有提交历史。
 2. 优先增加模型请求/首 token/完成耗时与 SDK 重试可观测性，再用同题 baseline 判断延迟瓶颈。
 3. 评审修复已收口；后续若发现新问题，应另开聚焦任务，不要继续扩大本批次。
 4. 稳定运行和评测后，另开模型化学生画像（LearnerStateProvider）及 P5 角色/工具权限任务。
 
 最终代码验证：596 passed、14 skipped、1 个既有 warning；Ruff check 通过，233 个文件格式合规；路由测试 37 passed；
 route harness 119/119、Unexpected RAG=0；前端 production build 通过（既有 Sass/chunk-size warning）。
-未提交、未推送，也未重启服务。
+迁移与评审修复已提交到本地分支，尚未推送；运行中服务状态属于本地临时状态，接手时必须现场复核。
 
 R4 后补充验证：`runtime/model_runtime.py` 的同步调用已统一使用
 `runtime/retry.py` 的类型化 retry policy；`AgentService` 的远端 chat model 显式关闭 SDK retry，
@@ -97,7 +95,7 @@ check/format 通过。上述聚焦结果已包含在最终 596 条全量验证�
 
 ## 1. 本轮目标
 
-本轮以本地 `/home/xiaofan/Projects/pi` 的 `packages/agent` 为结构参考，先整理当前单 Agent 的核心边界，
+本轮以相邻参考项目的 `packages/agent` 分层为结构参考，先整理当前单 Agent 的核心边界，
 为后续接入 MetaMonitor、模型化学习者状态和多 Agent 协作建立稳定契约。
 
 本轮没有引入多 Agent，也没有替换以下项目主干：
@@ -501,7 +499,6 @@ M4 后发现联网回答仍按已删除的 `AgentService.llm` 选择调用方法
 - 当前没有多 Agent 调度器、共享黑板或 agent-to-agent 消息协议；这是有意为之。
 - 主干五项契约与 T1-T7 不变量已恢复为仓库内权威文档
   `docs/phase1_backbone_contracts.md`；后续不得重新依赖个人 home 目录中的计划文件。
-- 未跟踪文件 `cw3458.html` 与本任务无关，未修改、未暂存、未提交。
 
 ## 6. 后续提交顺序
 
@@ -613,7 +610,7 @@ git log -1 --oneline
 git status --short
 ```
 
-先读第 0 节；P4-F、M1-M4、缺陷修复及事故恢复脚本均尚未提交。`cw3458.html` 仍是无关用户文件。
+先读第 0 节；P4-F、M1-M4、缺陷修复及事故恢复脚本均已提交到本地分支，推送与合并仍需明确授权。
 
 主要变更位置（完整文件列表用 `git status --short` 查看）：
 
@@ -633,5 +630,5 @@ git status --short
 - `docs/kb_incident_2026-09-08.md`、`docs/architecture_review_followup_2026-09-08.md`
 - `docs/agent_architecture_handoff_2026-09-07.md`
 
-下一步按第 0 节顺序推进；提交仍须用户授权。先处理真实运行验收与延迟观测，再进入画像模型化或 P5。
+下一步按第 0 节顺序推进；推送与合并仍须用户授权。先处理真实运行验收与延迟观测，再进入画像模型化或 P5。
 不引入通用消息总线、provider UI 或替换 `QueryPipeline`。不要为了“验证恢复脚本”再次运行清库或入库。
