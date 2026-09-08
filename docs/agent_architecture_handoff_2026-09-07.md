@@ -1,6 +1,6 @@
 # Agent 架构优化交接（2026-09-07）
 
-最近续作：2026-09-07（P3 与 P4-A turn runner 拆分已完成并分开提交）
+最近续作：2026-09-07（P4-B Web research pipeline 已完成，当前工作区尚未提交）
 
 ## 1. 本轮目标
 
@@ -181,6 +181,23 @@ grounded RAG 的来源事件已迁移为 `RetrievalEndEvent`。`core_bridge` 最
 本次拆分只移动已稳定的职责，没有修改 `QueryPipeline`、`RouteHandler`、history 写入时机或 SSE wire protocol。
 `rag/agent.py` 从 1621 行降至 1402 行；它仍明显过大，后续应继续按职责拆分，而不是在其中追加新能力。
 
+### 3.9 从 RouteHandler 拆出 Web research pipeline
+
+`WebSearchRouteHandler` 现在只负责识别 `RouteIntent.WEB_RESEARCH`，并把同步/流式执行委派给
+`WebResearchPipeline`。搜索、抓取、证据整理和回答生成已从 `rag/route_handlers.py` 直接删除，
+没有保留旧私有方法或兼容转发层。
+
+新边界按职责拆为：
+
+- `rag/web_research.py`：同步/流式 Web research 编排和类型化 `RouteExecutionResult`。
+- `rag/web_research_policy.py`：搜索范围、动态 top-k、抓取候选排序、引用编号和 prompt 证据规则。
+- `rag/web_research_fetch.py`：带总时间预算和并发控制的流式网页抓取阶段。
+- `rag/web_research_models.py`：`PreparedWebAnswer` 与 `WebFetchContext` 类型化阶段结果。
+
+`rag/route_handlers.py` 从 1465 行降至 395 行；新增 Web research 文件均低于 500 行。
+新增不变量测试确认 handler 不再拥有 `_fetch_plan` / `_prepare_web_answer_context`，且只做 pipeline 适配。
+现有搜索来源、深度抓取、引用编号、流式进度和降级行为保持不变。
+
 ## 4. 验证结果
 
 ```bash
@@ -188,18 +205,18 @@ grounded RAG 的来源事件已迁移为 `RetrievalEndEvent`。`core_bridge` 最
 .venv/bin/ruff format --check src tests scripts benchmarks
 ```
 
-结果：全部通过，189 个文件格式符合要求。
+结果：全部通过，193 个文件格式符合要求。
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest \
-  tests/test_turn_events.py \
   tests/test_agent_hooks_route_handlers.py \
   tests/test_query_pipeline.py \
+  tests/test_route_harness.py \
   tests/test_core_bridge_trace.py \
   tests/integration/api/test_chat_stream.py -q
 ```
 
-结果：`84 passed`。
+结果：`86 passed`。
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest \
@@ -219,12 +236,12 @@ PYTHONPATH=src .venv/bin/python benchmarks/route_harness.py
 PYTHONPATH=src .venv/bin/python -m pytest -q
 ```
 
-当前结果：`467 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
+当前结果：`468 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
 
 ## 5. 当前边界和未完成项
 
-- `rag/agent.py`、`rag/route_handlers.py`、`api/routers/chat.py` 仍然过大，需要按职责拆分。
-- Web research handler 同时承担搜索、抓取、整理、生成和流式事件组织，职责过多。
+- `rag/agent.py` 与 `api/routers/chat.py` 仍然过大，需要按职责拆分。
+- Web research 已迁移到独立 pipeline；`WebSearchRouteHandler` 只保留路由适配职责。
 - turn orchestration 和 API payload 投影已迁移到 `rag/turn_runner.py`；`AgentService` 只保留公开聊天入口
   及 runner 所需的执行能力。
 - API 对外仍使用现有 `progress` / `delta` / `final` SSE 表示；领域层已经类型化。后续若切换 wire protocol，
@@ -296,7 +313,7 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 当前进度：
 
 - P4-A turn runner：已完成，提交 `97d6668 refactor: extract turn runner`。
-- P4-B Web research pipeline：未开始。
+- P4-B Web research pipeline：已完成，当前工作区尚未提交。
 - P4-C API SSE/session service：未开始。
 - message context builder 与 result finalizer：仍在 `rag/agent.py`，应在 Web pipeline 之后按独立提交处理。
 
@@ -341,19 +358,18 @@ git log -1 --oneline
 git status --short
 ```
 
-最新代码提交为 `97d6668`，其父提交 `d70d782` 是独立的 P3 事件协议提交。
+最新代码提交为 `4d982ec docs: update agent architecture handoff`。P4-B 改动当前仍在工作区，尚未提交；
 `cw3458.html` 仍是与本任务无关的未跟踪用户文件。
 
-下一步是 P4-B：把 `WebSearchRouteHandler` 的搜索、抓取、证据整理和回答生成职责迁移到独立 web research
-pipeline。`RouteHandler` 应只负责适配 `RouteState` 与返回 `RouteExecutionResult` / `TurnEvent`，不要保留
-转发到旧私有方法的兼容层。
+下一步是 P4-C：从 `src/ds_course_agent/api/routers/chat.py` 拆出 SSE encoder 和 session/application service。
+继续保持现有 API wire protocol，不在文件拆分中夹带前端协议变更。
 
 继续前先审计：
 
 ```bash
-rg -n "^    def |WebSearchRouteHandler|web_search|web_fetch" \
-  src/ds_course_agent/rag/route_handlers.py \
-  tests/test_agent_hooks_route_handlers.py
+rg -n "^async def |^def |StreamingResponse|_sessions|_chat_history|stream_job" \
+  src/ds_course_agent/api/routers/chat.py \
+  tests/integration/api
 ```
 
-P3/P4-A 已按契约边界分开提交。继续修改时保持提交粒度，`cw3458.html` 仍是用户自己的未跟踪文件。
+P4-B 应作为独立提交；继续修改时保持提交粒度，`cw3458.html` 仍是用户自己的未跟踪文件。
