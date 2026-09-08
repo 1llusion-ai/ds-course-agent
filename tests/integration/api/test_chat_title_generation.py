@@ -1,5 +1,9 @@
-from ds_course_agent.api.routers.chat import _clean_generated_title, _finalize_title
-from ds_course_agent.api.title_generation import SESSION_TITLE_MAX_CHARS, build_fallback_session_title
+from ds_course_agent.api.title_generation import (
+    SESSION_TITLE_MAX_CHARS,
+    _clean_generated_title,
+    _finalize_title,
+    build_fallback_session_title,
+)
 
 
 def test_clean_generated_title_removes_prefix_and_quotes():

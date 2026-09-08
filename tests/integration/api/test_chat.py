@@ -114,6 +114,21 @@ class TestChatAPI:
         assert resp.status_code == 200
         assert '"type": "final"' in resp.text
 
+    def test_stream_endpoint_rejects_non_owner_before_opening_sse(self):
+        """流式响应创建前必须完成会话归属校验。"""
+
+        session_resp = client.post("/api/sessions", json={"title": "stream", "student_id": "owner"})
+        session_id = session_resp.json()["id"]
+
+        response = client.post(
+            "/api/chat/send/stream",
+            headers={"x-test-student-id": "other"},
+            json={"session_id": session_id, "message": "hello"},
+        )
+
+        assert response.status_code == 403
+        assert response.headers["content-type"].startswith("application/json")
+
     def test_clear_history(self):
         """测试清空历史"""
         # 创建会话并发送消息

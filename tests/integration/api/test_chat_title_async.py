@@ -8,12 +8,13 @@ from ds_course_agent.api.title_generation import DEFAULT_SESSION_TITLE, build_fa
 
 
 def test_stream_does_not_block_on_first_title_generation(monkeypatch):
-    import ds_course_agent.api.routers.chat as chat_module
+    import ds_course_agent.api.chat_application as chat_application
+    import ds_course_agent.api.chat_sessions as chat_sessions
     from ds_course_agent.api.state import _chat_history, _sessions
 
     _sessions.clear()
     _chat_history.clear()
-    chat_module._title_gen_cache.clear()
+    chat_sessions.reset_title_generation_state()
 
     async def slow_title(_question: str) -> str:
         await asyncio.sleep(1.2)
@@ -25,8 +26,8 @@ def test_stream_does_not_block_on_first_title_generation(monkeypatch):
         yield {"type": "delta", "delta": "h"}
         yield {"type": "final", "content": "hello", "sources": []}
 
-    monkeypatch.setattr(chat_module, "_generate_session_title", slow_title)
-    monkeypatch.setattr(chat_module, "stream_chat_with_history", fake_stream_chat_with_history)
+    monkeypatch.setattr(chat_sessions, "generate_session_title", slow_title)
+    monkeypatch.setattr(chat_application, "stream_chat_with_history", fake_stream_chat_with_history)
 
     client = TestClient(app)
     session_resp = client.post(
@@ -50,12 +51,13 @@ def test_stream_does_not_block_on_first_title_generation(monkeypatch):
 
 
 def test_post_send_does_not_block_on_first_title_generation(monkeypatch):
-    import ds_course_agent.api.routers.chat as chat_module
+    import ds_course_agent.api.chat_application as chat_application
+    import ds_course_agent.api.chat_sessions as chat_sessions
     from ds_course_agent.api.state import _chat_history, _sessions
 
     _sessions.clear()
     _chat_history.clear()
-    chat_module._title_gen_cache.clear()
+    chat_sessions.reset_title_generation_state()
 
     async def slow_title(_question: str) -> str:
         await asyncio.sleep(1.2)
@@ -66,8 +68,8 @@ def test_post_send_does_not_block_on_first_title_generation(monkeypatch):
         assert student_id == "test"
         return {"content": "hello", "used_retrieval": False, "sources": []}
 
-    monkeypatch.setattr(chat_module, "_generate_session_title", slow_title)
-    monkeypatch.setattr(chat_module, "chat_with_history", fake_chat_with_history)
+    monkeypatch.setattr(chat_sessions, "generate_session_title", slow_title)
+    monkeypatch.setattr(chat_application, "chat_with_history", fake_chat_with_history)
 
     client = TestClient(app)
     session_resp = client.post(
@@ -90,11 +92,11 @@ def test_post_send_does_not_block_on_first_title_generation(monkeypatch):
 
 
 def test_schedule_title_generation_sets_immediate_fallback(monkeypatch):
-    import ds_course_agent.api.routers.chat as chat_module
+    import ds_course_agent.api.chat_sessions as chat_sessions
     from ds_course_agent.api.state import _sessions
 
     _sessions.clear()
-    chat_module._title_gen_cache.clear()
+    chat_sessions.reset_title_generation_state()
     session_id = "title-immediate"
     question = "菲律宾的现任总统是谁"
     _sessions[session_id] = {
@@ -113,9 +115,9 @@ def test_schedule_title_generation_sets_immediate_fallback(monkeypatch):
         coro.close()
         return object()
 
-    monkeypatch.setattr(chat_module.asyncio, "create_task", fake_create_task)
+    monkeypatch.setattr(chat_sessions.asyncio, "create_task", fake_create_task)
 
-    chat_module._schedule_title_generation(session_id, question, is_first_message=True)
+    chat_sessions.schedule_title_generation(session_id, question, is_first_message=True)
 
     assert _sessions[session_id]["title"] == build_fallback_session_title(question)
     assert _sessions[session_id]["title"] != DEFAULT_SESSION_TITLE
