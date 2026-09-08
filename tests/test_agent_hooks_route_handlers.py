@@ -328,6 +328,35 @@ def test_buffered_stream_handler_uses_selected_handler_without_second_dispatch()
     assert calls == [("can", "course_schedule"), ("execute", True)]
 
 
+def test_web_search_route_handler_only_adapts_to_web_research_pipeline():
+    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+
+    state = _web_route_state()
+    calls = []
+
+    class FakePipeline:
+        def execute(self, agent, route_state, *, stream=False):
+            calls.append(("execute", agent, route_state, stream))
+            return _execution_result(route_state, "pipeline result")
+
+        def stream_execute(self, agent, route_state):
+            calls.append(("stream_execute", agent, route_state))
+            yield "pipeline chunk"
+
+    agent = object()
+    handler = WebSearchRouteHandler(FakePipeline())
+
+    assert handler.can_handle(agent, state) is True
+    assert handler.execute(agent, state, stream=True).content == "pipeline result"
+    assert list(handler.stream_execute(agent, state)) == ["pipeline chunk"]
+    assert not hasattr(handler, "_fetch_plan")
+    assert not hasattr(handler, "_prepare_web_answer_context")
+    assert calls == [
+        ("execute", agent, state, True),
+        ("stream_execute", agent, state),
+    ]
+
+
 def test_web_search_route_handler_compacts_evidence_and_tracks_sources(monkeypatch):
     import ds_course_agent.shared.config as config
     import ds_course_agent.tools.web_search as web_search_module
@@ -438,7 +467,7 @@ def test_web_search_route_rejects_general_fact_queries_without_search(monkeypatc
 
 def test_web_search_adaptive_plan_searches_broadly_but_reads_fewer_pages(monkeypatch):
     import ds_course_agent.shared.config as config
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.rag.web_research_policy import WebResearchPolicy
 
     monkeypatch.setattr(config, "WEB_SEARCH_TOP_K", 0)
     monkeypatch.setattr(config, "WEB_SEARCH_MIN_TOP_K", 8)
@@ -448,39 +477,39 @@ def test_web_search_adaptive_plan_searches_broadly_but_reads_fewer_pages(monkeyp
     monkeypatch.setattr(config, "WEB_FETCH_MAX_ATTEMPTS", 8)
     monkeypatch.setattr(config, "WEB_FETCH_MAX_WORKERS", 4)
 
-    handler = WebSearchRouteHandler()
+    policy = WebResearchPolicy()
 
-    assert handler._search_top_k("什么是过拟合？") == 8
-    assert handler._fetch_plan("什么是过拟合？")[:2] == (1, 4)
-    assert handler._search_top_k("GitHub 高星 EDU LLM Agent 项目有哪些？") == 16
-    assert handler._fetch_plan("GitHub 高星 EDU LLM Agent 项目有哪些？")[:2] == (2, 6)
-    assert handler._search_top_k("DAPO") == 16
-    assert handler._fetch_plan("DAPO")[:2] == (3, 8)
+    assert policy._search_top_k("什么是过拟合？") == 8
+    assert policy._fetch_plan("什么是过拟合？")[:2] == (1, 4)
+    assert policy._search_top_k("GitHub 高星 EDU LLM Agent 项目有哪些？") == 16
+    assert policy._fetch_plan("GitHub 高星 EDU LLM Agent 项目有哪些？")[:2] == (2, 6)
+    assert policy._search_top_k("DAPO") == 16
+    assert policy._fetch_plan("DAPO")[:2] == (3, 8)
 
 
 def test_web_search_scope_allows_data_science_prediction_queries(monkeypatch):
     import ds_course_agent.shared.config as config
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.rag.web_research_policy import WebResearchPolicy
 
     monkeypatch.setattr(config, "WEB_SEARCH_TEACHING_SCOPE_ENABLED", True)
 
-    handler = WebSearchRouteHandler()
+    policy = WebResearchPolicy()
 
-    assert handler._web_search_scope_response("如何用 LSTM 预测比特币价格") is None
+    assert policy._web_search_scope_response("如何用 LSTM 预测比特币价格") is None
 
 
 def test_web_fetch_top_n_zero_means_uncapped_not_disabled(monkeypatch):
     import ds_course_agent.shared.config as config
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.rag.web_research_policy import WebResearchPolicy
 
     monkeypatch.setattr(config, "WEB_FETCH_TOP_N", 0)
     monkeypatch.setattr(config, "WEB_FETCH_ADAPTIVE_ENABLED", True)
     monkeypatch.setattr(config, "WEB_FETCH_MAX_ATTEMPTS", 10)
 
-    handler = WebSearchRouteHandler()
+    policy = WebResearchPolicy()
 
-    assert handler._fetch_plan("什么是过拟合？")[:2] == (1, 4)
-    assert handler._candidate_fetch_urls(
+    assert policy._fetch_plan("什么是过拟合？")[:2] == (1, 4)
+    assert policy._candidate_fetch_urls(
         [
             {"url": "https://example.com/a", "title": "A"},
         ],
@@ -489,19 +518,19 @@ def test_web_fetch_top_n_zero_means_uncapped_not_disabled(monkeypatch):
 
 
 def test_low_success_filter_keeps_explicit_video_and_scholarly_pdf_requests():
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.rag.web_research_policy import WebResearchPolicy
 
-    handler = WebSearchRouteHandler()
+    policy = WebResearchPolicy()
 
     assert (
-        handler._is_low_success_fetch_target(
+        policy._is_low_success_fetch_target(
             "https://www.youtube.com/watch?v=abc",
             "读一下这个 YouTube 教程里的 PCA",
         )
         is False
     )
-    assert handler._is_low_success_fetch_target("https://arxiv.org/pdf/2401.00001.pdf") is False
-    assert handler._is_low_success_fetch_target("https://example.com/slides.pdf#page=3") is True
+    assert policy._is_low_success_fetch_target("https://arxiv.org/pdf/2401.00001.pdf") is False
+    assert policy._is_low_success_fetch_target("https://example.com/slides.pdf#page=3") is True
 
 
 def test_web_search_route_handler_streams_answer_chunks_directly(monkeypatch):
