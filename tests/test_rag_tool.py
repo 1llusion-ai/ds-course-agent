@@ -10,7 +10,7 @@ import pytest
 from langchain_core.documents import Document
 
 import ds_course_agent.tools.course_rag as course_rag_module
-from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
+from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.tools.course_rag import (
     begin_retrieval_trace,
     clear_rag_answer_cache,
@@ -102,6 +102,7 @@ class TestCourseRAGTool:
             trace = end_retrieval_trace(token)
 
         assert result == "PCA 是一种降维方法"
+        assert trace.retrieval_attempted is True
         assert trace.used_retrieval is True
         assert trace.sources == [{"reference": "《第7章 无监督学习算法》第123页"}]
 
@@ -110,10 +111,10 @@ class TestCourseRAGTool:
 
         parent_token = begin_retrieval_trace()
         try:
-            _track_retrieval([{"reference": "父来源"}], used=True)
+            _track_retrieval([{"reference": "父来源"}], attempted=True, used=True)
             child_token = begin_retrieval_trace()
             try:
-                _track_retrieval([{"reference": "子来源"}], used=True)
+                _track_retrieval([{"reference": "子来源"}], attempted=True, used=True)
             finally:
                 child_trace = end_retrieval_trace(child_token)
         finally:
@@ -207,7 +208,8 @@ class TestCourseRAGTool:
         finally:
             trace = end_retrieval_trace(token)
 
-        assert trace.used_retrieval is True
+        assert trace.retrieval_attempted is True
+        assert trace.used_retrieval is False
         assert trace.sources == []
 
     @patch("ds_course_agent.tools.course_rag.get_rag_service")
@@ -378,7 +380,7 @@ class TestCheckKnowledgeBaseStatus:
 class TestRAGPayloadWarnings:
     def test_retrieve_warns_on_large_formatted_context_without_changing_result(self, monkeypatch):
         import ds_course_agent.shared.context_governor as context_governor
-        from ds_course_agent.rag.rag import RAGService
+        from ds_course_agent.retrieval.service import RAGService
         from ds_course_agent.shared.context_governor import ContextBudget
 
         monkeypatch.setattr(

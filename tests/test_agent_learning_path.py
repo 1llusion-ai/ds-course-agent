@@ -1,21 +1,21 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from ds_course_agent.rag.learner_state import LearnerStateSnapshot
-from ds_course_agent.rag.profile_models import ProgressInfo, StudentProfile
+from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
+from ds_course_agent.teaching.profile_models import ProgressInfo, StudentProfile
 
 
 @patch("ds_course_agent.shared.history.get_history")
-@patch("ds_course_agent.rag.agent.map_question_to_concepts")
-@patch("ds_course_agent.rag.agent.record_event")
-@patch("ds_course_agent.rag.agent.get_memory_core")
+@patch("ds_course_agent.agent.service.map_question_to_concepts")
+@patch("ds_course_agent.agent.service.record_event")
+@patch("ds_course_agent.agent.service.get_memory_core")
 def test_chat_with_history_routes_to_learning_path_skill(
     mock_get_memory_core,
     _mock_record_event,
     mock_map_question,
     mock_get_history,
 ):
-    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.agent.service import AgentService
 
     mock_history = MagicMock()
     mock_history.messages = []
@@ -39,9 +39,6 @@ def test_chat_with_history_routes_to_learning_path_skill(
     mock_get_memory_core.return_value = mock_memory
 
     service = AgentService.__new__(AgentService)
-    service.llm = MagicMock()
-    service.tools = []
-    service.agent = MagicMock()
     service.learning_path_skill = MagicMock(return_value="学习路线结果")
     service.explanation_skill = MagicMock()
     service.chat = MagicMock(return_value="普通回答")

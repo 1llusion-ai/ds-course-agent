@@ -41,13 +41,13 @@ def _remote_chat_kwargs(
     }
 
 
-def get_chat_model():
-    """Return the chat model used by AgentService, titles, and skill executors."""
+def get_chat_model(*, max_retries: int | None = None) -> Any:
+    """Return a chat model, optionally assigning retry ownership to its caller."""
 
     if config.USE_REMOTE_LLM:
         from langchain_openai import ChatOpenAI
 
-        return ChatOpenAI(**_remote_chat_kwargs())
+        return ChatOpenAI(**_remote_chat_kwargs(max_retries=max_retries))
 
     from langchain_ollama import ChatOllama
 

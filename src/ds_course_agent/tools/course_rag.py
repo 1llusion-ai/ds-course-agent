@@ -271,7 +271,7 @@ def build_no_results_message() -> str:
 def trace_answer_degraded(exc: Exception, *, mode: str) -> None:
     """Record a warning-level RAG answer degradation without failing the turn."""
 
-    from ds_course_agent.rag.query_trace import trace_step
+    from ds_course_agent.shared.query_trace import trace_step
 
     trace_step(
         "tool.course_rag.answer_degraded",
@@ -310,7 +310,7 @@ def _answer_cache_key(question: str, context: str) -> str:
 
 def _trace_answer_cache(stage: str, **data) -> None:
     try:
-        from ds_course_agent.rag.query_trace import trace_step
+        from ds_course_agent.shared.query_trace import trace_step
 
         trace_step(stage, **data)
     except Exception:
@@ -384,15 +384,16 @@ def _answer_with_context_timeout_guard(service, question: str, context: str):
 @tool
 def course_rag_tool(question: str) -> str:
     """课程资料检索与问答工具。用于基于教材内容回答课程相关问题。"""
-    from ds_course_agent.rag.query_trace import trace_error, trace_span, trace_step
+    from ds_course_agent.shared.query_trace import trace_error, trace_span, trace_step
 
     trace_step("tool.invoke", tool="course_rag_tool", question=question)
+    _track_retrieval([], attempted=True, used=False)
     try:
         service = get_rag_service()
         with trace_span("tool.course_rag.retrieve"):
             result = service.retrieve(question)
         sources = build_sources_from_documents(result.documents)
-        _track_retrieval(sources, used=True)
+        _track_retrieval(sources, attempted=True, used=result.has_results)
 
         if not result.has_results:
             trace_step("tool.result", tool="course_rag_tool", status="no_results")

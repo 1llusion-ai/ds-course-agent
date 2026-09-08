@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from ds_course_agent.rag.query_pipeline.models import ExecutionMode, RouteFamily, RouteIntent
+from ds_course_agent.agent.routing.models import ExecutionMode, RouteFamily, RouteIntent
 
 
 class ChatMessage(BaseModel):
@@ -14,6 +14,9 @@ class ChatMessage(BaseModel):
     family: RouteFamily | None = None
     intent: RouteIntent | None = None
     execution_mode: ExecutionMode | None = None
+    retrieval_attempted: bool = False
+    used_retrieval: bool = False
+    degraded: bool = False
     progress: dict[str, Any] | None = None
     progress_events: list[dict[str, Any]] | None = None
     web_search_requested: bool = False

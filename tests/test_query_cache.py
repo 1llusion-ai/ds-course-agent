@@ -1,12 +1,40 @@
+import gc
 import time
+import weakref
 
+import numpy as np
 import pytest
 
-from ds_course_agent.rag import knowledge_mapper
-from ds_course_agent.rag.knowledge_mapper import MatchedConcept
-from ds_course_agent.rag.query_pipeline import utils
-from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
+from ds_course_agent.agent.routing import utils
 from ds_course_agent.shared import embeddings
+from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
+from ds_course_agent.teaching import knowledge_mapper
+from ds_course_agent.teaching.knowledge_mapper import KnowledgeMapper, MatchedConcept
+
+
+@pytest.fixture(autouse=True)
+def clear_concept_map_cache():
+    knowledge_mapper.clear_map_question_cache()
+    yield
+    knowledge_mapper.clear_map_question_cache()
+
+
+def _minimal_graph(*, embeddings=None):
+    graph = knowledge_mapper.KnowledgeGraph.__new__(knowledge_mapper.KnowledgeGraph)
+    graph.concepts = {
+        "unit": {
+            "canonical_id": "unit",
+            "display_name": "Unit",
+            "chapter": "unit",
+            "aliases": [],
+        }
+    }
+    graph.alias_to_concept = {}
+    graph.alias_specs = {}
+    graph.alias_policies = {}
+    graph.regex_rules = []
+    graph.embeddings = embeddings or {}
+    return graph
 
 
 def test_map_question_to_concepts_uses_inprocess_cache(monkeypatch):
@@ -41,6 +69,129 @@ def test_map_question_to_concepts_uses_inprocess_cache(monkeypatch):
     assert first is not second
     assert first[0] is not second[0]
     assert knowledge_mapper.map_question_cache_info().hits >= 1
+
+
+def test_concept_map_cache_reuses_equivalent_mapper_configuration(monkeypatch):
+    monkeypatch.setattr(knowledge_mapper.config, "QUERY_CACHE_ENABLED", True)
+    monkeypatch.setattr(knowledge_mapper.config, "CONCEPT_MAP_EMBEDDING_MODE", "disabled")
+
+    mapper_a = KnowledgeMapper(graph=_minimal_graph())
+    mapper_b = KnowledgeMapper(graph=_minimal_graph())
+    current_mapper = [mapper_a]
+    calls = 0
+    original_map_question = KnowledgeMapper.map_question
+
+    def counted_map_question(self, question, top_k=3, embedding_threshold=0.82):
+        nonlocal calls
+        calls += 1
+        return original_map_question(self, question, top_k, embedding_threshold)
+
+    monkeypatch.setattr(KnowledgeMapper, "map_question", counted_map_question)
+    monkeypatch.setattr(knowledge_mapper, "get_knowledge_mapper", lambda: current_mapper[0])
+
+    first = knowledge_mapper.map_question_to_concepts("same question", top_k=3)
+    current_mapper[0] = mapper_b
+    second = knowledge_mapper.map_question_to_concepts("same question", top_k=3)
+
+    assert first == second == []
+    assert calls == 1
+    assert knowledge_mapper.map_question_cache_info().hits == 1
+
+
+def test_concept_map_cache_invalidates_when_embedding_policy_changes(monkeypatch):
+    monkeypatch.setattr(knowledge_mapper.config, "QUERY_CACHE_ENABLED", True)
+    graph = _minimal_graph(embeddings={"unit": np.array([1.0, 0.0])})
+    mapper = KnowledgeMapper(graph=graph)
+    mapper._embed_text = lambda text: np.array([1.0, 0.0])
+    calls = 0
+    original_map_question = KnowledgeMapper.map_question
+
+    def counted_map_question(self, question, top_k=3, embedding_threshold=0.82):
+        nonlocal calls
+        calls += 1
+        return original_map_question(self, question, top_k, embedding_threshold)
+
+    monkeypatch.setattr(KnowledgeMapper, "map_question", counted_map_question)
+    monkeypatch.setattr(knowledge_mapper, "get_knowledge_mapper", lambda: mapper)
+
+    monkeypatch.setattr(knowledge_mapper.config, "CONCEPT_MAP_EMBEDDING_MODE", "disabled")
+    assert knowledge_mapper.map_question_to_concepts("unmatched", top_k=1) == []
+
+    monkeypatch.setattr(knowledge_mapper.config, "CONCEPT_MAP_EMBEDDING_MODE", "offline_first")
+    matches = knowledge_mapper.map_question_to_concepts("unmatched", top_k=1)
+
+    assert [(match.concept_id, match.method) for match in matches] == [("unit", "embedding")]
+    assert calls == 2
+
+
+def test_unknown_mapper_cache_owns_identity_until_clear(monkeypatch):
+    monkeypatch.setattr(knowledge_mapper.config, "QUERY_CACHE_ENABLED", True)
+
+    class FakeMapper:
+        def __init__(self, concept_id):
+            self.concept_id = concept_id
+            self.calls = 0
+
+        def map_question(self, question, top_k):
+            self.calls += 1
+            return [
+                MatchedConcept(
+                    concept_id=self.concept_id,
+                    display_name=self.concept_id,
+                    chapter="unit",
+                    method="exact_alias",
+                    score=1.0,
+                )
+            ]
+
+    first = FakeMapper("first")
+    first_ref = weakref.ref(first)
+    first_object_id = id(first)
+    current_mapper = [first]
+    monkeypatch.setattr(knowledge_mapper, "get_knowledge_mapper", lambda: current_mapper[0])
+
+    first_result = knowledge_mapper.map_question_to_concepts("question", top_k=1)
+    current_mapper[0] = None
+    del first
+    gc.collect()
+
+    assert first_ref() is not None
+    second = FakeMapper("second")
+    assert id(second) != first_object_id
+    current_mapper[0] = second
+    second_result = knowledge_mapper.map_question_to_concepts("question", top_k=1)
+
+    assert [match.concept_id for match in first_result] == ["first"]
+    assert [match.concept_id for match in second_result] == ["second"]
+    assert second.calls == 1
+
+    knowledge_mapper.clear_map_question_cache()
+    gc.collect()
+    assert first_ref() is None
+
+
+def test_concept_map_cache_is_bounded_and_clear_resets_observability(monkeypatch):
+    monkeypatch.setattr(knowledge_mapper.config, "QUERY_CACHE_ENABLED", True)
+
+    class FakeMapper:
+        def map_question(self, question, top_k):
+            return []
+
+    mapper = FakeMapper()
+    monkeypatch.setattr(knowledge_mapper, "get_knowledge_mapper", lambda: mapper)
+    maxsize = knowledge_mapper.map_question_cache_info().maxsize
+
+    for index in range(maxsize + 3 if maxsize else 3):
+        knowledge_mapper.map_question_to_concepts(f"question-{index}", top_k=1)
+
+    info = knowledge_mapper.map_question_cache_info()
+    assert info.currsize <= info.maxsize
+
+    knowledge_mapper.clear_map_question_cache()
+    cleared = knowledge_mapper.map_question_cache_info()
+    assert cleared.currsize == 0
+    assert cleared.hits == 0
+    assert cleared.misses == 0
 
 
 def test_query_normalize_cache_is_observable(monkeypatch):

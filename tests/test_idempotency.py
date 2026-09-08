@@ -12,9 +12,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ds_course_agent.rag.events import build_concept_mentioned_event
-from ds_course_agent.rag.memory_core import MemoryCore
-from ds_course_agent.rag.profile_models import StudentProfile
+from ds_course_agent.teaching.learning_events import build_concept_mentioned_event
+from ds_course_agent.teaching.memory_core import MemoryCore
+from ds_course_agent.teaching.profile_models import StudentProfile
 
 
 def test_record_event_idempotency():

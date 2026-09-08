@@ -1,6 +1,6 @@
 # Nanobot-Inspired Refactor Roadmap and Progress Log
 
-Last updated: 2026-07-16
+Last updated: 2026-09-08
 
 This document records the agreed local plan for borrowing engineering mechanisms
 from `nanobot` while preserving this project's core course-agent architecture.
@@ -86,7 +86,7 @@ changed.
      deterministic steps where safe.
 
 8. **Tool registry and metadata**
-   - Split `rag/tools.py` gradually.
+   - Use the split tool modules under `src/ds_course_agent/tools/` as the current ownership boundary.
    - Use a lightweight registry/dataclass first, not a large abstract framework.
 
 9. **Hooks plus route handlers**
@@ -127,8 +127,25 @@ changed.
 
 ## Progress Log
 
+> **Historical/stale path note.** The dated rows below preserve the paths,
+> commands, and validation facts from each contemporaneous migration stage.
+> They are not current import instructions. After M4, use these mappings:
+> `src/ds_course_agent/rag/agent.py` ->
+> `src/ds_course_agent/agent/service.py`; `src/ds_course_agent/rag/query_pipeline/`
+> -> `src/ds_course_agent/agent/routing/`; `src/ds_course_agent/rag/route_handlers.py`
+> -> `src/ds_course_agent/agent/handlers.py`; `src/ds_course_agent/rag/tools.py`
+> -> split modules under `src/ds_course_agent/tools/`; and top-level `hooks/`
+> -> `src/ds_course_agent/agent/hooks/`. Retrieval, teaching, and trace paths
+> likewise follow the current package layout at the top of this document.
+
 | Date | Item | Status | Evidence / Notes |
 | --- | --- | --- | --- |
+| 2026-09-08 | Architecture review closure | Done, uncommitted | Closed the remaining utility duplication, public annotation, document-path drift, rollout race, retrieval concurrency/revision/cache, and web-fetch retry items. Historical evidence retains contemporaneous paths with explicit post-M4 mappings; current instructions use the migrated owners. Final gates: 596 passed, 14 skipped, 1 existing warning; Ruff check passed and 233 files passed format check; route tests 37/37; harness 119/119, Unexpected RAG 0; frontend build passed with existing warnings. |
+| 2026-09-08 | Review repair: retrieval semantics and blank-stream recovery | Done, uncommitted | Added typed `retrieval_attempted` separately from evidence use, projected it through API/history/UI, removed metadata/route-mode inference, and kept blank-stream recovery inside the selected handler boundary without replaying route/hooks/tools. Full suite: 531 passed, 14 skipped, 1 existing warning; Ruff 224 files; route tests 37 passed; harness 119/119, Unexpected RAG 0; frontend build passed. |
+| 2026-09-08 | Layered migration M4: orchestration package | Done, uncommitted | Agent/routing/events/hooks moved to agent; code executor moved to tools. Old rag/hooks packages removed without shims. API, tools, skills, benchmarks, tests and entrypoint docs migrated. Full suite: 503 passed, 14 skipped, 1 existing warning; harness 119/119, Unexpected RAG 0. |
+| 2026-09-08 | Layered migration M3: domain packages | Done, uncommitted | 14 modules moved to teaching/retrieval/research; removed old paths and eager rag facade exports; updated consumers, scripts, tests. Full suite: 501 passed, 14 skipped, 1 existing warning; route harness 119/119, Unexpected RAG 0. M4 orchestration move remains pending. |
+| 2026-09-08 | Layered migration M2: route executor | Done, uncommitted | Dispatch, buffered finalization, streaming exception propagation, and stream-end observation moved to `rag/route_executor.py`; removed six AgentService methods without shims. AgentService: 549 lines. Full suite: 496 passed, 14 skipped, 1 existing warning; route harness 119/119, Unexpected RAG 0. |
+| 2026-09-08 | Layered migration M1: domain-independent runtime | Done, uncommitted | Model runtime/stream/context moved to `runtime/`; generic messages separated from learner rendering; domain fallback and tool resolution injected through explicit contracts; trace moved to `shared/query_trace.py` with no shim. Full suite: 488 passed, 14 skipped, 1 existing warning. Route harness: 119/119, Unexpected RAG 0. M2-M4 tracked in architecture_reorg_plan.md. |
 | 2026-07-15 | Roadmap recorded locally | Done | Created this file. |
 | 2026-07-15 | Condition RetrievalGuard | Done | Added `AgentService._retrieval_guard_skip_reason()` and trace events `retrieval_guard.skip` / `retrieval_guard.force`; added regression test for `GENERIC_AGENT + optional` skipping forced RAG. Validation: `python -m pytest tests/test_agent_grounded_fallback.py tests/test_query_pipeline.py -q` -> 44 passed, 1 warning. |
 | 2026-07-15 | Latency harness scaffold | Done | Subagent `Kepler` added `benchmarks/latency_harness.py`. Reviewed locally. Validation: `python -m py_compile benchmarks/latency_harness.py` -> pass; `python benchmarks/latency_harness.py --help` -> pass; `python benchmarks/latency_harness.py --limit 0 --output /tmp/latency_harness_report.json` -> pass and writes a zero-query report without LLM/RAG calls. |

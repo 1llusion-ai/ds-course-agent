@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.api.timestamps import parse_timestamp
 from ds_course_agent.api.title_generation import (
     DEFAULT_SESSION_TITLE,
     build_fallback_session_title,
@@ -46,17 +47,6 @@ def state_lock() -> Iterator[None]:
         yield
 
 
-def _parse_timestamp(value, fallback: datetime) -> datetime:
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, str):
-        try:
-            return datetime.fromisoformat(value)
-        except Exception:
-            return fallback
-    return fallback
-
-
 def _coerce_legacy_message(raw: dict, fallback_ts: datetime) -> dict | None:
     if not isinstance(raw, dict):
         return None
@@ -70,6 +60,9 @@ def _coerce_legacy_message(raw: dict, fallback_ts: datetime) -> dict | None:
             "family": raw.get("family"),
             "intent": raw.get("intent"),
             "execution_mode": raw.get("execution_mode"),
+            "retrieval_attempted": bool(raw.get("retrieval_attempted", False)),
+            "used_retrieval": bool(raw.get("used_retrieval", False)),
+            "degraded": bool(raw.get("degraded", False)),
             "progress": raw.get("progress"),
             "progress_events": raw.get("progress_events") or raw.get("progressEvents"),
             "metadata": raw.get("metadata"),
@@ -133,8 +126,8 @@ def _derive_session_metadata(session_id: str, messages: list[dict], fallback_ts:
         if message.get("role") == "user" and message.get("content")
     ]
     title = build_fallback_session_title(user_messages[0]) if user_messages else DEFAULT_SESSION_TITLE
-    created_at = _parse_timestamp(messages[0].get("timestamp"), fallback_ts) if messages else fallback_ts
-    updated_at = _parse_timestamp(messages[-1].get("timestamp"), fallback_ts) if messages else fallback_ts
+    created_at = parse_timestamp(messages[0].get("timestamp"), fallback_ts) if messages else fallback_ts
+    updated_at = parse_timestamp(messages[-1].get("timestamp"), fallback_ts) if messages else fallback_ts
 
     return {
         "title": title,

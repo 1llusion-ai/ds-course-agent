@@ -123,6 +123,23 @@ def _routing_fields_from_progress_events(progress_events: list[dict] | None) -> 
     return routing_fields
 
 
+def _retrieval_fields_from_progress_events(progress_events: list[dict] | None) -> dict[str, bool]:
+    """Return explicit retrieval facts emitted by typed retrieval events."""
+
+    fields = {
+        "retrieval_attempted": False,
+        "used_retrieval": False,
+        "degraded": False,
+    }
+    for event in progress_events or []:
+        details = event.get("details") if isinstance(event, dict) else None
+        if not isinstance(details, dict):
+            continue
+        for field_name in fields:
+            fields[field_name] = fields[field_name] or bool(details.get(field_name, False))
+    return fields
+
+
 def web_search_turn_fields(
     *,
     requested: bool,
@@ -253,6 +270,8 @@ def launch_stream_worker(
         snapshot = job.snapshot()
         content = str(event.get("content") or snapshot.content)
         base_metadata = dict(base_message.metadata or {}) if base_message else {}
+        for control_field in ("retrieval_attempted", "used_retrieval", "degraded"):
+            base_metadata.pop(control_field, None)
         progress_sources = _sources_from_progress_events(snapshot.progress_events)
         assistant_sources = (
             event.get("sources") or (base_message.sources if base_message else None) or progress_sources or None
@@ -273,16 +292,16 @@ def launch_stream_worker(
             or (base_message.execution_mode.value if base_message and base_message.execution_mode else None)
             or progress_routing["execution_mode"]
         )
-        used_retrieval = bool(
-            event.get("used_retrieval")
-            or base_metadata.get("used_retrieval")
-            or progress_sources
-            or execution_mode == "grounded_generation"
-        )
+        progress_retrieval = _retrieval_fields_from_progress_events(snapshot.progress_events)
+        retrieval_attempted = bool(event.get("retrieval_attempted", False)) or progress_retrieval["retrieval_attempted"]
+        used_retrieval = bool(event.get("used_retrieval", False)) or progress_retrieval["used_retrieval"]
+        degraded = bool(event.get("degraded", False)) or progress_retrieval["degraded"]
+        if base_message:
+            retrieval_attempted = retrieval_attempted or base_message.retrieval_attempted
+            used_retrieval = used_retrieval or base_message.used_retrieval
+            degraded = degraded or base_message.degraded
         metadata = {
             **base_metadata,
-            "used_retrieval": used_retrieval,
-            "degraded": bool(event.get("degraded", base_metadata.get("degraded", False))),
             "web_search": bool(web_search),
         }
 
@@ -311,6 +330,9 @@ def launch_stream_worker(
             family=family,
             intent=intent,
             execution_mode=execution_mode,
+            retrieval_attempted=retrieval_attempted,
+            used_retrieval=used_retrieval,
+            degraded=degraded,
             progress=snapshot.progress,
             progress_events=snapshot.progress_events or None,
             generation_status=generation_status,
@@ -347,9 +369,38 @@ def launch_stream_worker(
             }
         )
 
-    def worker() -> None:
+    def _publish_unpersisted_terminal_error() -> None:
+        """Terminate replay even when the final history mutation cannot be saved."""
+
+        if job.snapshot().terminal:
+            return
+        generation_error = "回答已结束，但最终状态无法保存，请刷新后重试。"
         try:
-            for event in event_source():
+            message = chat_sessions.message_to_dict(
+                _build_message(
+                    {},
+                    generation_status="error",
+                    generation_error=generation_error,
+                )
+            )
+        except Exception:
+            message = None
+        snapshot = job.snapshot()
+        job.publish(
+            {
+                "type": "final",
+                "session_id": session_id,
+                "stream_id": snapshot.stream_id,
+                "error": generation_error,
+                "message": message,
+            }
+        )
+
+    def worker() -> None:
+        source = None
+        try:
+            source = iter(event_source())
+            for event in source:
                 if not isinstance(event, dict):
                     continue
                 if stop_event.is_set():
@@ -429,8 +480,16 @@ def launch_stream_worker(
                 )
             except Exception:
                 logger.error("流式失败状态保存失败", exc_info=True)
+                _publish_unpersisted_terminal_error()
         finally:
-            operation_lock.release()
+            try:
+                close = getattr(source, "close", None)
+                if callable(close):
+                    close()
+            except Exception:
+                logger.exception("Failed to close upstream chat stream")
+            finally:
+                operation_lock.release()
 
     threading.Thread(
         target=worker,

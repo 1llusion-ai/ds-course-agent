@@ -1,14 +1,17 @@
+import ast
 import json
 import threading
+from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
+import ds_course_agent.agent.routing.utils as routing_utils
 import ds_course_agent.shared.context_governor as context_governor
 import ds_course_agent.shared.history as history_module
-from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.shared.context_governor import ContextBudget
 from ds_course_agent.shared.history import FileChatMessageHistory, MemoryPolicy
+from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.shared.tool_result_store import TOOL_RESULT_COMPACTED_MARKER
 
 
@@ -17,6 +20,48 @@ def _turn(i: int):
         HumanMessage(content=f"问题{i}"),
         AIMessage(content=f"回答{i}"),
     ]
+
+
+def test_summary_marker_is_shared_by_history_writer_and_routing_reader(tmp_path, monkeypatch):
+    marker = object()
+    monkeypatch.setattr(history_module, "SUMMARY_MARKER", marker)
+
+    history = FileChatMessageHistory(
+        storage_path=str(tmp_path),
+        session_id="summary-marker",
+        memory_policy=MemoryPolicy(max_recent_messages=10, summarize_after_messages=20),
+    )
+    message = history._new_summary_message("旧摘要")
+
+    assert message.additional_kwargs[marker] is True
+    assert not hasattr(routing_utils, "SUMMARY_MARKER")
+    assert routing_utils.is_summary_message(message)
+    assert routing_utils.is_summary_message({"role": "system", "additional_kwargs": {marker: True}})
+
+
+def test_legacy_summary_marker_remains_recognized():
+    legacy_message = SystemMessage(
+        content="短期记忆摘要：\n旧摘要",
+        additional_kwargs={"short_memory_summary": True},
+    )
+
+    assert routing_utils.is_summary_message(legacy_message)
+    assert routing_utils.is_summary_message({"role": "system", "additional_kwargs": {"short_memory_summary": True}})
+
+
+def test_summary_marker_has_one_production_definition():
+    source_root = Path(history_module.__file__).parents[1]
+    definitions = []
+    for path in source_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                if any(isinstance(target, ast.Name) and target.id == "SUMMARY_MARKER" for target in targets):
+                    definitions.append(path.relative_to(source_root).as_posix())
+
+    assert definitions == ["shared/history.py"]
+    assert history_module.SUMMARY_MARKER == "short_memory_summary"
 
 
 def test_file_chat_history_keeps_summary_plus_sliding_window(tmp_path):

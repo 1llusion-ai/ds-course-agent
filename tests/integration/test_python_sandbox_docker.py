@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from ds_course_agent.rag.code_executor import PythonSandbox
+from ds_course_agent.tools.code_executor import PythonSandbox
 
 SANDBOX_IMAGE = os.getenv("PYTHON_EXEC_DOCKER_IMAGE", "ds-course-python-sandbox:latest")
 

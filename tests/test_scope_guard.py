@@ -1,4 +1,4 @@
-from ds_course_agent.rag.scope_guard import assess_query_scope
+from ds_course_agent.agent.scope_guard import assess_query_scope
 
 
 def test_scope_guard_blocks_general_sports_fact():

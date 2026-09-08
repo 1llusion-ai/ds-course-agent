@@ -31,15 +31,19 @@ docker compose -f deploy/compose.yaml config
 ## Architecture
 
 ```text
-Vue 3 app (web/) → HTTP/SSE → FastAPI (src/ds_course_agent/api/) → ds_course_agent.rag
+Vue 3 app (web/) → HTTP/SSE → FastAPI (src/ds_course_agent/api/) → ds_course_agent.agent.service
 ```
 
 ## Python Package Layout
 
 - `src/ds_course_agent/api/` — FastAPI app, routers, schemas, API state.
-- `src/ds_course_agent/rag/` — agent orchestration, RAG, retrieval, tools, query pipeline, memory models.
+- `src/ds_course_agent/agent/` — service, routing/QueryPipeline, turn events/runner, hooks, handlers, result finalizer.
+- `src/ds_course_agent/runtime/` — model calls, context governance, message conversion, stream decoding.
+- `src/ds_course_agent/retrieval/` — course RAG, hybrid retrieval and reranking.
+- `src/ds_course_agent/research/` — web research pipeline and evidence policies.
+- `src/ds_course_agent/tools/` — atomic tools, registry and execution sandbox.
 - `src/ds_course_agent/kb/` — PDF/data parsing, cleaning, chunking, TOC parsing, vector-store write path.
-- `src/ds_course_agent/teaching/skills/` — SKILL.md teaching strategies and executors.
+- `src/ds_course_agent/teaching/` — learner state, learning events, profiles, graph and SKILL.md executors under skills/.
 - `src/ds_course_agent/shared/` — config, repository paths, logging, chat history, vector-store helpers.
 
 ## Frontend

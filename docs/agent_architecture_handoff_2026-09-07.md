@@ -1,6 +1,99 @@
 # Agent 架构优化交接（2026-09-07）
 
-最近续作：2026-09-08（P4-E result finalizer 已完成）
+最近续作：2026-09-08（M1-M4 完成；评审缺陷修复；真实知识库误删已重建恢复；全部待提交）
+
+> **Historical/stale path note.** Sections 3.1-3.16 and the historical P4/P5
+> plan entries preserve paths, line counts, and commands from their contemporaneous
+> stages. Those references are historical evidence, not current import
+> instructions. The current post-M4 mappings are:
+> `src/ds_course_agent/rag/agent.py` -> `src/ds_course_agent/agent/service.py`;
+> `src/ds_course_agent/rag/query_pipeline/` ->
+> `src/ds_course_agent/agent/routing/`;
+> `src/ds_course_agent/rag/route_handlers.py` ->
+> `src/ds_course_agent/agent/handlers.py`;
+> `src/ds_course_agent/rag/turn_events.py` ->
+> `src/ds_course_agent/agent/events.py`;
+> `src/ds_course_agent/rag/web_research*.py` ->
+> `src/ds_course_agent/research/{pipeline,policy,fetch,models}.py`;
+> `src/ds_course_agent/rag/knowledge_mapper.py` and `course_graph.py` ->
+> `src/ds_course_agent/teaching/`; `src/ds_course_agent/rag/query_trace.py` ->
+> `src/ds_course_agent/shared/query_trace.py`; and top-level `hooks/` ->
+> `src/ds_course_agent/agent/hooks/`. See section 3.17 for the authoritative
+> current directory migration.
+
+## 0. 接手先读：当前状态
+
+### 工作区与安全边界
+
+- 仓库：`/home/xiaofan/Projects/ds-course-agent`。
+- 分支：`refactor/agent-architecture-foundation`；当前 HEAD：`ce5d399 test: strengthen route result finalizer contracts`。
+- P4-F、M1-M4、后续缺陷修复、reset 防误删和恢复脚本均在工作区，**尚未提交或推送**。
+- `git status` 中旧 rag/hooks 路径的 D 与新领域文件对应，是有意迁移；不要 checkout/reset 回旧布局。
+- 新目录、新脚本、新测试和事故文档有未跟踪文件，审查时不能只看 `git diff`。
+- `cw3458.html` 是无关用户文件，未修改、未暂存。`var/`、`.env`、恢复库和缓存不提交。
+- 不再执行目录迁移；不要新建兼容 shim，不要重复恢复知识库。所有下一步变更先遵守 AGENTS.md。
+
+### 当前代码目录
+
+```text
+src/ds_course_agent/
+  agent/       service.py, events.py, turn_runner.py, route_executor.py,
+               handlers.py, result_finalizer.py, message_context.py,
+               routing/ (QueryPipeline), hooks/, prompt.py, model_fallback.py
+  runtime/     model_runtime.py, model_stream.py, context.py, messages.py, contracts.py
+  teaching/    learner_state.py, learning_events.py, profile_models.py, memory_core.py,
+               knowledge_mapper.py, course_graph.py, skill_system.py, skills/
+  retrieval/   service.py, hybrid_retriever.py, reranker.py
+  research/    pipeline.py, policy.py, fetch.py, models.py
+  tools/       原子工具、registry、code_executor.py
+  api/         FastAPI、chat application/session/streaming、SSE、timestamps.py
+  shared/      config、query_trace.py、kb_revision.py、embeddings、history 等
+  kb/          PDF 解析、清洗、分块、入库
+```
+
+`agent/service.py` 当前 564 行。原 `rag/` 和顶层 `hooks/` 包已删除。领域层仍有少量编排契约依赖，
+目录迁移完成不等于完全反转了所有依赖，也不等于实现了 MetaMonitor 或多 Agent。
+
+### 正在运行的服务与真实知识库
+
+- 前端：`http://localhost:5185/`；后端：`http://localhost:8084/`；健康接口：`/api/health`。
+- 日志：`var/logs/api.log`、`var/logs/vite.log`；恢复日志：`var/logs/kb_recovery_20260908.log`。
+- 服务以独立进程启动；后端没有开启自动 reload。修改后端代码后须确认当前 PID 再重启，不能复用历史 PID。
+- `scripts/wsl/start.sh` 会调用含全局 pkill 的 stop.sh；多项目同时运行时不要盲目使用，先检查实际进程。
+- 接手时先检查实际 `HERDR_ENV` 和 Herdr 状态；不得伪造环境变量控制其他终端。
+- 正式库：`var/chroma_db`，集合 `course_c37b7b78`，**560 条文档**；已只读核对 SQLite 计数。
+- 恢复清单：`var/chroma_db/recovery.json`；其中 output 是已移走的构建暂存路径，不是当前服务路径。
+- 空库现场：`var/artifacts/kb-empty-original-20260908`，保留取证，未删除。
+- 教材 PDF 和 parse/clean 缓存保留。恢复时 560 条成功、0 失败，未修改 `.env`，不是原向量库逐字节还原。
+- 真实检索三题通过；真实 RAG 工具回答约 19.85 秒、3 个来源、trace=ok。
+- 16:02 后端日志另记录页面发起的真实课程 RAG 成功：加载 560 条、总耗时 24.067 秒，回答流阶段 20.096 秒。
+
+### 事故与未解决问题
+
+13:38 的 Claude Code 评审子代理批量 import 了旧 `scripts.reset_db`，顶层 rmtree 当场删除真实知识库。
+此事已由工具日志和目录时间戳确认，不是 WSL 路径迁移问题。详见 `docs/kb_incident_2026-09-08.md`。
+reset 脚本现已导入安全、默认预览、显式确认后归档；审核未知脚本必须先静态检查，不能把 import 当只读操作。
+
+联网回答的 direct-model 调度回归、检索尝试/证据使用语义、空流整路重跑，以及已确认的缓存/流式/会话问题已修复，见
+`docs/architecture_review_followup_2026-09-08.md`。**模型延迟尚未优化**：一次 OPD 对比请求耗时 59.317 秒，
+其中搜索 2.328 秒、模型流式回答 55.764 秒；没有首个有效 token 的独立计时，不能断言是排队、网络、
+SDK 重试还是生成本身。15 秒无新事件时前端显示长等待提示；45 秒模型 timeout 不是整轮硬截止。
+
+### 建议下一步
+
+1. 先审查当前工作区并征得用户授权后按逻辑分组提交，不要混入运行时数据或改写现有提交历史。
+2. 优先增加模型请求/首 token/完成耗时与 SDK 重试可观测性，再用同题 baseline 判断延迟瓶颈。
+3. 评审修复已收口；后续若发现新问题，应另开聚焦任务，不要继续扩大本批次。
+4. 稳定运行和评测后，另开模型化学生画像（LearnerStateProvider）及 P5 角色/工具权限任务。
+
+最终代码验证：596 passed、14 skipped、1 个既有 warning；Ruff check 通过，233 个文件格式合规；路由测试 37 passed；
+route harness 119/119、Unexpected RAG=0；前端 production build 通过（既有 Sass/chunk-size warning）。
+未提交、未推送，也未重启服务。
+
+R4 后补充验证：`runtime/model_runtime.py` 的同步调用已统一使用
+`runtime/retry.py` 的类型化 retry policy；`AgentService` 的远端 chat model 显式关闭 SDK retry，
+其它模型工厂保留各自预算；首 token 后禁止重试。聚焦测试为 48 passed、4 skipped，相关 Ruff
+check/format 通过。上述聚焦结果已包含在最终 596 条全量验证中。
 
 ## 1. 本轮目标
 
@@ -27,6 +120,7 @@
 - `c7ce120 refactor: extract chat application services`
 - `15d9697 refactor: extract message context builder`
 - `9e029e1 refactor: extract route result finalizer`
+- `ce5d399 test: strengthen route result finalizer contracts`
 
 ## 2. 从 pi-agent 借鉴了什么
 
@@ -38,15 +132,15 @@ pi-agent 值得借鉴的不是 TypeScript 目录本身，而是职责分离：
 - 应用消息先转换为模型消息，再进入 LLM，业务状态不直接污染模型协议。
 - 生命周期事件统一覆盖 turn、message 和 tool execution。
 
-当前项目后续对应关系应为：
+当前已落地的对应关系：
 
 | pi-agent 机制 | 本项目落点 |
 | --- | --- |
 | Typed state | `LearnerStateSnapshot`、`QueryContext`、`RouteState` |
-| Agent loop | 后续从 `rag/agent.py` 拆出 turn runner，不替换 `QueryPipeline` |
-| Message transform | 后续集中处理 history、learner context、tool result 到 LLM messages 的转换 |
-| Typed events | 后续统一同步、流式、API SSE 的 turn event 协议 |
-| Tool result contract | 后续让 `RouteHandler` 直接返回带来源和检索状态的类型化结果 |
+| Agent loop | `agent/turn_runner.py`，保留 `agent/routing/` 中的 QueryPipeline |
+| Message transform | `runtime/messages.py` 通用消息转换；`agent/message_context.py` 教学上下文渲染 |
+| Typed events | `agent/events.py` 生命周期事件；RouteResultEvent 仅供内部收尾，不输出到 SSE |
+| Tool result contract | RouteHandler 返回 RouteExecutionResult；`agent/result_finalizer.py` 统一收尾 |
 
 多 Agent 的前提是共享明确状态、事件和工具权限，而不是先增加多个自主循环。
 
@@ -254,6 +348,93 @@ Web research 流式空结果兜底均直接调用模块函数 `finalize_route_re
 
 `rag/agent.py` 从 1282 行进一步降至 1204 行。
 
+### 3.13 从 AgentService 拆出 model runtime
+
+P4-F 最初抽出三个职责明确的模块；M1 已将其迁至如下最终路径：
+
+- `runtime/model_runtime.py`：模型调用、结构化重试/降级、显式工具 allowlist agent 构造与缓存。
+- `runtime/model_stream.py`：LangGraph message stream 解码、tool/non-assistant 过滤和恢复回答分块。
+- `runtime/context.py`：query prepare 与实际 LLM 调用共享的 context warning/compaction 边界。
+
+`AgentService` 只保留公开 `chat()` / `direct_chat()` 领域门面并组合 `ModelRuntime`。旧的模型调用、错误分类、
+stream parsing、`_agent_for_tools()`、`_create_agent()`、context governance 和 Ollama 检查私有方法已直接删除，
+没有保留转发 shim。`GenericAgentRouteHandler` 通过显式 `agent.model_runtime.agent_for_tools()` 获取工具子集 agent；
+`QueryPipeline`、turn runner、route handlers 和 Web research 直接依赖各自所需的公共函数。
+
+迁移过程中发现并修复了 `model_runtime -> message_context -> query_pipeline -> model_runtime` 模块环：context
+governance 被归到独立 `model_context.py`，pipeline 与 runtime 单向依赖它。新增结构不变量确认旧 runtime 私有方法
+不再存在于 `AgentService`。
+
+P4-F 将 `rag/agent.py` 从 1204 行降至 644 行，M1 增加显式 fallback 注入后为 646 行。但 route selection/execution adapter、retrieval guard
+适配和 learning enrichment adapter 仍可在进入 P5 前作为独立任务继续收敛。
+
+### 3.14 M1：独立 runtime 层
+
+迁移阶段以 `docs/architecture_reorg_plan.md` 为准；目前 M1-M4 均完成。
+
+- `runtime/contracts.py` 定义 `ToolResolver` 与 `ModelFallback`；runtime 不导入具体工具注册表或课程 RAG。
+- `rag/model_fallback.py` 保留既有课程兜底行为，由 `AgentService` 显式注入 runtime。
+- `runtime/messages.py` 持有通用消息转换；`rag/message_context.py` 仅保留教学状态渲染。
+- trace 的唯一所有者迁至 `shared/query_trace.py`；所有 import 和 monkeypatch 路径同步更新。
+- 删除旧的 runtime/context/stream/trace 路径，不保留 shim。未变更 trace 字段和 SSE 协议。
+- `tests/test_runtime_boundary.py` 钉死静态依赖方向、独立加载、旧路径删除、兜底隔离、部分流禁止重试和 trace 共享。
+
+实际新增目录：
+
+```text
+runtime/
+  __init__.py
+  contracts.py
+  context.py
+  messages.py
+  model_runtime.py
+  model_stream.py
+```
+
+### 3.15 M2：路由执行器
+
+新增 `rag/route_executor.py`，采用与 turn runner 一致的模块函数风格，依赖类型化 `RouteAgent` 协议。
+它持有 handler 顺序选择、已选 handler 执行与 finalizer 调用、流式异常传播和 observation-only stream-end hook。
+
+删除 `AgentService` 的 `_get_route_handlers`、`_select_route_handler`、`_execute_selected_route_handler`、
+`_execute_route`、`_iter_route_response`、`_observe_stream_end`，无转发 shim。turn runner、handler 和 Web research
+直接调用新模块。`AgentService` 从 646 行降至 549 行，仍保留 RAG 流式生成及 enrichment 适配。
+
+新增 8 个测试覆盖旧方法不得回归、sync/buffered stream 选路和执行失败只收尾一次、显式空 registry 不回退默认
+handlers、stream-end hook 不变更已发布内容及其异常隔离。既有测试继续覆盖选中 handler 不重复 dispatch、
+handler 检索结果不丢失、部分流异常不写完整助手历史。
+
+### 3.16 M3：领域目录迁移
+
+从 `rag/` 直接迁移 14 个模块，没有保留转发 shim：
+
+- `teaching/`：learner_state、profile_models、memory_core、knowledge_mapper、course_graph、skill_system；
+  原 events.py 更名为 learning_events.py，与 turn 生命周期事件区分。
+- `retrieval/`：原 rag.py 更名 service.py，连同 hybrid_retriever.py、reranker.py 迁入。
+- `research/`：原 web_research*.py 分别迁为 pipeline.py、policy.py、fetch.py、models.py。
+
+`rag/__init__.py` 删除 Agent/检索/工具的 eager re-export，调用方、测试 monkeypatch 和脚本全部使用真实路径。
+skill 脚本位置及数据/运行时路径未变。检索模块修正 import 位置并删除失效的 E402 路径豁免。
+新增 5 个测试确认领域独立加载不启动 Agent/API、旧路径删除、领域不导入 API。
+
+research 仍消费 rag 中的 RouteState、events、finalizer 等编排契约，M4 将迁移这些契约；此处不宣称已彻底消除
+所有跨层依赖。本轮没有更换 QueryPipeline、LearningEvent、RAG 实现或 SSE wire protocol。
+
+### 3.17 M4：编排包迁移完成
+
+- `rag/agent.py` → `agent/service.py`，仍为 549 行；公开入口保持 `AgentService` / `get_agent_service`。
+- `rag/query_pipeline/` → `agent/routing/`；QueryPipeline 类和执行顺序不变。
+- `rag/route_handlers.py` → `agent/handlers.py`；`rag/turn_events.py` → `agent/events.py`。
+- turn_runner、route_executor、result_finalizer、message_context、prompt、model_fallback、scope_guard、taxonomy
+  保持模块名迁入 `agent/`；顶层 `hooks/` → `agent/hooks/`。
+- `rag/code_executor.py` → `tools/code_executor.py`，不改变沙箱默认或执行权限。
+- 删除旧 rag/hooks 包，无兼容 shim；残留 pycache 可恢复地归档至 `/tmp/ds-course-agent-m4-cache.aMPjBx`。
+- 新增包边界测试确认旧包不可导入、Agent 包不隐式初始化 service/model、路由结果契约身份唯一。
+- 更新 API、skill 脚本、工具、测试、benchmark、README、AGENTS/CLAUDE 引用。
+
+目录迁移已完成，不代表多 Agent 或 MetaMonitor 已实现，也不代表全部领域依赖已反转；research 仍消费
+agent 的路由/事件和 finalizer 契约，后续若进一步解耦应另开任务。
+
 ## 4. 验证结果
 
 ```bash
@@ -261,7 +442,7 @@ Web research 流式空结果兜底均直接调用模块函数 `finalize_route_re
 .venv/bin/ruff format --check src tests scripts benchmarks
 ```
 
-结果：全部通过，199 个文件格式符合要求。
+结果：全部通过，223 个文件格式符合要求。
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest \
@@ -270,7 +451,7 @@ PYTHONPATH=src .venv/bin/python -m pytest \
   tests/test_turn_events.py -q
 ```
 
-结果：`64 passed`。
+该组合为 P4 历史验证：`64 passed`；M1 中全部包含在下述全量验证中。
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m pytest \
@@ -290,23 +471,36 @@ PYTHONPATH=src .venv/bin/python benchmarks/route_harness.py
 PYTHONPATH=src .venv/bin/python -m pytest -q
 ```
 
-当前结果：`478 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
+当前结果：`531 passed, 14 skipped, 1 warning`。warning 为既有的可选 `sentence_transformers` 缺失降级提示。
+
+13:38 的独立评审批量 import 触发旧 `scripts.reset_db` 顶层删除，导致真实课程库被清空。
+已封住该入口，并从保留缓存重建 560 条课程资料到独立目录，验证后切回原路径；空库现场已归档。
+详细证据、恢复路径和限制见 `docs/kb_incident_2026-09-08.md`。
+
+M4 后发现联网回答仍按已删除的 `AgentService.llm` 选择调用方法，误入无 graph_agent 的工具图路径。
+已删除 `_choose_chat_fn`，同步/流式联网回答明确使用 `direct_chat`，并补真实 service/runtime 配线测试。
+后续已修复知识库版本/BM25/检索缓存失效、embedding 客户端缓存隔离、检索尝试/证据使用语义、
+空流整路重跑、流式降级状态、取消 trace 收尾、会话计数和时间戳规范化。剩余评审项及维护限制见
+`docs/architecture_review_followup_2026-09-08.md`。
 
 ## 5. 当前边界和未完成项
 
-- `rag/agent.py` 仍然过大，需要继续按职责拆分。
+- `agent/service.py` 当前 564 行；model runtime、route execution 已独立，剩余主要是领域门面、RAG 流式生成和 enrichment adapter。
 - Web research 已迁移到独立 pipeline；`WebSearchRouteHandler` 只保留路由适配职责。
 - Chat router 已迁移为薄 FastAPI 适配层；SSE、session、stream worker 和 application use cases 各有独立所有者。
-- turn orchestration 和 API payload 投影已迁移到 `rag/turn_runner.py`；`AgentService` 只保留公开聊天入口
+- turn orchestration 和 API payload 投影已迁移到 `agent/turn_runner.py`；`AgentService` 只保留公开聊天入口
   及 runner 所需的执行能力。
-- message context 已迁移到 `rag/message_context.py`；AgentService 和 route handler 不再拥有历史格式化或
+- message context 已迁移到 `agent/message_context.py`；AgentService 和 route handler 不再拥有历史格式化或
   turn-level prompt context 构造职责。
-- result finalizer 已迁移到 `rag/result_finalizer.py`；AgentService 不再拥有 hook、空结果 fallback 和
+- result finalizer 已迁移到 `agent/result_finalizer.py`；AgentService 不再拥有 route-level hook、空结果 fallback 和
   retrieval trace 合并实现。
+- model runtime 已迁移到 `runtime/model_runtime.py`，stream decoding 和 context governance 分别由
+  `runtime/model_stream.py`、`runtime/context.py` 持有。通用消息转换位于 `runtime/messages.py`。
 - API 对外仍使用现有 `progress` / `delta` / `final` SSE 表示；领域层已经类型化。后续若切换 wire protocol，
   应作为单独契约变更同步修改 API、Pinia store 和集成测试，不在 P4 文件拆分中夹带。
 - 当前没有多 Agent 调度器、共享黑板或 agent-to-agent 消息协议；这是有意为之。
-- `~/.claude/plans/phase1-backbone-spec.md` 在本机不存在。后续若恢复该文件，应先核对本交接中的契约是否与其一致。
+- 主干五项契约与 T1-T7 不变量已恢复为仓库内权威文档
+  `docs/phase1_backbone_contracts.md`；后续不得重新依赖个人 home 目录中的计划文件。
 - 未跟踪文件 `cw3458.html` 与本任务无关，未修改、未暂存、未提交。
 
 ## 6. 后续提交顺序
@@ -357,7 +551,7 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 
 提交：`d70d782 refactor: unify turn execution events`
 
-### P4：拆分大文件（已完成）
+### P4：拆分大文件（P4-F 已完成，待提交）
 
 在前三个契约稳定后再拆文件：
 
@@ -376,6 +570,7 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 - P4-C API SSE/session service：已完成，提交 `c7ce120 refactor: extract chat application services`。
 - P4-D message context builder：已完成，提交主题为 `refactor: extract message context builder`。
 - P4-E result finalizer：已完成，独立提交主题为 `refactor: extract route result finalizer`。
+- P4-F model runtime：已完成，待以独立提交 `refactor: extract agent model runtime` 提交。
 
 ### P5：多 Agent 基础设施
 
@@ -418,16 +613,25 @@ git log -1 --oneline
 git status --short
 ```
 
-P4-E result finalizer 已完成；`cw3458.html` 仍是与本任务无关的未跟踪用户文件。
+先读第 0 节；P4-F、M1-M4、缺陷修复及事故恢复脚本均尚未提交。`cw3458.html` 仍是无关用户文件。
 
-本项变更文件：
+主要变更位置（完整文件列表用 `git status --short` 查看）：
 
-- `src/ds_course_agent/rag/result_finalizer.py`
-- `src/ds_course_agent/rag/agent.py`
-- `src/ds_course_agent/rag/route_handlers.py`
-- `src/ds_course_agent/rag/web_research.py`
-- `tests/test_result_finalizer.py`
+- `src/ds_course_agent/runtime/`
+- `src/ds_course_agent/teaching/`、`retrieval/`、`research/`
+- `tests/test_domain_packages.py` 和领域 import/monkeypatch 调用方
+- `src/ds_course_agent/shared/query_trace.py`
+- `src/ds_course_agent/agent/`，包含 routing/、hooks/ 和 service.py
+- `src/ds_course_agent/tools/code_executor.py`
+- runtime/trace 的全仓调用方和对应测试
+- `tests/test_runtime_boundary.py`
+- `src/ds_course_agent/agent/route_executor.py`、`tests/test_route_executor.py`、`tests/test_agent_package.py`
+- `AGENTS.md`、`docs/architecture_reorg_plan.md`
+- `shared/kb_revision.py`、`shared/embeddings.py`、`api/timestamps.py` 及检索/流式/会话修复
+- `scripts/reset_db.py`、`scripts/recover_kb_from_cache.py`、`tests/test_reset_db_safety.py`
+- `tests/test_review_repairs.py`、`tests/test_web_answer_runtime.py`
+- `docs/kb_incident_2026-09-08.md`、`docs/architecture_review_followup_2026-09-08.md`
 - `docs/agent_architecture_handoff_2026-09-07.md`
 
-P4 文件拆分至此完成；进入 P5 前应另开单一任务，先定义角色/工具权限和单 Agent baseline，不应夹带到
-result finalizer 提交中。
+下一步按第 0 节顺序推进；提交仍须用户授权。先处理真实运行验收与延迟观测，再进入画像模型化或 P5。
+不引入通用消息总线、provider UI 或替换 `QueryPipeline`。不要为了“验证恢复脚本”再次运行清库或入库。

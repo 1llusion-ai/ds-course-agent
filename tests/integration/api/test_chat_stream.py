@@ -1,3 +1,6 @@
+import asyncio
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -52,6 +55,7 @@ def fresh_client(monkeypatch):
             "type": "final",
             "content": "你好",
             "sources": [{"reference": "《第1章 数据科学简介》第1页"}],
+            "retrieval_attempted": True,
             "used_retrieval": True,
             "family": "learning",
             "intent": "concept_qa",
@@ -108,6 +112,8 @@ def test_stream_endpoint_returns_real_sse(fresh_client):
     assert messages[-1]["family"] == "learning"
     assert messages[-1]["intent"] == "concept_qa"
     assert messages[-1]["execution_mode"] == "grounded_generation"
+    assert messages[-1]["retrieval_attempted"] is True
+    assert messages[-1]["used_retrieval"] is True
     assert "route" not in messages[-1]
     assert messages[-1]["progress_events"][0]["phase"] == "routing"
     assert messages[-1]["progress_events"][0]["details"]["found_count"] == 2
@@ -151,6 +157,49 @@ def test_sse_encoder_preserves_unicode_json_frame():
     from ds_course_agent.api.sse import encode_sse
 
     assert encode_sse({"type": "delta", "delta": "你好"}) == 'data: {"type": "delta", "delta": "你好"}\n\n'
+
+
+def test_sse_encoder_emits_safe_diagnostic_for_nested_unsupported_value():
+    from ds_course_agent.api.sse import encode_sse
+
+    class SecretValue:
+        def __repr__(self):
+            return "do-not-leak-this-secret"
+
+    frame = encode_sse(
+        {
+            "type": "progress",
+            "details": {"items": [{"value": SecretValue()}]},
+        }
+    )
+    event = json.loads(frame.removeprefix("data: "))
+
+    assert event == {
+        "type": "error",
+        "code": "sse_serialization_error",
+        "message": "事件内容无法安全序列化",
+        "path": "$.details.items[0].value",
+        "value_kind": "unsupported",
+    }
+    assert "do-not-leak-this-secret" not in frame
+
+
+def test_streaming_response_continues_after_sse_serialization_error():
+    from ds_course_agent.api.sse import streaming_response
+
+    async def events():
+        yield {"type": "progress", "details": {"bad": object()}}
+        yield {"type": "delta", "delta": "still running"}
+
+    async def collect_frames():
+        response = streaming_response(events())
+        return [frame async for frame in response.body_iterator]
+
+    frames = asyncio.run(collect_frames())
+
+    assert len(frames) == 2
+    assert json.loads(frames[0].removeprefix("data: "))["code"] == "sse_serialization_error"
+    assert frames[1] == 'data: {"type": "delta", "delta": "still running"}\n\n'
 
 
 def test_stream_records_blocked_web_search_turn_state(monkeypatch):
@@ -355,7 +404,12 @@ def test_cancel_preserves_partial_answer_and_marks_it_stopped(monkeypatch):
             "execution_mode": "grounded_generation",
             "tool": "course_rag_tool",
             "stream_id": "cancel-1",
-            "details": {"sources": [{"reference": "《第1章》"}]},
+            "details": {
+                "sources": [{"reference": "《第1章》"}],
+                "retrieval_attempted": True,
+                "used_retrieval": True,
+                "degraded": False,
+            },
         }
         yield {"type": "delta", "delta": "已经生成的部分", "stream_id": "cancel-1"}
         first_delta_seen.set()
@@ -408,7 +462,8 @@ def test_cancel_preserves_partial_answer_and_marks_it_stopped(monkeypatch):
     assert assistant["execution_mode"] == "grounded_generation"
     assert "route" not in assistant
     assert assistant["sources"] == [{"reference": "《第1章》"}]
-    assert assistant["metadata"]["used_retrieval"] is True
+    assert assistant["retrieval_attempted"] is True
+    assert assistant["used_retrieval"] is True
     assert assistant["generation_status"] == "stopped"
     assert assistant["generation_error"] is None
 
@@ -441,8 +496,9 @@ def test_continue_stream_replaces_stopped_message_without_visible_user_turn(monk
             intent="concept_qa",
             execution_mode="grounded_generation",
             sources=[{"reference": "《第1章》"}],
+            retrieval_attempted=True,
+            used_retrieval=True,
             generation_status="stopped",
-            metadata={"used_retrieval": True},
         ),
     )
 
@@ -482,5 +538,6 @@ def test_continue_stream_replaces_stopped_message_without_visible_user_turn(monk
     assert messages[-1]["execution_mode"] == "grounded_generation"
     assert "route" not in messages[-1]
     assert messages[-1]["sources"] == [{"reference": "《第1章》"}]
-    assert messages[-1]["metadata"]["used_retrieval"] is True
+    assert messages[-1]["retrieval_attempted"] is True
+    assert messages[-1]["used_retrieval"] is True
     assert messages[-1]["generation_status"] == "completed"

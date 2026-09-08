@@ -19,7 +19,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-from ds_course_agent.rag.knowledge_mapper import precompute_knowledge_graph_embeddings
+from ds_course_agent.teaching.knowledge_mapper import precompute_knowledge_graph_embeddings
 
 
 def build_parser() -> argparse.ArgumentParser:

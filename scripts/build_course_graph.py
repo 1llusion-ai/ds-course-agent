@@ -42,7 +42,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 from langchain_core.documents import Document
 
 import ds_course_agent.shared.config as config
-from ds_course_agent.rag.course_graph import (
+from ds_course_agent.teaching.course_graph import (
     ALLOWED_NODE_TYPES,
     ALLOWED_PEDAGOGICAL_TYPES,
     ALLOWED_RELATION_TYPES,

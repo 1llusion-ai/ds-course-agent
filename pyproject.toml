@@ -51,7 +51,6 @@ known-first-party = ["ds_course_agent", "benchmarks", "scripts"]
 "src/ds_course_agent/api/routers/chat.py" = ["E402"]
 "src/ds_course_agent/api/main.py" = ["E402"]
 "src/ds_course_agent/api/core_bridge.py" = ["E402"]
-"src/ds_course_agent/rag/hybrid_retriever.py" = ["E402"]
 "src/ds_course_agent/teaching/skills/**/scripts/*.py" = ["E402"]
 "tests/**" = ["F401", "B011", "E402"]
 

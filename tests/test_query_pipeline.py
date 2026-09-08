@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ds_course_agent.rag.query_pipeline import (
+from ds_course_agent.agent.routing import (
     DetectedConcept,
     ExecutionMode,
     QueryContext,
@@ -18,7 +18,7 @@ from ds_course_agent.rag.query_pipeline import (
     get_postprocessor,
     get_preprocessor,
 )
-from ds_course_agent.rag.query_pipeline.router import QueryRouter
+from ds_course_agent.agent.routing.router import QueryRouter
 
 
 @dataclass(frozen=True)
@@ -384,9 +384,9 @@ class _NoopHooks:
 
 
 def _make_pipeline_service(monkeypatch, semantic: _SemanticRouterStub):
-    import ds_course_agent.rag.query_pipeline.router as router_module
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.profile_models import StudentProfile
+    import ds_course_agent.agent.routing.router as router_module
+    from ds_course_agent.agent.service import AgentService
+    from ds_course_agent.teaching.profile_models import StudentProfile
 
     service = object.__new__(AgentService)
     service.skill_loader = None
@@ -405,8 +405,8 @@ def _make_pipeline_service(monkeypatch, semantic: _SemanticRouterStub):
 
     router_module._router = QueryRouter(semantic_router=semantic)
     monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: FakeHistory())
-    monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", lambda: FakeMemory())
-    monkeypatch.setattr(service, "_warn_context_budget", lambda *args, **kwargs: None)
+    monkeypatch.setattr("ds_course_agent.agent.service.get_memory_core", lambda: FakeMemory())
+    monkeypatch.setattr("ds_course_agent.agent.routing.pipeline.warn_context_budget", lambda *args, **kwargs: None)
     monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
     monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
     monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
@@ -427,8 +427,8 @@ class TestQueryPipelineEnrichment:
             calls["profile"] += 1
             raise AssertionError("datetime must not load profile")
 
-        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", fail_concepts)
-        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", fail_profile)
+        monkeypatch.setattr("ds_course_agent.agent.service.map_question_to_concepts", fail_concepts)
+        monkeypatch.setattr("ds_course_agent.agent.service.get_memory_core", fail_profile)
 
         state = service._prepare_query_route("现在几点？", "session", "student")
 
@@ -460,8 +460,8 @@ class TestQueryPipelineEnrichment:
             calls["profile"] += 1
             raise AssertionError("code example must not load profile")
 
-        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", concept_map)
-        monkeypatch.setattr("ds_course_agent.rag.agent.get_memory_core", fail_profile)
+        monkeypatch.setattr("ds_course_agent.agent.service.map_question_to_concepts", concept_map)
+        monkeypatch.setattr("ds_course_agent.agent.service.get_memory_core", fail_profile)
 
         state = service._prepare_query_route("请用 Python 演示一次交叉验证", "session", "student")
 
@@ -485,7 +485,7 @@ class TestQueryPipelineEnrichment:
         def record_events(**kwargs):
             calls["events"] += 1
 
-        monkeypatch.setattr("ds_course_agent.rag.agent.map_question_to_concepts", concept_map)
+        monkeypatch.setattr("ds_course_agent.agent.service.map_question_to_concepts", concept_map)
         monkeypatch.setattr(service, "_record_learning_events", record_events)
 
         state = service._prepare_query_route(query, "session", "student")
@@ -521,7 +521,7 @@ class TestQueryPipelineEnrichment:
         ]
 
         monkeypatch.setattr(
-            "ds_course_agent.rag.agent.map_question_to_concepts",
+            "ds_course_agent.agent.service.map_question_to_concepts",
             lambda question, top_k=3: matches,
         )
         monkeypatch.setattr(
@@ -566,7 +566,7 @@ class TestPostprocessorAndRewrite:
     def test_rewriter_uses_recent_course_entity_without_changing_original(self):
         from langchain_core.messages import AIMessage, HumanMessage
 
-        from ds_course_agent.rag.query_pipeline import get_rewriter
+        from ds_course_agent.agent.routing import get_rewriter
 
         history = [
             HumanMessage(content="决策树容易过拟合吗？"),
@@ -585,7 +585,7 @@ class TestPostprocessorAndRewrite:
     def test_schedule_and_datetime_skip_rewrite(self):
         from langchain_core.messages import AIMessage, HumanMessage
 
-        from ds_course_agent.rag.query_pipeline import get_rewriter
+        from ds_course_agent.agent.routing import get_rewriter
 
         history = [
             HumanMessage(content="上次我们聊了 SVM 的核函数。"),
@@ -602,9 +602,9 @@ class TestPostprocessorAndRewrite:
 def test_grounded_rag_stream_emits_sources_before_answer_completion(monkeypatch):
     from langchain_core.documents import Document
 
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.query_pipeline import RouteState
-    from ds_course_agent.rag.turn_events import RetrievalEndEvent
+    from ds_course_agent.agent.events import RetrievalEndEvent
+    from ds_course_agent.agent.routing import RouteState
+    from ds_course_agent.agent.service import AgentService
 
     service = object.__new__(AgentService)
     context = QueryContext(
@@ -659,12 +659,60 @@ def test_grounded_rag_stream_emits_sources_before_answer_completion(monkeypatch)
 
     assert isinstance(events[0], RetrievalEndEvent)
     assert events[0].phase == "retrieval_sources"
+    assert events[0].retrieval_attempted is True
+    assert events[0].used_retrieval is True
     assert list(events[0].sources) == [{"reference": "course.pdf"}]
     assert events[1] == "课程回答"
 
 
+def test_grounded_rag_stream_distinguishes_attempt_from_evidence_use(monkeypatch):
+    from ds_course_agent.agent.events import RetrievalEndEvent
+    from ds_course_agent.agent.routing import RouteState
+    from ds_course_agent.agent.service import AgentService
+
+    service = object.__new__(AgentService)
+    context = QueryContext(
+        original_query="课程里有没有量子计算？",
+        normalized_query="课程里有没有量子计算",
+        session_id="session-rag-empty",
+        student_id="student-1",
+        chat_history=[],
+    )
+    state = RouteState(
+        student_id="student-1",
+        session_id="session-rag-empty",
+        history=None,
+        chat_history=[],
+        context=context,
+        decision=RouteDecision(
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.CONCEPT_QA,
+            execution_mode=ExecutionMode.GROUNDED_GENERATION,
+            confidence=0.8,
+            retrieval_policy=RetrievalPolicy.REQUIRED,
+        ),
+        stream_id="stream-empty",
+    )
+
+    class EmptyRagService:
+        def retrieve(self, question):
+            return SimpleNamespace(documents=[], formatted_context="", has_results=False)
+
+    monkeypatch.setattr("ds_course_agent.tools.course_rag.get_rag_service", lambda: EmptyRagService())
+
+    events = list(service._iter_grounded_rag_response(state))
+
+    retrieval_event = events[0]
+    assert isinstance(retrieval_event, RetrievalEndEvent)
+    assert retrieval_event.retrieval_attempted is True
+    assert retrieval_event.used_retrieval is False
+    assert retrieval_event.sources == ()
+    assert retrieval_event.message == "未找到可用课程来源"
+    assert "未找到" in "".join(str(event) for event in events[1:])
+
+
 def test_shared_query_predicates():
-    from ds_course_agent.rag.query_pipeline.utils import (
+    from ds_course_agent.agent.routing.utils import (
         is_contextual_followup,
         is_datetime_request,
         is_schedule_request,

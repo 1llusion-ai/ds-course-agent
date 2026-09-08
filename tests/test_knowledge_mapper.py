@@ -11,14 +11,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ds_course_agent.rag.knowledge_mapper import (
+from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
+from ds_course_agent.teaching.knowledge_mapper import (
     AliasMatchMode,
     ConceptMatchStrength,
     KnowledgeGraph,
     KnowledgeMapper,
     map_question_to_concepts,
 )
-from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 
 QUESTION_CASES = [
     ("什么是支持向量机？", ["svm"], "display_name 精确匹配"),
@@ -271,8 +271,8 @@ def test_embedding_fallback_uses_offline_cache_only_when_rules_miss(monkeypatch)
 
 def test_knowledge_graph_does_not_online_precompute_without_cache(tmp_path, monkeypatch):
     """请求路径默认只加载离线 cache；cache 缺失时不在线预计算概念 embedding。"""
-    import ds_course_agent.rag.knowledge_mapper as knowledge_mapper
     import ds_course_agent.shared.config as config
+    import ds_course_agent.teaching.knowledge_mapper as knowledge_mapper
 
     graph_path = tmp_path / "knowledge_graph.json"
     graph_path.write_text(

@@ -1,6 +1,5 @@
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.shared.context_governor import (
     CONTEXT_SUMMARY_MARKER,
     ContextBudget,
@@ -12,6 +11,7 @@ from ds_course_agent.shared.context_governor import (
     warn_if_large_message,
     warn_if_large_text_payload,
 )
+from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 
 
 def _warning_events(trace):

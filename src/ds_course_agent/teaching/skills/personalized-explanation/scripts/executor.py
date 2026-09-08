@@ -12,7 +12,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from ds_course_agent.rag.learner_state import LearnerStateSnapshot
+from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
 from ds_course_agent.tools.course_rag import course_rag_tool
 
 

@@ -247,7 +247,7 @@ def build_knowledge_base(pdf_path: str, max_pages: int = 0, ingest: bool = True,
 
     # 预计算知识点映射 embedding
     try:
-        from ds_course_agent.rag.knowledge_mapper import precompute_knowledge_graph_embeddings
+        from ds_course_agent.teaching.knowledge_mapper import precompute_knowledge_graph_embeddings
 
         graph_path = Path(PROJECT_ROOT) / "data" / "knowledge_graph.json"
         cache_path = Path(PROJECT_ROOT) / "data" / "knowledge_graph_embeddings.json"

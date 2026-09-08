@@ -2,9 +2,10 @@
 
 import pytest
 
-from ds_course_agent.hooks import HookManager, RetrievalGuardHook
-from ds_course_agent.rag.learner_state import LearnerStateSnapshot
-from ds_course_agent.rag.query_pipeline import (
+from ds_course_agent.agent.events import ToolEndEvent, ToolStartEvent
+from ds_course_agent.agent.hooks import HookManager, RetrievalGuardHook
+from ds_course_agent.agent.route_executor import execute_route, iter_route_response
+from ds_course_agent.agent.routing import (
     ExecutionMode,
     QueryContext,
     RetrievalPolicy,
@@ -14,7 +15,7 @@ from ds_course_agent.rag.query_pipeline import (
     RouteIntent,
     RouteState,
 )
-from ds_course_agent.rag.turn_events import ToolEndEvent, ToolStartEvent
+from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
 
 
 def _route_state(
@@ -92,7 +93,7 @@ def test_hook_manager_after_llm_transforms_result_in_order():
 
 
 def test_retrieval_guard_hook_forces_answer_and_records_trace(monkeypatch):
-    from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
+    from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 
     state = _route_state(
         intent=RouteIntent.CONCEPT_QA,
@@ -152,7 +153,7 @@ def test_retrieval_guard_hook_skips_grounded_rag_route_without_agent_callbacks()
 
 
 def test_execute_route_dispatches_to_route_handler_without_if_ladder():
-    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.agent.service import AgentService
 
     calls = []
 
@@ -174,7 +175,8 @@ def test_execute_route_dispatches_to_route_handler_without_if_ladder():
     service.route_handlers = [FakeHandler()]
     service.hooks = HookManager([])
 
-    result = service._execute_route(
+    result = execute_route(
+        service,
         _route_state(
             family=RouteFamily.COURSE_SERVICE,
             intent=RouteIntent.COURSE_SCHEDULE,
@@ -194,7 +196,7 @@ def test_execute_route_dispatches_to_route_handler_without_if_ladder():
 
 
 def test_execute_route_does_not_force_second_retrieval_after_handler_retrieval():
-    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.agent.service import AgentService
 
     state = _route_state(
         intent=RouteIntent.CONCEPT_QA,
@@ -222,7 +224,7 @@ def test_execute_route_does_not_force_second_retrieval_after_handler_retrieval()
         AssertionError("must not force a second retrieval")
     )
 
-    result = service._execute_route(state)
+    result = execute_route(service, state)
 
     assert result.content == "grounded answer"
     assert result.sources == [{"reference": "《第1章》"}]
@@ -230,7 +232,7 @@ def test_execute_route_does_not_force_second_retrieval_after_handler_retrieval()
 
 
 def test_stream_route_dispatches_to_route_handler_stream_contract():
-    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.agent.service import AgentService
 
     calls = []
 
@@ -250,14 +252,14 @@ def test_stream_route_dispatches_to_route_handler_stream_contract():
     service = AgentService.__new__(AgentService)
     service.route_handlers = [FakeHandler()]
 
-    chunks = list(service._iter_route_response(_route_state()))
+    chunks = list(iter_route_response(service, _route_state()))
 
     assert chunks == ["chunk-1", "chunk-2"]
     assert calls == [("can", "code_example"), ("stream_execute", "code_example")]
 
 
 def test_stream_route_exception_is_not_swallowed_or_persisted():
-    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.agent.service import AgentService
 
     class FakeHistory:
         def __init__(self):
@@ -295,8 +297,8 @@ def test_stream_route_exception_is_not_swallowed_or_persisted():
 
 
 def test_buffered_stream_handler_uses_selected_handler_without_second_dispatch():
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.route_handlers import BufferedRouteHandlerMixin
+    from ds_course_agent.agent.handlers import BufferedRouteHandlerMixin
+    from ds_course_agent.agent.service import AgentService
 
     calls = []
 
@@ -314,22 +316,27 @@ def test_buffered_stream_handler_uses_selected_handler_without_second_dispatch()
     service.hooks = HookManager([])
 
     chunks = list(
-        service._iter_route_response(
+        iter_route_response(
+            service,
             _route_state(
                 family=RouteFamily.COURSE_SERVICE,
                 intent=RouteIntent.COURSE_SCHEDULE,
                 execution_mode=ExecutionMode.DETERMINISTIC_TOOL,
                 retrieval_policy=RetrievalPolicy.DISABLED,
-            )
+            ),
         )
     )
 
-    assert "".join(chunks) == "buffered result"
+    from ds_course_agent.agent.events import RouteResultEvent
+
+    assert "".join(chunk for chunk in chunks if isinstance(chunk, str)) == "buffered result"
+    assert isinstance(chunks[-1], RouteResultEvent)
+    assert chunks[-1].result.content == "buffered result"
     assert calls == [("can", "course_schedule"), ("execute", True)]
 
 
 def test_web_search_route_handler_only_adapts_to_web_research_pipeline():
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.handlers import WebSearchRouteHandler
 
     state = _web_route_state()
     calls = []
@@ -360,8 +367,8 @@ def test_web_search_route_handler_only_adapts_to_web_research_pipeline():
 def test_web_search_route_handler_compacts_evidence_and_tracks_sources(monkeypatch):
     import ds_course_agent.shared.config as config
     import ds_course_agent.tools.web_search as web_search_module
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.service import AgentService
     from ds_course_agent.tools._shared import begin_retrieval_trace, end_retrieval_trace
     from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
 
@@ -391,7 +398,7 @@ def test_web_search_route_handler_compacts_evidence_and_tracks_sources(monkeypat
         return "联网回答 [1]"
 
     service = AgentService.__new__(AgentService)
-    service.chat = fake_chat
+    service.direct_chat = fake_chat
 
     token = begin_retrieval_trace()
     result = WebSearchRouteHandler().execute(service, _web_route_state(), stream=False)
@@ -410,8 +417,8 @@ def test_web_search_route_handler_compacts_evidence_and_tracks_sources(monkeypat
 def test_web_search_route_rejects_obvious_non_teaching_queries_without_search(monkeypatch):
     import ds_course_agent.shared.config as config
     import ds_course_agent.tools.web_search as web_search_module
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.service import AgentService
 
     monkeypatch.setattr(config, "WEB_SEARCH_TEACHING_SCOPE_ENABLED", True)
     monkeypatch.setattr(
@@ -435,8 +442,8 @@ def test_web_search_route_rejects_obvious_non_teaching_queries_without_search(mo
 def test_web_search_route_rejects_general_fact_queries_without_search(monkeypatch):
     import ds_course_agent.shared.config as config
     import ds_course_agent.tools.web_search as web_search_module
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.service import AgentService
 
     monkeypatch.setattr(config, "WEB_SEARCH_TEACHING_SCOPE_ENABLED", True)
     monkeypatch.setattr(
@@ -464,7 +471,7 @@ def test_web_search_route_rejects_general_fact_queries_without_search(monkeypatc
 
 def test_web_search_adaptive_plan_searches_broadly_but_reads_fewer_pages(monkeypatch):
     import ds_course_agent.shared.config as config
-    from ds_course_agent.rag.web_research_policy import WebResearchPolicy
+    from ds_course_agent.research.policy import WebResearchPolicy
 
     monkeypatch.setattr(config, "WEB_SEARCH_TOP_K", 0)
     monkeypatch.setattr(config, "WEB_SEARCH_MIN_TOP_K", 8)
@@ -486,7 +493,7 @@ def test_web_search_adaptive_plan_searches_broadly_but_reads_fewer_pages(monkeyp
 
 def test_web_search_scope_allows_data_science_prediction_queries(monkeypatch):
     import ds_course_agent.shared.config as config
-    from ds_course_agent.rag.web_research_policy import WebResearchPolicy
+    from ds_course_agent.research.policy import WebResearchPolicy
 
     monkeypatch.setattr(config, "WEB_SEARCH_TEACHING_SCOPE_ENABLED", True)
 
@@ -497,7 +504,7 @@ def test_web_search_scope_allows_data_science_prediction_queries(monkeypatch):
 
 def test_web_fetch_top_n_zero_means_uncapped_not_disabled(monkeypatch):
     import ds_course_agent.shared.config as config
-    from ds_course_agent.rag.web_research_policy import WebResearchPolicy
+    from ds_course_agent.research.policy import WebResearchPolicy
 
     monkeypatch.setattr(config, "WEB_FETCH_TOP_N", 0)
     monkeypatch.setattr(config, "WEB_FETCH_ADAPTIVE_ENABLED", True)
@@ -515,7 +522,7 @@ def test_web_fetch_top_n_zero_means_uncapped_not_disabled(monkeypatch):
 
 
 def test_low_success_filter_keeps_explicit_video_and_scholarly_pdf_requests():
-    from ds_course_agent.rag.web_research_policy import WebResearchPolicy
+    from ds_course_agent.research.policy import WebResearchPolicy
 
     policy = WebResearchPolicy()
 
@@ -533,8 +540,8 @@ def test_low_success_filter_keeps_explicit_video_and_scholarly_pdf_requests():
 def test_web_search_route_handler_streams_answer_chunks_directly(monkeypatch):
     import ds_course_agent.shared.config as config
     import ds_course_agent.tools.web_search as web_search_module
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.service import AgentService
     from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
 
     monkeypatch.setattr(config, "WEB_FETCH_ENABLED", False)
@@ -563,7 +570,7 @@ def test_web_search_route_handler_streams_answer_chunks_directly(monkeypatch):
         yield "第二段"
 
     service = AgentService.__new__(AgentService)
-    service.chat = fake_chat
+    service.direct_chat = fake_chat
     service.hooks = HookManager([])
 
     chunks = list(WebSearchRouteHandler().stream_execute(service, _web_route_state()))
@@ -575,8 +582,8 @@ def test_web_search_route_handler_streams_answer_chunks_directly(monkeypatch):
 def test_web_search_route_handler_prefers_direct_chat_for_streaming(monkeypatch):
     import ds_course_agent.shared.config as config
     import ds_course_agent.tools.web_search as web_search_module
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.service import AgentService
     from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
 
     monkeypatch.setattr(config, "WEB_FETCH_ENABLED", False)
@@ -618,8 +625,8 @@ def test_web_search_route_handler_stream_emits_detailed_progress_with_stream_id(
     import ds_course_agent.shared.config as config
     import ds_course_agent.tools.web_fetch as web_fetch_module
     import ds_course_agent.tools.web_search as web_search_module
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.service import AgentService
     from ds_course_agent.tools.web_fetch import WebFetchResult
     from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
 
@@ -682,8 +689,8 @@ def test_web_search_route_handler_adds_deep_fetch_context_and_metadata(monkeypat
     import ds_course_agent.shared.config as config
     import ds_course_agent.tools.web_fetch as web_fetch_module
     import ds_course_agent.tools.web_search as web_search_module
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.service import AgentService
     from ds_course_agent.tools._shared import begin_retrieval_trace, end_retrieval_trace
     from ds_course_agent.tools.web_fetch import WebFetchResult
     from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
@@ -713,7 +720,7 @@ def test_web_search_route_handler_adds_deep_fetch_context_and_metadata(monkeypat
     )
 
     monkeypatch.setattr(web_search_module, "search_web", lambda question: response)
-    monkeypatch.setattr(web_fetch_module, "fetch_web_pages", lambda urls: [page])
+    monkeypatch.setattr(web_fetch_module, "fetch_web_pages", lambda urls, **kwargs: [page])
 
     captured = {}
 
@@ -722,7 +729,7 @@ def test_web_search_route_handler_adds_deep_fetch_context_and_metadata(monkeypat
         return "联网深读回答 [1]"
 
     service = AgentService.__new__(AgentService)
-    service.chat = fake_chat
+    service.direct_chat = fake_chat
 
     token = begin_retrieval_trace()
     result = WebSearchRouteHandler().execute(service, _web_route_state(), stream=False)
@@ -737,12 +744,45 @@ def test_web_search_route_handler_adds_deep_fetch_context_and_metadata(monkeypat
     assert trace.sources[0]["truncated"] is True
 
 
+def test_web_search_fetch_type_error_is_not_retried_without_timeout_budget(monkeypatch):
+    import ds_course_agent.shared.config as config
+    import ds_course_agent.tools.web_fetch as web_fetch_module
+    import ds_course_agent.tools.web_search as web_search_module
+    from ds_course_agent.agent.handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.service import AgentService
+    from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
+
+    monkeypatch.setattr(config, "WEB_FETCH_ENABLED", True)
+    response = WebSearchResponse(
+        query="PCA",
+        provider="test",
+        results=[WebSearchResult(title="PCA", url="https://example.com/pca", snippet="summary")],
+        evidence_context="[1] PCA summary",
+    )
+    monkeypatch.setattr(web_search_module, "search_web", lambda question: response)
+    calls = []
+
+    def broken_fetch(urls, **kwargs):
+        calls.append((urls, kwargs))
+        raise TypeError("internal fetch bug")
+
+    monkeypatch.setattr(web_fetch_module, "fetch_web_pages", broken_fetch)
+    service = AgentService.__new__(AgentService)
+    service.direct_chat = lambda *args, **kwargs: "summary answer [1]"
+
+    result = WebSearchRouteHandler().execute(service, _web_route_state(), stream=False)
+
+    assert result.content == "summary answer [1]"
+    assert len(calls) == 1
+    assert calls[0][1]["total_timeout_seconds"] > 0
+
+
 def test_web_search_deep_fetch_keeps_original_source_number(monkeypatch):
     import ds_course_agent.shared.config as config
     import ds_course_agent.tools.web_fetch as web_fetch_module
     import ds_course_agent.tools.web_search as web_search_module
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.route_handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.handlers import WebSearchRouteHandler
+    from ds_course_agent.agent.service import AgentService
     from ds_course_agent.tools.web_fetch import WebFetchResult
     from ds_course_agent.tools.web_search import WebSearchResponse, WebSearchResult
 
@@ -779,7 +819,7 @@ def test_web_search_deep_fetch_keeps_original_source_number(monkeypatch):
     )
 
     monkeypatch.setattr(web_search_module, "search_web", lambda question: response)
-    monkeypatch.setattr(web_fetch_module, "fetch_web_pages", lambda urls: [page])
+    monkeypatch.setattr(web_fetch_module, "fetch_web_pages", lambda urls, **kwargs: [page])
 
     captured = {}
 
@@ -788,7 +828,7 @@ def test_web_search_deep_fetch_keeps_original_source_number(monkeypatch):
         return "answer [2]"
 
     service = AgentService.__new__(AgentService)
-    service.chat = fake_chat
+    service.direct_chat = fake_chat
 
     result = WebSearchRouteHandler().execute(service, _web_route_state(), stream=False)
 
@@ -800,7 +840,7 @@ def test_web_search_deep_fetch_keeps_original_source_number(monkeypatch):
 
 def test_execute_route_hook_failure_still_reaches_empty_result_fallback(monkeypatch):
     import ds_course_agent.tools.course_rag as course_rag
-    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.agent.service import AgentService
 
     class EmptyHandler:
         def can_handle(self, agent, route_state):
@@ -823,7 +863,8 @@ def test_execute_route_hook_failure_still_reaches_empty_result_fallback(monkeypa
     service.route_handlers = [EmptyHandler()]
     service.hooks = HookManager([BrokenAfterLlmHook()])
 
-    result = service._execute_route(
+    result = execute_route(
+        service,
         _route_state(
             intent=RouteIntent.CONCEPT_QA,
             execution_mode=ExecutionMode.TOOL_AGENT,
@@ -838,7 +879,7 @@ def test_execute_route_hook_failure_still_reaches_empty_result_fallback(monkeypa
 
 
 def test_query_postprocessor_preserves_boundary_static_response_contract():
-    from ds_course_agent.rag.query_pipeline import QueryContext, RouteDecision, get_postprocessor
+    from ds_course_agent.agent.routing import QueryContext, RouteDecision, get_postprocessor
 
     context = QueryContext(
         original_query="美国总统是谁？",
@@ -870,9 +911,9 @@ def test_query_postprocessor_preserves_boundary_static_response_contract():
 
 
 def test_direct_stream_route_runs_stream_end_hooks_and_retrieval_guard_trace():
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
-    from ds_course_agent.rag.route_handlers import GenericAgentRouteHandler
+    from ds_course_agent.agent.handlers import GenericAgentRouteHandler
+    from ds_course_agent.agent.service import AgentService
+    from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 
     state = _route_state(retrieval_policy=RetrievalPolicy.OPTIONAL)
     observed = {}
@@ -913,17 +954,14 @@ def test_direct_stream_route_runs_stream_end_hooks_and_retrieval_guard_trace():
 
 
 def test_direct_model_route_bypasses_graph_agent_and_tools_for_streaming():
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.route_handlers import GenericAgentRouteHandler
+    from ds_course_agent.agent.handlers import GenericAgentRouteHandler
+    from ds_course_agent.agent.service import AgentService
 
     state = _route_state(retrieval_policy=RetrievalPolicy.OPTIONAL)
     captured = {}
 
     def forbidden_chat(*_args, **_kwargs):
         raise AssertionError("tool-calling agent should not run for direct LLM route")
-
-    def forbidden_agent_for_tools(*_args, **_kwargs):
-        raise AssertionError("DIRECT_MODEL must not construct a graph agent")
 
     def fake_direct_chat(user_input, chat_history=None, stream=False, turn_context=None, **kwargs):
         assert stream is True
@@ -934,7 +972,6 @@ def test_direct_model_route_bypasses_graph_agent_and_tools_for_streaming():
     service = AgentService.__new__(AgentService)
     service.chat = forbidden_chat
     service.direct_chat = fake_direct_chat
-    service._agent_for_tools = forbidden_agent_for_tools
     service.hooks = HookManager([])
 
     chunks = list(GenericAgentRouteHandler().stream_execute(service, state))
@@ -944,7 +981,7 @@ def test_direct_model_route_bypasses_graph_agent_and_tools_for_streaming():
 
 
 def test_tool_agent_route_uses_only_explicit_non_empty_allowlist():
-    from ds_course_agent.rag.route_handlers import GenericAgentRouteHandler
+    from ds_course_agent.agent.handlers import GenericAgentRouteHandler
 
     state = _route_state(
         intent=RouteIntent.CONCEPT_QA,
@@ -966,9 +1003,15 @@ def test_tool_agent_route_uses_only_explicit_non_empty_allowlist():
         def _route_execution_query(self, context, decision):
             return context.original_query
 
-        def _agent_for_tools(self, allowed_tools):
-            captured["allowed_tools"] = allowed_tools
-            return graph_agent
+        model_runtime = type(
+            "FakeRuntime",
+            (),
+            {
+                "agent_for_tools": staticmethod(
+                    lambda allowed_tools: captured.update(allowed_tools=allowed_tools) or graph_agent
+                )
+            },
+        )()
 
         def direct_chat(self, *_args, **_kwargs):
             raise AssertionError("TOOL_AGENT must not use direct_chat")
@@ -977,7 +1020,7 @@ def test_tool_agent_route_uses_only_explicit_non_empty_allowlist():
             captured["graph_agent"] = graph_agent
             return "tool answer"
 
-    import ds_course_agent.rag.query_pipeline as query_pipeline
+    import ds_course_agent.agent.routing as query_pipeline
 
     original = query_pipeline.get_postprocessor
     query_pipeline.get_postprocessor = lambda: FakePostprocessor()
@@ -1004,7 +1047,7 @@ def test_tool_agent_route_uses_only_explicit_non_empty_allowlist():
     ],
 )
 def test_skill_route_handler_dispatches_by_intent(intent, skill_attr):
-    from ds_course_agent.rag.route_handlers import SkillRouteHandler
+    from ds_course_agent.agent.handlers import SkillRouteHandler
 
     learner_state = (
         LearnerStateSnapshot(student_id="student-hooks")
@@ -1038,7 +1081,7 @@ def test_skill_route_handler_dispatches_by_intent(intent, skill_attr):
 
 @pytest.mark.parametrize("intent", [RouteIntent.LEARNING_PATH, RouteIntent.PERSONALIZED_EXPLANATION])
 def test_personalized_skill_routes_require_learner_state(intent):
-    from ds_course_agent.rag.route_handlers import SkillRouteHandler
+    from ds_course_agent.agent.handlers import SkillRouteHandler
 
     state = _route_state(intent=intent, execution_mode=ExecutionMode.TEACHING_SKILL)
     skill_attr = SkillRouteHandler._ROUTES[intent][0]
@@ -1051,8 +1094,8 @@ def test_personalized_skill_routes_require_learner_state(intent):
 def test_agent_stream_messages_accepts_langgraph_model_node():
     from langchain_core.messages import AIMessageChunk
 
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
+    from ds_course_agent.runtime.model_stream import iter_agent_stream_messages
+    from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 
     class FakeLangGraphAgent:
         def stream(self, payload, stream_mode=None):
@@ -1061,11 +1104,10 @@ def test_agent_stream_messages_accepts_langgraph_model_node():
             yield AIMessageChunk(content="模"), {"langgraph_node": "model"}
             yield AIMessageChunk(content="型"), {"langgraph_node": "model"}
 
-    service = AgentService.__new__(AgentService)
     graph_agent = FakeLangGraphAgent()
 
     token = begin_query_trace({"entrypoint": "unit_test"})
-    chunks = list(service._stream_chat_messages(["hello"], graph_agent=graph_agent))
+    chunks = list(iter_agent_stream_messages(graph_agent, ["hello"]))
     trace = end_query_trace(token)
 
     assert chunks == ["模", "型"]
@@ -1077,7 +1119,7 @@ def test_agent_stream_messages_accepts_langgraph_model_node():
 def test_agent_stream_messages_filters_tool_node_content():
     from langchain_core.messages import AIMessageChunk, ToolMessage
 
-    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.runtime.model_stream import iter_agent_stream_messages
 
     class FakeLangGraphAgent:
         def stream(self, payload, stream_mode=None):
@@ -1089,18 +1131,17 @@ def test_agent_stream_messages_filters_tool_node_content():
             )
             yield AIMessageChunk(content="最终回答"), {"langgraph_node": "model"}
 
-    service = AgentService.__new__(AgentService)
     graph_agent = FakeLangGraphAgent()
 
-    assert list(service._stream_chat_messages(["hello"], graph_agent=graph_agent)) == ["最终回答"]
+    assert list(iter_agent_stream_messages(graph_agent, ["hello"])) == ["最终回答"]
 
 
 def test_context_governor_compaction_failure_records_trace_error(monkeypatch):
     from langchain_core.messages import HumanMessage
 
     import ds_course_agent.shared.context_governor as context_governor
-    from ds_course_agent.rag.agent import AgentService
-    from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
+    from ds_course_agent.runtime.context import govern_context_budget
+    from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 
     messages = [HumanMessage(content="hello")]
 
@@ -1109,9 +1150,8 @@ def test_context_governor_compaction_failure_records_trace_error(monkeypatch):
 
     monkeypatch.setattr(context_governor, "compact_messages_to_budget", boom)
 
-    service = AgentService.__new__(AgentService)
     token = begin_query_trace({"entrypoint": "unit_test"})
-    result = service._govern_context_budget(messages, location="unit.pre_llm")
+    result = govern_context_budget(messages, location="unit.pre_llm")
     trace = end_query_trace(token)
 
     assert result is messages
@@ -1120,9 +1160,9 @@ def test_context_governor_compaction_failure_records_trace_error(monkeypatch):
 
 
 def test_learner_state_context_is_natural_language_summary():
-    from ds_course_agent.rag.learner_state import learner_state_from_profile
-    from ds_course_agent.rag.message_context import format_learner_state_for_prompt
-    from ds_course_agent.rag.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
+    from ds_course_agent.agent.message_context import format_learner_state_for_prompt
+    from ds_course_agent.teaching.learner_state import learner_state_from_profile
+    from ds_course_agent.teaching.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
 
     profile = StudentProfile(student_id="student-hooks")
     profile.recent_concepts["decision_tree"] = ConceptFocus(
@@ -1148,8 +1188,8 @@ def test_learner_state_context_is_natural_language_summary():
 
 
 def test_direct_model_route_passes_turn_context_without_graph_agent(monkeypatch):
-    import ds_course_agent.rag.route_handlers as route_handlers_module
-    from ds_course_agent.rag.route_handlers import GenericAgentRouteHandler
+    import ds_course_agent.agent.handlers as route_handlers_module
+    from ds_course_agent.agent.handlers import GenericAgentRouteHandler
 
     state = _route_state(retrieval_policy=RetrievalPolicy.OPTIONAL)
     captured = {}
@@ -1162,7 +1202,7 @@ def test_direct_model_route_passes_turn_context_without_graph_agent(monkeypatch)
             return Response()
 
     monkeypatch.setattr(
-        "ds_course_agent.rag.query_pipeline.get_postprocessor",
+        "ds_course_agent.agent.routing.get_postprocessor",
         lambda: FakePostprocessor(),
     )
     monkeypatch.setattr(
@@ -1174,9 +1214,6 @@ def test_direct_model_route_passes_turn_context_without_graph_agent(monkeypatch)
     class FakeAgent:
         def _route_execution_query(self, context, decision):
             return context.original_query
-
-        def _agent_for_tools(self, allowed_tools):
-            raise AssertionError("DIRECT_MODEL must not bind tools")
 
         def direct_chat(self, user_input, chat_history=None, stream=False, turn_context=None):
             captured["turn_context"] = turn_context
@@ -1193,8 +1230,9 @@ def test_agent_chat_compacts_over_budget_messages_before_llm(monkeypatch):
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
     import ds_course_agent.shared.context_governor as context_governor
-    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.runtime.model_runtime import ModelRuntime
     from ds_course_agent.shared.context_governor import CONTEXT_SUMMARY_MARKER, ContextBudget
+    from ds_course_agent.tools.registry import ToolRegistry
 
     monkeypatch.setattr(
         context_governor,
@@ -1209,14 +1247,14 @@ def test_agent_chat_compacts_over_budget_messages_before_llm(monkeypatch):
             captured["messages"] = payload["messages"]
             return {"messages": [AIMessage(content="ok")]}
 
-    service = AgentService.__new__(AgentService)
+    runtime = ModelRuntime(llm=object(), tool_registry=ToolRegistry(), system_prompt="")
     graph_agent = FakeAgent()
 
     history = [
         HumanMessage(content="旧问题：" + "聚类" * 80),
         AIMessage(content="旧回答：" + "K-means 会迭代更新簇中心" * 60),
     ]
-    result = service.chat(
+    result = runtime.chat(
         "当前问题：K-means 的步骤是什么？",
         chat_history=history,
         stream=False,

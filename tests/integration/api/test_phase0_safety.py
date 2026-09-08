@@ -1,7 +1,7 @@
 import json
 import threading
 
-from ds_course_agent.rag.memory_core import MemoryCore
+from ds_course_agent.teaching.memory_core import MemoryCore
 
 
 def test_state_save_lock_is_real_lock():
@@ -45,7 +45,7 @@ def test_concurrent_state_save_writes_valid_json(monkeypatch, tmp_path):
 
 
 def test_memory_core_default_uses_config_chat_history_dir(monkeypatch, tmp_path):
-    monkeypatch.setattr("ds_course_agent.rag.memory_core.config.CHAT_HISTORY_DIR", str(tmp_path))
+    monkeypatch.setattr("ds_course_agent.teaching.memory_core.config.CHAT_HISTORY_DIR", str(tmp_path))
 
     memory = MemoryCore()
 
@@ -55,23 +55,33 @@ def test_memory_core_default_uses_config_chat_history_dir(monkeypatch, tmp_path)
 def test_hybrid_retriever_does_not_mutate_shared_doc_metadata():
     from langchain_core.documents import Document
 
-    from ds_course_agent.rag.hybrid_retriever import HybridRetriever
+    from ds_course_agent.retrieval.hybrid_retriever import HybridRetriever
     from ds_course_agent.shared import embeddings
 
     embeddings.reset_embedding_circuit_breaker()
     embeddings.clear_embedding_query_cache()
 
     retriever = HybridRetriever.__new__(HybridRetriever)
+    import threading
+
+    from ds_course_agent.shared.kb_revision import read_kb_revision
+
+    retriever.collection_name = "test"
+    retriever._revision = read_kb_revision("test")
+    retriever._corpus_lock = threading.RLock()
     retriever.k = 1
     retriever.use_rerank = False
     retriever.reranker = None
+    retriever.collection = object()
     retriever.documents = [Document(page_content="SVM 核函数", metadata={"chunk_id": "svm"})]
     retriever.bm25_retriever = type(
         "FakeBM25",
         (),
         {"retrieve": lambda self, query, top_k: [(0, 1.0)]},
     )()
-    retriever._vector_search = lambda query, top_k: []
+    retriever._doc_text_to_index = {"SVM 核函数": 0}
+    retriever._doc_prefix_to_index = {"SVM 核函数": 0}
+    retriever._vector_search = lambda query, top_k, snapshot: []
 
     docs = retriever.retrieve("SVM", top_k=1)
 

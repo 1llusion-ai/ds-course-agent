@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
-from ds_course_agent.hooks import HookManager
-from ds_course_agent.rag.agent import AgentService
-from ds_course_agent.rag.query_pipeline import (
+import pytest
+
+from ds_course_agent.agent.events import (
+    MessageDeltaEvent,
+    RetrievalEndEvent,
+    RouteSelectedEvent,
+    TurnEndEvent,
+    TurnErrorEvent,
+    TurnStartEvent,
+)
+from ds_course_agent.agent.hooks import HookManager
+from ds_course_agent.agent.routing import (
     ExecutionMode,
     QueryContext,
     RetrievalPolicy,
@@ -14,14 +23,8 @@ from ds_course_agent.rag.query_pipeline import (
     RouteIntent,
     RouteState,
 )
-from ds_course_agent.rag.turn_events import (
-    MessageDeltaEvent,
-    RouteSelectedEvent,
-    TurnEndEvent,
-    TurnErrorEvent,
-    TurnStartEvent,
-)
-from ds_course_agent.rag.turn_runner import iter_turn_events
+from ds_course_agent.agent.service import AgentService
+from ds_course_agent.agent.turn_runner import iter_turn_events
 
 
 class _History:
@@ -67,12 +70,15 @@ def _result(content: str) -> RouteExecutionResult:
     )
 
 
-def test_sync_turn_emits_typed_lifecycle_and_persists_once() -> None:
+def test_sync_turn_emits_typed_lifecycle_and_persists_once(monkeypatch) -> None:
     history = _History()
     state = _state(history)
     service = AgentService.__new__(AgentService)
     service._prepare_query_route = lambda user_input, session_id, student_id=None: state
-    service._execute_route = lambda route_state, stream=False: _result("同步回答")
+    monkeypatch.setattr(
+        "ds_course_agent.agent.turn_runner.execute_route",
+        lambda agent, route_state, stream=False: _result("同步回答"),
+    )
 
     events = list(
         iter_turn_events(
@@ -95,7 +101,7 @@ def test_sync_turn_emits_typed_lifecycle_and_persists_once() -> None:
 
 
 def test_sync_and_stream_public_methods_consume_shared_executor(monkeypatch) -> None:
-    import ds_course_agent.rag.agent as agent_module
+    import ds_course_agent.agent.service as agent_module
 
     service = AgentService.__new__(AgentService)
     calls: list[bool] = []
@@ -116,6 +122,7 @@ def test_sync_and_stream_public_methods_consume_shared_executor(monkeypatch) -> 
             "type": "done",
             "content": "统一回答",
             "sources": [],
+            "retrieval_attempted": False,
             "used_retrieval": False,
             "degraded": False,
             "family": "learning",
@@ -164,3 +171,113 @@ def test_stream_failure_emits_turn_error_and_does_not_persist_assistant() -> Non
     assert any(isinstance(event, MessageDeltaEvent) and event.delta == "部分回答" for event in events)
     assert any(isinstance(event, TurnErrorEvent) and event.partial_content == "部分回答" for event in events)
     assert [message.type for message in history.messages] == ["human"]
+
+
+@pytest.mark.parametrize("stream_value", ["", " \n\t"], ids=["empty", "whitespace"])
+def test_blank_stream_recovers_inside_selected_handler_once(monkeypatch, stream_value) -> None:
+    """Blank streams recover without replaying route selection or execution."""
+
+    history = _History()
+    state = _state(history)
+    source = {"reference": "first-pass"}
+    calls = {
+        "can_handle": 0,
+        "stream_execute": 0,
+        "execute": 0,
+        "tool": 0,
+        "after_llm": 0,
+        "after_stream_end": 0,
+        "execute_route": 0,
+    }
+
+    class CountingHandler:
+        def can_handle(self, agent, route_state):
+            calls["can_handle"] += 1
+            return True
+
+        def execute(self, agent, route_state, *, stream=False):
+            calls["execute"] += 1
+            raise AssertionError("blank stream recovery must not execute the handler again")
+
+        def stream_execute(self, agent, route_state):
+            calls["stream_execute"] += 1
+            calls["tool"] += 1
+            yield RetrievalEndEvent(
+                stream_id=route_state.stream_id or "",
+                sources=(source,),
+                retrieval_attempted=True,
+                used_retrieval=True,
+                message="first pass",
+            )
+            yield stream_value
+
+    class RecoveryHook:
+        def after_llm(self, route_state, content, **kwargs):
+            calls["after_llm"] += 1
+            return "recovered"
+
+        def after_stream_end(self, route_state, content, **kwargs):
+            calls["after_stream_end"] += 1
+            assert content == "recovered"
+
+    service = AgentService.__new__(AgentService)
+    service.route_handlers = [CountingHandler()]
+    service.hooks = HookManager([RecoveryHook()])
+    service._prepare_query_route = lambda user_input, session_id, student_id=None: state
+
+    def unexpected_execute_route(*args, **kwargs):
+        calls["execute_route"] += 1
+        raise AssertionError("turn runner must not replay the route")
+
+    monkeypatch.setattr("ds_course_agent.agent.turn_runner.execute_route", unexpected_execute_route)
+
+    events = list(iter_turn_events(service, "解释 PCA", "session-events", stream=True))
+    result = events[-1].result
+
+    assert calls == {
+        "can_handle": 1,
+        "stream_execute": 1,
+        "execute": 0,
+        "tool": 1,
+        "after_llm": 1,
+        "after_stream_end": 1,
+        "execute_route": 0,
+    }
+    assert result.content == "recovered"
+    assert result.sources == [source]
+    assert result.retrieval_attempted is True
+    assert result.used_retrieval is True
+    assert result.degraded is False
+    assert not any(isinstance(event, MessageDeltaEvent) and not event.delta.strip() for event in events)
+
+
+def test_stream_cancellation_does_not_project_a_terminal_result() -> None:
+    """Closing a partial stream must release retrieval state without finalizing it."""
+
+    from ds_course_agent.tools._shared import _track_retrieval, get_retrieval_trace
+
+    history = _History()
+    state = _state(history)
+
+    class PartialHandler:
+        def can_handle(self, agent, route_state):
+            return True
+
+        def stream_execute(self, agent, route_state):
+            _track_retrieval([{"reference": "partial"}], attempted=True, used=True)
+            yield "partial"
+            yield "must not be consumed"
+
+    service = AgentService.__new__(AgentService)
+    service.route_handlers = [PartialHandler()]
+    service.hooks = HookManager([])
+    service._prepare_query_route = lambda user_input, session_id, student_id=None: state
+
+    stream = iter_turn_events(service, "解释 PCA", "session-events", stream=True)
+    emitted = [next(stream), next(stream), next(stream)]
+    stream.close()
+
+    assert any(isinstance(event, MessageDeltaEvent) and event.delta == "partial" for event in emitted)
+    assert not any(isinstance(event, TurnEndEvent) for event in emitted)
+    assert [message.type for message in history.messages] == ["human"]
+    assert get_retrieval_trace().retrieval_attempted is False

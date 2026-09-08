@@ -104,7 +104,7 @@ def estimate_messages_tokens(messages: Iterable[Any]) -> int:
 
 def _trace_warning(kind: str, **data: Any) -> None:
     try:
-        from ds_course_agent.rag.query_trace import trace_step
+        from ds_course_agent.shared.query_trace import trace_step
 
         if "status" in data:
             payload_status = data.pop("status")
@@ -116,7 +116,7 @@ def _trace_warning(kind: str, **data: Any) -> None:
 
 def _trace_action(kind: str, status: str = "ok", **data: Any) -> None:
     try:
-        from ds_course_agent.rag.query_trace import trace_step
+        from ds_course_agent.shared.query_trace import trace_step
 
         trace_step("context_governor.compact", status=status, kind=kind, **data)
     except Exception:
@@ -439,7 +439,7 @@ def _summarize_messages_for_context(messages: Iterable[Any], *, max_chars: int) 
             return semantic, "semantic"
     except Exception as exc:
         try:
-            from ds_course_agent.rag.query_trace import trace_error
+            from ds_course_agent.shared.query_trace import trace_error
 
             trace_error("context_governor.semantic_summary_failed", exc)
         except Exception:

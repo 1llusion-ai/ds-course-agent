@@ -5,8 +5,8 @@ from pathlib import Path
 
 from langchain_core.messages import ToolMessage
 
-from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.shared.context_governor import ContextBudget
+from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.shared.tool_result_store import (
     TOOL_RESULT_COMPACTED_MARKER,
     compact_large_tool_messages,

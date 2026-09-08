@@ -347,7 +347,7 @@ def _resolve_schedule_query(query: str, schedule: dict, now: datetime | None = N
 @tool
 def course_schedule_tool(query: str) -> str:
     """课程时间查询工具。用于回答上课时间、教室、周次安排等问题。"""
-    from ds_course_agent.rag.query_trace import trace_error, trace_step
+    from ds_course_agent.shared.query_trace import trace_error, trace_step
 
     trace_step("tool.invoke", tool="course_schedule_tool", query=query)
     try:

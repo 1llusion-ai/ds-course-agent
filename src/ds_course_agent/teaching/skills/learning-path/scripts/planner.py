@@ -7,7 +7,11 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from ds_course_agent.rag.learner_state import LearnerStateSnapshot
+from ds_course_agent.teaching.learner_state import (
+    LearnerStateSnapshot,
+    rank_active_weak_spots,
+    rank_recent_concepts,
+)
 
 
 @dataclass
@@ -50,20 +54,12 @@ def _chapter_number(chapter: str | None) -> int | None:
 
 
 def _pick_recent_focuses(learner_state: LearnerStateSnapshot, limit: int = 3) -> list[str]:
-    concepts = sorted(
-        learner_state.recent_concepts.values(),
-        key=lambda item: (item.last_mentioned_at or 0, item.mention_count),
-        reverse=True,
-    )
+    concepts = rank_recent_concepts(learner_state)
     return [item.display_name for item in concepts[:limit] if item.display_name]
 
 
 def _pick_active_weak_spots(learner_state: LearnerStateSnapshot, limit: int = 3) -> list[str]:
-    spots = sorted(
-        learner_state.weak_spot_candidates,
-        key=lambda item: (item.evidence_confidence, item.last_triggered_at or 0),
-        reverse=True,
-    )
+    spots = rank_active_weak_spots(learner_state)
     return [item.display_name for item in spots[:limit] if item.display_name]
 
 

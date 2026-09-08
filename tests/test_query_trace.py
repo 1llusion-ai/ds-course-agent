@@ -1,4 +1,4 @@
-from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace, trace_error, trace_step
+from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace, trace_error, trace_step
 
 
 def test_query_trace_records_steps_and_errors():

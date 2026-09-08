@@ -12,8 +12,8 @@ project_root = Path(__file__).parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from ds_course_agent.rag.knowledge_mapper import get_knowledge_mapper
-from ds_course_agent.rag.learner_state import LearnerStateSnapshot
+from ds_course_agent.teaching.knowledge_mapper import get_knowledge_mapper
+from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
 
 
 def _load_local_module(filename: str, module_suffix: str):

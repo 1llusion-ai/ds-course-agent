@@ -20,11 +20,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import ds_course_agent.rag.agent as agent_module
-import ds_course_agent.rag.memory_core as memory_core_module
+import ds_course_agent.agent.service as agent_module
 import ds_course_agent.shared.config as config
+import ds_course_agent.teaching.memory_core as memory_core_module
 from ds_course_agent.api import core_bridge
-from ds_course_agent.rag.profile_models import ConceptFocus, ProgressInfo, StudentProfile, WeakSpotCandidate
+from ds_course_agent.teaching.profile_models import ConceptFocus, ProgressInfo, StudentProfile, WeakSpotCandidate
 
 DEFAULT_BENCHMARK_PATH = Path(__file__).parent / "data" / "agent_tasks_v1.json"
 DEFAULT_REPORT_PATH = Path("var") / "artifacts" / "benchmarks" / "agent_benchmark_report.json"

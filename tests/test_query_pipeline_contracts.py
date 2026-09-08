@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from ds_course_agent.rag.query_pipeline import (
+from ds_course_agent.agent.routing import (
     EnrichmentPlan,
     ExecutionMode,
     QueryContext,
@@ -17,7 +17,7 @@ from ds_course_agent.rag.query_pipeline import (
     RouteState,
     get_preprocessor,
 )
-from ds_course_agent.rag.query_pipeline.router import QueryRouter
+from ds_course_agent.agent.routing.router import QueryRouter
 
 
 @dataclass(frozen=True)
@@ -306,14 +306,13 @@ def _route_state(decision: RouteDecision) -> RouteState:
 
 
 def _make_gated_service(monkeypatch):
-    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.agent.service import AgentService
+    from ds_course_agent.runtime.model_runtime import ModelRuntime
     from ds_course_agent.tools.registry import get_rag_tool_registry
 
     service = object.__new__(AgentService)
     service.tool_registry = get_rag_tool_registry()
-    service.llm = object()
-    service.agent = ("default-agent", ())
-    service._agent_cache_by_tools = {}
+    service.model_runtime = ModelRuntime(llm=object(), tool_registry=service.tool_registry, system_prompt="")
     service.chat = lambda *args, **kwargs: None
     service.direct_chat = lambda *args, **kwargs: None
 
@@ -321,12 +320,12 @@ def _make_gated_service(monkeypatch):
         names = tuple(getattr(tool, "name", str(tool)) for tool in (tools or []))
         return ("subset-agent", names)
 
-    monkeypatch.setattr(service, "_create_agent", fake_create_agent)
+    monkeypatch.setattr(service.model_runtime, "_create_agent", fake_create_agent)
     return service
 
 
 def test_generic_handler_direct_model_binds_no_tools(monkeypatch):
-    from ds_course_agent.rag.route_handlers import GenericAgentRouteHandler
+    from ds_course_agent.agent.handlers import GenericAgentRouteHandler
 
     service = _make_gated_service(monkeypatch)
     decision = RouteDecision(
@@ -349,7 +348,7 @@ def test_generic_handler_direct_model_binds_no_tools(monkeypatch):
 
 
 def test_generic_handler_tool_agent_binds_exact_allowlist(monkeypatch):
-    from ds_course_agent.rag.route_handlers import GenericAgentRouteHandler
+    from ds_course_agent.agent.handlers import GenericAgentRouteHandler
 
     service = _make_gated_service(monkeypatch)
     decision = RouteDecision(
