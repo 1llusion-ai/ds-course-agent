@@ -6,8 +6,9 @@ from types import SimpleNamespace
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from ds_course_agent.rag.agent import AgentService
-from ds_course_agent.rag.message_context import build_chat_messages, build_turn_system_context
+from ds_course_agent.agent.message_context import build_turn_system_context
+from ds_course_agent.agent.service import AgentService
+from ds_course_agent.runtime.messages import build_chat_messages
 
 
 def test_build_chat_messages_preserves_context_history_user_order() -> None:

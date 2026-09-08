@@ -63,16 +63,13 @@ async def send_message(data: ChatRequest, student_id: str) -> ChatResponse:
                 },
             ) from exc
 
-        assistant_content = (
-            assistant_result.get("content", "") if isinstance(assistant_result, dict) else str(assistant_result)
-        )
-        assistant_sources = assistant_result.get("sources") if isinstance(assistant_result, dict) else None
-        query_trace = assistant_result.get("query_trace") if isinstance(assistant_result, dict) else None
-        assistant_family = assistant_result.get("family") if isinstance(assistant_result, dict) else None
-        assistant_intent = assistant_result.get("intent") if isinstance(assistant_result, dict) else None
-        assistant_execution_mode = (
-            assistant_result.get("execution_mode") if isinstance(assistant_result, dict) else None
-        )
+        assistant_payload = assistant_result if isinstance(assistant_result, dict) else {}
+        assistant_content = assistant_payload.get("content", "") if assistant_payload else str(assistant_result)
+        assistant_sources = assistant_payload.get("sources")
+        query_trace = assistant_payload.get("query_trace")
+        assistant_family = assistant_payload.get("family")
+        assistant_intent = assistant_payload.get("intent")
+        assistant_execution_mode = assistant_payload.get("execution_mode")
 
         assistant_msg = ChatMessage(
             role="assistant",
@@ -81,18 +78,19 @@ async def send_message(data: ChatRequest, student_id: str) -> ChatResponse:
             family=assistant_family,
             intent=assistant_intent,
             execution_mode=assistant_execution_mode,
+            retrieval_attempted=bool(assistant_payload.get("retrieval_attempted", False)),
+            used_retrieval=bool(assistant_payload.get("used_retrieval", False)),
+            degraded=bool(assistant_payload.get("degraded", False)),
             **chat_streaming.web_search_turn_fields(
                 requested=bool(data.web_search),
-                used_retrieval=assistant_result.get("used_retrieval") if isinstance(assistant_result, dict) else False,
+                used_retrieval=assistant_payload.get("used_retrieval", False),
                 query_trace=query_trace,
                 sources=assistant_sources,
             ),
             metadata={
-                "used_retrieval": assistant_result.get("used_retrieval"),
-                "degraded": bool(assistant_result.get("degraded", False)),
                 "web_search": bool(data.web_search),
             }
-            if isinstance(assistant_result, dict)
+            if assistant_payload
             else None,
         )
         chat_sessions.append_message_locked(data.session_id, assistant_msg, save=False)
@@ -251,11 +249,12 @@ def get_history(session_id: str, student_id: str) -> ChatHistoryResponse:
     )
 
 
-def clear_history(session_id: str, student_id: str) -> dict[str, str]:
-    """Delete all persisted messages for an owned session."""
+async def clear_history(session_id: str, student_id: str) -> dict[str, str]:
+    """Delete persisted messages after any active turn for the session finishes."""
 
     chat_sessions.ensure_session_owner(session_id, student_id)
-    chat_sessions.clear_messages(session_id)
+    async with chat_sessions.session_operation_guard(session_id):
+        chat_sessions.clear_messages(session_id)
     return {"message": "聊天记录已清空"}
 
 

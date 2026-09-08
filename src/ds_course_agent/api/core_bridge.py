@@ -1,11 +1,16 @@
 """
-桥接 ds_course_agent.rag 模块与 FastAPI
+桥接 ds_course_agent.agent 模块与 FastAPI
 """
 
 import logging
 import os
 import uuid
 from collections.abc import Iterator
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ds_course_agent.agent.service import AgentService
+    from ds_course_agent.teaching.memory_core import MemoryCore
 
 try:
     import certifi
@@ -45,26 +50,26 @@ _agent_service = None
 _memory_core = None
 
 
-def get_memory_core():
+def get_memory_core() -> "MemoryCore":
     global _memory_core
     if _memory_core is None:
-        from ds_course_agent.rag.memory_core import get_memory_core as _get_core
+        from ds_course_agent.teaching.memory_core import get_memory_core as _get_core
 
         _memory_core = _get_core()
     return _memory_core
 
 
-def get_agent_service():
+def get_agent_service() -> "AgentService":
     global _agent_service
     if _agent_service is None:
-        from ds_course_agent.rag.agent import get_agent_service as _get_service
+        from ds_course_agent.agent.service import get_agent_service as _get_service
 
         _agent_service = _get_service()
     return _agent_service
 
 
 def chat_with_history(message: str, session_id: str, student_id: str, web_search: bool = False) -> dict:
-    from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
+    from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
     from ds_course_agent.tools.course_rag import begin_retrieval_trace, end_retrieval_trace
 
     q_token = begin_query_trace(
@@ -104,6 +109,7 @@ def chat_with_history(message: str, session_id: str, student_id: str, web_search
 
     return {
         "content": content,
+        "retrieval_attempted": execution_result.retrieval_attempted,
         "used_retrieval": execution_result.used_retrieval,
         "sources": execution_result.sources,
         "family": execution_result.family.value,
@@ -114,8 +120,13 @@ def chat_with_history(message: str, session_id: str, student_id: str, web_search
     }
 
 
-def stream_chat_with_history(message: str, session_id: str, student_id: str, web_search: bool = False):
-    from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
+def stream_chat_with_history(
+    message: str,
+    session_id: str,
+    student_id: str,
+    web_search: bool = False,
+) -> Iterator[dict[str, Any]]:
+    from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
     from ds_course_agent.tools.course_rag import begin_retrieval_trace, end_retrieval_trace
 
     q_token = begin_query_trace(
@@ -133,9 +144,11 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
     final_intent = None
     final_execution_mode = None
     final_sources: list[dict] = []
+    final_retrieval_attempted = False
     final_used_retrieval = False
     final_degraded = False
     stream_error: str | None = None
+    cancelled = False
 
     try:
         with trace_span("core_bridge.get_agent_service"):
@@ -164,8 +177,12 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
                     final_intent = event.get("intent")
                     final_execution_mode = event.get("execution_mode")
                     final_sources = list(event.get("sources") or [])
+                    final_retrieval_attempted = bool(event.get("retrieval_attempted", False))
                     final_used_retrieval = bool(event.get("used_retrieval", False))
                     final_degraded = bool(event.get("degraded", False))
+    except GeneratorExit:
+        cancelled = True
+        raise
     except Exception as e:
         logger.error("流式Agent调用出错: %s", e, exc_info=True)
         trace_error("core_bridge.stream", e)
@@ -173,14 +190,16 @@ def stream_chat_with_history(message: str, session_id: str, student_id: str, web
         final_content = accumulated_content
     finally:
         trace = end_retrieval_trace(token)
-
-    q_trace = end_query_trace(q_token, status="error" if stream_error or not final_content else "ok")
-    logger.info("QueryTrace: %s", q_trace)
+        q_trace = end_query_trace(
+            q_token, status="cancelled" if cancelled else "error" if stream_error or not final_content else "ok"
+        )
+        logger.info("QueryTrace: %s", q_trace)
 
     final_event = {
         "type": "final",
         "content": final_content,
-        "used_retrieval": final_used_retrieval or trace.used_retrieval,
+        "retrieval_attempted": final_retrieval_attempted,
+        "used_retrieval": final_used_retrieval,
         "sources": final_sources or trace.sources,
         "degraded": final_degraded,
         "query_trace": q_trace,
@@ -205,8 +224,8 @@ def stream_continue_with_history(
 
     from langchain_core.messages import AIMessage
 
-    from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
     from ds_course_agent.shared.history import get_history
+    from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
 
     stream_id = uuid.uuid4().hex
     continuation_parts: list[str] = []
@@ -219,63 +238,70 @@ def stream_continue_with_history(
         }
     )
 
-    yield {
-        "type": "progress",
-        "phase": "generation",
-        "message": "正在继续生成...",
-        "stream_id": stream_id,
-        "resuming": False,
-    }
-
+    cancelled = False
     try:
-        with trace_span("core_bridge.get_agent_service"):
-            service = get_agent_service()
-        history = get_history(session_id)
-        transient_history = list(history.messages)
-        if partial_content:
-            transient_history.append(AIMessage(content=partial_content))
+        yield {
+            "type": "progress",
+            "phase": "generation",
+            "message": "正在继续生成...",
+            "stream_id": stream_id,
+            "resuming": False,
+        }
 
-        turn_context = (
-            "你正在续写一条被用户主动停止的回答。对话历史中最后一条 assistant 内容"
-            "是用户已经看到的部分。只输出尚未输出的后续内容，与断点自然衔接；"
-            "不要重复已有内容，不要重新开头，也不要提及停止、续写或这些指令。"
-        )
-        with trace_span("core_bridge.agent_continue_stream"):
-            for chunk in service.direct_chat(
-                "继续完成上一条回答。",
-                transient_history,
-                stream=True,
-                turn_context=turn_context,
-            ):
-                text = str(chunk or "")
-                if not text:
-                    continue
-                continuation_parts.append(text)
-                yield {
-                    "type": "delta",
-                    "delta": text,
-                    "stream_id": stream_id,
-                    "resuming": False,
-                }
-    except Exception as exc:
-        logger.error("续写Agent调用出错: %s", exc, exc_info=True)
-        trace_error("core_bridge.continue_stream", exc)
-        stream_error = f"续写调用出错：{str(exc)[:100]}"
-
-    continuation = "".join(continuation_parts)
-    final_content = f"{partial_content}{continuation}"
-    if final_content:
         try:
-            get_history(session_id).add_messages([AIMessage(content=final_content)])
-        except Exception as exc:
-            logger.error("续写结果写入历史失败: %s", exc, exc_info=True)
-            trace_error("core_bridge.continue_history", exc)
-            stream_error = stream_error or f"续写历史保存失败：{str(exc)[:100]}"
+            with trace_span("core_bridge.get_agent_service"):
+                service = get_agent_service()
+            history = get_history(session_id)
+            transient_history = list(history.messages)
+            if partial_content:
+                transient_history.append(AIMessage(content=partial_content))
 
-    q_trace = end_query_trace(q_token, status="error" if stream_error else "ok")
+            turn_context = (
+                "你正在续写一条被用户主动停止的回答。对话历史中最后一条 assistant 内容"
+                "是用户已经看到的部分。只输出尚未输出的后续内容，与断点自然衔接；"
+                "不要重复已有内容，不要重新开头，也不要提及停止、续写或这些指令。"
+            )
+            with trace_span("core_bridge.agent_continue_stream"):
+                for chunk in service.direct_chat(
+                    "继续完成上一条回答。",
+                    transient_history,
+                    stream=True,
+                    turn_context=turn_context,
+                ):
+                    text = str(chunk or "")
+                    if not text:
+                        continue
+                    continuation_parts.append(text)
+                    yield {
+                        "type": "delta",
+                        "delta": text,
+                        "stream_id": stream_id,
+                        "resuming": False,
+                    }
+        except Exception as exc:
+            logger.error("续写Agent调用出错: %s", exc, exc_info=True)
+            trace_error("core_bridge.continue_stream", exc)
+            stream_error = f"续写调用出错：{str(exc)[:100]}"
+
+        continuation = "".join(continuation_parts)
+        final_content = f"{partial_content}{continuation}"
+        if final_content:
+            try:
+                get_history(session_id).add_messages([AIMessage(content=final_content)])
+            except Exception as exc:
+                logger.error("续写结果写入历史失败: %s", exc, exc_info=True)
+                trace_error("core_bridge.continue_history", exc)
+                stream_error = stream_error or f"续写历史保存失败：{str(exc)[:100]}"
+    except GeneratorExit:
+        cancelled = True
+        raise
+    finally:
+        q_trace = end_query_trace(q_token, status="cancelled" if cancelled else "error" if stream_error else "ok")
+        logger.info("QueryTrace: %s", q_trace)
     final_event = {
         "type": "final",
         "content": final_content,
+        "retrieval_attempted": False,
         "used_retrieval": False,
         "sources": [],
         "query_trace": q_trace,

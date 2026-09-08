@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 from benchmarks.metrics.answer import evaluate_answer
-from ds_course_agent.rag.rag import RAGService
+from ds_course_agent.retrieval.service import RAGService
 
 
 class BenchmarkRunner:

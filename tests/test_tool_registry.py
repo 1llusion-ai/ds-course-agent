@@ -266,7 +266,7 @@ def test_apply_tool_result_policy_uses_supplied_registry(monkeypatch):
 
 
 def test_agent_progress_label_uses_registry_when_available():
-    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.agent.service import AgentService
 
     service = AgentService.__new__(AgentService)
     service.tool_registry = build_default_tool_registry()
@@ -276,7 +276,7 @@ def test_agent_progress_label_uses_registry_when_available():
 
 
 def test_router_required_tools_resolve_in_registry():
-    from ds_course_agent.rag.query_pipeline import ExecutionMode, get_preprocessor, get_router
+    from ds_course_agent.agent.routing import ExecutionMode, get_preprocessor, get_router
 
     registry = build_default_tool_registry()
     preprocessor = get_preprocessor(enable_concept_detection=False)
@@ -303,7 +303,7 @@ def test_router_required_tools_resolve_in_registry():
 
 def test_agent_fast_path_required_tools_use_registry_names(tmp_path, monkeypatch):
     import ds_course_agent.shared.config as config
-    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.agent.service import AgentService
 
     registry = build_default_tool_registry()
     monkeypatch.setattr(config, "storage_path", str(tmp_path))

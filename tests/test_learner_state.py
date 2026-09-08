@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-from ds_course_agent.rag.learner_state import (
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+from ds_course_agent.agent.routing import QueryContext
+from ds_course_agent.teaching.learner_state import (
+    LearnerConceptFocus,
     LearnerStateSnapshot,
+    LearnerWeakSpot,
     RuleBasedLearnerStateProvider,
     learner_state_from_profile,
+    rank_active_weak_spots,
+    rank_recent_concepts,
 )
-from ds_course_agent.rag.profile_models import ConceptFocus, ProgressInfo, StudentProfile, WeakSpotCandidate
-from ds_course_agent.rag.query_pipeline import QueryContext
+from ds_course_agent.teaching.profile_models import ConceptFocus, ProgressInfo, StudentProfile, WeakSpotCandidate
+from ds_course_agent.teaching.skill_system import SkillRegistry
 
 
 def _profile() -> StudentProfile:
@@ -34,6 +42,127 @@ def _profile() -> StudentProfile:
         )
     )
     return profile
+
+
+def _concept(concept_id: str, last_mentioned_at: float | None, mention_count: int) -> LearnerConceptFocus:
+    return LearnerConceptFocus(
+        concept_id=concept_id,
+        display_name=concept_id,
+        chapter="",
+        mention_count=mention_count,
+        first_mentioned_at=None,
+        last_mentioned_at=last_mentioned_at,
+        last_question_type=None,
+    )
+
+
+def _weak_spot(concept_id: str, confidence: float, last_triggered_at: float | None) -> LearnerWeakSpot:
+    return LearnerWeakSpot(
+        concept_id=concept_id,
+        display_name=concept_id,
+        parent_concept=None,
+        evidence_confidence=confidence,
+        clarification_count=1,
+        first_detected_at=None,
+        last_triggered_at=last_triggered_at,
+        resolved_at=None,
+        resolution_note=None,
+    )
+
+
+def test_rank_recent_concepts_uses_recency_count_and_stable_id() -> None:
+    state = LearnerStateSnapshot(
+        student_id="student_001",
+        recent_concepts={
+            "newer-tie-b": _concept("newer-tie-b", 10.0, 2),
+            "zero": _concept("zero", 0.0, 2),
+            "older-many": _concept("older-many", 9.0, 99),
+            "newer-few": _concept("newer-few", 10.0, 1),
+            "none": _concept("none", None, 2),
+            "newer-tie-a": _concept("newer-tie-a", 10.0, 2),
+        },
+    )
+
+    assert [item.concept_id for item in rank_recent_concepts(state)] == [
+        "newer-tie-a",
+        "newer-tie-b",
+        "newer-few",
+        "older-many",
+        "none",
+        "zero",
+    ]
+
+
+def test_rank_active_weak_spots_prioritizes_confidence_then_recency() -> None:
+    state = LearnerStateSnapshot(
+        student_id="student_001",
+        weak_spot_candidates=(
+            _weak_spot("none", 0.7, None),
+            _weak_spot("high-old", 0.9, 1.0),
+            _weak_spot("b", 0.8, 100.0),
+            _weak_spot("zero", 0.7, 0.0),
+            _weak_spot("a", 0.8, 100.0),
+            _weak_spot("low-new", 0.8, 100.0),
+        ),
+    )
+
+    assert [item.concept_id for item in rank_active_weak_spots(state)] == [
+        "high-old",
+        "a",
+        "b",
+        "low-new",
+        "none",
+        "zero",
+    ]
+
+
+def test_teaching_skills_consume_the_canonical_rankings() -> None:
+    state = LearnerStateSnapshot(
+        student_id="student_001",
+        recent_concepts={
+            "recent-b": _concept("recent-b", 10.0, 2),
+            "recent-a": _concept("recent-a", 10.0, 2),
+            "older": _concept("older", 9.0, 99),
+        },
+        weak_spot_candidates=(
+            _weak_spot("weak-low", 0.7, 100.0),
+            _weak_spot("weak-high", 0.9, 1.0),
+            _weak_spot("weak-mid", 0.8, 50.0),
+        ),
+    )
+    expected_recent = [item.display_name for item in rank_recent_concepts(state)]
+    expected_weak = [item.display_name for item in rank_active_weak_spots(state)]
+
+    registry = SkillRegistry()
+    planner = registry.load_module("learning-path", "scripts/planner.py")
+    strategy = registry.load_module("personalized-explanation", "scripts/strategy.py")
+
+    with (
+        patch.object(planner, "rank_recent_concepts", wraps=rank_recent_concepts) as planner_recent,
+        patch.object(planner, "rank_active_weak_spots", wraps=rank_active_weak_spots) as planner_weak,
+    ):
+        assert planner._pick_recent_focuses(state) == expected_recent
+        assert planner._pick_active_weak_spots(state) == expected_weak
+
+    planner_recent.assert_called_once_with(state)
+    planner_weak.assert_called_once_with(state)
+
+    with patch("ds_course_agent.teaching.knowledge_mapper.get_knowledge_mapper") as mock_get_mapper:
+        mock_mapper = MagicMock()
+        mock_mapper.get_related_concepts.return_value = expected_recent + expected_weak
+        mock_get_mapper.return_value = mock_mapper
+        matched = [SimpleNamespace(concept_id="target", display_name="target")]
+
+        with (
+            patch.object(strategy, "rank_recent_concepts", wraps=rank_recent_concepts) as strategy_recent,
+            patch.object(strategy, "rank_active_weak_spots", wraps=rank_active_weak_spots) as strategy_weak,
+        ):
+            result = strategy.build_strategy(matched, state, "target")
+
+    assert result.relevant_known_concepts == expected_recent[:2]
+    assert result.relevant_weak_spots == expected_weak[:2]
+    strategy_recent.assert_called_once_with(state)
+    strategy_weak.assert_called_once_with(state)
 
 
 def test_rule_profile_conversion_preserves_evidence_semantics() -> None:
@@ -72,7 +201,7 @@ def test_provider_reads_one_turn_snapshot_from_memory() -> None:
 
 
 def test_agent_loads_state_through_injected_provider() -> None:
-    from ds_course_agent.rag.agent import AgentService
+    from ds_course_agent.agent.service import AgentService
 
     expected = LearnerStateSnapshot(student_id="student_001")
 

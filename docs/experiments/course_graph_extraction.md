@@ -5,7 +5,7 @@ learner-state-aware RAG routing experiments.
 
 ## Files
 
-- `src/ds_course_agent/rag/course_graph.py`: JSON-native course graph schema.
+- `src/ds_course_agent/teaching/course_graph.py`: JSON-native course graph schema.
 - `scripts/build_course_graph.py`: offline extractor from Chroma chunks or a JSON/JSONL chunks file.
 
 The extractor is not wired into runtime RAG yet. It is intended for generating

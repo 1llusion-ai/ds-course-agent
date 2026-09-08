@@ -19,7 +19,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
+from ds_course_agent.teaching.knowledge_mapper import map_question_to_concepts
 from ds_course_agent.tools.course_rag import course_rag_tool
 from ds_course_agent.tools.misconception import record_misconception_event
 

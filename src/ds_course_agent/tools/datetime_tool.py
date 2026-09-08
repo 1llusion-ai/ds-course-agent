@@ -18,7 +18,7 @@ def _format_weekday_cn(value: datetime) -> str:
 @tool
 def current_datetime_tool(query: str = "") -> str:
     """当前日期时间查询工具。用于回答今天几号、星期几、现在几点。"""
-    from ds_course_agent.rag.query_trace import trace_step
+    from ds_course_agent.shared.query_trace import trace_step
 
     trace_step("tool.invoke", tool="current_datetime_tool")
     now = datetime.now().astimezone()

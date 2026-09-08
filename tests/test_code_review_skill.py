@@ -3,7 +3,7 @@
 import json
 from unittest.mock import patch
 
-from ds_course_agent.rag.skill_system import SkillRegistry
+from ds_course_agent.teaching.skill_system import SkillRegistry
 
 
 def _load_module():

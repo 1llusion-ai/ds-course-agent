@@ -39,6 +39,15 @@
         </template>
       </template>
 
+      <div
+        v-if="retrievalNotice"
+        class="retrieval-notice"
+        :class="{ 'retrieval-notice--degraded': message.degraded }"
+        role="status"
+      >
+        <span class="retrieval-notice__icon" aria-hidden="true">{{ message.degraded ? '△' : '○' }}</span>
+        <span>{{ retrievalNotice }}</span>
+      </div>
 
       <div v-if="sourceChips.length" class="source-panel">
         <button
@@ -405,6 +414,22 @@ const currentProgressMessage = computed(() => {
   return items.length ? items[items.length - 1].message : ''
 })
 
+const retrievalNotice = computed(() => {
+  if (props.message.role === 'user' || props.message.isLoading) return ''
+  if (props.message.degraded && props.message.used_retrieval) {
+    return '生成服务已降级，当前回答依据检索到的课程资料摘录整理。'
+  }
+  if (props.message.retrieval_attempted && !props.message.used_retrieval) {
+    return props.message.degraded
+      ? '已尝试检索课程资料，但未找到可用证据；当前回复为降级说明。'
+      : '已尝试检索课程资料，但未找到可用于本次回答的内容。'
+  }
+  if (props.message.degraded) {
+    return '本次回答走了降级路径，内容可能不完整。'
+  }
+  return ''
+})
+
 
 const sourceChips = computed(() => {
   const rawSources = normalizeSourceList(props.message.sources || props.message.metadata?.sources)
@@ -738,6 +763,32 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   background: #2563eb;
   animation: caret-blink 1s infinite;
+}
+
+.retrieval-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0 2px;
+  padding: 9px 11px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.86);
+  color: #475569;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.retrieval-notice--degraded {
+  border-color: rgba(217, 119, 6, 0.24);
+  background: rgba(255, 251, 235, 0.72);
+  color: #92400e;
+}
+
+.retrieval-notice__icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  font-weight: 800;
 }
 
 @keyframes caret-blink {

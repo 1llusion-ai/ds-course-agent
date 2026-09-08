@@ -11,7 +11,7 @@ from benchmarks.route_harness import (
     evaluate_case,
     load_route_cases,
 )
-from ds_course_agent.rag.query_pipeline import (
+from ds_course_agent.agent.routing import (
     ExecutionMode,
     RetrievalPolicy,
     RouteDecision,

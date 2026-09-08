@@ -7,8 +7,8 @@ import pytest
 from langchain_core.messages import AIMessage
 from pydantic import ValidationError
 
-from ds_course_agent.rag.query_pipeline.models import RouteIntent
-from ds_course_agent.rag.query_pipeline.semantic_router import (
+from ds_course_agent.agent.routing.models import RouteIntent
+from ds_course_agent.agent.routing.semantic_router import (
     LearningRouteOutput,
     LearningSemanticRouter,
 )

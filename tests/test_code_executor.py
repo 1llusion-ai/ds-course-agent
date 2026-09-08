@@ -2,7 +2,7 @@
 
 import subprocess
 
-from ds_course_agent.rag.code_executor import (
+from ds_course_agent.tools.code_executor import (
     PythonSandbox,
     SandboxResult,
     SandboxStatus,
@@ -81,7 +81,7 @@ def test_python_sandbox_truncates_combined_output():
 def test_python_sandbox_fails_closed_when_docker_unavailable(monkeypatch, tmp_path):
     marker = tmp_path / "should_not_exist.txt"
     code = f"from pathlib import Path\nPath({str(marker)!r}).write_text('ran')"
-    monkeypatch.setattr("ds_course_agent.rag.code_executor.shutil.which", lambda name: None)
+    monkeypatch.setattr("ds_course_agent.tools.code_executor.shutil.which", lambda name: None)
     sandbox = PythonSandbox(timeout_sec=2, backend="docker", allow_host_fallback=False)
 
     result = sandbox.execute(code)
@@ -93,7 +93,7 @@ def test_python_sandbox_fails_closed_when_docker_unavailable(monkeypatch, tmp_pa
 
 
 def test_python_sandbox_local_fallback_requires_explicit_opt_in(monkeypatch):
-    monkeypatch.setattr("ds_course_agent.rag.code_executor.shutil.which", lambda name: None)
+    monkeypatch.setattr("ds_course_agent.tools.code_executor.shutil.which", lambda name: None)
     sandbox = PythonSandbox(timeout_sec=2, backend="docker", allow_host_fallback=True)
 
     result = sandbox.execute("print(1 + 1)")
@@ -106,7 +106,7 @@ def test_python_sandbox_local_fallback_requires_explicit_opt_in(monkeypatch):
 def test_python_sandbox_busy_fails_closed_without_executing(monkeypatch, tmp_path):
     events = []
     monkeypatch.setattr(
-        "ds_course_agent.rag.code_executor.trace_step",
+        "ds_course_agent.tools.code_executor.trace_step",
         lambda stage, status="ok", **data: events.append({"stage": stage, "status": status, "data": data}),
     )
     marker = tmp_path / "should_not_exist.txt"
@@ -154,7 +154,7 @@ def test_python_sandbox_traces_start_and_result(monkeypatch):
     def fake_trace_step(stage, status="ok", **data):
         events.append({"stage": stage, "status": status, "data": data})
 
-    monkeypatch.setattr("ds_course_agent.rag.code_executor.trace_step", fake_trace_step)
+    monkeypatch.setattr("ds_course_agent.tools.code_executor.trace_step", fake_trace_step)
     sandbox = PythonSandbox(timeout_sec=2, backend="local")
 
     result = sandbox.execute("print(1 + 1)")
@@ -177,7 +177,7 @@ def test_python_sandbox_trace_failure_does_not_break_execution(monkeypatch):
     def failing_trace_step(*args, **kwargs):
         raise RuntimeError("trace sink is down")
 
-    monkeypatch.setattr("ds_course_agent.rag.code_executor.trace_step", failing_trace_step)
+    monkeypatch.setattr("ds_course_agent.tools.code_executor.trace_step", failing_trace_step)
     sandbox = PythonSandbox(timeout_sec=2, backend="local")
 
     result = sandbox.execute("print(1 + 1)")
@@ -195,8 +195,8 @@ def test_python_sandbox_docker_command_is_hardened(monkeypatch):
             return subprocess.CompletedProcess(command, 0, stdout="24.0", stderr="")
         return subprocess.CompletedProcess(command, 0, stdout="2\n", stderr="")
 
-    monkeypatch.setattr("ds_course_agent.rag.code_executor.shutil.which", lambda name: "/usr/bin/docker")
-    monkeypatch.setattr("ds_course_agent.rag.code_executor.subprocess.run", fake_run)
+    monkeypatch.setattr("ds_course_agent.tools.code_executor.shutil.which", lambda name: "/usr/bin/docker")
+    monkeypatch.setattr("ds_course_agent.tools.code_executor.subprocess.run", fake_run)
     sandbox = PythonSandbox(timeout_sec=2, backend="docker", memory_mb=128, cpus=0.25)
 
     result = sandbox.execute("print(1 + 1)")
@@ -258,7 +258,7 @@ def test_python_exec_tool_is_registered_and_formats_output(monkeypatch):
             assert code == "print(1 + 1)"
             return {"stdout": "2\n", "stderr": "", "exit_code": 0, "truncated": False}
 
-    monkeypatch.setattr("ds_course_agent.rag.code_executor.PythonSandbox", lambda: FakeSandbox())
+    monkeypatch.setattr("ds_course_agent.tools.code_executor.PythonSandbox", lambda: FakeSandbox())
 
     result = python_exec_tool.invoke("print(1 + 1)")
 
@@ -279,8 +279,8 @@ def test_python_sandbox_falls_back_when_docker_run_infra_fails(monkeypatch):
             return subprocess.CompletedProcess(command, 125, stdout="", stderr="image not found")
         return real_run(command, **kwargs)
 
-    monkeypatch.setattr("ds_course_agent.rag.code_executor.shutil.which", lambda name: "/usr/bin/docker")
-    monkeypatch.setattr("ds_course_agent.rag.code_executor.subprocess.run", fake_run_with_real_local)
+    monkeypatch.setattr("ds_course_agent.tools.code_executor.shutil.which", lambda name: "/usr/bin/docker")
+    monkeypatch.setattr("ds_course_agent.tools.code_executor.subprocess.run", fake_run_with_real_local)
     sandbox = PythonSandbox(timeout_sec=2, backend="docker", allow_host_fallback=True)
 
     result = sandbox.execute("print(1 + 1)")

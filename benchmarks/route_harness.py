@@ -214,7 +214,7 @@ class _HarnessSemanticRouter:
 
     def route(self, query: str, recent_context: str = "") -> _SemanticOutput:
         del query, recent_context
-        from ds_course_agent.rag.query_pipeline import RouteIntent
+        from ds_course_agent.agent.routing import RouteIntent
 
         payload = self._payload or {
             "intent": RouteIntent.NEEDS_CLARIFICATION.value,
@@ -240,8 +240,8 @@ class _OfflineRouteService:
     """Minimal QueryPipeline host with no external service dependencies."""
 
     def __init__(self) -> None:
-        import ds_course_agent.rag.query_pipeline.router as router_module
-        from ds_course_agent.rag.query_pipeline.router import QueryRouter
+        import ds_course_agent.agent.routing.router as router_module
+        from ds_course_agent.agent.routing.router import QueryRouter
 
         self._semantic_router = _HarnessSemanticRouter()
         router_module._router = QueryRouter(semantic_router=self._semantic_router)
@@ -258,7 +258,7 @@ class _OfflineRouteService:
         student_id: str,
         web_search: bool = False,
     ) -> Any:
-        from ds_course_agent.rag.query_pipeline import QueryPipeline
+        from ds_course_agent.agent.routing import QueryPipeline
 
         return QueryPipeline(self).prepare(
             user_input,
@@ -272,12 +272,12 @@ class _OfflineRouteService:
 
     @staticmethod
     def _handle_special_case(question: str) -> str | None:
-        from ds_course_agent.rag.taxonomy import special_case_response
+        from ds_course_agent.agent.taxonomy import special_case_response
 
         return special_case_response(question)
 
     def _enrich_skills(self, context: Any, user_input: str) -> set[str]:
-        from ds_course_agent.rag.skill_system import get_skill_loader
+        from ds_course_agent.teaching.skill_system import get_skill_loader
 
         candidates = {match.skill.key for match in get_skill_loader().select_candidates(user_input)}
         context.skill_candidate_keys = candidates
@@ -291,7 +291,7 @@ class _OfflineRouteService:
 
     @staticmethod
     def _load_learner_state(context: Any, student_id: str) -> Any:
-        from ds_course_agent.rag.learner_state import LearnerStateSnapshot
+        from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
 
         learner_state = LearnerStateSnapshot(student_id=student_id)
         context.learner_state_summary = learner_state.summary()
@@ -299,7 +299,7 @@ class _OfflineRouteService:
 
     @staticmethod
     def _rewrite_learning_query(context: Any) -> Any:
-        from ds_course_agent.rag.query_pipeline import get_rewriter
+        from ds_course_agent.agent.routing import get_rewriter
 
         result = get_rewriter().rewrite(context)
         context.grounded_tool_query = result.enriched_query
@@ -311,7 +311,7 @@ class _OfflineRouteService:
 
     @staticmethod
     def _build_route_state(**kwargs: Any) -> Any:
-        from ds_course_agent.rag.query_pipeline import RouteState
+        from ds_course_agent.agent.routing import RouteState
 
         return RouteState(
             context=kwargs["context"],

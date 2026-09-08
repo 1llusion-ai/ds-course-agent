@@ -24,11 +24,12 @@ from ds_course_agent.shared.config_utils import (
 )
 
 if TYPE_CHECKING:
-    from ds_course_agent.rag.rag import RAGService
+    from ds_course_agent.retrieval.service import RAGService
 
 
 @dataclass
 class RetrievalTrace:
+    retrieval_attempted: bool = False
     used_retrieval: bool = False
     sources: list[dict] = field(default_factory=list)
 
@@ -66,38 +67,10 @@ def normalize_tool_text(text: Any, *, strip_tags: bool = True) -> str:
     return value.strip()
 
 
-def truncate_text(text: Any, max_chars: int, *, marker: str = "...") -> tuple[str, bool]:
-    """Return ``(text, truncated)`` with a marker when room allows.
-
-    The guard for very small budgets mirrors the safer fetch implementation:
-    never return more than ``max_chars`` characters, and avoid appending a marker
-    when it would dominate or exceed the requested budget.
-    """
-
-    value = str(text or "").strip()
-    try:
-        limit = int(max_chars)
-    except (TypeError, ValueError):
-        limit = 0
-    if limit <= 0:
-        return "", bool(value)
-    if len(value) <= limit:
-        return value, False
-    if limit <= len(marker):
-        return value[:limit].rstrip(), True
-    return value[: limit - len(marker)].rstrip() + marker, True
-
-
-def truncate_text_only(text: Any, max_chars: int, *, marker: str = "...") -> str:
-    """Return only the truncated string for call sites that do not need a flag."""
-
-    return truncate_text(text, max_chars, marker=marker)[0]
-
-
 def get_rag_service() -> RAGService:
     global _rag_service
     if _rag_service is None:
-        from ds_course_agent.rag.rag import RAGService
+        from ds_course_agent.retrieval.service import RAGService
 
         _rag_service = RAGService()
     return _rag_service
@@ -116,8 +89,9 @@ def end_retrieval_trace(token: Token) -> RetrievalTrace:
     _retrieval_trace.reset(token)
     parent = _retrieval_trace.get()
     if parent is not None:
+        parent.retrieval_attempted = parent.retrieval_attempted or trace.retrieval_attempted
         parent.used_retrieval = parent.used_retrieval or trace.used_retrieval
-        parent.sources = _merge_sources(parent.sources, trace.sources)
+        parent.sources = merge_retrieval_sources(parent.sources, trace.sources)
     return trace
 
 
@@ -125,7 +99,9 @@ def get_retrieval_trace() -> RetrievalTrace:
     return _retrieval_trace.get() or RetrievalTrace()
 
 
-def _merge_sources(existing: list[dict], incoming: list[dict]) -> list[dict]:
+def merge_retrieval_sources(existing: list[dict], incoming: list[dict]) -> list[dict]:
+    """Merge retrieval sources by their stable reference without duplicates."""
+
     merged = list(existing)
     seen = set()
     for item in existing:
@@ -163,13 +139,21 @@ def _warn_large_tool_result(tool_name: str, result: str, **metadata) -> None:
         pass
 
 
-def _track_retrieval(sources: list[dict], used: bool = True) -> None:
+def _track_retrieval(
+    sources: list[dict],
+    *,
+    attempted: bool,
+    used: bool,
+) -> None:
+    """Record whether retrieval ran and whether usable evidence was consumed."""
+
     trace = _retrieval_trace.get()
     if trace is None:
         return
 
+    trace.retrieval_attempted = trace.retrieval_attempted or attempted
     trace.used_retrieval = trace.used_retrieval or used
-    trace.sources = _merge_sources(trace.sources, sources)
+    trace.sources = merge_retrieval_sources(trace.sources, sources)
 
 
 __all__ = [
@@ -183,10 +167,9 @@ __all__ = [
     "end_retrieval_trace",
     "get_retrieval_trace",
     "get_rag_service",
+    "merge_retrieval_sources",
     "normalize_tool_text",
     "strip_html_tags",
-    "truncate_text",
-    "truncate_text_only",
     "_track_retrieval",
     "_warn_large_tool_result",
 ]

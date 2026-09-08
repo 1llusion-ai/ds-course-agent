@@ -22,8 +22,8 @@ def record_misconception_event(
     turn_id: str = "0",
 ) -> str:
     """记录学生 misconception 事件到学习画像。"""
-    from ds_course_agent.rag.events import build_misconception_event
-    from ds_course_agent.rag.memory_core import record_event
+    from ds_course_agent.teaching.learning_events import build_misconception_event
+    from ds_course_agent.teaching.memory_core import record_event
 
     normalized_bucket = target_bucket if target_bucket in ("pending_weakness", "weakness") else "weakness"
 

@@ -97,4 +97,4 @@ async def clear_chat_history(
 ) -> dict[str, str]:
     """Clear persisted chat history for a session."""
 
-    return chat_application.clear_history(session_id, student_id)
+    return await chat_application.clear_history(session_id, student_id)

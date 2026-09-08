@@ -17,7 +17,7 @@ from benchmarks.metrics.retrieval import (
     calculate_recall_at_k,
 )
 from benchmarks.qa_dataset import find_missing_annotated_chunk_ids, load_retrieval_qa_dataset
-from ds_course_agent.rag.rag import RAGService
+from ds_course_agent.retrieval.service import RAGService
 
 try:
     from scipy import stats

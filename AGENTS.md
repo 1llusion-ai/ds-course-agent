@@ -11,13 +11,14 @@
 
 ## 0. 项目边界(先读，避免做错方向)
 
-- 这是「数据科学导论」课程 RAG 教学助教：`Vue 3 (web/) → HTTP/SSE → FastAPI (src/ds_course_agent/api/) → ds_course_agent.rag`。
+- 这是「数据科学导论」课程 RAG 教学助教：`Vue 3 (web/) → HTTP/SSE → FastAPI (src/ds_course_agent/api/) → ds_course_agent.agent.service`，领域实现分别位于 `teaching/`、`retrieval/`、`research/`。
 - 架构与能力边界的权威文档，改动前必须对齐、不得违反：
-  - `docs/architecture_reorg_plan.md` — 目录/包布局(已实现，勿回退)。
+  - `docs/architecture_reorg_plan.md` — 当前目录、目标分层与分阶段迁移状态；按已完成阶段更新调用方，不回退 src-layout。
   - `docs/capability_model.md` — 什么该做成 `tool` / `skill` / 普通模块。**新增能力前按其决策清单判定**，不要「什么都做成 skill / 什么都塞进 agent」。
   - `docs/nanobot_refactor_roadmap.md` — 不可动摇的边界(不换掉 QueryPipeline、不换掉 LearningEvent、前端不换 React、不引入 nanobot 通用 agent 表面)。
-  - `~/.claude/plans/phase1-backbone-spec.md` — 主干框架的 5 个契约(状态/控制信号/工具门控/路由即数据/单一入口)。主干重构以它为准。
+  - `docs/phase1_backbone_contracts.md` — 主干框架的 5 个契约与 T1-T7 不变量(状态/控制信号/工具门控/路由即数据/单一入口)。主干重构以它为准。
 - 运行时状态一律写 `var/`(`var/chat_history`、`var/chroma_db`、`var/logs`、`var/artifacts`、`var/cache`)，绝不写进包目录或仓库根。
+- `runtime/` 仅依赖通用模型协议与 `shared/`；禁止导入 `agent/`、`teaching/`、`retrieval/`、`research/`、`tools/` 或 `api/`。领域能力通过显式接口注入。旧 `rag/`、顶层 `hooks/` 包已删除，不得恢复兼容转发。
 
 ---
 
@@ -38,7 +39,7 @@
 ### 铁律三 — 契约优先，边界清晰
 - 每个模块/函数要能回答三问：**它做什么、怎么用、依赖什么**。答不上来说明边界没划好，先划边界再写。
 - 跨模块通信走**类型化的显式接口**(dataclass / Protocol / enum)，不靠裸 dict 传约定字段。
-- 文件过大(经验阈值 >600 行)是「做太多」的信号，拆分而非继续追加。`agent.py` 已知偏大，属 Phase 2 拆分对象，本阶段勿再往里堆新职责。
+- 文件过大(经验阈值 >600 行)是「做太多」的信号，拆分而非继续追加。Agent 入口为 `agent/service.py`；模型运行、路由执行和 turn 编排已有独立所有者，不得重新堆回入口。
 
 ---
 
@@ -91,6 +92,7 @@
 - 一个 PR/任务只解决一个问题。发现顺手能改的无关问题，**记下来另开**，不要夹带(夹带 = 审查失效 = 屎山入口)。
 - 只在被要求时提交/推送。对外或不可逆操作(删文件、改部署、推远端)先确认。
 - 秘密只进 `.env`(已 gitignore)，`.env.example` 只放占位符，任何密钥不得进代码或提交历史。
+- 审查脚本先静态检查，禁止把批量 import 当成只读验证；import 会执行模块顶层代码。清库/重建等运维脚本必须有 `__main__` 保护和显式确认，默认不修改数据，优先归档而非永久删除。事故记录见 `docs/kb_incident_2026-09-08.md`。
 
 ---
 

@@ -193,7 +193,7 @@ def maybe_store_large_text_payload(
     payload = {**warning, "artifact": artifact.to_trace_dict()}
 
     try:
-        from ds_course_agent.rag.query_trace import trace_step
+        from ds_course_agent.shared.query_trace import trace_step
 
         trace_step(
             "tool_result.artifact",
@@ -415,7 +415,7 @@ def _replace_message_content(message: Any, content: str, metadata: dict[str, Any
 
 def _trace_compaction(*, location: str, compacted_count: int, preserve_recent: int) -> None:
     try:
-        from ds_course_agent.rag.query_trace import trace_step
+        from ds_course_agent.shared.query_trace import trace_step
 
         trace_step(
             "tool_result.compaction",

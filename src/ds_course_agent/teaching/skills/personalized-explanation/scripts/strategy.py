@@ -6,7 +6,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from ds_course_agent.rag.learner_state import LearnerStateSnapshot
+from ds_course_agent.teaching.learner_state import (
+    LearnerStateSnapshot,
+    rank_active_weak_spots,
+    rank_recent_concepts,
+)
 
 
 @dataclass
@@ -39,7 +43,7 @@ def build_strategy(
     if not matched_concepts:
         return TeachingStrategy()
 
-    from ds_course_agent.rag.knowledge_mapper import get_knowledge_mapper
+    from ds_course_agent.teaching.knowledge_mapper import get_knowledge_mapper
 
     mapper = get_knowledge_mapper()
     target_ids = [item.concept_id for item in matched_concepts]
@@ -50,22 +54,14 @@ def build_strategy(
 
     related_name_set = set(_dedupe_keep_order(related_names))
 
-    recent_concepts = sorted(
-        learner_state.recent_concepts.values(),
-        key=lambda item: (item.last_mentioned_at or 0, item.mention_count),
-        reverse=True,
-    )
+    recent_concepts = rank_recent_concepts(learner_state)
     relevant_known = [
         item.display_name
         for item in recent_concepts
         if item.concept_id not in target_ids and item.display_name in related_name_set
     ]
 
-    weak_spots = sorted(
-        learner_state.weak_spot_candidates,
-        key=lambda item: (item.evidence_confidence, item.last_triggered_at or 0),
-        reverse=True,
-    )
+    weak_spots = rank_active_weak_spots(learner_state)
     relevant_weak = [
         item.display_name
         for item in weak_spots

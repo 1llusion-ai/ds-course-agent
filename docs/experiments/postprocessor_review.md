@@ -1,5 +1,15 @@
 # Postprocessor Code Review 结果
 
+> **Historical/stale path note.** This review records the pre-M4 layout. The
+> file paths and line numbers below are contemporaneous evidence and are kept
+> unchanged; do not use them as current import instructions. Current mappings
+> are `src/ds_course_agent/rag/agent.py` ->
+> `src/ds_course_agent/agent/service.py`,
+> `src/ds_course_agent/rag/query_pipeline/` ->
+> `src/ds_course_agent/agent/routing/`, and
+> `src/ds_course_agent/rag/route_handlers.py` ->
+> `src/ds_course_agent/agent/handlers.py`.
+
 审查范围：uncommitted changes（postprocessor 抽取 + 回归测试 + conftest 修复）
 
 ---

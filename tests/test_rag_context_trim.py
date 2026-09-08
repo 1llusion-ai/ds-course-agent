@@ -3,9 +3,9 @@ from unittest.mock import MagicMock
 import pytest
 from langchain_core.documents import Document
 
-import ds_course_agent.rag.rag as rag_module
-from ds_course_agent.rag.query_trace import begin_query_trace, end_query_trace
-from ds_course_agent.rag.rag import RAGService, clear_rag_retrieval_cache
+import ds_course_agent.retrieval.service as rag_module
+from ds_course_agent.retrieval.service import RAGService, clear_rag_retrieval_cache
+from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.tools.course_rag import build_sources_from_documents
 
 
@@ -55,6 +55,20 @@ def _make_doc(source, page, content, extra_metadata=None):
     if extra_metadata:
         metadata.update(extra_metadata)
     return Document(page_content=content, metadata=metadata)
+
+
+def test_rag_content_trim_uses_shared_budget_with_dynamic_marker_and_preserves_whitespace(monkeypatch):
+    _set_trim_config(monkeypatch, enabled=True, max_chars=300, doc_max_chars=35)
+
+    service = RAGService.__new__(RAGService)
+    formatted, trimmed = service._format_one_document(
+        _make_doc("marker.pdf", 3, "甲" * 80),
+        max_content_chars=35,
+    )
+
+    assert trimmed is True
+    assert "文档片段：甲" in formatted
+    assert "[片段已裁剪：原始 80 字，保留前 35 字]" in formatted
 
 
 def test_retrieve_trims_each_document_and_total_budget_preserves_metadata(monkeypatch):
@@ -136,6 +150,40 @@ def test_retrieve_cache_key_includes_top_k(monkeypatch):
 
     assert len(first.documents) == 1
     assert len(second.documents) == 2
+    assert service.hybrid_retriever.retrieve.call_count == 2
+
+
+def test_retrieve_does_not_cache_empty_results(monkeypatch):
+    _set_trim_config(monkeypatch, enabled=True, max_chars=500, doc_max_chars=80)
+
+    service = RAGService.__new__(RAGService)
+    service.use_hybrid = True
+    service.hybrid_retriever = MagicMock()
+    service.hybrid_retriever.retrieve.return_value = []
+
+    assert not service.retrieve("temporary outage", top_k=2).has_results
+    assert not service.retrieve("temporary outage", top_k=2).has_results
+    assert service.hybrid_retriever.retrieve.call_count == 2
+
+
+def test_retrieve_cache_key_includes_model_identity(monkeypatch):
+    _set_trim_config(monkeypatch, enabled=True, max_chars=500, doc_max_chars=80)
+
+    service = RAGService.__new__(RAGService)
+    service.use_hybrid = True
+    service.hybrid_retriever = MagicMock()
+    service.hybrid_retriever.retrieve.side_effect = [
+        [_make_doc("first.pdf", 1, "first model")],
+        [_make_doc("second.pdf", 2, "second model")],
+    ]
+
+    monkeypatch.setattr(rag_module.config, "MODEL_EMBEDDING", "embedding-a")
+    first = service.retrieve("same question", top_k=1)
+    monkeypatch.setattr(rag_module.config, "MODEL_EMBEDDING", "embedding-b")
+    second = service.retrieve("same question", top_k=1)
+
+    assert first.documents[0].page_content == "first model"
+    assert second.documents[0].page_content == "second model"
     assert service.hybrid_retriever.retrieve.call_count == 2
 
 

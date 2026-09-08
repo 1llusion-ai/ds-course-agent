@@ -17,9 +17,12 @@ import json
 import os
 import re
 import zlib
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+
+from ds_course_agent.shared.kb_revision import knowledge_base_write
 
 
 @dataclass
@@ -243,52 +246,64 @@ class CourseKnowledgeBase:
         batch_metadatas = []
         batch_ids = []
 
-        for chunk in chunks:
-            chunk_hash = self._compute_chunk_hash(chunk)
+        with ExitStack() as write_stack:
+            write_started = False
 
-            if chunk_hash in self.hashes:
-                skip_count += 1
-                continue
+            for chunk in chunks:
+                chunk_hash = self._compute_chunk_hash(chunk)
 
-            # 过滤非语义块（struct/shadow）
-            if skip_non_semantic:
-                chunk_type = getattr(chunk.metadata, "chunk_type", "semantic")
-                if chunk_type in ("struct", "shadow"):
-                    filtered_count += 1
+                if chunk_hash in self.hashes:
+                    skip_count += 1
                     continue
 
-            metadata = self._build_metadata(chunk)
+                # 过滤非语义块（struct/shadow）
+                if skip_non_semantic:
+                    chunk_type = getattr(chunk.metadata, "chunk_type", "semantic")
+                    if chunk_type in ("struct", "shadow"):
+                        filtered_count += 1
+                        continue
 
-            batch_texts.append(chunk.content)
-            batch_metadatas.append(metadata)
-            batch_ids.append(chunk_hash)
+                metadata = self._build_metadata(chunk)
 
-            self.hashes[chunk_hash] = source_file
+                batch_texts.append(chunk.content)
+                batch_metadatas.append(metadata)
+                batch_ids.append(chunk_hash)
 
-            if len(batch_texts) >= batch_size:
+                self.hashes[chunk_hash] = source_file
+
+                if len(batch_texts) >= batch_size:
+                    if not write_started:
+                        write_stack.enter_context(
+                            knowledge_base_write(self.collection_name, self._config.CHROMA_PERSIST_DIR)
+                        )
+                        write_started = True
+                    try:
+                        self.vector_store.add_texts(batch_texts, metadatas=batch_metadatas, ids=batch_ids)
+                        success_count += len(batch_texts)
+                        print(f"    入库进度: {success_count}/{len(chunks)} (过滤非语义块: {filtered_count})")
+                    except Exception as e:
+                        error_count += len(batch_texts)
+                        errors.append(f"批量入库失败: {str(e)}")
+                        for h in batch_ids:
+                            self.hashes.pop(h, None)
+
+                    batch_texts = []
+                    batch_metadatas = []
+                    batch_ids = []
+
+            if batch_texts:
+                if not write_started:
+                    write_stack.enter_context(
+                        knowledge_base_write(self.collection_name, self._config.CHROMA_PERSIST_DIR)
+                    )
                 try:
                     self.vector_store.add_texts(batch_texts, metadatas=batch_metadatas, ids=batch_ids)
                     success_count += len(batch_texts)
-                    print(f"    入库进度: {success_count}/{len(chunks)} (过滤非语义块: {filtered_count})")
                 except Exception as e:
                     error_count += len(batch_texts)
                     errors.append(f"批量入库失败: {str(e)}")
                     for h in batch_ids:
                         self.hashes.pop(h, None)
-
-                batch_texts = []
-                batch_metadatas = []
-                batch_ids = []
-
-        if batch_texts:
-            try:
-                self.vector_store.add_texts(batch_texts, metadatas=batch_metadatas, ids=batch_ids)
-                success_count += len(batch_texts)
-            except Exception as e:
-                error_count += len(batch_texts)
-                errors.append(f"批量入库失败: {str(e)}")
-                for h in batch_ids:
-                    self.hashes.pop(h, None)
 
         self._save_hashes()
 
@@ -354,12 +369,13 @@ class CourseKnowledgeBase:
 
     def clear(self):
         """清空知识库"""
-        self.vector_store.delete_collection()
-        self.vector_store = self._chroma_cls(
-            collection_name=self.collection_name,
-            embedding_function=self.embedding,
-            persist_directory=self._config.CHROMA_PERSIST_DIR,
-        )
+        with knowledge_base_write(self.collection_name, self._config.CHROMA_PERSIST_DIR):
+            self.vector_store.delete_collection()
+            self.vector_store = self._chroma_cls(
+                collection_name=self.collection_name,
+                embedding_function=self.embedding,
+                persist_directory=self._config.CHROMA_PERSIST_DIR,
+            )
         self.hashes = {}
         self._save_hashes()
         print(f"[KB] 知识库已清空: {self.collection_name}")

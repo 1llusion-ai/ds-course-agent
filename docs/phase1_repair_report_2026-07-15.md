@@ -1,5 +1,17 @@
 # 第一阶段修复报告（2026-07-15）
 
+> **Historical/stale path note.** This dated report intentionally preserves
+> the paths, line numbers, and validation commands that were true on July 15,
+> 2026. They are historical evidence, not current module instructions. After
+> M4, `src/ds_course_agent/rag/agent.py` is
+> `src/ds_course_agent/agent/service.py`, `src/ds_course_agent/rag/tools.py`
+> is the split modules under `src/ds_course_agent/tools/`,
+> `src/ds_course_agent/rag/rag.py` is
+> `src/ds_course_agent/retrieval/service.py`, and
+> `src/ds_course_agent/shared/config.py` is the
+> `src/ds_course_agent/shared/config/` package. Historical commands below are
+> not rewritten.
+
 ## 目标
 
 第一阶段只做防御性加固与可观测性建设，不推倒核心业务逻辑：

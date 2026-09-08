@@ -3,9 +3,9 @@ import tempfile
 from fastapi.testclient import TestClient
 
 from ds_course_agent.api.main import app
-from ds_course_agent.rag.events import build_clarification_event, build_concept_mentioned_event
-from ds_course_agent.rag.memory_core import MemoryCore
-from ds_course_agent.rag.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
+from ds_course_agent.teaching.learning_events import build_clarification_event, build_concept_mentioned_event
+from ds_course_agent.teaching.memory_core import MemoryCore
+from ds_course_agent.teaching.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
 
 client = TestClient(app)
 
@@ -220,8 +220,8 @@ class TestProfileAPI:
         assert "支持向量机" in data["textbook_excerpt"]
 
     def test_get_concept_detail_supports_distinction_concept(self):
+        from ds_course_agent.agent.service import AgentService
         from ds_course_agent.api.routers import profile as profile_router
-        from ds_course_agent.rag.agent import AgentService
 
         service = AgentService.__new__(AgentService)
         distinction = service._build_distinction_learning_concept(

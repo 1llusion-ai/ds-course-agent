@@ -11,8 +11,8 @@ project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from ds_course_agent.rag.memory_core import MemoryCore, aggregate_profile
-from ds_course_agent.rag.skill_system import SkillRegistry
+from ds_course_agent.teaching.memory_core import MemoryCore, aggregate_profile
+from ds_course_agent.teaching.skill_system import SkillRegistry
 
 
 def test_deep_learning_misconception():
@@ -20,8 +20,8 @@ def test_deep_learning_misconception():
     tmpdir = tempfile.mkdtemp(prefix="misconception_e2e_")
     test_core = MemoryCore(base_dir=str(tmpdir))
 
-    with patch("ds_course_agent.rag.memory_core.get_memory_core", return_value=test_core):
-        with patch("ds_course_agent.rag.memory_core._memory_core", test_core):
+    with patch("ds_course_agent.teaching.memory_core.get_memory_core", return_value=test_core):
+        with patch("ds_course_agent.teaching.memory_core._memory_core", test_core):
             module = SkillRegistry().load_module("misconception-handling")
 
             fake_json = json.dumps(

@@ -1122,13 +1122,13 @@ src/ds_course_agent/tools/web_search.py
 src/ds_course_agent/tools/web_fetch.py
 src/ds_course_agent/tools/course_rag.py
 src/ds_course_agent/tools/registry.py
-src/ds_course_agent/rag/knowledge_mapper.py
-src/ds_course_agent/rag/course_graph.py
-src/ds_course_agent/rag/query_trace.py
+src/ds_course_agent/teaching/knowledge_mapper.py
+src/ds_course_agent/teaching/course_graph.py
+src/ds_course_agent/shared/query_trace.py
 src/ds_course_agent/shared/tool_result_store.py
 ```
 
-不要把搜索循环继续堆进 `rag/agent.py`，也不要改变默认课程问答路径。
+不要把搜索循环继续堆进 `agent/service.py`，也不要改变默认课程问答路径。
 
 ---
 

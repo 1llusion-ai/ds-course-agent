@@ -1,7 +1,7 @@
 import pytest
 
 import ds_course_agent.api.core_bridge as core_bridge
-from ds_course_agent.rag.query_pipeline import (
+from ds_course_agent.agent.routing import (
     ExecutionMode,
     RouteExecutionResult,
     RouteFamily,
@@ -20,6 +20,7 @@ class _FakeService:
             intent=RouteIntent.CONCEPT_QA,
             execution_mode=ExecutionMode.GROUNDED_GENERATION,
             sources=[{"title": "课程资料"}],
+            retrieval_attempted=True,
             used_retrieval=True,
         )
 
@@ -35,6 +36,8 @@ class _FakeService:
             "family": RouteFamily.LEARNING.value,
             "intent": RouteIntent.CONCEPT_QA.value,
             "execution_mode": ExecutionMode.GROUNDED_GENERATION.value,
+            "retrieval_attempted": True,
+            "used_retrieval": True,
         }
 
 
@@ -47,6 +50,7 @@ def test_core_bridge_chat_includes_query_trace(monkeypatch):
     assert result["family"] == "learning"
     assert result["intent"] == "concept_qa"
     assert result["execution_mode"] == "grounded_generation"
+    assert result["retrieval_attempted"] is True
     assert result["used_retrieval"] is True
     assert result["sources"] == [{"title": "课程资料"}]
     assert "query_trace" in result
@@ -79,5 +83,7 @@ def test_core_bridge_stream_final_includes_query_trace(monkeypatch):
     assert events[-1]["family"] == "learning"
     assert events[-1]["intent"] == "concept_qa"
     assert events[-1]["execution_mode"] == "grounded_generation"
+    assert events[-1]["retrieval_attempted"] is True
+    assert events[-1]["used_retrieval"] is True
     assert "query_trace" in events[-1]
     assert events[-1]["query_trace"]["meta"]["session_id"] == "sess_1"

@@ -35,9 +35,9 @@ These expose data access or deterministic query behaviors to the agent.
 
 | Capability | Why it is a tool | Main file |
 | --- | --- | --- |
-| Textbook retrieval | Query textbook chunks and return grounded context | `src/ds_course_agent/rag/tools.py` |
-| KB status check | Deterministic environment/status check | `src/ds_course_agent/rag/tools.py` |
-| Course schedule query | Query course time/location from structured schedule data | `src/ds_course_agent/rag/tools.py` |
+| Textbook retrieval | Query textbook chunks and return grounded context | `src/ds_course_agent/tools/course_rag.py` |
+| KB status check | Deterministic environment/status check | `src/ds_course_agent/tools/knowledge_base_status.py` |
+| Course schedule query | Query course time/location from structured schedule data | `src/ds_course_agent/tools/course_schedule.py` |
 
 ### Skills
 
@@ -54,8 +54,8 @@ These should not be promoted to tools or skills unless their role changes.
 
 | Module area | Why it remains internal |
 | --- | --- |
-| `src/ds_course_agent/rag/memory_core.py` | profile aggregation, weak-spot detection, resolved-history bookkeeping |
-| `src/ds_course_agent/rag/knowledge_mapper.py` | concept matching and related-concept lookup |
+| `src/ds_course_agent/teaching/memory_core.py` | profile aggregation, weak-spot detection, resolved-history bookkeeping |
+| `src/ds_course_agent/teaching/knowledge_mapper.py` | concept matching and related-concept lookup |
 | `skills/learning-path/scripts/planner.py` | internal route ranking and step ordering |
 | `skills/personalized-explanation/scripts/strategy.py` | internal relevance filtering and scaffold strategy |
 | retrieval fusion / rerank logic | internal ranking implementation rather than a user-facing capability |

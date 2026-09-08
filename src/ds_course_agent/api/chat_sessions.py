@@ -16,6 +16,7 @@ from fastapi.concurrency import run_in_threadpool
 from ds_course_agent.api.schemas.chat import ChatMessage
 from ds_course_agent.api.state import DEFAULT_SESSION_TITLE, _chat_history, _sessions, state_lock
 from ds_course_agent.api.state import _save as _save_state
+from ds_course_agent.api.timestamps import parse_timestamp, timestamps_match
 from ds_course_agent.api.title_generation import (
     SESSION_TITLE_MAX_CHARS,
     _clean_generated_title,
@@ -113,6 +114,9 @@ def message_to_dict(msg: ChatMessage) -> dict[str, Any]:
         "family": msg.family.value if msg.family else None,
         "intent": msg.intent.value if msg.intent else None,
         "execution_mode": msg.execution_mode.value if msg.execution_mode else None,
+        "retrieval_attempted": msg.retrieval_attempted,
+        "used_retrieval": msg.used_retrieval,
+        "degraded": msg.degraded,
         "progress": msg.progress or None,
         "progress_events": msg.progress_events or None,
         "web_search_requested": msg.web_search_requested,
@@ -128,9 +132,7 @@ def message_to_dict(msg: ChatMessage) -> dict[str, Any]:
 def message_from_dict(data: dict[str, Any]) -> ChatMessage:
     """Restore one API chat message from backend state."""
 
-    ts = data.get("timestamp")
-    if isinstance(ts, str):
-        ts = datetime.fromisoformat(ts)
+    ts = parse_timestamp(data.get("timestamp"), datetime.now())
     metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
     web_search_requested = bool(data.get("web_search_requested", metadata.get("web_search", False)))
     web_search_used = bool(data.get("web_search_used", has_web_source(data.get("sources"))))
@@ -142,6 +144,9 @@ def message_from_dict(data: dict[str, Any]) -> ChatMessage:
         family=data.get("family"),
         intent=data.get("intent"),
         execution_mode=data.get("execution_mode"),
+        retrieval_attempted=bool(data.get("retrieval_attempted", False)),
+        used_retrieval=bool(data.get("used_retrieval", False)),
+        degraded=bool(data.get("degraded", False)),
         progress=data.get("progress"),
         progress_events=data.get("progress_events") or data.get("progressEvents"),
         web_search_requested=web_search_requested,
@@ -275,17 +280,10 @@ def find_stopped_assistant_turn(session_id: str, message_timestamp: datetime) ->
 
             target_index = len(history) - 1
             target = history[target_index]
-            target_timestamp = target.get("timestamp")
-            if isinstance(target_timestamp, str):
-                try:
-                    target_timestamp = datetime.fromisoformat(target_timestamp)
-                except ValueError:
-                    target_timestamp = None
-
             if (
                 target.get("role") != "assistant"
                 or target.get("generation_status") != "stopped"
-                or target_timestamp != message_timestamp
+                or not timestamps_match(target.get("timestamp"), message_timestamp)
             ):
                 raise HTTPException(status_code=409, detail="只能继续当前会话最后一条已停止的回答")
             return target
@@ -456,9 +454,9 @@ def clear_messages(session_id: str) -> None:
 
     with _history_lock(session_id):
         with state_lock():
-            if session_id in _chat_history:
-                del _chat_history[session_id]
-                _save_state()
+            _chat_history.pop(session_id, None)
+            update_session_metadata(session_id, save=False)
+            _save_state()
 
 
 def ensure_session_owner(session_id: str, student_id: str) -> None:

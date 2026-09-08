@@ -12,7 +12,7 @@ import json
 import time
 from dataclasses import dataclass
 
-from ds_course_agent.rag.rag import RAGService
+from ds_course_agent.retrieval.service import RAGService
 
 
 @dataclass

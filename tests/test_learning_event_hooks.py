@@ -2,9 +2,9 @@
 
 from types import SimpleNamespace
 
-from ds_course_agent.hooks import ClarificationDetectorHook, LearningEventHook
-from ds_course_agent.rag.events import EventType, build_concept_mentioned_event
-from ds_course_agent.rag.knowledge_mapper import MatchedConcept
+from ds_course_agent.agent.hooks import ClarificationDetectorHook, LearningEventHook
+from ds_course_agent.teaching.knowledge_mapper import MatchedConcept
+from ds_course_agent.teaching.learning_events import EventType, build_concept_mentioned_event
 
 
 def test_clarification_detector_classifies_rules_and_distinction_concept():

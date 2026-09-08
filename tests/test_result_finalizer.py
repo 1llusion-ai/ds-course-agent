@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ds_course_agent.hooks import HookManager
-from ds_course_agent.rag.agent import AgentService
-from ds_course_agent.rag.query_pipeline import (
+from ds_course_agent.agent.hooks import HookManager
+from ds_course_agent.agent.result_finalizer import finalize_route_result, merge_route_result_facts
+from ds_course_agent.agent.routing import (
     ExecutionMode,
     QueryContext,
     RetrievalPolicy,
@@ -14,7 +14,7 @@ from ds_course_agent.rag.query_pipeline import (
     RouteIntent,
     RouteState,
 )
-from ds_course_agent.rag.result_finalizer import finalize_route_result
+from ds_course_agent.agent.service import AgentService
 
 
 def _route_state(
@@ -59,6 +59,35 @@ def test_agent_service_does_not_retain_result_finalizer_method() -> None:
     assert not hasattr(AgentService, "_finalize_route_result")
 
 
+def test_merge_route_result_facts_projects_sources_and_flags_once() -> None:
+    """The terminal projection preserves every fact without duplicate sources."""
+
+    from ds_course_agent.tools._shared import RetrievalTrace
+
+    state = _route_state()
+    first = {"reference": "《第1章》"}
+    second = {"reference": "《第2章》"}
+    result = RouteExecutionResult(
+        content="回答",
+        family=state.decision.family,
+        intent=state.decision.intent,
+        execution_mode=state.decision.execution_mode,
+        sources=[first],
+    )
+    retrieval = RetrievalTrace(
+        retrieval_attempted=True,
+        used_retrieval=True,
+        sources=[first, second],
+    )
+
+    merged = merge_route_result_facts(result, retrieval, degraded=True)
+
+    assert merged.sources == [first, second]
+    assert merged.retrieval_attempted is True
+    assert merged.used_retrieval is True
+    assert merged.degraded is True
+
+
 def test_finalize_route_result_merges_hook_retrieval_without_duplicate_sources() -> None:
     """Hook retrieval facts must augment, not replace, handler-owned facts."""
 
@@ -71,6 +100,7 @@ def test_finalize_route_result_merges_hook_retrieval_without_duplicate_sources()
                     {"reference": "《第1章》"},
                     {"reference": "《第2章》"},
                 ],
+                attempted=True,
                 used=True,
             )
             return f"{result}（已校验）"
@@ -89,6 +119,7 @@ def test_finalize_route_result_merges_hook_retrieval_without_duplicate_sources()
         intent=state.decision.intent,
         execution_mode=state.decision.execution_mode,
         sources=[{"reference": "《第1章》"}],
+        retrieval_attempted=True,
         used_retrieval=True,
     )
 
@@ -100,6 +131,7 @@ def test_finalize_route_result_merges_hook_retrieval_without_duplicate_sources()
         {"reference": "《第2章》"},
     ]
     assert finalized.used_retrieval is True
+    assert finalized.retrieval_attempted is True
     assert original.content == "回答"
     assert original.sources == [{"reference": "《第1章》"}]
 
@@ -115,7 +147,7 @@ def test_finalize_route_result_grounds_empty_required_learning_result_once(monke
     class FakeCourseRagTool:
         def invoke(self, query: str) -> str:
             calls.append(query)
-            _track_retrieval([{"reference": "《第3章》"}], used=True)
+            _track_retrieval([{"reference": "《第3章》"}], attempted=True, used=True)
             return "基础检索回答"
 
     class FakeAgent:
@@ -137,6 +169,7 @@ def test_finalize_route_result_grounds_empty_required_learning_result_once(monke
     assert finalized.content == "基础检索回答\n\n[注：使用基础检索模式回答]"
     assert finalized.sources == [{"reference": "《第3章》"}]
     assert finalized.used_retrieval is True
+    assert finalized.retrieval_attempted is True
     assert finalized.degraded is True
 
 
@@ -171,4 +204,44 @@ def test_finalize_route_result_does_not_ground_empty_non_learning_result(monkeyp
     assert "无法生成回答" in finalized.content
     assert finalized.sources == []
     assert finalized.used_retrieval is False
+    assert finalized.retrieval_attempted is False
     assert finalized.degraded is True
+
+
+def test_finalize_route_result_does_not_repeat_unsuccessful_retrieval(monkeypatch) -> None:
+    """An attempted empty retrieval is terminal evidence state, not permission to rerun it."""
+
+    import ds_course_agent.tools.course_rag as course_rag
+
+    class ForbiddenCourseRagTool:
+        def invoke(self, query: str) -> str:
+            raise AssertionError(f"retrieval repeated: {query}")
+
+    class FakeAgent:
+        def __init__(self) -> None:
+            from ds_course_agent.agent.service import AgentService
+
+            self._retrieval_guard_skip_reason = AgentService._retrieval_guard_skip_reason.__get__(self)
+            self._maybe_force_grounded_answer = AgentService._maybe_force_grounded_answer.__get__(self)
+
+        def _get_hooks(self) -> HookManager:
+            from ds_course_agent.agent.hooks import RetrievalGuardHook
+
+            return HookManager([RetrievalGuardHook()])
+
+    monkeypatch.setattr(course_rag, "course_rag_tool", ForbiddenCourseRagTool())
+    state = _route_state()
+    result = RouteExecutionResult(
+        content="课程资料中没有找到相关内容。",
+        family=state.decision.family,
+        intent=state.decision.intent,
+        execution_mode=state.decision.execution_mode,
+        retrieval_attempted=True,
+        used_retrieval=False,
+    )
+
+    finalized = finalize_route_result(FakeAgent(), state, result)
+
+    assert finalized.content == result.content
+    assert finalized.retrieval_attempted is True
+    assert finalized.used_retrieval is False

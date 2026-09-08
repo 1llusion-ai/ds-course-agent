@@ -31,6 +31,7 @@ import chromadb
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.kb.toc_parser import SectionInfo, get_toc_parser
+from ds_course_agent.shared.kb_revision import knowledge_base_write
 
 
 @dataclass(frozen=True)
@@ -355,15 +356,16 @@ def repair_collection(
         if update_ids and not dry_run:
             # Chroma's update/upsert merge metadata and cannot delete stale keys.
             # Delete + add gives us an exact replacement of wrong page/chapter fields.
-            collection.delete(ids=update_ids)
-            add_kwargs: dict[str, Any] = {
-                "ids": update_ids,
-                "documents": update_docs,
-                "metadatas": update_metas,
-            }
-            if embeddings is not None:
-                add_kwargs["embeddings"] = update_embeddings
-            collection.add(**add_kwargs)
+            with knowledge_base_write(collection_name, persist_dir):
+                collection.delete(ids=update_ids)
+                add_kwargs: dict[str, Any] = {
+                    "ids": update_ids,
+                    "documents": update_docs,
+                    "metadatas": update_metas,
+                }
+                if embeddings is not None:
+                    add_kwargs["embeddings"] = update_embeddings
+                collection.add(**add_kwargs)
 
     return {"total": total, "changed": changed, "dry_run": int(dry_run)}
 

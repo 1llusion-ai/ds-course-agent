@@ -17,11 +17,11 @@ _SRC_DIR = Path(__file__).resolve().parents[5]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from ds_course_agent.rag.code_executor import (  # noqa: E402
+from ds_course_agent.shared.messages import normalize_content_text  # noqa: E402
+from ds_course_agent.tools.code_executor import (  # noqa: E402
     extract_python_code,
     extract_question,
 )
-from ds_course_agent.shared.messages import normalize_content_text  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

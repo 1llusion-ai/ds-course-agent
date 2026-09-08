@@ -120,7 +120,7 @@ flowchart LR
         BRIDGE["core_bridge"]
     end
 
-    subgraph RAG["🧠 路由与 RAG（src/ds_course_agent/rag/）"]
+    subgraph RAG["🧠 路由与检索（agent/ + retrieval/）"]
         QP["查询预处理 QueryPipeline"]
         ROUTER["声明式规则路由 + 语义路由"]
         RETR["混合检索 HybridRetriever<br/>BM25 + 向量 · RRF 融合"]
@@ -249,12 +249,16 @@ docker compose -f deploy/compose.yaml up --build   # Docker 一键部署
 ```text
 src/ds_course_agent/
 ├── api/                  FastAPI 应用：路由、认证、schema、SSE 流式桥
-├── rag/                   Agent 编排、混合检索、查询流水线、语义路由、学习画像
-│   └── query_pipeline/    路由即数据：规则表 / 语义路由 / 重写 / 策略 / 后处理
+├── agent/                 Agent 门面、turn 编排、handler、消息上下文、结果收尾
+│   ├── routing/           QueryPipeline：规则表 / 语义路由 / 重写 / 策略 / 后处理
+│   └── hooks/             检索守卫、学习事件、澄清检测等生命周期钩子
+├── runtime/               模型调用、重试、工具绑定、流解析、通用消息转换
+├── retrieval/             课程 RAG、混合检索、重排序
+├── research/              联网研究 pipeline、抓取、证据策略
 ├── kb/                    PDF 解析 → 清洗 → 目录解析 → 分块 → 向量化入库
-├── teaching/skills/       SKILL.md 教学技能（学习路径/个性化讲解/误解处理/代码评审）
+├── teaching/              学习状态、画像、学习事件、知识映射和图谱
+│   └── skills/            SKILL.md 教学技能（学习路径/个性化讲解/误解处理/代码评审）
 ├── tools/                 课程检索、课程表、代码沙箱、联网搜索、网页抓取等 8 个工具
-├── hooks/                 检索守卫、学习事件、澄清检测等横切钩子
 └── shared/                配置、路径、日志、历史、上下文治理、向量库封装
 
 web/                       Vue 3 前端（聊天 / 画像 / 登录）

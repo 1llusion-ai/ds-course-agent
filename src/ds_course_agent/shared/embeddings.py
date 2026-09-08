@@ -32,7 +32,7 @@ class EmbeddingUnavailable(RuntimeError):
 
 _CACHE_INFO = namedtuple("EmbeddingCacheInfo", "hits misses maxsize currsize")
 _CACHE_LOCK = threading.RLock()
-_QUERY_CACHE: OrderedDict[tuple[str, str, str], list[float]] = OrderedDict()
+_QUERY_CACHE: OrderedDict[tuple, list[float]] = OrderedDict()
 _CACHE_HITS = 0
 _CACHE_MISSES = 0
 _CIRCUIT_OPEN_UNTIL = 0.0
@@ -72,13 +72,32 @@ def _breaker_seconds() -> float:
     return max(0.0, float(getattr(config, "EMBEDDING_CIRCUIT_BREAKER_SECONDS", 60.0) or 0.0))
 
 
-def _cache_key(text: str) -> tuple[str, str, str]:
-    return (str(config.MODEL_EMBEDDING), str(config.BASE_URL), str(text or "").strip())
+class _ModelIdentity:
+    """Keep bounded-cache model identities alive, including unhashable clients."""
+
+    def __init__(self, model: Any) -> None:
+        self.model = model
+
+    def __hash__(self) -> int:
+        return id(self.model)
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _ModelIdentity) and self.model is other.model
+
+
+def _cache_key(model: Any, text: str) -> tuple:
+    return (
+        _ModelIdentity(model),
+        str(getattr(model, "model", "")),
+        str(getattr(model, "openai_api_base", "")),
+        str(getattr(model, "dimensions", "")),
+        str(text or "").strip(),
+    )
 
 
 def _trace_step(stage: str, **data) -> None:
     try:
-        from ds_course_agent.rag.query_trace import trace_step
+        from ds_course_agent.shared.query_trace import trace_step
 
         trace_step(stage, **data)
     except Exception:
@@ -142,9 +161,9 @@ def embed_query_cached(model: Any, text: str, *, timeout_seconds: float | None =
     """Embed one query with cache and fast-fail circuit breaker.
 
     ``model`` is intentionally passed in so tests can still patch the local
-    module's ``OpenAIEmbeddings`` constructor.  Cache keys use the configured
-    model/base URL plus the normalized text, so different providers/models do
-    not collide.  ``timeout_seconds`` is a caller-specific wait guard layered
+    module's ``OpenAIEmbeddings`` constructor. Cache keys bind the actual client
+    identity and model settings; separate clients cannot share cached vectors.
+    ``timeout_seconds`` is a caller-specific wait guard layered
     on top of the embedding client's own HTTP timeout; cache hits do not spawn
     a worker thread.
     """
@@ -152,7 +171,7 @@ def embed_query_cached(model: Any, text: str, *, timeout_seconds: float | None =
     global _CACHE_HITS, _CACHE_MISSES
 
     query = str(text or "")
-    key = _cache_key(query)
+    key = _cache_key(model, query)
     maxsize = _cache_maxsize()
 
     if maxsize > 0:
