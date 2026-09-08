@@ -51,13 +51,13 @@
 
       <div class="chat-content">
         <div ref="messagesContainer" class="messages-area" @scroll.passive="handleMessagesScroll">
-          <div v-if="sessionLoading" class="session-loading-state" aria-live="polite">
+          <div v-if="showSessionLoading" class="session-loading-state" aria-live="polite">
             <div class="session-loading-indicator" aria-hidden="true">
               <span></span>
               <span></span>
               <span></span>
             </div>
-            <span>正在加载会话…</span>
+            <span>{{ sessionLoadingText }}</span>
           </div>
 
           <div v-else-if="chatStore.messages.length === 0" class="empty-state">
@@ -105,7 +105,7 @@
           </div>
         </div>
 
-        <div v-if="chatStore.messages.length > 0 && !sessionLoading" class="input-area">
+        <div v-if="chatStore.messages.length > 0 && !showSessionLoading" class="input-area">
           <ChatInput
             :loading="chatStore.loading"
             :web-search-enabled="webSearchEnabled"
@@ -198,6 +198,7 @@ const headerRenameInputRef = ref(null)
 const headerRenaming = ref(false)
 const headerRenameTitle = ref('')
 const headerRenameSaving = ref(false)
+const sessionBootstrapPending = ref(!sessionStore.loaded)
 const sessionLoading = ref(false)
 let sessionLoadToken = 0
 let scrollFrameId = null
@@ -206,6 +207,10 @@ let messagesResizeObserver = null
 const headerTitle = computed(() => sessionStore.currentSession?.title || '新对话')
 const canRenameCurrentSession = computed(() => Boolean(sessionStore.currentSessionId && sessionStore.currentSession))
 const isDarkTheme = computed(() => theme.value === 'dark')
+const showSessionLoading = computed(() => sessionBootstrapPending.value || sessionLoading.value)
+const sessionLoadingText = computed(() => (
+  sessionBootstrapPending.value ? '正在恢复会话，请稍候…' : '正在加载会话…'
+))
 const webSearchHint = computed(() => (
   webSearchTurnNotice.value ||
   (webSearchEnabled.value ? '将使用外部搜索结果' : '基于教材与学习画像回答')
@@ -677,6 +682,8 @@ onMounted(async () => {
   } catch (error) {
     console.error('加载会话列表失败:', error)
     ElMessage.error('加载会话列表失败，请稍后重试。')
+  } finally {
+    sessionBootstrapPending.value = false
   }
 })
 
