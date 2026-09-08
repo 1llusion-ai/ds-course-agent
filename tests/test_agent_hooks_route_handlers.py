@@ -392,7 +392,6 @@ def test_web_search_route_handler_compacts_evidence_and_tracks_sources(monkeypat
 
     service = AgentService.__new__(AgentService)
     service.chat = fake_chat
-    service._build_turn_system_context = lambda route_state: ""
 
     token = begin_retrieval_trace()
     result = WebSearchRouteHandler().execute(service, _web_route_state(), stream=False)
@@ -425,7 +424,6 @@ def test_web_search_route_rejects_obvious_non_teaching_queries_without_search(mo
     state.context.original_query = "今天北京天气怎么样？"
     service = AgentService.__new__(AgentService)
     service.chat = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("chat should not be called"))
-    service._build_turn_system_context = lambda route_state: ""
 
     result = WebSearchRouteHandler().execute(service, state, stream=False)
 
@@ -449,7 +447,6 @@ def test_web_search_route_rejects_general_fact_queries_without_search(monkeypatc
 
     service = AgentService.__new__(AgentService)
     service.chat = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("chat should not be called"))
-    service._build_turn_system_context = lambda route_state: ""
 
     state = _web_route_state()
     state.context.original_query = "詹姆斯多大了？"
@@ -567,7 +564,6 @@ def test_web_search_route_handler_streams_answer_chunks_directly(monkeypatch):
 
     service = AgentService.__new__(AgentService)
     service.chat = fake_chat
-    service._build_turn_system_context = lambda route_state: ""
     service.hooks = HookManager([])
 
     chunks = list(WebSearchRouteHandler().stream_execute(service, _web_route_state()))
@@ -611,7 +607,6 @@ def test_web_search_route_handler_prefers_direct_chat_for_streaming(monkeypatch)
     service = AgentService.__new__(AgentService)
     service.chat = buffered_agent_chat
     service.direct_chat = direct_chat
-    service._build_turn_system_context = lambda route_state: ""
     service.hooks = HookManager([])
 
     chunks = list(WebSearchRouteHandler().stream_execute(service, _web_route_state()))
@@ -662,7 +657,6 @@ def test_web_search_route_handler_stream_emits_detailed_progress_with_stream_id(
     service = AgentService.__new__(AgentService)
     service.chat = lambda *args, **kwargs: "should not be used"
     service.direct_chat = direct_chat
-    service._build_turn_system_context = lambda route_state: ""
     service.hooks = HookManager([])
 
     state = _web_route_state()
@@ -729,7 +723,6 @@ def test_web_search_route_handler_adds_deep_fetch_context_and_metadata(monkeypat
 
     service = AgentService.__new__(AgentService)
     service.chat = fake_chat
-    service._build_turn_system_context = lambda route_state: ""
 
     token = begin_retrieval_trace()
     result = WebSearchRouteHandler().execute(service, _web_route_state(), stream=False)
@@ -796,7 +789,6 @@ def test_web_search_deep_fetch_keeps_original_source_number(monkeypatch):
 
     service = AgentService.__new__(AgentService)
     service.chat = fake_chat
-    service._build_turn_system_context = lambda route_state: ""
 
     result = WebSearchRouteHandler().execute(service, _web_route_state(), stream=False)
 
@@ -974,9 +966,6 @@ def test_tool_agent_route_uses_only_explicit_non_empty_allowlist():
         def _route_execution_query(self, context, decision):
             return context.original_query
 
-        def _build_turn_system_context(self, route_state):
-            return ""
-
         def _agent_for_tools(self, allowed_tools):
             captured["allowed_tools"] = allowed_tools
             return graph_agent
@@ -1131,11 +1120,10 @@ def test_context_governor_compaction_failure_records_trace_error(monkeypatch):
 
 
 def test_learner_state_context_is_natural_language_summary():
-    from ds_course_agent.rag.agent import AgentService
     from ds_course_agent.rag.learner_state import learner_state_from_profile
+    from ds_course_agent.rag.message_context import format_learner_state_for_prompt
     from ds_course_agent.rag.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
 
-    service = AgentService.__new__(AgentService)
     profile = StudentProfile(student_id="student-hooks")
     profile.recent_concepts["decision_tree"] = ConceptFocus(
         concept_id="decision_tree",
@@ -1152,7 +1140,7 @@ def test_learner_state_context_is_natural_language_summary():
         )
     )
 
-    summary = service._format_learner_state_for_prompt(learner_state_from_profile(profile))
+    summary = format_learner_state_for_prompt(learner_state_from_profile(profile))
 
     assert "Learner State Context" in summary
     assert "最近关注概念：决策树（第6章）x3" in summary
@@ -1160,6 +1148,7 @@ def test_learner_state_context_is_natural_language_summary():
 
 
 def test_direct_model_route_passes_turn_context_without_graph_agent(monkeypatch):
+    import ds_course_agent.rag.route_handlers as route_handlers_module
     from ds_course_agent.rag.route_handlers import GenericAgentRouteHandler
 
     state = _route_state(retrieval_policy=RetrievalPolicy.OPTIONAL)
@@ -1176,14 +1165,15 @@ def test_direct_model_route_passes_turn_context_without_graph_agent(monkeypatch)
         "ds_course_agent.rag.query_pipeline.get_postprocessor",
         lambda: FakePostprocessor(),
     )
+    monkeypatch.setattr(
+        route_handlers_module,
+        "build_turn_system_context",
+        lambda route_state: "turn profile context",
+    )
 
     class FakeAgent:
         def _route_execution_query(self, context, decision):
             return context.original_query
-
-        def _build_turn_system_context(self, route_state):
-            assert route_state is state
-            return "turn profile context"
 
         def _agent_for_tools(self, allowed_tools):
             raise AssertionError("DIRECT_MODEL must not bind tools")

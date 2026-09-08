@@ -13,7 +13,7 @@ from dataclasses import replace
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.hooks.base import HookManager
@@ -23,6 +23,7 @@ from ds_course_agent.hooks.retrieval_guard import RetrievalGuardHook
 from ds_course_agent.rag.knowledge_mapper import map_question_to_concepts
 from ds_course_agent.rag.learner_state import LearnerStateProvider, RuleBasedLearnerStateProvider
 from ds_course_agent.rag.memory_core import get_memory_core, record_event
+from ds_course_agent.rag.message_context import build_chat_messages
 from ds_course_agent.rag.prompt import get_system_prompt
 from ds_course_agent.rag.query_pipeline import ExecutionMode, RouteExecutionResult, RouteFamily, RouteState
 from ds_course_agent.rag.query_pipeline.utils import (
@@ -533,12 +534,7 @@ class AgentService:
         if chat_history is None:
             chat_history = []
 
-        formatted_history = self._format_chat_history(chat_history)
-        messages = []
-        if turn_context and turn_context.strip():
-            messages.append(SystemMessage(content=turn_context.strip()))
-        messages.extend(formatted_history)
-        messages.append(HumanMessage(content=user_input))
+        messages = build_chat_messages(user_input, chat_history, turn_context=turn_context)
         messages = self._govern_context_budget(
             messages,
             location="agent.chat.pre_llm",
@@ -562,12 +558,7 @@ class AgentService:
         if chat_history is None:
             chat_history = []
 
-        formatted_history = self._format_chat_history(chat_history)
-        messages = []
-        if turn_context and turn_context.strip():
-            messages.append(SystemMessage(content=turn_context.strip()))
-        messages.extend(formatted_history)
-        messages.append(HumanMessage(content=user_input))
+        messages = build_chat_messages(user_input, chat_history, turn_context=turn_context)
         messages = self._govern_context_budget(
             messages,
             location="agent.direct_chat.pre_llm",
@@ -728,36 +719,6 @@ class AgentService:
                 return message_content_text(msg, list_joiner="", dict_keys=("text", "content"))
         return ""
 
-    def _format_chat_history(self, chat_history: list) -> list:
-        """
-        格式化聊天历史为 LangChain 消息格式
-
-        支持两种输入格式：
-        1. dict 格式: {"role": "user", "content": "..."}
-        2. BaseMessage 格式: HumanMessage/AIMessage/SystemMessage 实例
-        """
-        formatted = []
-        for msg in chat_history:
-            if isinstance(msg, BaseMessage):
-                formatted.append(msg)
-            elif isinstance(msg, dict):
-                role = msg.get("role", "")
-                content = msg.get("content", "")
-
-                if role == "user":
-                    formatted.append(HumanMessage(content=content))
-                elif role == "assistant":
-                    formatted.append(AIMessage(content=content))
-                elif role == "system":
-                    formatted.append(
-                        SystemMessage(
-                            content=content,
-                            additional_kwargs=msg.get("additional_kwargs", {}),
-                        )
-                    )
-
-        return formatted
-
     def _build_distinction_learning_concept(self, question: str, matched_concepts: list):
         return self._get_clarification_detector().build_distinction_learning_concept(question, matched_concepts)
 
@@ -784,87 +745,6 @@ class AgentService:
         loader = getattr(self, "skill_loader", None) or get_skill_loader()
         matches = loader.select_candidates(question)
         return {item.skill.key for item in matches}
-
-    def _build_turn_system_context(self, route_state: RouteState) -> str:
-        """Build per-turn system context for the generic agent branch."""
-
-        sections: list[str] = []
-        learner_state_summary = self._format_learner_state_for_prompt(route_state.learner_state)
-        if learner_state_summary:
-            sections.append(learner_state_summary)
-
-        skill_keys = sorted(route_state.skill_candidate_keys or [])
-        if skill_keys:
-            sections.append(
-                "# Matched Teaching Skill Hints\n"
-                "The router/keyword matcher found these potentially relevant skills for this turn: "
-                + ", ".join(skill_keys)
-                + ". Use the inline SKILL.md instructions in the main system prompt when appropriate."
-            )
-
-        matched_concepts = route_state.matched_concepts or []
-        concept_labels = []
-        for item in matched_concepts[:5]:
-            display_name = getattr(item, "display_name", None) or getattr(item, "concept_id", "")
-            chapter = getattr(item, "chapter", "")
-            if display_name and chapter:
-                concept_labels.append(f"{display_name}（{chapter}）")
-            elif display_name:
-                concept_labels.append(str(display_name))
-        if concept_labels:
-            sections.append("# Current Turn Concepts\n" + "、".join(concept_labels))
-
-        return "\n\n".join(sections)
-
-    def _format_learner_state_for_prompt(self, learner_state) -> str:
-        """Render compact learner state for LLM context."""
-
-        if learner_state is None:
-            return ""
-
-        lines: list[str] = []
-
-        progress = learner_state.progress
-        current_chapter = getattr(progress, "current_chapter", None)
-        covered_chapters = list(getattr(progress, "covered_chapters", []) or [])
-        if current_chapter:
-            lines.append(f"当前学习进度：{current_chapter}")
-        if covered_chapters:
-            lines.append("已覆盖章节：" + "、".join(map(str, covered_chapters[:6])))
-
-        recent_concepts = list(learner_state.recent_concepts.values())
-        recent_concepts.sort(key=lambda item: getattr(item, "last_mentioned_at", 0) or 0, reverse=True)
-        if recent_concepts:
-            labels = []
-            for item in recent_concepts[:5]:
-                name = getattr(item, "display_name", "") or getattr(item, "concept_id", "")
-                chapter = getattr(item, "chapter", "")
-                count = getattr(item, "mention_count", 0) or 0
-                label = str(name)
-                if chapter:
-                    label += f"（{chapter}）"
-                if count:
-                    label += f"x{count}"
-                labels.append(label)
-            lines.append("最近关注概念：" + "、".join(labels))
-
-        active_weak = list(learner_state.weak_spot_candidates)
-        pending_weak = list(learner_state.pending_weak_spots)
-        if active_weak:
-            labels = [getattr(item, "display_name", "") or getattr(item, "concept_id", "") for item in active_weak[:5]]
-            lines.append("当前薄弱点：" + "、".join(filter(None, labels)))
-        if pending_weak:
-            labels = [getattr(item, "display_name", "") or getattr(item, "concept_id", "") for item in pending_weak[:5]]
-            lines.append("待观察薄弱点：" + "、".join(filter(None, labels)))
-
-        if not lines:
-            return ""
-
-        return (
-            "# Learner State Context\n"
-            "以下是学生当前学习状态摘要，只用于调整讲解粒度和例子选择，不要逐字暴露内部标签：\n"
-            + "\n".join(f"- {line}" for line in lines if line)
-        )
 
     def _handle_special_case(self, question: str) -> str | None:
         return special_case_response(question)

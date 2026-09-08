@@ -12,6 +12,7 @@ import logging
 from collections.abc import Callable, Iterator
 from typing import Any, Protocol, TypeVar
 
+from ds_course_agent.rag.message_context import build_turn_system_context
 from ds_course_agent.rag.query_pipeline import ExecutionMode, RouteExecutionResult, RouteIntent, RouteState
 from ds_course_agent.rag.turn_events import TurnEvent
 from ds_course_agent.rag.web_research import WebResearchPipeline
@@ -282,7 +283,7 @@ class GenericAgentRouteHandler:
         decision = route_state.decision
         chat_history = route_state.chat_history
         execution_query = agent._route_execution_query(context, decision)
-        turn_context = agent._build_turn_system_context(route_state)
+        turn_context = build_turn_system_context(route_state)
         chat_fn, turn_context, direct_llm, graph_agent = self._chat_callable_and_context(
             agent, route_state, turn_context
         )
@@ -336,7 +337,7 @@ class GenericAgentRouteHandler:
             decision = route_state.decision
             chat_history = route_state.chat_history
             execution_query = agent._route_execution_query(context, decision)
-            turn_context = agent._build_turn_system_context(route_state)
+            turn_context = build_turn_system_context(route_state)
             chat_fn, turn_context, direct_llm, graph_agent = self._chat_callable_and_context(
                 agent, route_state, turn_context
             )
