@@ -2,9 +2,9 @@
 
 Date: 2026-09-11
 
-Status: prepared and validated in isolation. Production cutover is not approved
-and has not been executed. The active `.env` and `var/chroma_db` remain on the
-560-document index.
+Status: production cutover completed and validated on 2026-09-11. The active
+service uses the 313-document promoted index. The former 560-document index is
+preserved as a recoverable archive.
 
 ## 1. Approved Retrieval Target
 
@@ -67,8 +67,7 @@ index reproduced the frozen Top-10 ranking exactly.
 
 ## 4. Active Index Snapshot Before Cutover
 
-This is the rollback source and must not be modified before the controlled
-switch.
+This was the rollback source immediately before the controlled switch.
 
 | Field | Value |
 | --- | --- |
@@ -84,13 +83,13 @@ The content fingerprint is SHA-256 over sorted records of each relative file
 path, byte size, and file SHA-256. It intentionally excludes mtimes because a
 Chroma client can touch SQLite timestamps during read access.
 
-The active `.env` currently points to `var/chroma_db`, has no
-`RAG_INDEX_MANIFEST_PATH`, and still contains the obsolete character-budget
-settings. It must be changed only during the approved switch.
+At snapshot time, `.env` pointed to `var/chroma_db`, had no
+`RAG_INDEX_MANIFEST_PATH`, and still contained the obsolete character-budget
+settings. Those entries were changed only during the approved switch.
 
 ## 5. Controlled Cutover Procedure
 
-Do not execute these steps without explicit user approval.
+These steps were executed after explicit user approval.
 
 1. Stop the FastAPI backend and every KB writer. Verify no process is serving
    requests or ingesting into `var/chroma_db`.
@@ -157,8 +156,28 @@ Rollback does not re-ingest or re-embed documents.
 - Ruff format: 274 Python files passed.
 - Live `RAGService()` manifest/startup and `ret-0053` retrieval smoke: passed.
 
-## 8. Approval Boundary
+## 8. Executed Cutover
 
-Implementation, isolated validation, and documentation may proceed. Archiving
-or moving the active database, editing `.env`, restarting production, or
-switching traffic requires a new explicit user approval.
+- Cutover date and time: 2026-09-11, backend started at 14:12 Asia/Shanghai.
+- Rollback archive:
+  `var/artifacts/kb_backups/20260911-141029-b488abee/database`.
+- Archived collection: `course_c37b7b78`, 560 documents, revision
+  `1e01f7eb26cd4891ba8425f525bf82f0`.
+- Archive SQLite SHA-256 after opening it once for count verification:
+  `238f5f1b695318dd2a9dec15ddc26e20e164a30109f239f0daf6c789dc31a7fa`.
+  Chroma updated internal SQLite state during that verification, so the
+  pre-cutover SQLite byte hash is retained as historical evidence rather than
+  used as the rollback acceptance condition.
+- Active collection after restart: `course_c37b7b78`, 313 documents, manifest
+  SHA-256
+  `cb63f11d10d60a1381ade8fb7350c0261e9aeae0e67df210dacef7c8594175b5`.
+- Definition, formula, procedure, and `ret-0053` live vector retrievals passed.
+  `ret-0053` reproduced the frozen Top-10 exactly and retained source pages 114
+  and 119 in a 2760-token context.
+- Authenticated FastAPI SSE smoke passed through routing, retrieval, answer
+  generation, source projection, and history persistence. It completed without
+  degradation with 6 displayed sources.
+- Backend process: local development service on `127.0.0.1:8084`; health check
+  returned `{"status":"ok","service":"rag-tutor-backend"}`.
+
+Keep the rollback archive unchanged through the observation period.
