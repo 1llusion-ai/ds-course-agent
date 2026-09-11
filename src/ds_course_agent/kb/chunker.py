@@ -18,6 +18,7 @@ class ChunkMetadataV2:
     """增强版Chunk元数据"""
 
     source_file: str = ""
+    parser_source: str = "unknown"
     source_pages: list = field(default_factory=list)
     chunk_type: str = "semantic"  # struct/semantic/shadow
 
@@ -251,10 +252,25 @@ class CourseChunkerV2:
             if len(para) <= max_size:
                 return [para]
 
+            protected_ranges = [(match.start(), match.end()) for match in re.finditer(r"\$\$.*?\$\$", para, re.DOTALL)]
+
+            def _inside_protected(position: int) -> bool:
+                return any(start < position < end for start, end in protected_ranges)
+
+            def _adjust_for_protected(start: int, target: int) -> int | None:
+                """Move a target outside display math without splitting the formula."""
+                for protected_start, protected_end in protected_ranges:
+                    if protected_start < target < protected_end:
+                        if protected_start > start and protected_start - start >= max_size * 0.3:
+                            return protected_start
+                        return protected_end
+                return None
+
             # 尝试按句子边界切分（中文/英文句号、问号、感叹号）
             sentence_boundaries = []
             for m in re.finditer(r"[。！？\n]|\.[ \t]+|[?!][ \t]+", para):
-                sentence_boundaries.append(m.end())
+                if not _inside_protected(m.end()):
+                    sentence_boundaries.append(m.end())
             sentence_boundaries.append(len(para))
 
             parts = []
@@ -280,13 +296,19 @@ class CourseChunkerV2:
             while start < len(para):
                 end = min(start + max_size, len(para))
                 if end < len(para):
+                    protected_end = _adjust_for_protected(start, end)
+                    if protected_end is not None:
+                        end = protected_end
+                        parts.append(para[start:end].strip())
+                        start = end
+                        continue
                     lookback = para[start:end]
                     # 从后往前找公式友好切分点
                     best_pos = -1
                     for m in formula_friendly_pattern.finditer(lookback):
                         pos = m.end()
                         # 优先在靠近 max_size 的 50%~100% 处
-                        if pos >= max_size * 0.5:
+                        if pos >= max_size * 0.5 and not _inside_protected(start + pos):
                             best_pos = pos
                     if best_pos > 0:
                         end = start + best_pos
@@ -420,6 +442,7 @@ class CourseChunkerV2:
         self,
         pages: list[tuple[int, str]],
         filename: str,
+        parser_source: str = "unknown",
         chunk_size: int = 1300,  # 语义块目标大小
         chunk_overlap: int = 300,  # 块间重叠，减少边界语义损失
         page_offset: int = 0,  # 页码偏移量（用于章节PDF）
@@ -431,6 +454,7 @@ class CourseChunkerV2:
         Args:
             pages: [(页码, 文本), ...]
             filename: 文件名
+            parser_source: PDF 解析器来源
             chunk_size: 分块大小
             chunk_overlap: 重叠大小
         """
@@ -443,7 +467,9 @@ class CourseChunkerV2:
 
             # 计算教材页码（用于目录查询）
             absolute_page_num = relative_page_num + page_offset
-            book_pages = [absolute_page_num] if absolute_page_num >= 1 else []
+            if absolute_page_num < 1:
+                continue
+            book_pages = [absolute_page_num]
 
             # 检测章节信息（使用绝对页码）
             section_info = self._detect_sections_in_text(text, absolute_page_num)
@@ -463,8 +489,9 @@ class CourseChunkerV2:
 
                 metadata = ChunkMetadataV2(
                     source_file=filename,
+                    parser_source=parser_source,
                     source_pages=[relative_page_num],  # 保存相对页码
-                    book_pages=book_pages,  # 保存教材页码；封面/目录等前置页为空
+                    book_pages=book_pages,  # 保存教材页码
                     chunk_type="semantic",
                     chapter=section_info.get("chapter", ""),
                     chapter_number=section_info.get("chapter_number", ""),
@@ -479,11 +506,11 @@ class CourseChunkerV2:
                 chunks.append(ChunkV2(content=chunk_text, metadata=metadata))
 
         # 创建结构分块（章节导航）
-        struct_chunks = self._create_struct_chunks(filename)
+        struct_chunks = self._create_struct_chunks(filename, parser_source)
         chunks.extend(struct_chunks)
 
         # 创建影子分块（全文索引）
-        shadow_chunks = self._create_shadow_chunks(pages, filename, page_offset)
+        shadow_chunks = self._create_shadow_chunks(pages, filename, page_offset, parser_source)
         chunks.extend(shadow_chunks)
 
         # 统计
@@ -501,7 +528,7 @@ class CourseChunkerV2:
             avg_chunk_size=avg_size,
         )
 
-    def _create_struct_chunks(self, filename: str) -> list[ChunkV2]:
+    def _create_struct_chunks(self, filename: str, parser_source: str) -> list[ChunkV2]:
         """创建结构分块 - 章节导航"""
         chunks = []
 
@@ -511,13 +538,24 @@ class CourseChunkerV2:
             chunks.append(
                 ChunkV2(
                     content=f"《{self.toc.title}》\n\n目录：\n{toc_text}",
-                    metadata=ChunkMetadataV2(source_file=filename, chunk_type="struct", chapter="目录"),
+                    metadata=ChunkMetadataV2(
+                        source_file=filename,
+                        parser_source=parser_source,
+                        chunk_type="struct",
+                        chapter="目录",
+                    ),
                 )
             )
 
         return chunks
 
-    def _create_shadow_chunks(self, pages: list[tuple[int, str]], filename: str, page_offset: int = 0) -> list[ChunkV2]:
+    def _create_shadow_chunks(
+        self,
+        pages: list[tuple[int, str]],
+        filename: str,
+        page_offset: int,
+        parser_source: str,
+    ) -> list[ChunkV2]:
         """创建影子分块 - 章节级全文索引"""
         chunks = []
 
@@ -551,6 +589,7 @@ class CourseChunkerV2:
                     content=shadow_text,
                     metadata=ChunkMetadataV2(
                         source_file=filename,
+                        parser_source=parser_source,
                         source_pages=data["source_pages"][:5],  # parser/PDF页
                         book_pages=data["book_pages"][:5],  # 教材页
                         chunk_type="shadow",
@@ -565,13 +604,13 @@ class CourseChunkerV2:
 
 # 兼容性函数
 def chunk_document(
-    pages: list[tuple[int, str]], filename: str, parser_source: str = "marker", **kwargs
+    pages: list[tuple[int, str]], filename: str, parser_source: str = "unknown", **kwargs
 ) -> ChunkingResultV2:
     """
     兼容旧接口的分块函数
     """
     chunker = CourseChunkerV2()
-    return chunker.chunk_document(pages, filename, **kwargs)
+    return chunker.chunk_document(pages, filename, parser_source=parser_source, **kwargs)
 
 
 if __name__ == "__main__":

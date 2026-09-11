@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     import ds_course_agent.shared.config as config
     from ds_course_agent.kb.chunker import CourseChunkerV2
     from ds_course_agent.kb.store import CourseKnowledgeBase
-    from scripts.build_kb import _cache_path, _compute_page_offset, _load_cache
+    from scripts.build_kb import _compute_page_offset, _file_hash, _load_cache
 
     target = args.output.resolve()
     active = Path(config.CHROMA_PERSIST_DIR).resolve()
@@ -40,13 +40,17 @@ def main(argv: list[str] | None = None) -> int:
     ):
         parser.error("Recovery output must be a separate directory under var, not the active database")
     pdf = args.pdf.resolve()
-    parse_path, clean_path = (_cache_path(str(pdf), stage, 0) for stage in ("parse", "clean"))
+    legacy_cache_base = root / "var" / "cache"
+    legacy_cache_prefix = f"{pdf.stem}_{_file_hash(str(pdf))}_mp0"
+    parse_path = legacy_cache_base / f"{legacy_cache_prefix}_parse.pkl"
+    clean_path = legacy_cache_base / f"{legacy_cache_prefix}_clean.pkl"
     parsed, cleaned = _load_cache(parse_path), _load_cache(clean_path)
     if parsed is None or cleaned is None:
         parser.error("Trusted parse/clean caches are required; refusing automatic PDF parsing")
     chunks = CourseChunkerV2().chunk_document(
         [(page.page_num, page.cleaned_text) for page in cleaned.pages],
         parsed.file_name,
+        parser_source=parsed.parser_mode,
         page_offset=_compute_page_offset(str(pdf)),
     )
     semantic = [chunk for chunk in chunks.chunks if chunk.metadata.chunk_type == "semantic"]

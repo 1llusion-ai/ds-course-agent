@@ -1,0 +1,86 @@
+{
+  "schema_version": "retrieval-strategy-candidates/1.0",
+  "strategies": [
+    {
+      "id": "vector_raw",
+      "retrieval_mode": "vector",
+      "query_instruction": null,
+      "candidate_depth": 20,
+      "rrf_rank_constant": null
+    },
+    {
+      "id": "vector_qwen_default",
+      "retrieval_mode": "vector",
+      "query_instruction": "Given a web search query, retrieve relevant passages that answer the query",
+      "candidate_depth": 20,
+      "rrf_rank_constant": null
+    },
+    {
+      "id": "vector_course_zh",
+      "retrieval_mode": "vector",
+      "query_instruction": "给定一个数据科学导论课程问题，检索能够直接回答该问题的教材段落",
+      "candidate_depth": 20,
+      "rrf_rank_constant": null
+    },
+    {
+      "id": "hybrid_rrf_raw",
+      "retrieval_mode": "hybrid_rrf",
+      "query_instruction": null,
+      "candidate_depth": 20,
+      "rrf_rank_constant": 60
+    },
+    {
+      "id": "hybrid_rrf_qwen_default",
+      "retrieval_mode": "hybrid_rrf",
+      "query_instruction": "Given a web search query, retrieve relevant passages that answer the query",
+      "candidate_depth": 20,
+      "rrf_rank_constant": 60
+    },
+    {
+      "id": "hybrid_rrf_course_zh",
+      "retrieval_mode": "hybrid_rrf",
+      "query_instruction": "给定一个数据科学导论课程问题，检索能够直接回答该问题的教材段落",
+      "candidate_depth": 20,
+      "rrf_rank_constant": 60
+    },
+    {
+      "id": "vector_rerank_bge",
+      "retrieval_mode": "vector",
+      "query_instruction": null,
+      "candidate_depth": 20,
+      "rrf_rank_constant": null,
+      "reranker_model": "BAAI/bge-reranker-v2-m3"
+    },
+    {
+      "id": "hybrid_rrf_rerank_bge",
+      "retrieval_mode": "hybrid_rrf",
+      "query_instruction": null,
+      "candidate_depth": 20,
+      "rrf_rank_constant": 60,
+      "reranker_model": "BAAI/bge-reranker-v2-m3"
+    },
+    {
+      "id": "bm25_raw",
+      "retrieval_mode": "bm25",
+      "query_instruction": null,
+      "candidate_depth": 20,
+      "rrf_rank_constant": null
+    },
+    {
+      "id": "adaptive_lexical_v1",
+      "retrieval_mode": "adaptive",
+      "query_instruction": null,
+      "candidate_depth": 20,
+      "rrf_rank_constant": null,
+      "routing_policy": "lexical_gate_v1"
+    },
+    {
+      "id": "adaptive_exact_lookup",
+      "retrieval_mode": "adaptive",
+      "query_instruction": null,
+      "candidate_depth": 20,
+      "rrf_rank_constant": null,
+      "routing_policy": "exact_lookup"
+    }
+  ]
+}

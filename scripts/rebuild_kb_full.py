@@ -20,9 +20,11 @@ from pathlib import Path
 
 from ds_course_agent.kb.chunker import CourseChunkerV2
 from ds_course_agent.kb.cleaner import clean_document
-from ds_course_agent.kb.parser import parse_pdf_file
+from ds_course_agent.kb.parser import ParserMode, parse_pdf_file
 from ds_course_agent.kb.store import CourseKnowledgeBase
 from ds_course_agent.kb.toc_parser import get_toc_parser
+
+CACHE_SCHEMA_VERSION = "blocks-v2"
 
 
 def _file_hash(pdf_path: str) -> str:
@@ -32,9 +34,11 @@ def _file_hash(pdf_path: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
-def _cache_path(pdf_path: str, stage: str, max_pages: int = 0) -> Path:
+def _cache_path(pdf_path: str, stage: str, parser_mode: ParserMode, max_pages: int = 0) -> Path:
     base = Path("var/cache")
-    name = f"{Path(pdf_path).stem}_{_file_hash(pdf_path)}_mp{max_pages}_{stage}.pkl"
+    name = (
+        f"{Path(pdf_path).stem}_{_file_hash(pdf_path)}_mp{max_pages}_{parser_mode}_{stage}_{CACHE_SCHEMA_VERSION}.pkl"
+    )
     return base / name
 
 
@@ -183,20 +187,25 @@ def process_source(
     chunk_overlap: int = 300,
     max_chunk_size: int | None = None,
     use_cache: bool = True,
+    parser_mode: ParserMode = "marker",
 ):
     """Parse, clean, chunk one source PDF."""
-    parse_cache = _cache_path(pdf_path, "parse", max_pages=0)
-    clean_cache = _cache_path(pdf_path, "clean", max_pages=0)
+    parse_cache = _cache_path(pdf_path, "parse", parser_mode, max_pages=0)
+    clean_cache = _cache_path(pdf_path, "clean", parser_mode, max_pages=0)
 
     parse_result = _load_cache(parse_cache) if use_cache else None
     if parse_result is not None:
         print(f"\n  Parse PDF... [cache] {parse_cache.name}")
     else:
         print("\n  Parse PDF...")
-        parse_result = parse_pdf_file(pdf_path)
+        parse_result = parse_pdf_file(pdf_path, parser_mode=parser_mode)
         if use_cache:
             _save_cache(parse_cache, parse_result)
             print(f"    saved parse cache: {parse_cache.name}")
+    if parse_result.error:
+        raise RuntimeError(f"PDF parsing failed: {parse_result.error}")
+    if not parse_result.pages:
+        raise RuntimeError("PDF parsing failed: parser returned no pages")
     print(f"    total_pages={parse_result.total_pages}, marker_pages={parse_result.marker_pages}")
 
     cleaned = _load_cache(clean_cache) if use_cache else None
@@ -220,6 +229,7 @@ def process_source(
     chunk_result = chunker.chunk_document(
         chunk_pages,
         parse_result.file_name,
+        parser_source=parse_result.parser_mode,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
         page_offset=page_offset,
@@ -281,6 +291,12 @@ def parse_args():
         help="Hard upper bound; defaults to chunk_size + 200",
     )
     parser.add_argument("--no-cache", action="store_true", help="Ignore parse/clean caches under var/cache")
+    parser.add_argument(
+        "--parser-mode",
+        choices=("marker", "auto", "datalab", "pypdf-plain", "pypdf-layout"),
+        default="marker",
+        help="PDF parser (default: marker)",
+    )
     return parser.parse_args()
 
 
@@ -356,6 +372,7 @@ def main():
                 chunk_overlap=args.chunk_overlap,
                 max_chunk_size=args.max_chunk_size,
                 use_cache=not args.no_cache,
+                parser_mode=args.parser_mode,
             )
             print("\n  Ingest...")
             ingest_result = kb.ingest_chunking_result(chunk_result, source_file=source_file)

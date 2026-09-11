@@ -1,0 +1,29 @@
+{
+  "schema_version": "retrieval-embedding-candidates/1.0",
+  "embeddings": [
+    {
+      "id": "qwen3_8b_native",
+      "model": "Qwen/Qwen3-Embedding-8B",
+      "dimensions": null,
+      "distance": "cosine",
+      "query_prefix": "",
+      "batch_size": 16
+    },
+    {
+      "id": "qwen3_8b_1024",
+      "model": "Qwen/Qwen3-Embedding-8B",
+      "dimensions": 1024,
+      "distance": "cosine",
+      "query_prefix": "",
+      "batch_size": 16
+    },
+    {
+      "id": "bge_m3",
+      "model": "BAAI/bge-m3",
+      "dimensions": null,
+      "distance": "cosine",
+      "query_prefix": "",
+      "batch_size": 16
+    }
+  ]
+}

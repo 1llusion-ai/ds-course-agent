@@ -27,21 +27,19 @@ import argparse
 import hashlib
 import json
 import pickle
+import re
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
-# 优先使用 GPU 进行 Marker 解析
-os.environ.setdefault("TORCH_DEVICE", "cuda")
-
-import re
-
 from ds_course_agent.kb.chunker import ChunkingResultV2, CourseChunkerV2
 from ds_course_agent.kb.cleaner import CleanedDocument, clean_document
-from ds_course_agent.kb.parser import PDFParseResult, parse_pdf_file
+from ds_course_agent.kb.parser import ParserMode, PDFParseResult, parse_pdf_file
 from ds_course_agent.kb.store import CourseKnowledgeBase
 from ds_course_agent.kb.toc_parser import get_toc_parser
+
+CACHE_SCHEMA_VERSION = "blocks-v2"
 
 
 @dataclass
@@ -65,11 +63,11 @@ def _file_hash(pdf_path: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
-def _cache_path(pdf_path: str, stage: str, max_pages: int) -> Path:
+def _cache_path(pdf_path: str, stage: str, max_pages: int, parser_mode: ParserMode) -> Path:
     """生成缓存文件路径"""
     base = Path("var/cache")
     h = _file_hash(pdf_path)
-    name = f"{Path(pdf_path).stem}_{h}_mp{max_pages}_{stage}.pkl"
+    name = f"{Path(pdf_path).stem}_{h}_mp{max_pages}_{parser_mode}_{stage}_{CACHE_SCHEMA_VERSION}.pkl"
     return base / name
 
 
@@ -123,24 +121,36 @@ def _compute_page_offset(pdf_path: str) -> int:
     return -8
 
 
-def _parse_with_cache(pdf_path: str, max_pages: int, use_cache: bool) -> PDFParseResult:
+def _parse_with_cache(
+    pdf_path: str,
+    max_pages: int,
+    use_cache: bool,
+    parser_mode: ParserMode,
+) -> PDFParseResult:
     """带缓存的PDF解析"""
-    cache_file = _cache_path(pdf_path, "parse", max_pages)
+    cache_file = _cache_path(pdf_path, "parse", max_pages, parser_mode)
     if use_cache:
         cached = _load_cache(cache_file)
         if cached is not None:
             print(f"  [Cache] 命中解析缓存: {cache_file.name}")
             return cached
-    result = parse_pdf_file(pdf_path, max_pages=max_pages)
+    result = parse_pdf_file(pdf_path, max_pages=max_pages, parser_mode=parser_mode)
     if use_cache:
         _save_cache(cache_file, result)
         print(f"  [Cache] 保存解析缓存: {cache_file.name}")
     return result
 
 
-def _clean_with_cache(pages, file_name: str, pdf_path: str, max_pages: int, use_cache: bool) -> CleanedDocument:
+def _clean_with_cache(
+    pages,
+    file_name: str,
+    pdf_path: str,
+    max_pages: int,
+    use_cache: bool,
+    parser_mode: ParserMode,
+) -> CleanedDocument:
     """带缓存的文本清洗"""
-    cache_file = _cache_path(pdf_path, "clean", max_pages)
+    cache_file = _cache_path(pdf_path, "clean", max_pages, parser_mode)
     if use_cache:
         cached = _load_cache(cache_file)
         if cached is not None:
@@ -153,7 +163,13 @@ def _clean_with_cache(pages, file_name: str, pdf_path: str, max_pages: int, use_
     return result
 
 
-def build_knowledge_base(pdf_path: str, max_pages: int = 0, ingest: bool = True, use_cache: bool = True) -> BuildReport:
+def build_knowledge_base(
+    pdf_path: str,
+    max_pages: int = 0,
+    ingest: bool = True,
+    use_cache: bool = True,
+    parser_mode: ParserMode = "marker",
+) -> BuildReport:
     """
     构建课程知识库
 
@@ -162,6 +178,7 @@ def build_knowledge_base(pdf_path: str, max_pages: int = 0, ingest: bool = True,
         max_pages: 最大解析页数，0 表示全部
         ingest: 是否入库
         use_cache: 是否使用解析/清洗缓存
+        parser_mode: PDF 解析器
 
     Returns:
         BuildReport
@@ -170,24 +187,40 @@ def build_knowledge_base(pdf_path: str, max_pages: int = 0, ingest: bool = True,
     print("课程知识库构建")
     print("=" * 60)
     print(f"源文件: {pdf_path}")
-    print(f"解析器: Marker (TORCH_DEVICE={os.environ.get('TORCH_DEVICE', 'auto')})")
+    print(f"解析器: {parser_mode}")
     print(f"最大页数: {max_pages if max_pages > 0 else '全部'}")
     print(f"使用缓存: {use_cache}")
     print("=" * 60)
 
     print("\n[1/4] 解析 PDF...")
-    parse_result = _parse_with_cache(pdf_path, max_pages, use_cache)
+    parse_result = _parse_with_cache(pdf_path, max_pages, use_cache, parser_mode)
+    if parse_result.error:
+        raise RuntimeError(f"PDF 解析失败: {parse_result.error}")
+    if not parse_result.pages:
+        raise RuntimeError("PDF 解析失败: 解析器未返回页面")
 
     print("\n[2/4] 清洗文本...")
     pages = [(p.page_num, p.text) for p in parse_result.pages if p.text]
-    cleaned = _clean_with_cache(pages, parse_result.file_name, pdf_path, max_pages, use_cache)
+    cleaned = _clean_with_cache(
+        pages,
+        parse_result.file_name,
+        pdf_path,
+        max_pages,
+        use_cache,
+        parser_mode,
+    )
 
     print("\n[3/4] 分块...")
     chunk_pages = [(p.page_num, p.cleaned_text) for p in cleaned.pages]
     page_offset = _compute_page_offset(pdf_path)
     print(f"  page_offset: {page_offset}")
     chunker = CourseChunkerV2()
-    chunk_result = chunker.chunk_document(chunk_pages, parse_result.file_name, page_offset=page_offset)
+    chunk_result = chunker.chunk_document(
+        chunk_pages,
+        parse_result.file_name,
+        parser_source=parse_result.parser_mode,
+        page_offset=page_offset,
+    )
 
     ingest_result = None
     if ingest:
@@ -202,7 +235,7 @@ def build_knowledge_base(pdf_path: str, max_pages: int = 0, ingest: bool = True,
 
     report = BuildReport(
         source_file=parse_result.file_name,
-        parser_mode="marker",
+        parser_mode=parse_result.parser_mode,
         generated_at=datetime.now().isoformat(),
         parse_result={
             "total_pages": parse_result.total_pages,
@@ -318,9 +351,9 @@ def calculate_quality_metrics(
 
 def _build_one_pdf(args: tuple) -> BuildReport:
     """多进程包装器：构建单个PDF"""
-    pdf_path, max_pages, ingest, use_cache = args
+    pdf_path, max_pages, ingest, use_cache, parser_mode = args
     try:
-        return build_knowledge_base(pdf_path, max_pages, ingest, use_cache)
+        return build_knowledge_base(pdf_path, max_pages, ingest, use_cache, parser_mode)
     except Exception as e:
         print(f"[ERROR] 处理 {pdf_path} 失败: {e}")
         raise
@@ -334,6 +367,12 @@ def main():
     parser.add_argument("--no-cache", action="store_true", help="禁用解析/清洗缓存")
     parser.add_argument("--workers", type=int, default=2, help="并行处理PDF的进程数 (默认2，防止GPU显存不足)")
     parser.add_argument("--clear-db", action="store_true", help="入库前先清空整个知识库")
+    parser.add_argument(
+        "--parser-mode",
+        choices=("marker", "auto", "datalab", "pypdf-plain", "pypdf-layout"),
+        default="marker",
+        help="PDF 解析器 (默认 marker)",
+    )
 
     args = parser.parse_args()
 
@@ -355,7 +394,9 @@ def main():
             sys.exit(1)
 
         print(f"发现 {len(pdf_files)} 个 PDF 文件，使用 {args.workers} 个进程并行处理...\n")
-        tasks = [(str(pdf_file), args.max_pages, not args.no_ingest, use_cache) for pdf_file in pdf_files]
+        tasks = [
+            (str(pdf_file), args.max_pages, not args.no_ingest, use_cache, args.parser_mode) for pdf_file in pdf_files
+        ]
 
         reports = []
         with ProcessPoolExecutor(max_workers=args.workers) as executor:
@@ -372,7 +413,11 @@ def main():
         print(f"\n批量构建完成: {len(reports)}/{len(pdf_files)} 成功")
     else:
         build_knowledge_base(
-            pdf_path=args.pdf_path, max_pages=args.max_pages, ingest=not args.no_ingest, use_cache=use_cache
+            pdf_path=args.pdf_path,
+            max_pages=args.max_pages,
+            ingest=not args.no_ingest,
+            use_cache=use_cache,
+            parser_mode=args.parser_mode,
         )
 
 
