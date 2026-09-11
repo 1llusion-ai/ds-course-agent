@@ -416,6 +416,7 @@ class AgentService:
             build_extractive_rag_fallback,
             build_no_results_message,
             build_sources_from_documents,
+            build_term_correction_notice,
             get_rag_service,
             trace_answer_degraded,
         )
@@ -429,7 +430,10 @@ class AgentService:
         try:
             service = get_rag_service()
             with trace_span("tool.course_rag.retrieve"):
-                result = service.retrieve(question)
+                result = service.retrieve(
+                    question,
+                    term_resolution_query=route_state.context.original_query,
+                )
 
             sources = build_sources_from_documents(result.documents)
             used_retrieval = result.has_results
@@ -449,20 +453,24 @@ class AgentService:
 
             if not result.has_results:
                 trace_step("tool.result", tool="course_rag_tool", status="no_results")
-                yield from iter_text_chunks(build_no_results_message())
+                yield from iter_text_chunks(build_no_results_message(question, result.term_resolution))
                 return
 
+            correction_notice = build_term_correction_notice(result.term_resolution)
+            if correction_notice:
+                yield from iter_text_chunks(correction_notice)
+            answer_question = result.retrieval_query
             yielded = False
             try:
                 with trace_span("tool.course_rag.answer_stream"):
-                    for chunk in service.stream_answer_with_context(question, result.formatted_context):
+                    for chunk in service.stream_answer_with_context(answer_question, result.formatted_context):
                         if chunk:
                             yielded = True
                             yield chunk
 
                 if not yielded:
                     with trace_span("tool.course_rag.answer"):
-                        answer_result = service.answer_with_context(question, result.formatted_context)
+                        answer_result = service.answer_with_context(answer_question, result.formatted_context)
                     yield from iter_text_chunks(answer_result.answer)
             except Exception as answer_exc:
                 trace_answer_degraded(answer_exc, mode="stream")
@@ -475,7 +483,7 @@ class AgentService:
                     degraded=True,
                 )
                 fallback = build_extractive_rag_fallback(
-                    question,
+                    answer_question,
                     result.documents,
                     error=answer_exc,
                 )

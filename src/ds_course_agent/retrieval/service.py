@@ -27,6 +27,11 @@ from ds_course_agent.retrieval.context_assembler import (
     load_token_counter,
 )
 from ds_course_agent.retrieval.index_manifest import PromotedIndexManifest
+from ds_course_agent.retrieval.term_resolution import (
+    COURSE_TERM_POLICY_VERSION,
+    CourseTermIndex,
+    CourseTermResolution,
+)
 from ds_course_agent.retrieval.timeouts import retrieval_embedding_timeout_seconds
 from ds_course_agent.shared.embeddings import embed_query_cached, embedding_model_kwargs
 from ds_course_agent.shared.kb_revision import read_kb_revision
@@ -153,6 +158,8 @@ class RetrievalResult:
     formatted_context: str
     has_results: bool
     assembly: AssembledContext
+    retrieval_query: str
+    term_resolution: CourseTermResolution | None
 
 
 @dataclass(frozen=True)
@@ -180,22 +187,21 @@ def _rag_retrieval_cache_size() -> int:
     return max(0, int(getattr(config, "RAG_RETRIEVAL_CACHE_SIZE", 128) or 0))
 
 
-def _normalize_retrieval_cache_question(question: str) -> str:
-    return "".join(str(question or "").lower().split())
-
-
 def _retrieval_cache_key(
     question: str,
     *,
     candidate_depth: int,
     similarity_threshold: float | None,
     revision: str,
+    term_resolution_query: str | None = None,
 ) -> str:
     """Bind cached retrievals to the complete vector/context policy identity."""
     threshold_key = "none" if similarity_threshold is None else f"{float(similarity_threshold):.6g}"
+    # Term resolution depends on capitalization and token boundaries in the original input.
     raw = "|".join(
         [
-            _normalize_retrieval_cache_question(question),
+            question,
+            f"term_query={term_resolution_query if term_resolution_query is not None else question}",
             f"candidate_depth={candidate_depth}",
             f"threshold={threshold_key}",
             f"token_budget={_context_token_budget()}",
@@ -208,6 +214,7 @@ def _retrieval_cache_key(
             f"persist={getattr(config, 'CHROMA_PERSIST_DIR', '')}",
             f"embedding_model={getattr(config, 'MODEL_EMBEDDING', '')}",
             f"embedding_base={getattr(config, 'BASE_URL', '')}",
+            f"term_policy={COURSE_TERM_POLICY_VERSION}",
         ]
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -230,6 +237,8 @@ def _clone_retrieval_result(result: RetrievalResult) -> RetrievalResult:
         formatted_context=assembly.formatted_context or _NO_CONTEXT,
         has_results=bool(assembly.selected),
         assembly=assembly,
+        retrieval_query=result.retrieval_query,
+        term_resolution=result.term_resolution,
     )
 
 
@@ -239,6 +248,7 @@ def _get_cached_retrieval_result(
     candidate_depth: int,
     similarity_threshold: float | None,
     revision: str,
+    term_resolution_query: str | None = None,
 ) -> RetrievalResult | None:
     maxsize = _rag_retrieval_cache_size()
     ttl = _rag_retrieval_cache_ttl_seconds()
@@ -250,6 +260,7 @@ def _get_cached_retrieval_result(
         candidate_depth=candidate_depth,
         similarity_threshold=similarity_threshold,
         revision=revision,
+        term_resolution_query=term_resolution_query,
     )
     now = time.monotonic()
     with _RETRIEVAL_CACHE_LOCK:
@@ -290,6 +301,7 @@ def _store_cached_retrieval_result(
     candidate_depth: int,
     similarity_threshold: float | None,
     revision: str,
+    term_resolution_query: str | None = None,
 ) -> None:
     maxsize = _rag_retrieval_cache_size()
     ttl = _rag_retrieval_cache_ttl_seconds()
@@ -309,6 +321,7 @@ def _store_cached_retrieval_result(
         candidate_depth=candidate_depth,
         similarity_threshold=similarity_threshold,
         revision=revision,
+        term_resolution_query=term_resolution_query,
     )
     with _RETRIEVAL_CACHE_LOCK:
         _RETRIEVAL_CACHE[key] = (time.monotonic(), _clone_retrieval_result(result))
@@ -331,7 +344,7 @@ def clear_rag_retrieval_cache() -> None:
 
 
 class RAGService:
-    """Raw-vector retrieval plus one exact, token-bounded context assembly path."""
+    """Course-term or raw-vector retrieval with one token-bounded assembly path."""
 
     def __init__(self) -> None:
         self.index_manifest = _load_index_manifest()
@@ -342,6 +355,7 @@ class RAGService:
         if self.vector_store_service.collection.count() != self.index_manifest.document_count:
             self.vector_store_service.close()
             raise RuntimeError("production retrieval collection count does not match its manifest")
+        self.course_term_index = CourseTermIndex.from_collection_payload(self.vector_store_service.get_all_documents())
         self.prompt_template = build_rag_prompt_template()
         self.chat_model = get_rag_text_model()
         self._token_counter = load_token_counter(PROJECT_ROOT / "var" / "cache" / "tiktoken")
@@ -372,8 +386,10 @@ class RAGService:
         question: str,
         top_k: int | None = None,
         similarity_threshold: float | None = 1.0,
+        *,
+        term_resolution_query: str | None = None,
     ) -> RetrievalResult:
-        """Retrieve raw-vector candidates and return only evidence included in context."""
+        """Retrieve evidence, resolving short terms from the current user query."""
         depth = max(1, int(top_k)) if top_k is not None else _candidate_depth()
         manifest = getattr(self, "index_manifest", None)
         manifest_revision = manifest.collection_revision if manifest is not None else "test"
@@ -384,6 +400,7 @@ class RAGService:
             candidate_depth=depth,
             similarity_threshold=similarity_threshold,
             revision=revision,
+            term_resolution_query=term_resolution_query,
         )
         if cached_result is not None:
             _warn_large_rag_payload(
@@ -397,42 +414,66 @@ class RAGService:
             )
             return cached_result
 
-        query_embedding = embed_query_cached(
-            self.embedding,
-            question,
-            timeout_seconds=retrieval_embedding_timeout_seconds(),
-        )
-        results = self.vector_store_service.query(
-            query_embeddings=[query_embedding],
-            n_results=depth,
-            include=["documents", "metadatas", "distances"],
-        )
-        documents = (results.get("documents") or [[]])[0]
-        metadatas = (results.get("metadatas") or [[]])[0]
-        distances = (results.get("distances") or [[]])[0]
-        ids = (results.get("ids") or [[]])[0]
-        if not (len(documents) == len(metadatas) == len(distances) == len(ids)):
-            raise ValueError("Chroma returned inconsistent vector result columns")
-
         candidates: list[RankedContextCandidate] = []
-        for rank, (chunk_id, text, metadata, distance) in enumerate(
-            zip(ids, documents, metadatas, distances, strict=True),
-            start=1,
-        ):
-            distance_value = float(distance)
-            if similarity_threshold is not None and distance_value > similarity_threshold:
-                continue
-            document_metadata = dict(metadata or {})
-            document_metadata.setdefault("chunk_id", str(chunk_id))
-            document = Document(page_content=str(text or ""), metadata=document_metadata)
-            candidates.append(
-                RankedContextCandidate(
-                    document=document,
-                    retrieval_rank=rank,
-                    distance=distance_value,
-                    provenance=ChunkProvenance.from_document(document),
-                )
+        term_lookup = self.course_term_index.lookup(term_resolution_query or question)
+        retrieval_query = question
+        term_resolution = None
+        if term_lookup is not None:
+            term_resolution = term_lookup.resolution
+            retrieval_query = term_resolution.resolved_query
+            _trace_rag_event(
+                "rag.term_resolution",
+                match_kind=term_resolution.match_kind.value,
+                requested_term=term_resolution.requested_term,
+                resolved_term=term_resolution.resolved_term,
+                direct_document_count=len(term_lookup.documents),
+                policy_version=term_resolution.policy_version,
             )
+            for rank, document in enumerate(term_lookup.documents[:depth], start=1):
+                candidates.append(
+                    RankedContextCandidate(
+                        document=document,
+                        retrieval_rank=rank,
+                        distance=0.0,
+                        provenance=ChunkProvenance.from_document(document),
+                    )
+                )
+        else:
+            query_embedding = embed_query_cached(
+                self.embedding,
+                question,
+                timeout_seconds=retrieval_embedding_timeout_seconds(),
+            )
+            results = self.vector_store_service.query(
+                query_embeddings=[query_embedding],
+                n_results=depth,
+                include=["documents", "metadatas", "distances"],
+            )
+            documents = (results.get("documents") or [[]])[0]
+            metadatas = (results.get("metadatas") or [[]])[0]
+            distances = (results.get("distances") or [[]])[0]
+            ids = (results.get("ids") or [[]])[0]
+            if not (len(documents) == len(metadatas) == len(distances) == len(ids)):
+                raise ValueError("Chroma returned inconsistent vector result columns")
+
+            for rank, (chunk_id, text, metadata, distance) in enumerate(
+                zip(ids, documents, metadatas, distances, strict=True),
+                start=1,
+            ):
+                distance_value = float(distance)
+                if similarity_threshold is not None and distance_value > similarity_threshold:
+                    continue
+                document_metadata = dict(metadata or {})
+                document_metadata.setdefault("chunk_id", str(chunk_id))
+                document = Document(page_content=str(text or ""), metadata=document_metadata)
+                candidates.append(
+                    RankedContextCandidate(
+                        document=document,
+                        retrieval_rank=rank,
+                        distance=distance_value,
+                        provenance=ChunkProvenance.from_document(document),
+                    )
+                )
 
         assembly = assemble_context(
             candidates,
@@ -468,6 +509,8 @@ class RAGService:
             formatted_context=formatted_context,
             has_results=bool(selected_documents),
             assembly=assembly,
+            retrieval_query=retrieval_query,
+            term_resolution=term_resolution,
         )
         _store_cached_retrieval_result(
             question,
@@ -475,6 +518,7 @@ class RAGService:
             candidate_depth=depth,
             similarity_threshold=similarity_threshold,
             revision=revision,
+            term_resolution_query=term_resolution_query,
         )
         return result
 

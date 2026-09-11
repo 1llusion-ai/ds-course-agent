@@ -54,6 +54,8 @@ def _make_vector_only_service(tmp_path, monkeypatch):
     service.vector_store_service = vector_store_service
     service.embedding = object()
     service._token_counter = _CharacterTokenCounter()
+    service.course_term_index = Mock()
+    service.course_term_index.lookup.return_value = None
     return service, vector_store_service
 
 

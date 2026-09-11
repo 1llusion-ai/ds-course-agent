@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from ds_course_agent.shared.term_queries import ShortTermQuery
 from ds_course_agent.teaching.learner_state import LearnerStateSnapshot, LearnerStateSummary
 
 
@@ -133,6 +134,8 @@ class QueryContext:
     is_followup: bool = False
     is_clarification_signal: bool = False
     is_mastery_signal: bool = False
+    short_term_query: ShortTermQuery | None = None
+    course_evidence_requested: bool = False
 
     # 类型化路由控制信号（Contract 2：metadata 只承载自由数据，控制信号必须类型化）。
     # 由 QueryPipeline 在 preprocess 后注入，供规则表 match_fn 读取。

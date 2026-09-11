@@ -45,6 +45,7 @@ def build_route_rules(router: Any) -> tuple[RouteRule, ...]:
         RouteRule(40, "code_review", _match_code_review, _build_code_review),
         RouteRule(50, "code_execution", _match_code_execution, _build_code_execution),
         _bind(router, 60, "code_learning", _match_code_learning, _build_code_learning),
+        RouteRule(65, "short_term_lookup", _match_short_term_lookup, _build_short_term_lookup),
         _bind(
             router,
             70,
@@ -174,6 +175,25 @@ def _build_web_research(context: QueryContext) -> RouteDecision:
     )
 
 
+def _match_short_term_lookup(context: QueryContext) -> bool:
+    return context.short_term_query is not None
+
+
+def _build_short_term_lookup(context: QueryContext) -> RouteDecision:
+    query = context.short_term_query
+    if query is None:
+        raise RuntimeError("short-term lookup rule matched without a parsed term")
+    return RouteDecision(
+        family=RouteFamily.LEARNING,
+        intent=RouteIntent.CONCEPT_QA,
+        execution_mode=ExecutionMode.GROUNDED_GENERATION,
+        confidence=0.95,
+        reasons=[f"明确短术语问句: {query.term}"],
+        retrieval_policy=RetrievalPolicy.REQUIRED,
+        executor_key="course_rag",
+    )
+
+
 def _match_code_review(context: QueryContext) -> bool:
     return "code_review" in context.detected_intents
 
@@ -293,7 +313,7 @@ def _build_personalized_explanation(router: Any, context: QueryContext) -> Route
 
 
 def _match_grounded_learning(router: Any, context: QueryContext) -> bool:
-    return router._is_likely_course_question(context)
+    return context.course_evidence_requested or router._is_likely_course_question(context)
 
 
 def _build_grounded_learning(router: Any, context: QueryContext) -> RouteDecision:

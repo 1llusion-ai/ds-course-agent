@@ -50,6 +50,11 @@ class VectorStoreService:
             include=include,
         )
 
+    def get_all_documents(self) -> dict[str, Any]:
+        """Return all collection documents and metadata for exact term lookup."""
+
+        return self.collection.get(include=["documents", "metadatas"])
+
     def close(self) -> None:
         """Release the owned Chroma client exactly once."""
         if self._closed:
