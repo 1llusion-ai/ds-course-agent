@@ -17,9 +17,12 @@ import logging
 import threading
 import time
 from collections import OrderedDict, namedtuple
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 from langchain_openai import OpenAIEmbeddings
+from openai import APIConnectionError, APIStatusError
 
 import ds_course_agent.shared.config as config
 
@@ -30,13 +33,32 @@ class EmbeddingUnavailable(RuntimeError):
     """Raised when embedding is unavailable or circuit breaker is open."""
 
 
+class EmbeddingCircuitMode(str, Enum):
+    """Control whether a request may mutate the shared circuit breaker."""
+
+    MANAGED = "managed"
+    OBSERVE_ONLY = "observe_only"
+
+
 _CACHE_INFO = namedtuple("EmbeddingCacheInfo", "hits misses maxsize currsize")
 _CACHE_LOCK = threading.RLock()
 _QUERY_CACHE: OrderedDict[tuple, list[float]] = OrderedDict()
 _CACHE_HITS = 0
 _CACHE_MISSES = 0
-_CIRCUIT_OPEN_UNTIL = 0.0
-_LAST_ERROR = ""
+_MANAGED_MAX_ATTEMPTS = 2
+_CIRCUIT_FAILURE_THRESHOLD = 3
+
+
+@dataclass
+class _CircuitState:
+    """Consecutive failed requests, excluding optional embedding observations."""
+
+    consecutive_failures: int = 0
+    open_until: float = 0.0
+    last_error: str = ""
+
+
+_CIRCUIT = _CircuitState()
 
 
 def embedding_model_kwargs(*, timeout_seconds: float | None = None) -> dict[str, Any]:
@@ -106,25 +128,40 @@ def _trace_step(stage: str, **data) -> None:
 
 def _circuit_is_open() -> tuple[bool, float, str]:
     with _CACHE_LOCK:
-        remaining = _CIRCUIT_OPEN_UNTIL - time.monotonic()
-        return remaining > 0, max(0.0, remaining), _LAST_ERROR
+        remaining = _CIRCUIT.open_until - time.monotonic()
+        return remaining > 0, max(0.0, remaining), _CIRCUIT.last_error
 
 
 def _record_failure(exc: Exception) -> None:
-    global _CIRCUIT_OPEN_UNTIL, _LAST_ERROR
     seconds = _breaker_seconds()
     with _CACHE_LOCK:
-        _LAST_ERROR = f"{type(exc).__name__}: {str(exc)[:200]}"
-        if seconds > 0:
-            _CIRCUIT_OPEN_UNTIL = time.monotonic() + seconds
-    _trace_step("embedding.circuit_open", status="error", seconds=seconds, error=_LAST_ERROR)
+        _CIRCUIT.consecutive_failures += 1
+        _CIRCUIT.last_error = f"{type(exc).__name__}: {str(exc)[:200]}"
+        opened = seconds > 0 and _CIRCUIT.consecutive_failures >= _CIRCUIT_FAILURE_THRESHOLD
+        if opened:
+            _CIRCUIT.open_until = time.monotonic() + seconds
+        failures = _CIRCUIT.consecutive_failures
+        error = _CIRCUIT.last_error
+    _trace_step(
+        "embedding.circuit_open" if opened else "embedding.request_failed",
+        status="error",
+        seconds=seconds if opened else 0.0,
+        consecutive_failures=failures,
+        error=error,
+    )
 
 
 def _record_success() -> None:
-    global _CIRCUIT_OPEN_UNTIL, _LAST_ERROR
     with _CACHE_LOCK:
-        _CIRCUIT_OPEN_UNTIL = 0.0
-        _LAST_ERROR = ""
+        _CIRCUIT.open_until = 0.0
+        _CIRCUIT.last_error = ""
+        _CIRCUIT.consecutive_failures = 0
+
+
+def _is_retryable_embedding_error(exc: Exception) -> bool:
+    if isinstance(exc, (EmbeddingUnavailable, APIConnectionError)):
+        return True
+    return isinstance(exc, APIStatusError) and (exc.status_code in {408, 409, 429} or exc.status_code >= 500)
 
 
 def _embed_query_with_optional_timeout(
@@ -157,7 +194,13 @@ def _embed_query_with_optional_timeout(
         executor.shutdown(wait=False, cancel_futures=True)
 
 
-def embed_query_cached(model: Any, text: str, *, timeout_seconds: float | None = None) -> list[float]:
+def embed_query_cached(
+    model: Any,
+    text: str,
+    *,
+    timeout_seconds: float | None = None,
+    circuit_mode: EmbeddingCircuitMode = EmbeddingCircuitMode.MANAGED,
+) -> list[float]:
     """Embed one query with cache and fast-fail circuit breaker.
 
     ``model`` is intentionally passed in so tests can still patch the local
@@ -165,7 +208,10 @@ def embed_query_cached(model: Any, text: str, *, timeout_seconds: float | None =
     identity and model settings; separate clients cannot share cached vectors.
     ``timeout_seconds`` is a caller-specific wait guard layered
     on top of the embedding client's own HTTP timeout; cache hits do not spawn
-    a worker thread.
+    a worker thread. Managed calls retry transient failures once under the same
+    per-attempt wait guard. Only three consecutive exhausted requests open the
+    breaker. Observe-only callers respect an existing open circuit but never
+    retry or change the breaker's state.
     """
 
     global _CACHE_HITS, _CACHE_MISSES
@@ -194,17 +240,22 @@ def embed_query_cached(model: Any, text: str, *, timeout_seconds: float | None =
         )
         raise EmbeddingUnavailable(f"Embedding service temporarily unavailable; circuit open for {remaining:.1f}s")
 
-    try:
-        vector = _embed_query_with_optional_timeout(
-            model,
-            query,
-            timeout_seconds=timeout_seconds,
-        )
-    except Exception as exc:
-        _record_failure(exc)
-        raise
+    managed = circuit_mode is EmbeddingCircuitMode.MANAGED
+    max_attempts = _MANAGED_MAX_ATTEMPTS if managed else 1
+    for attempt in range(1, max_attempts + 1):
+        try:
+            vector = _embed_query_with_optional_timeout(model, query, timeout_seconds=timeout_seconds)
+            break
+        except Exception as exc:
+            if attempt < max_attempts and _is_retryable_embedding_error(exc):
+                _trace_step("embedding.retry", attempt=attempt, error_type=type(exc).__name__)
+                continue
+            if managed:
+                _record_failure(exc)
+            raise
 
-    _record_success()
+    if circuit_mode is EmbeddingCircuitMode.MANAGED:
+        _record_success()
     vector_list = [float(value) for value in vector]
 
     if maxsize > 0:
@@ -242,6 +293,7 @@ def embedding_query_cache_info():
 
 
 __all__ = [
+    "EmbeddingCircuitMode",
     "EmbeddingUnavailable",
     "embedding_model_kwargs",
     "create_embedding_model",

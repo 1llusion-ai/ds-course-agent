@@ -11,7 +11,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from ds_course_agent.shared.embeddings import EmbeddingCircuitMode
 from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
+from ds_course_agent.teaching import knowledge_mapper
 from ds_course_agent.teaching.knowledge_mapper import (
     AliasMatchMode,
     ConceptMatchStrength,
@@ -267,6 +269,27 @@ def test_embedding_fallback_uses_offline_cache_only_when_rules_miss(monkeypatch)
     matches = mapper.map_question("语义上指向泛化变差但没有显式别名", top_k=1, embedding_threshold=0.8)
 
     assert [(match.concept_id, match.method) for match in matches] == [("overfitting", "embedding")]
+
+
+def test_concept_query_embedding_cannot_mutate_shared_circuit(monkeypatch):
+    mapper = KnowledgeMapper(graph=KnowledgeGraph.__new__(KnowledgeGraph))
+    model = object()
+    observed = {}
+
+    monkeypatch.setattr(mapper, "_get_embedding_model", lambda: model)
+
+    def fake_embed_query_cached(actual_model, text, *, circuit_mode):
+        observed.update(model=actual_model, text=text, circuit_mode=circuit_mode)
+        return [1.0, 0.0]
+
+    monkeypatch.setattr(knowledge_mapper, "embed_query_cached", fake_embed_query_cached)
+
+    assert mapper._embed_text("DMKI是什么？").tolist() == [1.0, 0.0]
+    assert observed == {
+        "model": model,
+        "text": "DMKI是什么？",
+        "circuit_mode": EmbeddingCircuitMode.OBSERVE_ONLY,
+    }
 
 
 def test_knowledge_graph_does_not_online_precompute_without_cache(tmp_path, monkeypatch):
