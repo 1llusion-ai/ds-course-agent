@@ -32,10 +32,11 @@
 
 | 特性 | 说明 |
 | --- | --- |
-| 混合检索 | BM25 稀疏检索（jieba 中文分词）与 ChromaDB 向量语义检索经 **RRF 融合（k=60）** 取 top-N；向量服务不可用时自动降级 BM25-only |
+| 生产检索 | ChromaDB 原始向量 Top-10，使用 Qwen3-Embedding-8B 原生 4096 维向量；保持向量排名，不做 BM25/RRF 或重排序 |
+| Token 上下文 | 按同来源页精确字符区间去重，在 4096-token 预算内组装证据；展示来源只包含实际发送给回答模型的片段 |
 | 引用溯源 | 回答内嵌 `[n]` 教材引用，换算为教材绝对页码，前端一键跳转对应来源 |
 | 检索守卫 | `RetrievalGuard` 作为安全网：路由要求 grounded 却未检索时，强制补一次 RAG，避免模型凭印象作答课程事实题 |
-| 分层降级 | Embedding 超时降级、回答模型失败降级为可核验的「教材片段模式」，检索与回答双层 LRU+TTL 缓存，弱网/本地依然可用 |
+| 分层降级 | 回答模型失败时降级为可核验的「教材片段模式」；检索和回答使用绑定索引/策略身份的 LRU+TTL 缓存 |
 | 课程表查询 | 自然语言解析「今天有课吗」「第 N 周安排」，返回结构化课程表 |
 
 ### 🧭 智能路由与 Agent 编排
@@ -123,7 +124,7 @@ flowchart LR
     subgraph RAG["🧠 路由与检索（agent/ + retrieval/）"]
         QP["查询预处理 QueryPipeline"]
         ROUTER["声明式规则路由 + 语义路由"]
-        RETR["混合检索 HybridRetriever<br/>BM25 + 向量 · RRF 融合"]
+        RETR["生产检索 RAGService<br/>Raw vector Top-10 · Token context"]
         AGENT["Agent 编排 · 结构化工具门控"]
         SKILL["教学技能 SKILL.md ×4"]
         MEM["学习画像 MemoryCore"]
@@ -191,6 +192,7 @@ cp .env.example .env
 
 ```bash
 pip install -r config/api-requirements.txt   # 后端
+pip install -r config/kb-marker-requirements.txt  # 仅离线构建知识库的机器需要
 cd web && npm install                        # 前端
 ```
 
@@ -284,8 +286,10 @@ var/                       本地运行时状态（chat_history、chroma_db、lo
 | `EMBEDDING_MODEL` | `Qwen/Qwen3-Embedding-8B` | Embedding 模型 |
 | `REMOTE_MODEL_NAME` | `Qwen/Qwen3-8B` | Chat 模型（`USE_REMOTE_LLM=false` 时用本地 Ollama） |
 | `AUTH_SESSION_TTL_HOURS` | `12` | 登录会话有效期 |
-| `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1300` / `300` | 知识库分块参数 |
-| `ENABLE_RERANK` | `false` | 是否开启 CrossEncoder 重排序 |
+| `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1300` / `300` | 通用离线构建默认值；当前生产候选固定为 `700` / `140` |
+| `RAG_CANDIDATE_DEPTH` | `10` | 原始向量候选深度 |
+| `RAG_CONTEXT_MAX_TOKENS` | `4096` | 检索上下文 token 上限（含来源页头） |
+| `RAG_INDEX_MANIFEST_PATH` | 空 | 生产索引 manifest；正式服务启动时必须与 Chroma 路径、集合和 Embedding 匹配 |
 | `WEB_SEARCH_ENABLED` | `false` | 是否开启联网搜索（前端另有显式开关） |
 | `PYTHON_EXEC_BACKEND` | `docker` | 代码沙箱后端（fail-closed） |
 | `RAG_ANSWER_MAX_TOKENS` | `768` | 回答最大 token |

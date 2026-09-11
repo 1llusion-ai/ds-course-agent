@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from unittest.mock import Mock
 
 from chromadb.api.shared_system_client import SharedSystemClient
@@ -10,6 +11,29 @@ import ds_course_agent.retrieval.service as rag_module
 import ds_course_agent.shared.config as config
 from ds_course_agent.retrieval.service import RAGService, clear_rag_retrieval_cache
 from ds_course_agent.shared.vector_store import VectorStoreService
+
+
+class _CharacterTokenCounter:
+    policy_version = "cl100k_base_v1"
+
+    def count(self, text: str) -> int:
+        return len(text)
+
+
+def _metadata(text: str) -> dict:
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    return {
+        "metadata_schema_version": "retrieval-provenance/1.0",
+        "source": "f3.pdf",
+        "source_id": "f3",
+        "source_page": 9,
+        "book_page": 1,
+        "source_char_start": 0,
+        "source_char_end": len(text),
+        "content_sha256": digest,
+        "source_page_sha256": digest,
+        "source_page_text": text,
+    }
 
 
 def _make_vector_only_service(tmp_path, monkeypatch):
@@ -23,15 +47,13 @@ def _make_vector_only_service(tmp_path, monkeypatch):
         ids=["doc-1"],
         documents=["vector-only document"],
         embeddings=[[1.0, 0.0]],
-        metadatas=[{"source": "f3.pdf"}],
+        metadatas=[_metadata("vector-only document")],
     )
 
     service = RAGService.__new__(RAGService)
-    service.use_hybrid = False
-    service.hybrid_retriever = None
     service.vector_store_service = vector_store_service
     service.embedding = object()
-    service._format_documents = lambda documents: "|".join(doc.page_content for doc in documents)
+    service._token_counter = _CharacterTokenCounter()
     return service, vector_store_service
 
 

@@ -1,6 +1,6 @@
 # Nanobot-Inspired Refactor Roadmap and Progress Log
 
-Last updated: 2026-09-08
+Last updated: 2026-09-11
 
 This document records the agreed local plan for borrowing engineering mechanisms
 from `nanobot` while preserving this project's core course-agent architecture.
@@ -140,6 +140,8 @@ changed.
 
 | Date | Item | Status | Evidence / Notes |
 | --- | --- | --- | --- |
+| 2026-09-11 | Production retrieval migration prepared | Ready for approved cutover | Replaced the production RAG path with raw-vector Top-10 retrieval and one typed exact-source-interval context assembler; promoted the frozen `fine_700_140` / Qwen-native index into an isolated 313-document production-shaped collection; added startup manifest identity checks and complete-prompt token validation. Prompt proof covers 48 frozen queries with maximum complete size 5078/8192 tokens; a live `ret-0053` smoke reproduced the frozen Top-10 and included both required source regions. Final gates: 714 passed, 14 skipped, 1 existing warning; Ruff check/format passed; route tests 37/37; harness 119/119, Unexpected RAG 0; panel v2 valid. Active `.env` and `var/chroma_db` remain unchanged. See `docs/retrieval_production_pre_cutover_2026-09-11.md`. |
+| 2026-09-11 | Retrieval evidence, chunk, embedding, strategy, and context selection | Done | Built a dual-annotation source-evidence panel, selected `fine_700_140` with native 4096-dimensional `Qwen/Qwen3-Embedding-8B`, retained raw vectors after unseen strategy validation, and selected rank-preserving exact interval de-duplication under a 4096-token context budget. Rejected query instructions, BM25 routing/RRF, BGE reranking, and MMR based on frozen dev/test evidence. |
 | 2026-09-08 | Architecture review closure | Done, committed in `41065f8` | Closed the remaining utility duplication, public annotation, document-path drift, rollout race, retrieval concurrency/revision/cache, and web-fetch retry items. Historical evidence retains contemporaneous paths with explicit post-M4 mappings; current instructions use the migrated owners. Final gates: 596 passed, 14 skipped, 1 existing warning; Ruff check passed and 233 files passed format check; route tests 37/37; harness 119/119, Unexpected RAG 0; frontend build passed with existing warnings. |
 | 2026-09-08 | Review repair: retrieval semantics and blank-stream recovery | Done, committed in `41065f8` | Added typed `retrieval_attempted` separately from evidence use, projected it through API/history/UI, removed metadata/route-mode inference, and kept blank-stream recovery inside the selected handler boundary without replaying route/hooks/tools. Full suite: 531 passed, 14 skipped, 1 existing warning; Ruff 224 files; route tests 37 passed; harness 119/119, Unexpected RAG 0; frontend build passed. |
 | 2026-09-08 | Layered migration M4: orchestration package | Done, committed in `41065f8` | Agent/routing/events/hooks moved to agent; code executor moved to tools. Old rag/hooks packages removed without shims. API, tools, skills, benchmarks, tests and entrypoint docs migrated. Full suite: 503 passed, 14 skipped, 1 existing warning; harness 119/119, Unexpected RAG 0. |

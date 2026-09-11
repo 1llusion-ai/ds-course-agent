@@ -12,6 +12,7 @@ import json
 import time
 from dataclasses import dataclass
 
+from ds_course_agent.retrieval.hybrid_retriever import HybridRetriever
 from ds_course_agent.retrieval.service import RAGService
 
 
@@ -57,8 +58,7 @@ def evaluate_retrieval(test_cases: list[TestCase], use_hybrid: bool = False, top
     print(f"评估 {'BM25混合检索' if use_hybrid else '纯向量检索'} (Top-{top_k})")
     print("=" * 60)
 
-    # 初始化检索服务
-    service = RAGService(use_hybrid=use_hybrid)
+    retriever = HybridRetriever(k=top_k, use_rerank=False) if use_hybrid else RAGService()
 
     results = {"method": "hybrid" if use_hybrid else "vector", "top_k": top_k, "test_cases": [], "summary": {}}
 
@@ -71,10 +71,11 @@ def evaluate_retrieval(test_cases: list[TestCase], use_hybrid: bool = False, top
         print(f"  预期章节: {tc.expected_chapters}")
 
         start_time = time.time()
-        retrieval_result = service.retrieve(tc.query, top_k=top_k)
+        retrieval_result = retriever.retrieve(tc.query, top_k=top_k)
         elapsed = time.time() - start_time
 
-        retrieved_chapters = [doc.metadata.get("chapter", "Unknown") for doc in retrieval_result.documents]
+        documents = retrieval_result if isinstance(retrieval_result, list) else retrieval_result.documents
+        retrieved_chapters = [doc.metadata.get("chapter", "Unknown") for doc in documents]
         print(f"  检索章节: {retrieved_chapters}")
         print(f"  耗时: {elapsed:.3f}s")
 
@@ -128,6 +129,8 @@ def evaluate_retrieval(test_cases: list[TestCase], use_hybrid: bool = False, top
     print(f"  Top-1 精确匹配率: {results['summary']['top1_accuracy']:.4f}")
     print("=" * 60)
 
+    if isinstance(retriever, RAGService):
+        retriever.close()
     return results
 
 

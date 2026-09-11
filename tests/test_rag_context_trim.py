@@ -1,12 +1,64 @@
+"""Invariants for exact, token-bounded production retrieval context."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock
 
+import chromadb
 import pytest
 from langchain_core.documents import Document
 
 import ds_course_agent.retrieval.service as rag_module
+from ds_course_agent.retrieval.context_assembler import (
+    ChunkProvenance,
+    ContextAssemblyConfig,
+    ContextBudgetError,
+    ContextProvenanceError,
+    RankedContextCandidate,
+    assemble_context,
+    load_token_counter,
+    subtract_interval,
+)
 from ds_course_agent.retrieval.service import RAGService, clear_rag_retrieval_cache
 from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.tools.course_rag import build_sources_from_documents
+
+
+class CharacterTokenCounter:
+    """Deterministic test counter that makes header accounting observable."""
+
+    policy_version = "cl100k_base_v1"
+
+    def count(self, text: str) -> int:
+        return len(text)
+
+
+class RecordingPromptTemplate:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def format(self, **kwargs) -> str:
+        self.calls.append(kwargs)
+        return f"CTX={kwargs['context']}\nQ={kwargs['input']}"
+
+
+class FakeChatModel:
+    def __init__(self, answer: str = "mock-answer") -> None:
+        self.answer = answer
+        self.invoked_prompts: list[str] = []
+        self.streamed_prompts: list[str] = []
+
+    def invoke(self, prompt: str):
+        self.invoked_prompts.append(prompt)
+        return MagicMock(content=self.answer)
+
+    def stream(self, prompt: str):
+        self.streamed_prompts.append(prompt)
+        yield MagicMock(content=self.answer)
 
 
 @pytest.fixture(autouse=True)
@@ -16,273 +68,395 @@ def _clear_retrieval_cache_between_tests():
     clear_rag_retrieval_cache()
 
 
-class RecordingPromptTemplate:
-    def __init__(self):
-        self.calls = []
-
-    def format(self, **kwargs):
-        self.calls.append(kwargs)
-        return f"CTX={kwargs['context']}\nQ={kwargs['input']}"
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-class FakeChatModel:
-    def __init__(self, answer="mock-answer"):
-        self.answer = answer
-        self.invoked_prompts = []
-        self.streamed_prompts = []
+def _document(
+    *,
+    source_id: str = "book",
+    source_page: int = 20,
+    book_page: int = 12,
+    source_text: str = "abcdefghij",
+    start: int = 0,
+    end: int | None = None,
+    chapter: str = "第一章",
+) -> Document:
+    end = len(source_text) if end is None else end
+    content = source_text[start:end]
+    return Document(
+        page_content=content,
+        metadata={
+            "metadata_schema_version": "retrieval-provenance/1.0",
+            "source": "book.pdf",
+            "source_id": source_id,
+            "source_page": source_page,
+            "book_page": book_page,
+            "source_char_start": start,
+            "source_char_end": end,
+            "content_sha256": _sha256(content),
+            "source_page_sha256": _sha256(source_text),
+            "source_page_text": source_text,
+            "chapter": chapter,
+        },
+    )
 
-    def invoke(self, prompt):
-        self.invoked_prompts.append(prompt)
-        return MagicMock(content=self.answer)
 
-    def stream(self, prompt):
-        self.streamed_prompts.append(prompt)
-        yield MagicMock(content=self.answer)
+def _candidate(rank: int, **document_kwargs) -> RankedContextCandidate:
+    document = _document(**document_kwargs)
+    return RankedContextCandidate(
+        document=document,
+        retrieval_rank=rank,
+        distance=rank / 100,
+        provenance=ChunkProvenance.from_document(document),
+    )
 
 
-def _set_trim_config(monkeypatch, *, enabled=True, max_chars=120, doc_max_chars=40):
-    monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_TRIM_ENABLED", enabled, raising=False)
-    monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_MAX_CHARS", max_chars, raising=False)
-    monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_DOC_MAX_CHARS", doc_max_chars, raising=False)
-    monkeypatch.setattr(rag_module.config, "CHAT_SYSTEM_SUFFIX", "", raising=False)
+def _assemble(candidates, *, budget: int = 10_000):
+    return assemble_context(
+        candidates,
+        config=ContextAssemblyConfig(token_budget=budget, candidate_depth=10),
+        token_counter=CharacterTokenCounter(),
+    )
+
+
+@pytest.mark.parametrize(
+    ("interval", "covered", "expected"),
+    [
+        ((0, 10), [(0, 10)], []),
+        ((0, 10), [(0, 4)], [(4, 10)]),
+        ((0, 10), [(2, 8)], [(0, 2), (8, 10)]),
+        ((2, 8), [(0, 10)], []),
+    ],
+)
+def test_subtract_interval_covers_complete_partial_middle_and_nested_overlap(interval, covered, expected):
+    assert subtract_interval(interval, covered) == expected
+
+
+def test_disjoint_remainder_fragments_preserve_source_order():
+    result = _assemble(
+        [
+            _candidate(1, start=3, end=7),
+            _candidate(2, start=0, end=10),
+        ]
+    )
+
+    second = result.selected[1]
+    assert [fragment.text for fragment in second.fragments] == ["abc", "hij"]
+    assert [(fragment.interval.char_start, fragment.interval.char_end) for fragment in second.fragments] == [
+        (0, 3),
+        (7, 10),
+    ]
+    assert "abc\n[...]\nhij" in result.formatted_context
+
+
+def test_deduplication_never_crosses_sources_or_pages():
+    result = _assemble(
+        [
+            _candidate(1, source_id="book-a", source_page=20, book_page=12, start=0, end=5),
+            _candidate(2, source_id="book-a", source_page=21, book_page=13, start=0, end=5),
+            _candidate(3, source_id="book-b", source_page=20, book_page=12, start=0, end=5),
+        ]
+    )
+
+    assert [item.retrieval_rank for item in result.selected] == [1, 2, 3]
+    assert result.duplicate_characters_removed == 0
+
+
+def test_missing_or_invalid_exact_provenance_fails_clearly():
+    with pytest.raises(ContextProvenanceError, match="missing exact production provenance"):
+        ChunkProvenance.from_document(Document(page_content="text", metadata={"book_page": 1}))
+
+    document = _document(start=0, end=5)
+    document.metadata["source_char_end"] = 6
+    with pytest.raises(ContextProvenanceError, match="does not reproduce"):
+        ChunkProvenance.from_document(document)
+
+
+def _write_index_manifest(tmp_path: Path, *, embedding_model: str = "Qwen/Qwen3-Embedding-8B") -> Path:
+    persist = tmp_path / "chroma"
+    persist.mkdir()
+    relative_persist = persist.relative_to(rag_module.PROJECT_ROOT).as_posix()
+    digest = "a" * 64
+    manifest = {
+        "schema_version": "retrieval-production-index/1.0",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "candidate_bundle": {"path": "candidate.json", "sha256": digest},
+        "candidate_index_manifest": {"path": "index.json", "sha256": digest},
+        "source_collection": "source",
+        "destination_collection": "course_test",
+        "persist_directory": relative_persist,
+        "document_count": 313,
+        "vector_dimension": 4096,
+        "embedding_model": embedding_model,
+        "embedding_distance": "cosine",
+        "embedding_query_prefix": "",
+        "metadata_schema_version": "retrieval-provenance/1.0",
+        "collection_revision": digest,
+        "document_set_sha256": digest,
+        "source_vectors_sha256": digest,
+        "destination_vectors_sha256": digest,
+        "maximum_vector_absolute_error": 0.0,
+        "minimum_vector_cosine_similarity": 1.0,
+        "code_revision": "test",
+        "build_seconds": 1.0,
+    }
+    path = tmp_path / "production_manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    return path
+
+
+def test_index_manifest_identity_is_required_and_embedding_bound(monkeypatch, tmp_path):
+    missing = tmp_path / "missing.json"
+    monkeypatch.setattr(rag_module.config, "RAG_INDEX_MANIFEST_PATH", str(missing), raising=False)
+    with pytest.raises(RuntimeError, match="manifest is missing"):
+        rag_module._load_index_manifest()
+
+    manifest_path = _write_index_manifest(tmp_path)
+    monkeypatch.setattr(rag_module.config, "RAG_INDEX_MANIFEST_PATH", str(manifest_path), raising=False)
+    monkeypatch.setattr(rag_module.config, "CHROMA_PERSIST_DIR", str(tmp_path / "chroma"), raising=False)
+    monkeypatch.setattr(rag_module.config, "collection_name", "course_test", raising=False)
+    monkeypatch.setattr(rag_module.config, "MODEL_EMBEDDING", "Qwen/Qwen3-Embedding-8B", raising=False)
+    assert rag_module._load_index_manifest().vector_dimension == 4096
+
+    monkeypatch.setattr(rag_module.config, "MODEL_EMBEDDING", "wrong-model", raising=False)
+    with pytest.raises(RuntimeError, match="embedding model does not match"):
+        rag_module._load_index_manifest()
+
+
+def test_vector_rank_order_is_required_and_preserved():
+    candidates = [_candidate(2), _candidate(1, source_page=21, book_page=13)]
+    with pytest.raises(ValueError, match="ascending vector ranks"):
+        _assemble(candidates)
+
+    result = _assemble(list(reversed(candidates)))
+    assert [item.retrieval_rank for item in result.selected] == [1, 2]
+
+
+def test_headers_are_included_in_token_accounting_and_budget_is_never_exceeded():
+    candidate = _candidate(1, source_text="abc", end=3)
+    full = _assemble([candidate])
+    header_tokens = full.used_tokens - len("abc")
+    assert header_tokens > 0
+
+    constrained = _assemble([candidate], budget=full.used_tokens - 1)
+    assert constrained.used_tokens == 0
+    assert constrained.stopped_on_overflow is True
+    assert constrained.overflow_retrieval_rank == 1
+
+
+def test_fully_covered_chunk_is_skipped_and_later_candidate_is_considered():
+    result = _assemble(
+        [
+            _candidate(1, start=0, end=5),
+            _candidate(2, start=0, end=5),
+            _candidate(3, source_page=21, book_page=13, start=0, end=5),
+        ]
+    )
+
+    assert [item.retrieval_rank for item in result.selected] == [1, 3]
+    assert result.skipped_fully_covered_count == 1
+    assert result.duplicate_characters_removed == 5
+
+
+def test_overflow_stops_lower_ranked_candidates_under_frozen_policy():
+    first = _candidate(1, source_text="a", end=1)
+    second = _candidate(2, source_page=21, book_page=13, source_text="b" * 100, end=100)
+    third = _candidate(3, source_page=22, book_page=14, source_text="c", end=1)
+    first_only = _assemble([first])
+
+    result = _assemble([first, second, third], budget=first_only.used_tokens + 1)
+
+    assert [item.retrieval_rank for item in result.selected] == [1]
+    assert result.stopped_on_overflow is True
+    assert result.overflow_retrieval_rank == 2
+    assert "c" not in result.formatted_context
+
+
+def test_selected_documents_match_fragments_actually_sent_to_the_model():
+    result = _assemble(
+        [
+            _candidate(1, start=0, end=6, chapter="第1章"),
+            _candidate(2, start=4, end=10, chapter="第1章"),
+        ]
+    )
+
+    documents = result.documents
+    assert [document.page_content for document in documents] == ["abcdef", "ghij"]
+    assert [document.metadata["retrieval_rank"] for document in documents] == [1, 2]
+    sources = build_sources_from_documents(documents)
+    assert len(sources) == 1
+    assert sources[0]["reference"].endswith("第12页")
+
+
+def _service_with_vector_results(monkeypatch, documents: list[Document]) -> RAGService:
+    monkeypatch.setattr(rag_module, "embed_query_cached", lambda *args, **kwargs: [1.0, 0.0])
+    monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_MAX_TOKENS", 10_000, raising=False)
     monkeypatch.setattr(rag_module.config, "RAG_RETRIEVAL_CACHE_ENABLED", True, raising=False)
     monkeypatch.setattr(rag_module.config, "RAG_RETRIEVAL_CACHE_TTL_SECONDS", 600.0, raising=False)
     monkeypatch.setattr(rag_module.config, "RAG_RETRIEVAL_CACHE_SIZE", 128, raising=False)
-
-
-def _make_doc(source, page, content, extra_metadata=None):
-    metadata = {"source": source, "book_page": page}
-    if extra_metadata:
-        metadata.update(extra_metadata)
-    return Document(page_content=content, metadata=metadata)
-
-
-def test_rag_content_trim_uses_shared_budget_with_dynamic_marker_and_preserves_whitespace(monkeypatch):
-    _set_trim_config(monkeypatch, enabled=True, max_chars=300, doc_max_chars=35)
-
+    monkeypatch.setattr(rag_module.config, "CHAT_SYSTEM_SUFFIX", "", raising=False)
     service = RAGService.__new__(RAGService)
-    formatted, trimmed = service._format_one_document(
-        _make_doc("marker.pdf", 3, "甲" * 80),
-        max_content_chars=35,
-    )
+    service.embedding = object()
+    service._token_counter = CharacterTokenCounter()
+    service.vector_store_service = MagicMock()
+    service.vector_store_service.query.return_value = {
+        "ids": [[f"chunk-{index}" for index in range(len(documents))]],
+        "documents": [[document.page_content for document in documents]],
+        "metadatas": [[document.metadata for document in documents]],
+        "distances": [[index / 100 for index in range(len(documents))]],
+    }
+    return service
 
-    assert trimmed is True
-    assert "文档片段：甲" in formatted
-    assert "[片段已裁剪：原始 80 字，保留前 35 字]" in formatted
 
-
-def test_retrieve_trims_each_document_and_total_budget_preserves_metadata(monkeypatch):
-    _set_trim_config(monkeypatch, enabled=True, max_chars=300, doc_max_chars=35)
-
-    service = RAGService.__new__(RAGService)
-    service.use_hybrid = True
-    service.hybrid_retriever = MagicMock()
-    service.hybrid_retriever.retrieve.return_value = [
-        _make_doc("chapter-1.pdf", 12, "甲" * 80, {"chapter": "第一章"}),
-        _make_doc("chapter-2.pdf", 18, "乙" * 80, {"chapter": "第二章"}),
-        _make_doc("chapter-3.pdf", 25, "丙" * 80, {"chapter": "第三章"}),
+def test_retrieve_returns_only_documents_in_assembled_context(monkeypatch):
+    documents = [
+        _document(start=0, end=6),
+        _document(start=4, end=10),
+        _document(source_page=21, book_page=13, source_text="later", end=5),
     ]
+    service = _service_with_vector_results(monkeypatch, documents)
 
-    token = begin_query_trace({"entrypoint": "unit_test"})
     result = service.retrieve("测试问题", top_k=3)
-    trace = end_query_trace(token)
 
     assert result.has_results is True
-    assert len(result.documents) == 3
-    assert len(result.formatted_context) <= 300
-    assert result.formatted_context.count("文档片段：") == 2
-    assert "chapter-1.pdf" in result.formatted_context
-    assert "chapter-2.pdf" in result.formatted_context
-    assert "chapter-3.pdf" not in result.formatted_context
-    assert "page_note" in result.formatted_context
-    assert "甲" * 80 not in result.formatted_context
-    assert build_sources_from_documents(result.documents)[0] == {"reference": "《第一章》第12页"}
-    assert any(
-        marker in result.formatted_context
-        for marker in ("[片段已裁剪", "[片段已按总上下文预算裁剪", "[片段因上下文预算省略]")
-    )
-    assert any(
-        event["stage"] == "rag.context_trim" and event["data"]["location"] == "rag.format_documents"
-        for event in trace["events"]
-    )
+    assert [document.page_content for document in result.documents] == ["abcdef", "ghij", "later"]
+    assert service.vector_store_service.query.call_args.kwargs["n_results"] == 3
+    assert "教材第12页" in result.formatted_context
+    assert result.assembly.used_tokens <= result.assembly.token_budget
 
 
-def test_retrieve_cache_hit_avoids_second_retriever_call_and_returns_clones(monkeypatch):
-    _set_trim_config(monkeypatch, enabled=True, max_chars=300, doc_max_chars=35)
+def test_retrieve_cache_hit_returns_document_clones(monkeypatch):
+    service = _service_with_vector_results(monkeypatch, [_document(source_text="PCA", end=3)])
 
-    service = RAGService.__new__(RAGService)
-    service.use_hybrid = True
-    service.hybrid_retriever = MagicMock()
-    service.hybrid_retriever.retrieve.return_value = [
-        _make_doc("chapter-cache.pdf", 22, "PCA 可以用于降维", {"chapter": "第7章"})
-    ]
-
-    token = begin_query_trace({"entrypoint": "unit_test"})
     first = service.retrieve("PCA 有什么作用？", top_k=1)
     second = service.retrieve(" PCA 有什么作用？ ", top_k=1)
-    trace = end_query_trace(token)
 
     assert first.formatted_context == second.formatted_context
     assert first.documents[0].metadata == second.documents[0].metadata
     assert first.documents[0] is not second.documents[0]
-    assert service.hybrid_retriever.retrieve.call_count == 1
-    assert any(event["stage"] == "rag.retrieve.cache_miss" for event in trace["events"])
-    assert any(event["stage"] == "rag.retrieve.cache_store" for event in trace["events"])
-    assert any(event["stage"] == "rag.retrieve.cache_hit" for event in trace["events"])
+    assert service.vector_store_service.query.call_count == 1
 
 
-def test_retrieve_cache_key_includes_top_k(monkeypatch):
-    _set_trim_config(monkeypatch, enabled=True, max_chars=500, doc_max_chars=80)
+def test_retrieval_cache_key_changes_with_policy_index_and_model(monkeypatch):
+    def key() -> str:
+        return rag_module._retrieval_cache_key(
+            "question",
+            candidate_depth=10,
+            similarity_threshold=1.0,
+            revision="revision-a",
+        )
 
+    original = key()
+    monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_MAX_TOKENS", 2048, raising=False)
+    assert key() != original
+    monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_MAX_TOKENS", 4096, raising=False)
+    monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_DEDUPLICATION_MODE", "policy-v2", raising=False)
+    assert key() != original
+    monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_DEDUPLICATION_MODE", "exact_source_interval_v1", raising=False)
+    monkeypatch.setattr(rag_module.config, "collection_name", "new-index", raising=False)
+    assert key() != original
+    monkeypatch.setattr(rag_module.config, "collection_name", "rag_knowledge_base", raising=False)
+    monkeypatch.setattr(rag_module.config, "MODEL_EMBEDDING", "embedding-v2", raising=False)
+    assert key() != original
+
+
+def test_complete_answer_prompt_budget_is_validated(monkeypatch):
     service = RAGService.__new__(RAGService)
-    service.use_hybrid = True
-    service.hybrid_retriever = MagicMock()
-    service.hybrid_retriever.retrieve.side_effect = [
-        [_make_doc("top1.pdf", 1, "top one")],
-        [
-            _make_doc("top1.pdf", 1, "top one"),
-            _make_doc("top2.pdf", 2, "top two"),
-        ],
-    ]
+    service._token_counter = CharacterTokenCounter()
+    service.prompt_template = RecordingPromptTemplate()
+    service.chat_model = FakeChatModel()
+    monkeypatch.setattr(rag_module.config, "CHAT_SYSTEM_SUFFIX", "", raising=False)
+    monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_MAX_TOKENS", 100, raising=False)
+    monkeypatch.setattr(rag_module.config, "RAG_ANSWER_MAX_TOKENS", 10, raising=False)
+    monkeypatch.setattr(rag_module.config, "CONTEXT_WINDOW_TOKENS", 25, raising=False)
 
-    first = service.retrieve("PCA 有什么作用？", top_k=1)
-    second = service.retrieve("PCA 有什么作用？", top_k=2)
-
-    assert len(first.documents) == 1
-    assert len(second.documents) == 2
-    assert service.hybrid_retriever.retrieve.call_count == 2
+    with pytest.raises(ContextBudgetError, match="complete RAG prompt"):
+        service.answer_with_context("question", "context")
+    assert service.chat_model.invoked_prompts == []
 
 
-def test_retrieve_does_not_cache_empty_results(monkeypatch):
-    _set_trim_config(monkeypatch, enabled=True, max_chars=500, doc_max_chars=80)
-
+def test_answer_prompt_trace_reports_token_contract(monkeypatch):
     service = RAGService.__new__(RAGService)
-    service.use_hybrid = True
-    service.hybrid_retriever = MagicMock()
-    service.hybrid_retriever.retrieve.return_value = []
-
-    assert not service.retrieve("temporary outage", top_k=2).has_results
-    assert not service.retrieve("temporary outage", top_k=2).has_results
-    assert service.hybrid_retriever.retrieve.call_count == 2
-
-
-def test_retrieve_cache_key_includes_model_identity(monkeypatch):
-    _set_trim_config(monkeypatch, enabled=True, max_chars=500, doc_max_chars=80)
-
-    service = RAGService.__new__(RAGService)
-    service.use_hybrid = True
-    service.hybrid_retriever = MagicMock()
-    service.hybrid_retriever.retrieve.side_effect = [
-        [_make_doc("first.pdf", 1, "first model")],
-        [_make_doc("second.pdf", 2, "second model")],
-    ]
-
-    monkeypatch.setattr(rag_module.config, "MODEL_EMBEDDING", "embedding-a")
-    first = service.retrieve("same question", top_k=1)
-    monkeypatch.setattr(rag_module.config, "MODEL_EMBEDDING", "embedding-b")
-    second = service.retrieve("same question", top_k=1)
-
-    assert first.documents[0].page_content == "first model"
-    assert second.documents[0].page_content == "second model"
-    assert service.hybrid_retriever.retrieve.call_count == 2
-
-
-def test_format_documents_keeps_full_content_when_trim_disabled(monkeypatch):
-    _set_trim_config(monkeypatch, enabled=False, max_chars=20, doc_max_chars=5)
-
-    service = RAGService.__new__(RAGService)
-    long_text = "课程资料" * 30
-    docs = [_make_doc("no-trim.pdf", 7, long_text)]
-
-    formatted_context = service._format_documents(docs)
-
-    assert long_text in formatted_context
-    assert len(formatted_context) > 20
-    assert "no-trim.pdf" in formatted_context
-    assert "page_note" in formatted_context
-    assert "片段已裁剪" not in formatted_context
-    assert "片段已按总上下文预算裁剪" not in formatted_context
-    assert "片段因上下文预算省略" not in formatted_context
-
-
-def test_rag_answer_prompt_is_teaching_oriented_not_compact():
-    assert "教学型回答" in rag_module._RAG_ANSWER_SYSTEM_PROMPT
-    assert "简单例子或类比" in rag_module._RAG_ANSWER_SYSTEM_PROMPT
-    assert "常见误区或学习建议" in rag_module._RAG_ANSWER_SYSTEM_PROMPT
-    assert "请基于参考材料认真讲解" in rag_module._RAG_ANSWER_USER_PROMPT
-    assert "请简洁回答" not in rag_module._RAG_ANSWER_USER_PROMPT
-    assert "3-6句" not in rag_module._RAG_ANSWER_SYSTEM_PROMPT
-
-
-def test_answer_with_context_applies_final_context_budget_protection(monkeypatch):
-    _set_trim_config(monkeypatch, enabled=True, max_chars=150, doc_max_chars=25)
-
-    service = RAGService.__new__(RAGService)
-    prompt_template = RecordingPromptTemplate()
-    fake_model = FakeChatModel()
-    service.prompt_template = prompt_template
-    service.chat_model = fake_model
-
-    context = (
-        "文档片段：" + ("数据" * 60) + "\n"
-        "文档元数据：{'source': 'final-guard.pdf', 'page': 8, 'page_note': '教材第8页'}"
-    )
+    service._token_counter = CharacterTokenCounter()
+    service.prompt_template = RecordingPromptTemplate()
+    service.chat_model = FakeChatModel()
+    monkeypatch.setattr(rag_module.config, "CHAT_SYSTEM_SUFFIX", "", raising=False)
+    monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_MAX_TOKENS", 100, raising=False)
+    monkeypatch.setattr(rag_module.config, "RAG_ANSWER_MAX_TOKENS", 10, raising=False)
+    monkeypatch.setattr(rag_module.config, "CONTEXT_WINDOW_TOKENS", 100, raising=False)
 
     token = begin_query_trace({"entrypoint": "unit_test"})
-    answer = service.answer_with_context("什么是数据科学？", context)
+    answer = service.answer_with_context("question", "context")
     trace = end_query_trace(token)
 
     assert answer.answer == "mock-answer"
-    assert fake_model.invoked_prompts
-    assert prompt_template.calls, "prompt_template.format should be called"
+    event = next(event for event in trace["events"] if event["stage"] == "rag.answer.prompt")
+    assert event["data"]["context_tokens"] == len("context")
+    assert event["data"]["answer_reserved_tokens"] == 10
+    assert event["data"]["context_window_tokens"] == 100
 
-    passed_context = prompt_template.calls[0]["context"]
-    expected_max_tokens = int(getattr(rag_module.config, "RAG_ANSWER_MAX_TOKENS", 384) or 384)
-    assert len(passed_context) <= 150
-    assert "final-guard.pdf" in passed_context
-    assert "page_note" in passed_context
-    assert "[片段已按总上下文预算裁剪" in passed_context or "[片段因上下文预算省略]" in passed_context
-    assert any(
-        event["stage"] == "rag.answer.prompt"
-        and event["data"]["mode"] == "sync"
-        and event["data"]["context_chars"] == len(passed_context)
-        and event["data"]["max_tokens"] == expected_max_tokens
-        for event in trace["events"]
+
+def test_stream_answer_uses_the_same_prompt_budget_validation(monkeypatch):
+    service = RAGService.__new__(RAGService)
+    service._token_counter = CharacterTokenCounter()
+    service.prompt_template = RecordingPromptTemplate()
+    service.chat_model = FakeChatModel()
+    monkeypatch.setattr(rag_module.config, "CHAT_SYSTEM_SUFFIX", "", raising=False)
+    monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_MAX_TOKENS", 100, raising=False)
+    monkeypatch.setattr(rag_module.config, "RAG_ANSWER_MAX_TOKENS", 10, raising=False)
+    monkeypatch.setattr(rag_module.config, "CONTEXT_WINDOW_TOKENS", 100, raising=False)
+
+    assert list(service.stream_answer_with_context("question", "context")) == ["mock-answer"]
+    assert service.chat_model.streamed_prompts == ["CTX=context\nQ=question"]
+
+
+def test_ret_0053_rank_7_evidence_enters_real_4096_token_context(monkeypatch):
+    root = Path.cwd()
+    retrieval_report_path = root / "var/artifacts/kb_eval/retrieval_strategy_20260910/vector_raw_unseen_test_v2.json"
+    promoted_path = root / "var/chroma_candidates/production_switch_20260910/qwen3_8b_native/chroma"
+    if not retrieval_report_path.is_file() or not promoted_path.is_dir():
+        pytest.skip("frozen ret-0053 ranking and promoted index are local evaluation artifacts")
+
+    report = json.loads(retrieval_report_path.read_text(encoding="utf-8"))
+    row = next(query for query in report["queries"] if query["id"] == "ret-0053")
+    retrieved = row["retrieved"]
+    chunk_ids = [item["chunk_id"] for item in retrieved]
+    collection = chromadb.PersistentClient(path=str(promoted_path)).get_collection("course_c37b7b78")
+    payload = collection.get(ids=chunk_ids, include=["documents", "metadatas"])
+    by_id = {
+        chunk_id: Document(page_content=document, metadata=metadata)
+        for chunk_id, document, metadata in zip(payload["ids"], payload["documents"], payload["metadatas"], strict=True)
+    }
+    candidates = [
+        RankedContextCandidate(
+            document=by_id[item["chunk_id"]],
+            retrieval_rank=item["rank"],
+            distance=max(0.0, 1.0 - item["ranking_score"]),
+            provenance=ChunkProvenance.from_document(by_id[item["chunk_id"]]),
+        )
+        for item in retrieved
+    ]
+    counter = load_token_counter(root / "var/cache/tiktoken")
+    assembly = assemble_context(
+        candidates,
+        config=ContextAssemblyConfig(token_budget=4096, candidate_depth=10),
+        token_counter=counter,
     )
 
-
-def test_stream_answer_with_context_applies_final_context_budget_protection(monkeypatch):
-    _set_trim_config(monkeypatch, enabled=True, max_chars=150, doc_max_chars=25)
+    selected_pages = {fragment.interval.source_page for item in assembly.selected for fragment in item.fragments}
+    assert len(assembly.selected) == 10
+    assert [item.retrieval_rank for item in assembly.selected] == list(range(1, 11))
+    assert 114 in selected_pages
+    assert 119 in selected_pages
+    assert assembly.selected[6].retrieval_rank == 7
+    assert assembly.used_tokens == 2760
 
     service = RAGService.__new__(RAGService)
-    prompt_template = RecordingPromptTemplate()
-    fake_model = FakeChatModel()
-    service.prompt_template = prompt_template
-    service.chat_model = fake_model
-
-    context = (
-        "文档片段：" + ("数据" * 60) + "\n"
-        "文档元数据：{'source': 'stream-guard.pdf', 'page': 9, 'page_note': '教材第9页'}"
-    )
-
-    token = begin_query_trace({"entrypoint": "unit_test"})
-    chunks = list(service.stream_answer_with_context("什么是数据科学？", context))
-    trace = end_query_trace(token)
-
-    assert chunks == ["mock-answer"]
-    assert fake_model.streamed_prompts
-    assert prompt_template.calls, "prompt_template.format should be called"
-
-    passed_context = prompt_template.calls[0]["context"]
-    expected_max_tokens = int(getattr(rag_module.config, "RAG_ANSWER_MAX_TOKENS", 384) or 384)
-    assert len(passed_context) <= 150
-    assert "stream-guard.pdf" in passed_context
-    assert "page_note" in passed_context
-    assert "[片段已按总上下文预算裁剪" in passed_context or "[片段因上下文预算省略]" in passed_context
-    assert any(
-        event["stage"] == "rag.answer.prompt"
-        and event["data"]["mode"] == "stream"
-        and event["data"]["context_chars"] == len(passed_context)
-        and event["data"]["max_tokens"] == expected_max_tokens
-        for event in trace["events"]
-    )
+    service._token_counter = counter
+    service.prompt_template = rag_module.build_rag_prompt_template()
+    monkeypatch.setattr(rag_module.config, "RAG_CONTEXT_MAX_TOKENS", 4096, raising=False)
+    monkeypatch.setattr(rag_module.config, "RAG_ANSWER_MAX_TOKENS", 768, raising=False)
+    monkeypatch.setattr(rag_module.config, "CONTEXT_WINDOW_TOKENS", 8192, raising=False)
+    prompt = service._prepare_answer_prompt(row["query"], assembly.formatted_context, mode="validation")
+    assert counter.count(prompt) + 768 <= 8192

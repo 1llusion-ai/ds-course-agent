@@ -21,9 +21,13 @@ from ds_course_agent.shared.config import (
     RAG_ANSWER_CACHE_TTL_SECONDS,
     RAG_ANSWER_MAX_TOKENS,
     RAG_ANSWER_TIMEOUT_SECONDS,
-    RAG_CONTEXT_DOC_MAX_CHARS,
-    RAG_CONTEXT_MAX_CHARS,
-    RAG_CONTEXT_TRIM_ENABLED,
+    RAG_CANDIDATE_DEPTH,
+    RAG_CONTEXT_DEDUPLICATION_MODE,
+    RAG_CONTEXT_HEADER_POLICY,
+    RAG_CONTEXT_MAX_TOKENS,
+    RAG_CONTEXT_OVERFLOW_POLICY,
+    RAG_CONTEXT_TOKENIZER_POLICY,
+    RAG_INDEX_MANIFEST_PATH,
     RAG_RETRIEVAL_CACHE_ENABLED,
     RAG_RETRIEVAL_CACHE_SIZE,
     RAG_RETRIEVAL_CACHE_TTL_SECONDS,
@@ -47,9 +51,13 @@ from ds_course_agent.shared.config import (
     rag_answer_cache_ttl_seconds,
     rag_answer_max_tokens,
     rag_answer_timeout_seconds,
-    rag_context_doc_max_chars,
-    rag_context_max_chars,
-    rag_context_trim_enabled,
+    rag_candidate_depth,
+    rag_context_deduplication_mode,
+    rag_context_header_policy,
+    rag_context_max_tokens,
+    rag_context_overflow_policy,
+    rag_context_tokenizer_policy,
+    rag_index_manifest_path,
     rag_retrieval_cache_enabled,
     rag_retrieval_cache_size,
     rag_retrieval_cache_ttl_seconds,
@@ -76,11 +84,15 @@ def test_course_collection_name_overrides_default_collection():
     assert cfg.COLLECTION_NAME == "course_custom"
 
 
-def test_rag_context_trim_settings_are_exported():
+def test_rag_context_policy_settings_are_exported():
     cfg = Settings(
-        RAG_CONTEXT_TRIM_ENABLED=False,
-        RAG_CONTEXT_MAX_CHARS=1234,
-        RAG_CONTEXT_DOC_MAX_CHARS=456,
+        RAG_CANDIDATE_DEPTH=10,
+        RAG_CONTEXT_MAX_TOKENS=4096,
+        RAG_CONTEXT_TOKENIZER_POLICY="cl100k_base_v1",
+        RAG_CONTEXT_DEDUPLICATION_MODE="exact_source_interval_v1",
+        RAG_CONTEXT_OVERFLOW_POLICY="stop_v1",
+        RAG_CONTEXT_HEADER_POLICY="compact_page_v1",
+        RAG_INDEX_MANIFEST_PATH="var/chroma/production_manifest.json",
         RAG_ANSWER_MAX_TOKENS=321,
         RAG_ANSWER_TIMEOUT_SECONDS=7.5,
         RAG_ANSWER_CACHE_ENABLED=False,
@@ -91,9 +103,13 @@ def test_rag_context_trim_settings_are_exported():
         RAG_RETRIEVAL_CACHE_TTL_SECONDS=456.0,
         RAG_RETRIEVAL_CACHE_SIZE=19,
     )
-    assert cfg.RAG_CONTEXT_TRIM_ENABLED is False
-    assert cfg.RAG_CONTEXT_MAX_CHARS == 1234
-    assert cfg.RAG_CONTEXT_DOC_MAX_CHARS == 456
+    assert cfg.RAG_CANDIDATE_DEPTH == 10
+    assert cfg.RAG_CONTEXT_MAX_TOKENS == 4096
+    assert cfg.RAG_CONTEXT_TOKENIZER_POLICY == "cl100k_base_v1"
+    assert cfg.RAG_CONTEXT_DEDUPLICATION_MODE == "exact_source_interval_v1"
+    assert cfg.RAG_CONTEXT_OVERFLOW_POLICY == "stop_v1"
+    assert cfg.RAG_CONTEXT_HEADER_POLICY == "compact_page_v1"
+    assert cfg.RAG_INDEX_MANIFEST_PATH == "var/chroma/production_manifest.json"
     assert cfg.RAG_ANSWER_MAX_TOKENS == 321
     assert cfg.RAG_ANSWER_TIMEOUT_SECONDS == 7.5
     assert cfg.RAG_ANSWER_CACHE_ENABLED is False
@@ -104,9 +120,13 @@ def test_rag_context_trim_settings_are_exported():
     assert cfg.RAG_RETRIEVAL_CACHE_TTL_SECONDS == 456.0
     assert cfg.RAG_RETRIEVAL_CACHE_SIZE == 19
 
-    assert RAG_CONTEXT_TRIM_ENABLED == settings.RAG_CONTEXT_TRIM_ENABLED
-    assert RAG_CONTEXT_MAX_CHARS == settings.RAG_CONTEXT_MAX_CHARS
-    assert RAG_CONTEXT_DOC_MAX_CHARS == settings.RAG_CONTEXT_DOC_MAX_CHARS
+    assert RAG_CANDIDATE_DEPTH == settings.RAG_CANDIDATE_DEPTH
+    assert RAG_CONTEXT_MAX_TOKENS == settings.RAG_CONTEXT_MAX_TOKENS
+    assert RAG_CONTEXT_TOKENIZER_POLICY == settings.RAG_CONTEXT_TOKENIZER_POLICY
+    assert RAG_CONTEXT_DEDUPLICATION_MODE == settings.RAG_CONTEXT_DEDUPLICATION_MODE
+    assert RAG_CONTEXT_OVERFLOW_POLICY == settings.RAG_CONTEXT_OVERFLOW_POLICY
+    assert RAG_CONTEXT_HEADER_POLICY == settings.RAG_CONTEXT_HEADER_POLICY
+    assert RAG_INDEX_MANIFEST_PATH == settings.RAG_INDEX_MANIFEST_PATH
     assert RAG_ANSWER_MAX_TOKENS == settings.RAG_ANSWER_MAX_TOKENS
     assert RAG_ANSWER_TIMEOUT_SECONDS == settings.RAG_ANSWER_TIMEOUT_SECONDS
     assert RAG_ANSWER_CACHE_ENABLED == settings.RAG_ANSWER_CACHE_ENABLED
@@ -116,9 +136,13 @@ def test_rag_context_trim_settings_are_exported():
     assert RAG_RETRIEVAL_CACHE_ENABLED == settings.RAG_RETRIEVAL_CACHE_ENABLED
     assert RAG_RETRIEVAL_CACHE_TTL_SECONDS == settings.RAG_RETRIEVAL_CACHE_TTL_SECONDS
     assert RAG_RETRIEVAL_CACHE_SIZE == settings.RAG_RETRIEVAL_CACHE_SIZE
-    assert rag_context_trim_enabled == settings.RAG_CONTEXT_TRIM_ENABLED
-    assert rag_context_max_chars == settings.RAG_CONTEXT_MAX_CHARS
-    assert rag_context_doc_max_chars == settings.RAG_CONTEXT_DOC_MAX_CHARS
+    assert rag_candidate_depth == settings.RAG_CANDIDATE_DEPTH
+    assert rag_context_max_tokens == settings.RAG_CONTEXT_MAX_TOKENS
+    assert rag_context_tokenizer_policy == settings.RAG_CONTEXT_TOKENIZER_POLICY
+    assert rag_context_deduplication_mode == settings.RAG_CONTEXT_DEDUPLICATION_MODE
+    assert rag_context_overflow_policy == settings.RAG_CONTEXT_OVERFLOW_POLICY
+    assert rag_context_header_policy == settings.RAG_CONTEXT_HEADER_POLICY
+    assert rag_index_manifest_path == settings.RAG_INDEX_MANIFEST_PATH
     assert rag_answer_max_tokens == settings.RAG_ANSWER_MAX_TOKENS
     assert rag_answer_timeout_seconds == settings.RAG_ANSWER_TIMEOUT_SECONDS
     assert rag_answer_cache_enabled == settings.RAG_ANSWER_CACHE_ENABLED
