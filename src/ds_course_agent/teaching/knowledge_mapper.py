@@ -19,7 +19,7 @@ import numpy as np
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.shared.cache import CacheInfo
-from ds_course_agent.shared.embeddings import create_embedding_model, embed_query_cached
+from ds_course_agent.shared.embeddings import EmbeddingCircuitMode, create_embedding_model, embed_query_cached
 from ds_course_agent.shared.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
@@ -530,7 +530,11 @@ class KnowledgeMapper:
     def _embed_text(self, text: str) -> np.ndarray:
         """获取文本 embedding"""
         model = self._get_embedding_model()
-        embedding = embed_query_cached(model, text)
+        embedding = embed_query_cached(
+            model,
+            text,
+            circuit_mode=EmbeddingCircuitMode.OBSERVE_ONLY,
+        )
         return np.array(embedding)
 
     def _cosine_similarity(self, v1: np.ndarray, v2: np.ndarray) -> float:

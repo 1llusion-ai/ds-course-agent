@@ -230,7 +230,7 @@ def test_embedding_query_cache_uses_model_base_and_text(monkeypatch):
     assert embeddings.embedding_query_cache_info().hits >= 1
 
 
-def test_embedding_circuit_breaker_fast_fails_after_error(monkeypatch):
+def test_embedding_circuit_breaker_fast_fails_after_consecutive_errors(monkeypatch):
     embeddings.clear_embedding_query_cache()
     embeddings.reset_embedding_circuit_breaker()
     monkeypatch.setattr(embeddings.config, "EMBEDDING_QUERY_CACHE_SIZE", 0)
@@ -246,12 +246,9 @@ def test_embedding_circuit_breaker_fast_fails_after_error(monkeypatch):
 
     model = FailingEmbeddingModel()
 
-    try:
-        embeddings.embed_query_cached(model, "第一次")
-    except RuntimeError:
-        pass
-    else:
-        raise AssertionError("first failing embedding call should raise")
+    for index in range(3):
+        with pytest.raises(RuntimeError, match="network down"):
+            embeddings.embed_query_cached(model, f"失败请求{index}")
 
     try:
         embeddings.embed_query_cached(model, "第二次")
@@ -260,11 +257,11 @@ def test_embedding_circuit_breaker_fast_fails_after_error(monkeypatch):
     else:
         raise AssertionError("second call should fast-fail via circuit breaker")
 
-    assert model.calls == 1
+    assert model.calls == 3
     embeddings.reset_embedding_circuit_breaker()
 
 
-def test_embedding_query_timeout_guard_opens_circuit(monkeypatch):
+def test_embedding_query_timeout_is_bounded_without_opening_circuit_for_one_request(monkeypatch):
     embeddings.clear_embedding_query_cache()
     embeddings.reset_embedding_circuit_breaker()
     monkeypatch.setattr(embeddings.config, "EMBEDDING_QUERY_CACHE_SIZE", 0)
@@ -286,10 +283,42 @@ def test_embedding_query_timeout_guard_opens_circuit(monkeypatch):
         embeddings.embed_query_cached(model, "慢查询", timeout_seconds=0.001)
     trace = end_query_trace(token)
 
-    assert model.calls == 1
+    assert model.calls == 2
     assert any(event["stage"] == "embedding.timeout" and event["status"] == "error" for event in trace["events"])
+    assert any(event["stage"] == "embedding.retry" for event in trace["events"])
+    assert not any(event["stage"] == "embedding.circuit_open" for event in trace["events"])
 
-    with pytest.raises(embeddings.EmbeddingUnavailable):
-        embeddings.embed_query_cached(model, "第二次")
-    assert model.calls == 1
+    assert embeddings.embed_query_cached(model, "第二次", timeout_seconds=0.5) == [1.0]
+    assert model.calls == 3
+    embeddings.reset_embedding_circuit_breaker()
+
+
+def test_observe_only_embedding_failure_does_not_open_circuit(monkeypatch):
+    embeddings.clear_embedding_query_cache()
+    embeddings.reset_embedding_circuit_breaker()
+    monkeypatch.setattr(embeddings.config, "EMBEDDING_QUERY_CACHE_SIZE", 0)
+    monkeypatch.setattr(embeddings.config, "EMBEDDING_CIRCUIT_BREAKER_SECONDS", 30)
+
+    class FailingEmbeddingModel:
+        def embed_query(self, text):
+            raise RuntimeError("optional request failed")
+
+    class HealthyEmbeddingModel:
+        def __init__(self):
+            self.calls = 0
+
+        def embed_query(self, text):
+            self.calls += 1
+            return [1.0]
+
+    with pytest.raises(RuntimeError, match="optional request failed"):
+        embeddings.embed_query_cached(
+            FailingEmbeddingModel(),
+            "概念映射",
+            circuit_mode=embeddings.EmbeddingCircuitMode.OBSERVE_ONLY,
+        )
+
+    retrieval_model = HealthyEmbeddingModel()
+    assert embeddings.embed_query_cached(retrieval_model, "课程检索") == [1.0]
+    assert retrieval_model.calls == 1
     embeddings.reset_embedding_circuit_breaker()
