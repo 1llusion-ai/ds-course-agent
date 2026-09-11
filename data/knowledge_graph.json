@@ -1,6 +1,6 @@
 {
   "course_name": "数据科学导论",
-  "version": "1.1",
+  "version": "1.6",
   "alias_policies": {
     "分类": {
       "match_mode": "contextual",
@@ -25,26 +25,25 @@
         "数字素养"
       ],
       "related_concepts": [
-        "数据思维",
-        "数据技能",
-        "数字领导力"
+        "digital_leadership",
+        "dikw_pyramid"
       ],
       "chapter": "第1章",
       "section": "1.1"
     },
     {
       "canonical_id": "data_science_definition",
-      "display_name": "数据科学定义",
+      "display_name": "数据科学",
       "aliases": [
+        "数据科学",
         "什么是数据科学",
         "data science",
         "数据科学是什么",
-        "数据科学的定义"
+        "数据科学的定义",
+        "数据科学定义"
       ],
       "related_concepts": [
-        "数据分析",
-        "机器学习",
-        "大数据"
+        "data_thinking"
       ],
       "chapter": "第1章",
       "section": "1.1"
@@ -57,11 +56,7 @@
         "data skills",
         "数据能力"
       ],
-      "related_concepts": [
-        "数据素养",
-        "Python语言",
-        "数据分析"
-      ],
+      "related_concepts": [],
       "chapter": "第1章",
       "section": "1.1"
     },
@@ -74,9 +69,8 @@
         "数据要素"
       ],
       "related_concepts": [
-        "数据思维",
-        "数字化",
-        "数据资源"
+        "data_businessization",
+        "digitization"
       ],
       "chapter": "第1章",
       "section": "1.1"
@@ -90,9 +84,7 @@
         "数字化领导力"
       ],
       "related_concepts": [
-        "数据思维",
-        "数字化",
-        "数据驱动决策"
+        "data_literacy"
       ],
       "chapter": "第1章",
       "section": "1.1"
@@ -107,10 +99,8 @@
         "数据化思维"
       ],
       "related_concepts": [
-        "数据素养",
-        "数据技能",
-        "数字领导力",
-        "数字经济"
+        "data_science_definition",
+        "technology_hype_cycle"
       ],
       "chapter": "第1章",
       "section": "1.1"
@@ -125,16 +115,16 @@
         "新兴技术成熟度曲线"
       ],
       "related_concepts": [
-        "新兴技术",
-        "数字技术",
-        "技术预测"
+        "data_science_history",
+        "data_thinking",
+        "technology_forecasting"
       ],
       "chapter": "第1章",
       "section": "1.2"
     },
     {
       "canonical_id": "data_engineering_workflow",
-      "display_name": "数据工程基本流程",
+      "display_name": "数据工程流程",
       "aliases": [
         "数据工程基本流程",
         "数据工程流程",
@@ -142,10 +132,8 @@
         "数据生命周期"
       ],
       "related_concepts": [
-        "数据采集",
-        "数据组织与存储",
-        "数据挖掘",
-        "数据应用与决策"
+        "data_collection",
+        "data_storage_models"
       ],
       "chapter": "第1章",
       "section": "1.3"
@@ -161,10 +149,7 @@
         "图数据库"
       ],
       "related_concepts": [
-        "数据工程基本流程",
-        "MySQL",
-        "MongoDB",
-        "Redis"
+        "data_engineering_workflow"
       ],
       "chapter": "第1章",
       "section": "1.3"
@@ -178,9 +163,8 @@
         "特征分析"
       ],
       "related_concepts": [
-        "推荐系统",
-        "用户画像",
-        "精准营销"
+        "data_insight",
+        "feature_engineering"
       ],
       "chapter": "第1章",
       "section": "1.4.1"
@@ -195,9 +179,8 @@
         "政务推荐"
       ],
       "related_concepts": [
-        "推荐系统",
-        "自然语言处理",
-        "智能问答"
+        "natural_language_processing",
+        "text_mining"
       ],
       "chapter": "第1章",
       "section": "1.4.2"
@@ -211,9 +194,7 @@
         "制造业数据挖掘"
       ],
       "related_concepts": [
-        "数据仓库",
-        "多源异构数据",
-        "预测性维护"
+        "data_fusion"
       ],
       "chapter": "第1章",
       "section": "1.4.3"
@@ -228,9 +209,8 @@
         "需求分析"
       ],
       "related_concepts": [
-        "专利分析",
-        "趋势预测",
-        "数据驱动决策"
+        "data_insight",
+        "technology_hype_cycle"
       ],
       "chapter": "第1章",
       "section": "1.4.4"
@@ -244,10 +224,7 @@
         "data information knowledge wisdom"
       ],
       "related_concepts": [
-        "数据",
-        "信息",
-        "知识",
-        "智慧"
+        "data_literacy"
       ],
       "chapter": "第2章",
       "section": "2.1.1"
@@ -260,11 +237,7 @@
         "数据的分类",
         "data classification"
       ],
-      "related_concepts": [
-        "结构化数据",
-        "半结构化数据",
-        "非结构化数据"
-      ],
+      "related_concepts": [],
       "chapter": "第2章",
       "section": "2.1.2"
     },
@@ -274,13 +247,10 @@
       "aliases": [
         "半结构化数据",
         "semi-structured data",
-        "xml",
-        "html"
+        "xml"
       ],
       "related_concepts": [
-        "数据分类",
-        "网页数据",
-        "网络爬虫"
+        "html_document"
       ],
       "chapter": "第2章",
       "section": "2.1.2"
@@ -293,9 +263,7 @@
         "structured data"
       ],
       "related_concepts": [
-        "数据分类",
-        "关系型数据库",
-        "表格数据"
+        "dataframe"
       ],
       "chapter": "第2章",
       "section": "2.1.2"
@@ -309,9 +277,7 @@
         "文本图像音频视频"
       ],
       "related_concepts": [
-        "数据分类",
-        "文本数据",
-        "图像数据"
+        "image_representation"
       ],
       "chapter": "第2章",
       "section": "2.1.2"
@@ -326,9 +292,7 @@
         "大数据特征"
       ],
       "related_concepts": [
-        "数据特征",
-        "大数据",
-        "价值密度"
+        "data_science_tasks"
       ],
       "chapter": "第2章",
       "section": "2.1.3"
@@ -343,9 +307,7 @@
         "信息化与数字化"
       ],
       "related_concepts": [
-        "数字经济",
-        "数据要素",
-        "数字化转型"
+        "digital_economy"
       ],
       "chapter": "第2章",
       "section": "2.1.4"
@@ -355,12 +317,12 @@
       "display_name": "数据科学发展历程",
       "aliases": [
         "数据科学发展历程",
+        "数据科学的发展历程",
         "数据科学里程碑",
         "data science history"
       ],
       "related_concepts": [
-        "数据科学定义",
-        "数据科学知识体系"
+        "technology_hype_cycle"
       ],
       "chapter": "第2章",
       "section": "2.2.2"
@@ -370,29 +332,29 @@
       "display_name": "数据科学知识体系",
       "aliases": [
         "数据科学知识体系",
+        "数据科学的知识体系",
         "数据科学知识框架",
         "data science knowledge system"
       ],
       "related_concepts": [
-        "数据科学定义",
-        "交叉学科",
-        "数据科学发展历程"
+        "data_science_tasks"
       ],
       "chapter": "第2章",
       "section": "2.2.3"
     },
     {
       "canonical_id": "data_science_tasks",
-      "display_name": "数据科学研究任务",
+      "display_name": "数据科学任务",
       "aliases": [
+        "数据科学任务",
+        "数据科学的任务",
         "数据科学研究任务",
         "数据科学研究内容",
         "data science tasks"
       ],
       "related_concepts": [
-        "数据洞见",
-        "数据业务化",
-        "数据生命周期"
+        "big_data_4v",
+        "data_science_knowledge_system"
       ],
       "chapter": "第2章",
       "section": "2.2.4"
@@ -406,9 +368,7 @@
         "数据的业务化"
       ],
       "related_concepts": [
-        "数字化",
-        "数据洞见",
-        "数据驱动决策"
+        "digital_economy"
       ],
       "chapter": "第2章",
       "section": "2.2.5"
@@ -422,9 +382,9 @@
         "数据价值发现"
       ],
       "related_concepts": [
-        "数据挖掘",
-        "数据科学研究任务",
-        "数据业务化"
+        "data_visualization",
+        "feature_discovery",
+        "technology_forecasting"
       ],
       "chapter": "第2章",
       "section": "2.2.5"
@@ -439,10 +399,9 @@
         "数据来源"
       ],
       "related_concepts": [
-        "数据科学基本流程",
-        "网络爬虫",
-        "数据源",
-        "数据清洗"
+        "data_engineering_workflow",
+        "tabular_data_io",
+        "web_crawler"
       ],
       "chapter": "第2章",
       "section": "2.3"
@@ -457,9 +416,9 @@
         "数据对齐"
       ],
       "related_concepts": [
-        "缺失值处理",
-        "数据冲突检测",
-        "流式计算"
+        "data_merge",
+        "intelligent_manufacturing",
+        "missing_values"
       ],
       "chapter": "第2章",
       "section": "2.3"
@@ -472,47 +431,23 @@
         "stream processing",
         "实时计算"
       ],
-      "related_concepts": [
-        "时间序列数据",
-        "数据科学基本流程",
-        "计算引擎"
-      ],
+      "related_concepts": [],
       "chapter": "第2章",
       "section": "2.3"
     },
     {
       "canonical_id": "python_language",
-      "display_name": "Python语言",
+      "display_name": "Python",
       "aliases": [
+        "Python",
         "python语言",
         "python",
-        "python基础"
+        "python基础",
+        "Python语言"
       ],
-      "related_concepts": [
-        "Python语法",
-        "Anaconda",
-        "Jupyter Notebook",
-        "PyCharm"
-      ],
+      "related_concepts": [],
       "chapter": "第3章",
       "section": "3.1.1"
-    },
-    {
-      "canonical_id": "anaconda",
-      "display_name": "Anaconda",
-      "aliases": [
-        "anaconda",
-        "conda",
-        "anaconda navigator",
-        "anaconda prompt"
-      ],
-      "related_concepts": [
-        "Python开发环境",
-        "Jupyter Notebook",
-        "虚拟环境"
-      ],
-      "chapter": "第3章",
-      "section": "3.1.3"
     },
     {
       "canonical_id": "jupyter_notebook",
@@ -523,24 +458,7 @@
         "notebook环境"
       ],
       "related_concepts": [
-        "Anaconda",
-        "Python开发环境",
-        "数据探索"
-      ],
-      "chapter": "第3章",
-      "section": "3.1.3"
-    },
-    {
-      "canonical_id": "pycharm",
-      "display_name": "PyCharm",
-      "aliases": [
-        "pycharm",
-        "python编辑器",
-        "pycharm编辑器"
-      ],
-      "related_concepts": [
-        "Python开发环境",
-        "Jupyter Notebook"
+        "python_ide"
       ],
       "chapter": "第3章",
       "section": "3.1.3"
@@ -551,12 +469,19 @@
       "aliases": [
         "python开发环境",
         "集成开发环境",
-        "python环境搭建"
+        "python环境搭建",
+        "Anaconda",
+        "anaconda",
+        "conda",
+        "Anaconda Navigator",
+        "Anaconda Prompt",
+        "PyCharm",
+        "pycharm",
+        "Python编辑器",
+        "PyCharm编辑器"
       ],
       "related_concepts": [
-        "PyCharm",
-        "Jupyter Notebook",
-        "Anaconda"
+        "jupyter_notebook"
       ],
       "chapter": "第3章",
       "section": "3.1.3"
@@ -570,11 +495,7 @@
         "变量与赋值",
         "流程控制"
       ],
-      "related_concepts": [
-        "Python语言",
-        "Python数据类型",
-        "Python函数"
-      ],
+      "related_concepts": [],
       "chapter": "第3章",
       "section": "3.2"
     },
@@ -587,9 +508,7 @@
         "list tuple dict set"
       ],
       "related_concepts": [
-        "Python语法",
-        "列表",
-        "字典"
+        "dataframe"
       ],
       "chapter": "第3章",
       "section": "3.2.4"
@@ -603,9 +522,7 @@
         "自定义函数"
       ],
       "related_concepts": [
-        "Python语法",
-        "局部变量",
-        "返回值"
+        "data_mapping"
       ],
       "chapter": "第3章",
       "section": "3.2.5"
@@ -619,12 +536,7 @@
         "oop",
         "类和对象"
       ],
-      "related_concepts": [
-        "Python函数",
-        "Python语法",
-        "类",
-        "对象"
-      ],
+      "related_concepts": [],
       "chapter": "第3章",
       "section": "3.2.6"
     },
@@ -638,10 +550,7 @@
         "爬虫"
       ],
       "related_concepts": [
-        "爬虫安全",
-        "HTML",
-        "URL",
-        "robots.txt协议"
+        "data_collection"
       ],
       "chapter": "第3章",
       "section": "3.3"
@@ -655,11 +564,7 @@
         "反爬虫",
         "爬虫合规"
       ],
-      "related_concepts": [
-        "网络爬虫",
-        "robots.txt协议",
-        "网页采集"
-      ],
+      "related_concepts": [],
       "chapter": "第3章",
       "section": "3.3.1"
     },
@@ -670,10 +575,7 @@
         "robots.txt",
         "robots.txt协议"
       ],
-      "related_concepts": [
-        "网络爬虫",
-        "爬虫安全"
-      ],
+      "related_concepts": [],
       "chapter": "第3章",
       "section": "3.3.1"
     },
@@ -686,9 +588,8 @@
         "网页源码"
       ],
       "related_concepts": [
-        "网络爬虫",
-        "半结构化数据",
-        "URL"
+        "semi_structured_data",
+        "url_concept"
       ],
       "chapter": "第3章",
       "section": "3.3.2"
@@ -701,8 +602,7 @@
         "统一资源定位符"
       ],
       "related_concepts": [
-        "网络爬虫",
-        "HTML"
+        "html_document"
       ],
       "chapter": "第3章",
       "section": "3.3.2"
@@ -712,15 +612,73 @@
       "display_name": "DataFrame",
       "aliases": [
         "dataframe",
-        "数据表"
+        "数据表",
+        "从字典创建 DataFrame",
+        "创建DataFrame",
+        "创建 DataFrame",
+        "字典创建数据表",
+        "查看数据形状与首尾行",
+        "DataFrame形状",
+        "查看首尾行",
+        "head和tail",
+        "shape和head",
+        "检查非空数量与类型",
+        "DataFrame.info",
+        "df.info",
+        "Pandas info",
+        "非空数量"
       ],
       "related_concepts": [
-        "Pandas",
-        "Series",
-        "索引与选择"
+        "python_data_types",
+        "structured_data"
       ],
       "chapter": "第4章",
-      "section": "4.1.1"
+      "section": "4.1.1",
+      "learning_points": [
+        {
+          "title": "从字典创建 DataFrame",
+          "objective": "能由等长列表组成的字典构造包含指定列名的数据表。",
+          "question": "如何用 question 和 answer 两个列表构造两列的 DataFrame？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 52,
+              "source_page": 60,
+              "quote": "qa=pd.DataFrame({'question':['今天的天气','兔子的英文怎么说'],'answer':['晴','rabbit']})\n这里使用了 Pandas库的十分重要的一种数据类型：DataFrame。DataFrame是一个数据表，DataFrame中的每一个条目都是一列，条目的名字就是列名。上面的代码中，创建了一个 DataFrame类型的数据表，表中包含两列数据，第一列是"
+            }
+          ]
+        },
+        {
+          "title": "查看数据形状与首尾行",
+          "objective": "能区分 shape 属性与 head、tail 方法，并检查行列数及首尾记录。",
+          "question": "为什么 book.shape 不加括号，而 book.head() 需要加括号？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 52,
+              "source_page": 60,
+              "quote": "读取数据后，可以使用shape属性查看读取的数据表的维度。book.shape # 注意这是一个属性，不带括号还可以使用head(）方法查看数据表的前5行，或使用tail(）方法查看数据表的后5行。book.head() # head(）方法可接受一个参数 n,n 表示显示的行数，默认为 5 book.tail() # head(）和 tail(）都是方法，需要带括号\n2.创建数据如果要创建新的数"
+            }
+          ]
+        },
+        {
+          "title": "检查非空数量与类型",
+          "objective": "能通过 DataFrame.info 输出判断列类型和非空记录数量。",
+          "question": "总共 100 行的数据中，某列显示 82 non-null，说明什么？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 60,
+              "source_page": 68,
+              "quote": "该方法能够输出每列数据的非空值的数量、数据类型，以及整个数据表的内存占用信息等。在数据建模时，一般要求输入特征不能为空，可以使用info(）方法查看，代码如下：squid.info()\n输出结果如下：<class'pandas.core.frame.DataFrame'> RangeIndex:30000 entries,0 to 29999 Data columns(total 12 colum"
+            }
+          ]
+        }
+      ],
+      "summary": "具有行索引与列标签的二维表格数据结构，是 Pandas 组织和分析数据的核心对象。"
     },
     {
       "canonical_id": "pandas",
@@ -730,26 +688,44 @@
         "pandas库"
       ],
       "related_concepts": [
-        "DataFrame",
-        "Series",
-        "read_csv"
+        "opencv",
+        "scikit_learn"
       ],
       "chapter": "第4章",
-      "section": "4.1.1"
+      "section": "4.1.1",
+      "summary": "面向表格与序列数据的 Python 分析工具库，支持数据读取、选择、统计和清洗。"
     },
     {
       "canonical_id": "series",
       "display_name": "Series",
       "aliases": [
         "series",
-        "数据序列"
+        "数据序列",
+        "从列表创建 Series",
+        "创建Series",
+        "创建 Series",
+        "pd.Series"
       ],
-      "related_concepts": [
-        "Pandas",
-        "DataFrame"
-      ],
+      "related_concepts": [],
       "chapter": "第4章",
-      "section": "4.1.1"
+      "section": "4.1.1",
+      "learning_points": [
+        {
+          "title": "从列表创建 Series",
+          "objective": "能从列表创建 Series，并区分一维数据序列与二维数据表。",
+          "question": "pd.Series([1,2,3]) 与一列的 DataFrame 在对象类型上有什么区别？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 53,
+              "source_page": 61,
+              "quote": "可以直接传入一个列表来构造一个Series对象，代码如下：pd.Series([1,2,3,4,5])\nSeries数据序列本质上是 DataFrame数据表中的一列。4.1.2 索引与选择\n1.获取单个数据列\nPandas索引数据 4.1.2节~4.1.6节使用的数据是某网站上用户对一个影片的评论信息，包含用户的昵称、所在地、粉丝数量，以及评论的发布时间、内容、来源等。首先读取数据文件并输出前5"
+            }
+          ]
+        }
+      ],
+      "summary": "带索引的一维数据序列，可表达数据表中的单列，也可作为独立对象使用。"
     },
     {
       "canonical_id": "data_indexing",
@@ -757,32 +733,172 @@
       "aliases": [
         "索引与选择",
         "数据索引",
-        "条件筛选"
+        "条件筛选",
+        "选择单列数据",
+        "Pandas单列选择",
+        "DataFrame单列",
+        "选择多列数据",
+        "Pandas多列选择",
+        "DataFrame双中括号",
+        "使用布尔条件筛选",
+        "Pandas布尔筛选",
+        "布尔条件筛选",
+        "布尔掩码",
+        "组合多个筛选条件",
+        "Pandas多条件筛选",
+        "多个筛选条件",
+        "Pandas与或非",
+        "按候选值集合筛选",
+        "isin",
+        "候选值集合筛选"
       ],
-      "related_concepts": [
-        "iloc",
-        "loc",
-        "Pandas"
-      ],
+      "related_concepts": [],
       "chapter": "第4章",
-      "section": "4.1.2"
+      "section": "4.1.2",
+      "learning_points": [
+        {
+          "title": "选择单列数据",
+          "objective": "能使用方括号与列名取得一列数据，并说明返回的对象类型。",
+          "question": "df[\"name\"] 返回什么类型？列名有空格时应如何选择这一列？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 54,
+              "source_page": 62,
+              "quote": "另一种数据索引的方式是以字典的方式，Python语言有字典类型的数据，DataFrame 类型的数据可以用键值对的方式索引，如squid[\"user_name\"]，该方法与第一种索引方法的结果相同。上述两种获取列数据的方法，从语法上来看没有任何差别，在实际的数据科学编程中也经常看到两种方法的使用，但是以字典的方式进行索引的方法可以获取一些名称比较复杂的字段，如名称中带有空格的字段。例如，usern"
+            }
+          ]
+        },
+        {
+          "title": "选择多列数据",
+          "objective": "能使用列名列表选择多列，并解释双层方括号的含义。",
+          "question": "df[[\"name\", \"city\"]] 为什么需要两层方括号？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 55,
+              "source_page": 63,
+              "quote": "接收一个列表作为输入，返回多列数据组成的 DataFrame数据表，因此数据的获取形式变为【[]]，看上去有些特殊，如果仅使用【】会报错，提示 KeyError:('user_ name','user_location')，即没有这个键，因为程序将（\"user_name\",\"user_location\"）看成一个键。3.基于索引选择数据基于索引选择数据使用iloc属性，格式为iloc[n]，想选择"
+            }
+          ]
+        },
+        {
+          "title": "使用布尔条件筛选",
+          "objective": "能由列比较生成布尔序列，并选出满足条件的记录。",
+          "question": "如何筛选出 city 列等于 France 的全部记录？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 57,
+              "source_page": 65,
+              "quote": "输出结果是一系列布尔值，当布尔值为 True时，表示当前行满足筛选条件，当布尔值为 False时，表示当前行不满足筛选条件。然后根据输出结果，使用loc(）方法筛选出布尔值为 True的数据，代码如下："
+            }
+          ]
+        },
+        {
+          "title": "组合多个筛选条件",
+          "objective": "能用带括号的条件与 &、|、~ 表达多个筛选要求。",
+          "question": "如何筛选 city 为 France 且 followers 大于 100 的记录？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 58,
+              "source_page": 66,
+              "quote": "多个筛选条件之间使用\"与\"\"或\"\"非\"关联。例如，想要筛选出用户位置在法国，且粉丝数量大于100的用户，代码如下：squid.loc[(squid[\"user_location\"]==\"France\")&(squid[\"user_followers\"]>100)]\n使用多个条件筛选的输出结果如图4-4所示。图4-4 使用多个条件筛选的输出结果在代码中，& 表示\"与\",|表示\"或\",~表示\"非\"。P"
+            }
+          ]
+        },
+        {
+          "title": "按候选值集合筛选",
+          "objective": "能用 isin 判断列值是否属于给定集合并筛选记录。",
+          "question": "如何一次筛选城市为 Paris、London 或 Rome 的记录？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 58,
+              "source_page": 66,
+              "quote": "可以使用isin(）方法。例如，筛选用户位置在德国、法国或美国的用户，代码如下："
+            }
+          ]
+        }
+      ],
+      "summary": "通过列名、行标签、位置或条件定位所需数据，建立从数据结构到分析对象的访问方式。"
     },
     {
       "canonical_id": "loc_iloc",
-      "display_name": "loc与iloc",
+      "display_name": "标签索引与位置索引",
       "aliases": [
+        "标签索引与位置索引",
         "loc与iloc",
+        "按位置选择 iloc",
         "iloc",
+        "按位置选择",
+        "按位置索引",
+        "基于位置选择",
+        "位置切片与负数索引",
+        "iloc切片",
+        "iloc 切片",
+        "Pandas负数索引",
+        "按标签选择 loc",
+        "loc",
+        "按标签选择",
+        "按标签索引",
         "loc索引",
-        "基于标签选择",
-        "基于位置选择"
+        "基于标签选择"
       ],
-      "related_concepts": [
-        "索引与选择",
-        "Pandas"
-      ],
+      "related_concepts": [],
       "chapter": "第4章",
-      "section": "4.1.2"
+      "section": "4.1.2",
+      "learning_points": [
+        {
+          "title": "按位置选择 iloc",
+          "objective": "能用从零开始的行列位置，通过 iloc 选择指定数据。",
+          "question": "取数据表第 4 行、第 2 列的值，应如何写 iloc？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 55,
+              "source_page": 63,
+              "quote": "基于索引选择数据使用iloc属性，格式为iloc[n]，想选择数据的第几行，就将n设置为该行的索引序号。例如，选择user_description列的第4行数据，代码如下：squid[\"user_description\"].iloc[3]\n输出结果如下：\"Where the heck is the karma\\ nI'm going on my school grave brb\\ n# Techn"
+            }
+          ]
+        },
+        {
+          "title": "位置切片与负数索引",
+          "objective": "能用 iloc 切片选择前若干行或末尾若干行，并解释切片范围。",
+          "question": "df.iloc[:3, 0] 和 df.iloc[-5:] 分别选择哪些数据？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 56,
+              "source_page": 64,
+              "quote": "squid.iloc[:3,0]\n输出结果如下：0 the_ûndër- ratèd niggáh 1 Best uncle on planet earth 2 marcie Name:user_name,dtype:object\n在Python语言中，负数代表从结尾开始索引，这在 Pandas库中同样适用。选择整个数据表的最后5行数据的代码如下：squid.iloc[- 5:]\n输出结果如图4-"
+            }
+          ]
+        },
+        {
+          "title": "按标签选择 loc",
+          "objective": "能通过行标签和列名使用 loc 选择数据，并区分标签与位置。",
+          "question": "当行标签为 10、20、30 时，df.loc[20] 与 df.iloc[1] 如何对应？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 57,
+              "source_page": 65,
+              "quote": "这里的1表示数据表的行标签，如果 1出现在iloc属性中，则表示索引序号。loc属性常常与iloc属性混淆。在使用iloc属性时，忽略了数据表的标签，也就是字段名和行名，直接将数据表当成一个矩阵，通过元素所在的行和列进行选择。通常情况下，在选择列数据时，每列都带有字段名，因此使用loc属性。5.条件筛选在 Pandas库中，可以使用条件语句对数据进行筛选，类似于 SQL 中 SELECT A FR"
+            }
+          ]
+        }
+      ],
+      "summary": "Pandas 的两种索引语义：loc 使用标签，iloc 使用位置；整数标签也需要与位置区分。"
     },
     {
       "canonical_id": "descriptive_statistics",
@@ -793,16 +909,70 @@
         "标准差",
         "中位数",
         "众数",
-        "descriptive statistics"
+        "descriptive statistics",
+        "解读 describe 统计摘要",
+        "describe",
+        "统计摘要",
+        "统计描述表",
+        "统计不同取值的频次",
+        "value_counts",
+        "取值频次统计",
+        "查看不重复的取值",
+        "Pandas unique",
+        "不重复的取值",
+        "Series.unique"
       ],
       "related_concepts": [
-        "均值",
-        "方差",
-        "标准差",
-        "数据分析"
+        "eda",
+        "groupby_aggregation"
       ],
       "chapter": "第4章",
-      "section": "4.1.3"
+      "section": "4.1.3",
+      "learning_points": [
+        {
+          "title": "解读 describe 统计摘要",
+          "objective": "能解读 describe 输出的均值、标准差、极值和四分位数。",
+          "question": "describe 输出中的 mean、std 和 50% 分别表示什么？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 60,
+              "source_page": 68,
+              "quote": "describe(）方法给出了用户粉丝数的平均值、标准差、最小值、上四分位数、下四分位数等统计量，通过该方法可以对数据的分布有初步认识。如果要单独查看某个统计量，可以直接调用计算该统计量的方法，如计算平均值的代码如下：squid[\"user_followers\"].mean()\n另一个较为有用的统计方法是info()，该方法能够输出每列数据的非空值的数量、数据类型，以及整个数据表的内存占用信息等。"
+            }
+          ]
+        },
+        {
+          "title": "统计不同取值的频次",
+          "objective": "能用 value_counts 统计分类取值出现次数。",
+          "question": "要统计每种设备各出现多少次，应该调用哪个方法？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 61,
+              "source_page": 69,
+              "quote": "value_counts(）方法的作用是统计某个特征字段的不同取值的个数，该方法常用于性别统计、星座统计等。例如，对用户发布评论所使用的设备进行统计，代码如下：squid[\"source\"].value_counts()\n输出结果如下：Twitter for iPhone 13919 Twitter for Android 8851 Twitter Web App 5251 Twitter for"
+            }
+          ]
+        },
+        {
+          "title": "查看不重复的取值",
+          "objective": "能用 unique 获取列中不同的取值，并与频次统计区分。",
+          "question": "查看有哪些设备类型与统计各类型次数，应分别使用什么方法？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 60,
+              "source_page": 68,
+              "quote": "unique(）方法用于查看某一列数据中有多少个不同的数据。例如，查看用户发布评论所使用的设备有哪些，代码如下：squid[\"source\"].unique()"
+            }
+          ]
+        }
+      ],
+      "summary": "用频次、集中趋势、离散程度与分位数等信息概括数据分布。"
     },
     {
       "canonical_id": "hypothesis_testing",
@@ -815,9 +985,7 @@
         "显著性检验"
       ],
       "related_concepts": [
-        "描述性统计",
-        "显著性检验",
-        "统计推断"
+        "probability"
       ],
       "chapter": "第4章",
       "section": "4.1.3"
@@ -832,9 +1000,7 @@
         "随机变量"
       ],
       "related_concepts": [
-        "概率分布",
-        "随机变量",
-        "统计分析"
+        "hypothesis_testing"
       ],
       "chapter": "第4章",
       "section": "4.1.3"
@@ -844,16 +1010,34 @@
       "display_name": "分组聚合",
       "aliases": [
         "分组聚合",
+        "聚合统计",
+        "分组后进行聚合",
         "groupby",
-        "聚合统计"
+        "分组后聚合"
       ],
       "related_concepts": [
-        "Pandas",
-        "排序",
-        "统计分析"
+        "data_sorting",
+        "descriptive_statistics"
       ],
       "chapter": "第4章",
-      "section": "4.1.4"
+      "section": "4.1.4",
+      "learning_points": [
+        {
+          "title": "分组后进行聚合",
+          "objective": "能按指定字段分组，并对每组执行 count 或 max 等聚合。",
+          "question": "如何按 source 分组，求每种来源的最大 followers 值？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 62,
+              "source_page": 70,
+              "quote": "根据source对用户进行分组，然后获取每组用户的source字段的数据，再使用count(）方法统计其出现的次数。也可以使用其他的聚合方法，如统计每种设备上粉丝数最多的用户的粉丝数，可以使用 max(）方法，代码如下："
+            }
+          ]
+        }
+      ],
+      "summary": "按字段把数据划分为组，再在各组上计算统计量，形成分组比较。"
     },
     {
       "canonical_id": "data_cleaning",
@@ -862,18 +1046,16 @@
         "数据预处理",
         "data cleaning",
         "数据清理",
-        "缺失值处理",
         "异常值处理",
         "数据清洗"
       ],
       "related_concepts": [
-        "缺失值处理",
-        "数据类型",
-        "数据融合",
-        "数据预处理"
+        "data_mapping",
+        "feature_engineering"
       ],
       "chapter": "第4章",
-      "section": "4.1.5"
+      "section": "4.1.5",
+      "summary": "识别并处理数据质量问题，使类型、缺失情况和表示方式适合后续分析。"
     },
     {
       "canonical_id": "missing_values",
@@ -882,15 +1064,52 @@
         "缺失值处理",
         "缺失值",
         "missing value",
-        "空值处理"
+        "空值处理",
+        "识别缺失记录",
+        "isnull",
+        "Pandas空值检测",
+        "用指定值填充缺失值",
+        "fillna",
+        "指定值填充缺失值",
+        "缺失值填充"
       ],
       "related_concepts": [
-        "数据清洗",
-        "数据类型",
-        "数据融合"
+        "data_fusion",
+        "data_type_conversion"
       ],
       "chapter": "第4章",
-      "section": "4.1.5"
+      "section": "4.1.5",
+      "learning_points": [
+        {
+          "title": "识别缺失记录",
+          "objective": "能用 isnull 生成缺失值掩码，筛选出指定列为空的记录。",
+          "question": "如何找出 location 列为空的记录？为什么要用 isnull？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 65,
+              "source_page": 73,
+              "quote": "isnull(）方法用于查看数据是否存在空值，fillna(）方法常用于填充缺失值。例如，查看用户所在位置为空的数据，并将空值填充为 Unknown，代码如下：unknown_loc =squid[squid[\"user_location\"].isnull()][\"user_location\"] unknown_loc.fillna('Unknown')\n输出结果如下：0 Unknown 1 Un"
+            }
+          ]
+        },
+        {
+          "title": "用指定值填充缺失值",
+          "objective": "能用 fillna 将缺失值替换为指定值，并保存返回结果。",
+          "question": "如何将 location 列的空值填为 Unknown 并更新这一列？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 65,
+              "source_page": 73,
+              "quote": "fillna(）方法常用于填充缺失值。例如，查看用户所在位置为空的数据，并将空值填充为 Unknown，代码如下：unknown_loc =squid[squid[\"user_location\"].isnull()][\"user_location\"] unknown_loc.fillna('Unknown')\n输出结果如下：0 Unknown 1 Unknown 2 Unknown 6 Unkno"
+            }
+          ]
+        }
+      ],
+      "summary": "识别数据中缺失的信息，并根据字段含义和分析目的选择合适的处理方式。"
     },
     {
       "canonical_id": "data_merge",
@@ -899,45 +1118,138 @@
         "数据拼接",
         "数据合并",
         "merge",
-        "concat"
+        "沿行拼接数据表",
+        "pd.concat",
+        "concat",
+        "沿行拼接",
+        "重建拼接后的索引",
+        "ignore_index",
+        "拼接后重新编号"
       ],
       "related_concepts": [
-        "Pandas",
-        "分组聚合",
-        "数据分析"
+        "data_fusion",
+        "tabular_data_io"
       ],
       "chapter": "第4章",
-      "section": "4.1.6"
+      "section": "4.1.6",
+      "learning_points": [
+        {
+          "title": "沿行拼接数据表",
+          "objective": "能将列结构一致的多张表按行拼接，并说明默认索引行为。",
+          "question": "将 df1 和 df2 上下拼接应该使用哪个函数？原索引会怎样？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 66,
+              "source_page": 74,
+              "quote": "使用pd.concat(）函数，代码如下：df1=squid.iloc[0:2,:] df2=squid.iloc[5:7,:] pd.concat([df1,df2])\n数据拼接的输出结果如图4-7所示。图4-7 数据拼接的输出结果第一列的标签是0、1、5、6，分别对应源数据的第1行、第2行、第6行、第7行数据。也就是说，组合之后的结果会保留原来的编号，不会重新编号。如果设置参数ignore_"
+            }
+          ]
+        },
+        {
+          "title": "重建拼接后的索引",
+          "objective": "能用 ignore_index=True 为拼接结果生成连续索引。",
+          "question": "拼接结果保留了 0、1、5、6 的索引，怎样改为从零连续编号？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 66,
+              "source_page": 74,
+              "quote": "拼接后的结果会重新编号，代码如下：df1=squid.iloc[0:2,:] df2=squid.iloc[5:7,:] pd.concat([df1,df2],ignore_index=True)\n输出结果如图4-8所示。图4-8 数据拼接后重新编号的输出结果"
+            }
+          ]
+        }
+      ],
+      "summary": "将多份数据组织为统一的数据表，同时处理字段、拼接方向与索引。"
     },
     {
       "canonical_id": "scikit_learn",
       "display_name": "scikit-learn",
       "aliases": [
         "scikit-learn",
-        "sklearn"
+        "sklearn",
+        "训练分类器并预测",
+        "SVC分类器训练",
+        "SVC预测",
+        "svm.fit",
+        "训练线性回归并预测",
+        "LinearRegression拟合",
+        "线性回归fit和predict"
       ],
       "related_concepts": [
-        "分类模型",
-        "回归模型",
-        "聚类模型"
+        "pandas",
+        "supervised_learning",
+        "unsupervised_learning"
       ],
       "chapter": "第4章",
-      "section": "4.2"
+      "section": "4.2",
+      "learning_points": [
+        {
+          "title": "训练分类器并预测",
+          "objective": "能使用 SVC.fit 训练分类器，并通过 predict 获取测试样本类别。",
+          "question": "svm.fit(X_train, y_train) 与 svm.predict(X_test) 分别完成哪一步？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 69,
+              "source_page": 77,
+              "quote": "svm.fit(X_train,y_train) # 对测试集数据进行预测 y_pred=svm.predict(X_test) # 计算分类器的准确率 accuracy=accuracy_score(y_test,y_pred) print(\"Accuracy:\",accuracy)\n4.2.2 构建回归模型机器学习中的回归任务是指预测连续值的预测性建模问题，其目标是为输入变量和连续输出变量之间"
+            }
+          ]
+        },
+        {
+          "title": "训练线性回归并预测",
+          "objective": "能用 LinearRegression 的 fit 与 predict 完成连续数值预测。",
+          "question": "预测房价时，fit 和 predict 分别应接收什么数据？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 70,
+              "source_page": 78,
+              "quote": "regressor.fit(X_train,y_train) # 对测试数据进行预测 y_ pred= regressor.predict(X_test) # 计算模型的均方误差 mse= mean_squared_error(y_test,y_pred) print(\"Mean squared error:\",mse)\n4.2.3 构建聚类模型构建聚类模型使用的是聚类算法。聚类算法是机器学习中的"
+            }
+          ]
+        }
+      ],
+      "summary": "提供统一建模接口的 Python 机器学习工具库，支持分类、回归、聚类与数据预处理。"
     },
     {
       "canonical_id": "opencv",
       "display_name": "OpenCV",
       "aliases": [
         "opencv",
-        "计算机视觉库"
+        "计算机视觉库",
+        "读取、显示与保存图像",
+        "cv2.imread",
+        "cv2.imwrite",
+        "OpenCV图像读写"
       ],
       "related_concepts": [
-        "图像读取与保存",
-        "图像变换",
-        "边缘提取"
+        "pandas"
       ],
       "chapter": "第4章",
-      "section": "4.3"
+      "section": "4.3",
+      "learning_points": [
+        {
+          "title": "读取、显示与保存图像",
+          "objective": "能用 imread、imshow 和 imwrite 完成一次图像读取、查看与保存。",
+          "question": "读取 image.jpg 并保存为 copy.jpg，需要哪些 OpenCV 函数？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 71,
+              "source_page": 79,
+              "quote": "img=cv2.imread('lena.jpg') # 显示图像 cv2.imshow('image',img) cv2.waitKey(0) cv2.destroyAllWindows() # 保存图像 cv2.imwrite('new_image.jpg',img)"
+            }
+          ]
+        }
+      ],
+      "summary": "用于图像与计算机视觉处理的工具库，提供图像读写、表示、变换和特征提取等能力。"
     },
     {
       "canonical_id": "image_transformation",
@@ -945,30 +1257,86 @@
       "aliases": [
         "图像变换",
         "平移与旋转",
+        "构造平移变换",
         "图像平移",
-        "图像旋转"
+        "OpenCV平移",
+        "平移矩阵",
+        "构造旋转变换",
+        "getRotationMatrix2D",
+        "图像旋转",
+        "OpenCV旋转"
       ],
       "related_concepts": [
-        "OpenCV",
-        "图像读取与保存"
+        "edge_detection"
       ],
       "chapter": "第4章",
-      "section": "4.3.3"
+      "section": "4.3.3",
+      "learning_points": [
+        {
+          "title": "构造平移变换",
+          "objective": "能设置二维平移矩阵，并用 warpAffine 得到平移后的图像。",
+          "question": "将图像向右移动 100、向下移动 50 像素，平移矩阵应怎样设置？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 73,
+              "source_page": 81,
+              "quote": "M=np.float32([[1,0,100],[0,1,50]]) # 对图像进行平移变换 dst=cv2.warpAffine(img,M,(img.shape[1]+100,img.shape[0]+50)) # 显示平移后的图像 cv2.imshow('image',dst) cv2.waitKey(0) cv2.destroyAllWindows()\n要旋转图像，可以使用cv2.getR"
+            }
+          ]
+        },
+        {
+          "title": "构造旋转变换",
+          "objective": "能指定旋转中心、角度和缩放比例，生成矩阵后执行仿射变换。",
+          "question": "getRotationMatrix2D 的中心、角度和缩放参数分别控制什么？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 73,
+              "source_page": 81,
+              "quote": "cv2.getRotationMatrix2D(）函数定义旋转矩阵，然后将其与原始图像进行矩阵乘法运算，代码如下：import cv2 # 读取图像 img=cv2.imread('lena.jpg') # 定义旋转矩阵，这里将图像顺时针旋转 45 度 M=cv2.getRotationMatrix2D((img.shape[1]/2,img.shape[0]/2),- 45,1) # 对图像进行"
+            }
+          ]
+        }
+      ],
+      "summary": "通过空间变换改变图像的位置、方向或几何形状，常用于数据增强。"
     },
     {
       "canonical_id": "edge_detection",
-      "display_name": "边缘提取",
+      "display_name": "边缘检测",
       "aliases": [
         "边缘提取",
         "边缘检测",
-        "edge detection"
+        "edge detection",
+        "设置 Canny 的双阈值",
+        "cv2.Canny",
+        "Canny双阈值",
+        "Canny边缘检测"
       ],
       "related_concepts": [
-        "OpenCV",
-        "图像变换"
+        "image_transformation"
       ],
       "chapter": "第4章",
-      "section": "4.3.4"
+      "section": "4.3.4",
+      "learning_points": [
+        {
+          "title": "设置 Canny 的双阈值",
+          "objective": "能对灰度图应用 Canny，并解释低阈值与高阈值的作用。",
+          "question": "cv2.Canny(img, 100, 200) 中的两个阈值分别起什么作用？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 74,
+              "source_page": 82,
+              "quote": "低阈值用于边缘连接，高阈值用于强边缘检测。最后使用cv2.imshow(）函数显示原始灰度图像和边缘信息图像，如图4-14所示。图4-14 原始灰度图像和边缘信息图像习题\n1.Python语言中的图像处理工具除了 OpenCV 库之外，还有pillow 工具库。使用命令 pipinstallpillow 安装该库，并使用Image.open(）函数读取图像，与 OpenCV 工具库的"
+            }
+          ]
+        }
+      ],
+      "summary": "根据图像局部变化提取轮廓和边界信息，帮助理解图像结构。"
     },
     {
       "canonical_id": "data_visualization",
@@ -977,15 +1345,12 @@
         "可视化",
         "data visualization",
         "画图",
-        "图表",
-        "matplotlib",
-        "seaborn"
+        "图表"
       ],
       "related_concepts": [
-        "科学可视化",
-        "信息可视化",
-        "可视分析",
-        "视觉编码"
+        "data_insight",
+        "eda",
+        "competition_platforms"
       ],
       "chapter": "第5章",
       "section": "5.1.1"
@@ -999,9 +1364,8 @@
         "图结构可视化"
       ],
       "related_concepts": [
-        "数据可视化",
-        "视觉编码",
-        "交互"
+        "dashboard",
+        "visual_encoding"
       ],
       "chapter": "第5章",
       "section": "5.1.2"
@@ -1014,9 +1378,7 @@
         "scientific visualization"
       ],
       "related_concepts": [
-        "数据可视化",
-        "可视映射",
-        "可视分析"
+        "matplotlib"
       ],
       "chapter": "第5章",
       "section": "5.1.2"
@@ -1030,9 +1392,7 @@
         "人机交互可视分析"
       ],
       "related_concepts": [
-        "数据挖掘",
-        "信息可视化",
-        "数据可视化"
+        "eda"
       ],
       "chapter": "第5章",
       "section": "5.1.2"
@@ -1042,16 +1402,9 @@
       "display_name": "数据可视化分类",
       "aliases": [
         "数据可视化分类",
-        "可视化分类",
-        "科学可视化",
-        "信息可视化",
-        "可视分析"
+        "可视化分类"
       ],
-      "related_concepts": [
-        "科学可视化",
-        "信息可视化",
-        "可视分析"
-      ],
+      "related_concepts": [],
       "chapter": "第5章",
       "section": "5.1.2"
     },
@@ -1064,9 +1417,7 @@
         "位置尺寸色彩形状"
       ],
       "related_concepts": [
-        "信息可视化",
-        "数据可视化",
-        "交互"
+        "information_visualization"
       ],
       "chapter": "第5章",
       "section": "5.1.3"
@@ -1080,8 +1431,7 @@
         "词云"
       ],
       "related_concepts": [
-        "Python数据可视化",
-        "文本挖掘"
+        "text_mining"
       ],
       "chapter": "第5章",
       "section": "5.1.5"
@@ -1095,9 +1445,9 @@
         "数据看板"
       ],
       "related_concepts": [
-        "Tableau",
-        "ECharts",
-        "数据可视化"
+        "information_visualization",
+        "pyecharts",
+        "tableau"
       ],
       "chapter": "第5章",
       "section": "5.2"
@@ -1108,14 +1458,12 @@
       "aliases": [
         "EDA",
         "exploratory data analysis",
-        "数据探索",
-        "描述性统计"
+        "数据探索"
       ],
       "related_concepts": [
-        "数据可视化",
-        "Tableau",
-        "数据探索",
-        "描述性统计"
+        "data_visualization",
+        "descriptive_statistics",
+        "visual_analytics"
       ],
       "chapter": "第5章",
       "section": "5.2"
@@ -1129,9 +1477,7 @@
         "tableau仪表板"
       ],
       "related_concepts": [
-        "仪表板",
-        "数据探索",
-        "数据可视化"
+        "dashboard"
       ],
       "chapter": "第5章",
       "section": "5.2"
@@ -1144,9 +1490,8 @@
         "plt"
       ],
       "related_concepts": [
-        "Python数据可视化",
-        "Seaborn",
-        "pyecharts"
+        "pyecharts",
+        "scientific_visualization"
       ],
       "chapter": "第5章",
       "section": "5.3.2"
@@ -1158,8 +1503,8 @@
         "pyecharts"
       ],
       "related_concepts": [
-        "Python数据可视化",
-        "ECharts"
+        "dashboard",
+        "matplotlib"
       ],
       "chapter": "第5章",
       "section": "5.3.2"
@@ -1170,10 +1515,7 @@
       "aliases": [
         "seaborn"
       ],
-      "related_concepts": [
-        "Matplotlib",
-        "Python数据可视化"
-      ],
+      "related_concepts": [],
       "chapter": "第5章",
       "section": "5.3.2"
     },
@@ -1185,12 +1527,7 @@
         "classification problem",
         "分类任务"
       ],
-      "related_concepts": [
-        "K近邻算法",
-        "支持向量机",
-        "朴素贝叶斯",
-        "决策树"
-      ],
+      "related_concepts": [],
       "chapter": "第6章",
       "section": "6.1"
     },
@@ -1204,9 +1541,7 @@
         "二分类"
       ],
       "related_concepts": [
-        "分类问题",
-        "监督学习",
-        "模型评估"
+        "regularization"
       ],
       "chapter": "第6章",
       "section": "6.1"
@@ -1221,9 +1556,7 @@
         "带标签数据"
       ],
       "related_concepts": [
-        "分类问题",
-        "回归问题",
-        "模型评估"
+        "scikit_learn"
       ],
       "chapter": "第6章",
       "section": "6.1"
@@ -1238,9 +1571,9 @@
         "最近邻"
       ],
       "related_concepts": [
-        "分类问题",
-        "距离度量",
-        "监督学习"
+        "classification_evaluation",
+        "feature_standardization",
+        "svm"
       ],
       "chapter": "第6章",
       "section": "6.1.1"
@@ -1257,9 +1590,9 @@
         "SVM哪个好"
       ],
       "related_concepts": [
-        "核函数",
-        "分类问题",
-        "支持向量"
+        "classification_evaluation",
+        "feature_standardization",
+        "knn"
       ],
       "chapter": "第6章",
       "section": "6.1.2"
@@ -1280,9 +1613,8 @@
         "Python里怎么实现核函数"
       ],
       "related_concepts": [
-        "支持向量机",
-        "核技巧",
-        "高维映射"
+        "kernel_pca",
+        "spectral_clustering"
       ],
       "chapter": "第6章",
       "section": "6.1.2"
@@ -1296,9 +1628,7 @@
         "贝叶斯分类器"
       ],
       "related_concepts": [
-        "分类问题",
-        "贝叶斯定理",
-        "文本分类"
+        "text_mining"
       ],
       "chapter": "第6章",
       "section": "6.1.3"
@@ -1316,29 +1646,47 @@
         "CART"
       ],
       "related_concepts": [
-        "分类问题",
-        "信息增益",
-        "随机森林"
+        "random_forest"
       ],
       "chapter": "第6章",
       "section": "6.1.4"
     },
     {
       "canonical_id": "classification_evaluation",
-      "display_name": "分类模型评估",
+      "display_name": "分类模型评价",
       "aliases": [
+        "分类模型评价",
         "分类模型评估",
         "分类评估",
         "混淆矩阵",
-        "precision recall f1"
+        "precision recall f1",
+        "计算分类准确率",
+        "accuracy_score",
+        "分类准确率计算"
       ],
       "related_concepts": [
-        "模型评估",
-        "分类问题",
-        "ROC曲线"
+        "cross_validation",
+        "knn",
+        "svm"
       ],
       "chapter": "第6章",
-      "section": "6.1.5"
+      "section": "6.1.5",
+      "learning_points": [
+        {
+          "title": "计算分类准确率",
+          "objective": "能用测试标签和预测标签计算 accuracy_score。",
+          "question": "accuracy_score 的两个输入分别是什么？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 69,
+              "source_page": 77,
+              "quote": "accuracy=accuracy_score(y_test,y_pred) print(\"Accuracy:\",accuracy)\n4.2.2 构建回归模型机器学习中的回归任务是指预测连续值的预测性建模问题，其目标是为输入变量和连续输出变量之间建立一个函数关系。回归任务通常用于预测数值型数据，如房价、股票价格、销售额等。回归任务与分类任务都是机器学习中的常见任务，但它们的目标不同。分类任务的目标"
+            }
+          ]
+        }
+      ]
     },
     {
       "canonical_id": "cross_validation",
@@ -1352,9 +1700,8 @@
         "我想让模型在没见过数据上表现好"
       ],
       "related_concepts": [
-        "模型评估",
-        "过拟合",
-        "验证集"
+        "classification_evaluation",
+        "overfitting"
       ],
       "chapter": "第6章",
       "section": "6.1.5"
@@ -1371,9 +1718,7 @@
         "F1分数"
       ],
       "related_concepts": [
-        "分类模型评估",
-        "回归模型评估",
-        "交叉验证"
+        "feature_engineering"
       ],
       "chapter": "第6章",
       "section": "6.1.5"
@@ -1386,11 +1731,7 @@
         "regression problem",
         "回归任务"
       ],
-      "related_concepts": [
-        "线性回归",
-        "非线性回归",
-        "回归模型评估"
-      ],
+      "related_concepts": [],
       "chapter": "第6章",
       "section": "6.2"
     },
@@ -1405,29 +1746,46 @@
         "回归分析"
       ],
       "related_concepts": [
-        "回归问题",
-        "回归模型评估",
-        "非线性回归"
+        "regression_evaluation"
       ],
       "chapter": "第6章",
       "section": "6.2.1"
     },
     {
       "canonical_id": "regression_evaluation",
-      "display_name": "回归模型评估",
+      "display_name": "回归模型评价",
       "aliases": [
+        "回归模型评价",
         "回归模型评估",
         "回归评估",
         "均方误差",
         "mae",
-        "rmse"
+        "rmse",
+        "计算回归均方误差",
+        "mean_squared_error",
+        "回归均方误差计算"
       ],
       "related_concepts": [
-        "模型评估",
-        "线性回归"
+        "linear_regression"
       ],
       "chapter": "第6章",
-      "section": "6.2.2"
+      "section": "6.2.2",
+      "learning_points": [
+        {
+          "title": "计算回归均方误差",
+          "objective": "能用真实连续值与预测值计算 mean_squared_error。",
+          "question": "回归示例中的 mean_squared_error 应输入哪两组数值？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 70,
+              "source_page": 78,
+              "quote": "mean_squared_error(y_test,y_pred) print(\"Mean squared error:\",mse)\n4.2.3 构建聚类模型构建聚类模型使用的是聚类算法。聚类算法是机器学习中的一种无监督学习方法，用于将数据集中的数据分成不同的聚类或组。聚类算法的目标是将相似的数据点分组在一起，使得同一聚类中的数据点相似度高，而不同聚类中的数据点相似度低。以k均值（k-means）"
+            }
+          ]
+        }
+      ]
     },
     {
       "canonical_id": "ensemble_learning",
@@ -1435,16 +1793,9 @@
       "aliases": [
         "集成学习",
         "ensemble learning",
-        "随机森林",
-        "random forest",
-        "bagging",
-        "boosting"
+        "bagging"
       ],
-      "related_concepts": [
-        "随机森林",
-        "梯度提升树",
-        "决策树"
-      ],
+      "related_concepts": [],
       "chapter": "第6章",
       "section": "6.3.1"
     },
@@ -1458,8 +1809,7 @@
         "boosting"
       ],
       "related_concepts": [
-        "集成学习",
-        "随机森林"
+        "random_forest"
       ],
       "chapter": "第6章",
       "section": "6.3.1"
@@ -1472,9 +1822,8 @@
         "random forest"
       ],
       "related_concepts": [
-        "集成学习",
-        "决策树",
-        "Bagging"
+        "decision_tree",
+        "gradient_boosting_tree"
       ],
       "chapter": "第6章",
       "section": "6.3.1"
@@ -1487,8 +1836,7 @@
         "nonlinear regression"
       ],
       "related_concepts": [
-        "回归问题",
-        "线性回归"
+        "kernel_pca"
       ],
       "chapter": "第6章",
       "section": "6.3.2"
@@ -1502,9 +1850,7 @@
         "聚类"
       ],
       "related_concepts": [
-        "K-means聚类",
-        "密度聚类",
-        "层次聚类"
+        "pca"
       ],
       "chapter": "第7章",
       "section": "7.1"
@@ -1514,14 +1860,10 @@
       "display_name": "无监督学习",
       "aliases": [
         "无监督学习",
-        "unsupervised learning",
-        "聚类",
-        "降维"
+        "unsupervised learning"
       ],
       "related_concepts": [
-        "聚类算法",
-        "降维",
-        "无标签数据"
+        "scikit_learn"
       ],
       "chapter": "第7章",
       "section": "7.1"
@@ -1533,15 +1875,35 @@
         "K-means",
         "kmeans",
         "K均值",
-        "K均值聚类"
+        "K均值聚类",
+        "拟合聚类并读取标签",
+        "KMeans.labels_",
+        "kmeans.labels_",
+        "聚类标签读取",
+        "n_clusters"
       ],
       "related_concepts": [
-        "聚类算法",
-        "聚类中心",
-        "聚类评估"
+        "dbscan",
+        "hierarchical_clustering"
       ],
       "chapter": "第7章",
-      "section": "7.1.1"
+      "section": "7.1.1",
+      "learning_points": [
+        {
+          "title": "拟合聚类并读取标签",
+          "objective": "能设置 n_clusters、拟合 KMeans，并获取各样本的聚类标签。",
+          "question": "将样本聚成 4 组应设置什么参数？拟合后在哪里读取聚类标签？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 70,
+              "source_page": 78,
+              "quote": "kmeans=KMeans(n_clusters=4,random_state=42) # 使用拟合函数对数据进行聚类拟合 kmeans.fit(X) # 获取每个数据点的聚类标签 labels=kmeans.labels_ # 绘制聚类结果的可视化图形"
+            }
+          ]
+        }
+      ]
     },
     {
       "canonical_id": "dbscan",
@@ -1551,8 +1913,8 @@
         "dbscan"
       ],
       "related_concepts": [
-        "聚类算法",
-        "K-means聚类"
+        "clustering_evaluation",
+        "kmeans"
       ],
       "chapter": "第7章",
       "section": "7.1.2"
@@ -1565,24 +1927,24 @@
         "hierarchical clustering"
       ],
       "related_concepts": [
-        "聚类算法",
-        "聚类评估"
+        "clustering_evaluation",
+        "kmeans"
       ],
       "chapter": "第7章",
       "section": "7.1.3"
     },
     {
       "canonical_id": "clustering_evaluation",
-      "display_name": "聚类模型评估",
+      "display_name": "聚类模型评价",
       "aliases": [
+        "聚类模型评价",
         "聚类模型评估",
         "聚类评估",
         "轮廓系数"
       ],
       "related_concepts": [
-        "聚类算法",
-        "K-means聚类",
-        "层次聚类"
+        "dbscan",
+        "hierarchical_clustering"
       ],
       "chapter": "第7章",
       "section": "7.1.4"
@@ -1594,10 +1956,7 @@
         "降维",
         "dimensionality reduction"
       ],
-      "related_concepts": [
-        "主成分分析",
-        "核主成分分析"
-      ],
+      "related_concepts": [],
       "chapter": "第7章",
       "section": "7.2"
     },
@@ -1607,13 +1966,11 @@
       "aliases": [
         "PCA",
         "主成分分析",
-        "principal component analysis",
-        "降维"
+        "principal component analysis"
       ],
       "related_concepts": [
-        "降维",
-        "核主成分分析",
-        "特征提取"
+        "clustering",
+        "feature_standardization"
       ],
       "chapter": "第7章",
       "section": "7.2.1"
@@ -1627,8 +1984,8 @@
         "kpca"
       ],
       "related_concepts": [
-        "主成分分析",
-        "降维"
+        "nonlinear_regression",
+        "svm_kernel"
       ],
       "chapter": "第7章",
       "section": "7.2.2"
@@ -1641,8 +1998,7 @@
         "spectral clustering"
       ],
       "related_concepts": [
-        "聚类算法",
-        "图聚类"
+        "svm_kernel"
       ],
       "chapter": "第7章",
       "section": "7.3.1"
@@ -1656,9 +2012,7 @@
         "主题模型"
       ],
       "related_concepts": [
-        "文本挖掘",
-        "无监督学习",
-        "谱聚类"
+        "text_mining"
       ],
       "chapter": "第7章",
       "section": "7.3.2"
@@ -1671,15 +2025,14 @@
         "artificial intelligence"
       ],
       "related_concepts": [
-        "神经网络",
-        "深度学习"
+        "large_language_model"
       ],
       "chapter": "第8章",
       "section": "8.1.1"
     },
     {
       "canonical_id": "neural_network",
-      "display_name": "神经网络基础",
+      "display_name": "神经网络",
       "aliases": [
         "神经网络",
         "neural network",
@@ -1688,14 +2041,10 @@
         "神经元",
         "感知机",
         "神经网络哪个好",
-        "神经网络和SVM哪个好"
+        "神经网络和SVM哪个好",
+        "神经网络基础"
       ],
-      "related_concepts": [
-        "人工智能",
-        "反向传播",
-        "激活函数",
-        "深度学习"
-      ],
+      "related_concepts": [],
       "chapter": "第8章",
       "section": "8.1.1"
     },
@@ -1710,9 +2059,8 @@
         "tanh"
       ],
       "related_concepts": [
-        "神经网络",
-        "反向传播",
-        "卷积神经网络"
+        "convolutional_neural_network",
+        "recurrent_neural_network"
       ],
       "chapter": "第8章",
       "section": "8.1.2"
@@ -1725,11 +2073,7 @@
         "backpropagation",
         "bp算法"
       ],
-      "related_concepts": [
-        "梯度下降",
-        "神经网络",
-        "激活函数"
-      ],
+      "related_concepts": [],
       "chapter": "第8章",
       "section": "8.1.2"
     },
@@ -1743,27 +2087,22 @@
         "序列建模"
       ],
       "related_concepts": [
-        "深度学习",
-        "卷积神经网络",
-        "循环神经网络"
+        "convolutional_neural_network",
+        "recurrent_neural_network"
       ],
       "chapter": "第8章",
       "section": "8.1.3"
     },
     {
       "canonical_id": "deep_learning_frameworks",
-      "display_name": "深度学习利器",
+      "display_name": "深度学习框架",
       "aliases": [
         "深度学习利器",
         "tensorflow",
         "pytorch",
         "深度学习框架"
       ],
-      "related_concepts": [
-        "深度学习",
-        "模型训练",
-        "GPU"
-      ],
+      "related_concepts": [],
       "chapter": "第8章",
       "section": "8.1.4"
     },
@@ -1773,12 +2112,14 @@
       "aliases": [
         "卷积神经网络",
         "cnn",
-        "convolutional neural network"
+        "convolutional neural network",
+        "美食图鉴",
+        "美食图鉴项目",
+        "项目实践美食图鉴"
       ],
       "related_concepts": [
-        "神经网络",
-        "LeNet-5",
-        "MNIST手写数字识别"
+        "activation_function",
+        "deep_learning_tasks"
       ],
       "chapter": "第8章",
       "section": "8.2"
@@ -1788,28 +2129,14 @@
       "display_name": "LeNet-5",
       "aliases": [
         "lenet5",
-        "lenet-5"
-      ],
-      "related_concepts": [
-        "卷积神经网络",
-        "MNIST手写数字识别"
-      ],
-      "chapter": "第8章",
-      "section": "8.2.2"
-    },
-    {
-      "canonical_id": "mnist",
-      "display_name": "MNIST手写数字识别",
-      "aliases": [
-        "mnist",
+        "lenet-5",
+        "MNIST",
+        "MNIST手写数字识别",
         "手写数字识别"
       ],
-      "related_concepts": [
-        "LeNet-5",
-        "卷积神经网络"
-      ],
+      "related_concepts": [],
       "chapter": "第8章",
-      "section": "8.2.3"
+      "section": "8.2.2"
     },
     {
       "canonical_id": "recurrent_neural_network",
@@ -1820,8 +2147,9 @@
         "recurrent neural network"
       ],
       "related_concepts": [
-        "长短期记忆网络",
-        "自然语言处理"
+        "activation_function",
+        "deep_learning_tasks",
+        "natural_language_processing"
       ],
       "chapter": "第8章",
       "section": "8.3.1"
@@ -1834,26 +2162,10 @@
         "lstm"
       ],
       "related_concepts": [
-        "循环神经网络",
-        "自然语言处理"
+        "natural_language_processing"
       ],
       "chapter": "第8章",
       "section": "8.3.2"
-    },
-    {
-      "canonical_id": "food_image_project",
-      "display_name": "美食图鉴项目",
-      "aliases": [
-        "美食图鉴",
-        "项目实践美食图鉴"
-      ],
-      "related_concepts": [
-        "卷积神经网络",
-        "模型训练与测试",
-        "数据准备"
-      ],
-      "chapter": "第8章",
-      "section": "8.4"
     },
     {
       "canonical_id": "gradient_descent",
@@ -1863,14 +2175,9 @@
         "gradient descent",
         "批量梯度下降",
         "随机梯度下降",
-        "SGD",
-        "学习率"
+        "SGD"
       ],
-      "related_concepts": [
-        "反向传播",
-        "模型训练与测试",
-        "学习率"
-      ],
+      "related_concepts": [],
       "chapter": "第8章",
       "section": "8.4.4"
     },
@@ -1889,9 +2196,7 @@
         "在没见过数据上表现好"
       ],
       "related_concepts": [
-        "正则化",
-        "交叉验证",
-        "模型泛化"
+        "cross_validation"
       ],
       "chapter": "第8章",
       "section": "8.4.5"
@@ -1908,9 +2213,7 @@
         "Lasso"
       ],
       "related_concepts": [
-        "过拟合",
-        "L1正则",
-        "L2正则"
+        "logistic_regression"
       ],
       "chapter": "第8章",
       "section": "8.4.5"
@@ -1924,9 +2227,9 @@
         "natural language processing"
       ],
       "related_concepts": [
-        "文本挖掘",
-        "智能问答",
-        "大语言模型"
+        "lstm",
+        "recurrent_neural_network",
+        "text_recommendation"
       ],
       "chapter": "第9章",
       "section": "9.1.1"
@@ -1939,9 +2242,12 @@
         "text mining"
       ],
       "related_concepts": [
-        "自然语言处理",
-        "LDA算法",
-        "智能问答"
+        "lda_topic_model",
+        "naive_bayes",
+        "question_answering",
+        "text_recommendation",
+        "wordcloud",
+        "large_language_model_applications"
       ],
       "chapter": "第9章",
       "section": "9.1.2"
@@ -1955,8 +2261,8 @@
         "问答系统"
       ],
       "related_concepts": [
-        "自然语言处理",
-        "大语言模型"
+        "text_mining",
+        "large_language_model_applications"
       ],
       "chapter": "第9章",
       "section": "9.1.3"
@@ -1967,31 +2273,18 @@
       "aliases": [
         "大语言模型",
         "llm",
-        "large language model"
-      ],
-      "related_concepts": [
-        "自然语言处理",
-        "提示工程",
-        "智能问答"
-      ],
-      "chapter": "第9章",
-      "section": "9.2.1"
-    },
-    {
-      "canonical_id": "llm_examples",
-      "display_name": "大语言模型实例",
-      "aliases": [
+        "large language model",
+        "大语言模型代表产品",
         "大语言模型实例",
-        "llm实例",
-        "chatgpt",
+        "LLM实例",
+        "ChatGPT",
         "文心一言"
       ],
       "related_concepts": [
-        "大语言模型",
-        "提示工程"
+        "artificial_intelligence"
       ],
       "chapter": "第9章",
-      "section": "9.2.2"
+      "section": "9.2.1"
     },
     {
       "canonical_id": "prompt_engineering",
@@ -2001,56 +2294,37 @@
         "prompt engineering",
         "提示词工程"
       ],
-      "related_concepts": [
-        "大语言模型",
-        "提示词"
-      ],
+      "related_concepts": [],
       "chapter": "第9章",
       "section": "9.2.3"
     },
     {
-      "canonical_id": "writing_assistant",
-      "display_name": "辅助写作助手",
+      "canonical_id": "large_language_model_applications",
+      "display_name": "大语言模型应用",
       "aliases": [
+        "大语言模型应用",
+        "LLM应用",
         "辅助写作助手",
         "写作助手",
-        "llm写作助手"
-      ],
-      "related_concepts": [
-        "大语言模型",
-        "提示工程"
-      ],
-      "chapter": "第9章",
-      "section": "9.3.1"
-    },
-    {
-      "canonical_id": "literature_reading_assistant",
-      "display_name": "文献辅助阅读工具",
-      "aliases": [
+        "LLM写作助手",
+        "大模型辅助写作",
+        "大语言模型辅助写作",
         "文献辅助阅读工具",
         "文献阅读助手",
-        "llm阅读工具"
-      ],
-      "related_concepts": [
-        "大语言模型",
-        "自然语言处理"
-      ],
-      "chapter": "第9章",
-      "section": "9.3.2"
-    },
-    {
-      "canonical_id": "financial_service_assistant",
-      "display_name": "金融服务助手",
-      "aliases": [
+        "LLM阅读工具",
+        "大模型辅助阅读文献",
+        "大语言模型辅助阅读",
         "金融服务助手",
-        "llm金融助手"
+        "LLM金融助手",
+        "大模型金融服务",
+        "大语言模型金融应用"
       ],
       "related_concepts": [
-        "大语言模型",
-        "智能问答"
+        "question_answering",
+        "text_mining"
       ],
       "chapter": "第9章",
-      "section": "9.3.3"
+      "section": "9.3"
     },
     {
       "canonical_id": "data_science_competition",
@@ -2059,122 +2333,47 @@
         "数据科学竞赛",
         "data science competition"
       ],
-      "related_concepts": [
+      "related_concepts": [],
+      "chapter": "第10章",
+      "section": "10.1"
+    },
+    {
+      "canonical_id": "competition_platforms",
+      "display_name": "数据科学竞赛平台",
+      "aliases": [
+        "数据科学竞赛平台",
+        "竞赛平台",
         "Kaggle",
-        "参赛流程",
-        "算法分析报告"
+        "DrivenData",
+        "阿里云天池",
+        "天池",
+        "DataCastle",
+        "DataFountain",
+        "ChinaVis",
+        "和鲸社区",
+        "ModelWhale"
+      ],
+      "related_concepts": [
+        "data_visualization"
       ],
       "chapter": "第10章",
       "section": "10.1"
     },
     {
-      "canonical_id": "kaggle",
-      "display_name": "Kaggle",
-      "aliases": [
-        "kaggle"
-      ],
-      "related_concepts": [
-        "数据科学竞赛",
-        "竞赛平台"
-      ],
-      "chapter": "第10章",
-      "section": "10.1.1"
-    },
-    {
-      "canonical_id": "drivendata",
-      "display_name": "DrivenData",
-      "aliases": [
-        "drivendata"
-      ],
-      "related_concepts": [
-        "数据科学竞赛",
-        "竞赛平台"
-      ],
-      "chapter": "第10章",
-      "section": "10.1.2"
-    },
-    {
-      "canonical_id": "tianchi",
-      "display_name": "阿里云天池",
-      "aliases": [
-        "阿里云天池",
-        "天池",
-        "tianchi"
-      ],
-      "related_concepts": [
-        "数据科学竞赛",
-        "竞赛平台"
-      ],
-      "chapter": "第10章",
-      "section": "10.1.3"
-    },
-    {
-      "canonical_id": "datacastle",
-      "display_name": "DataCastle",
-      "aliases": [
-        "datacastle"
-      ],
-      "related_concepts": [
-        "数据科学竞赛",
-        "竞赛平台"
-      ],
-      "chapter": "第10章",
-      "section": "10.1.4"
-    },
-    {
-      "canonical_id": "datafountain",
-      "display_name": "DataFountain",
-      "aliases": [
-        "datafountain"
-      ],
-      "related_concepts": [
-        "数据科学竞赛",
-        "竞赛平台"
-      ],
-      "chapter": "第10章",
-      "section": "10.1.5"
-    },
-    {
-      "canonical_id": "chinavis",
-      "display_name": "ChinaVis",
-      "aliases": [
-        "chinavis"
-      ],
-      "related_concepts": [
-        "数据科学竞赛",
-        "竞赛平台",
-        "可视化竞赛"
-      ],
-      "chapter": "第10章",
-      "section": "10.1.6"
-    },
-    {
-      "canonical_id": "modelwhale",
-      "display_name": "和鲸社区",
-      "aliases": [
-        "和鲸社区",
-        "modelwhale"
-      ],
-      "related_concepts": [
-        "数据科学竞赛",
-        "竞赛平台"
-      ],
-      "chapter": "第10章",
-      "section": "10.1.7"
-    },
-    {
       "canonical_id": "competition_workflow",
-      "display_name": "参赛流程",
+      "display_name": "数据科学竞赛流程",
       "aliases": [
+        "数据科学竞赛流程",
         "参赛流程",
         "比赛流程",
-        "competition workflow"
+        "competition workflow",
+        "赛题解析",
+        "算法分析报告",
+        "算法报告",
+        "答辩报告",
+        "比赛答辩"
       ],
-      "related_concepts": [
-        "数据科学竞赛",
-        "特征工程",
-        "模型评估"
-      ],
+      "related_concepts": [],
       "chapter": "第10章",
       "section": "10.2"
     },
@@ -2189,40 +2388,989 @@
         "特征构造"
       ],
       "related_concepts": [
-        "参赛流程",
-        "特征选择",
-        "特征构造"
+        "data_cleaning",
+        "feature_discovery",
+        "model_evaluation"
       ],
       "chapter": "第10章",
       "section": "10.2"
     },
     {
-      "canonical_id": "algorithm_analysis_report",
-      "display_name": "算法分析报告",
+      "canonical_id": "tabular_data_io",
+      "display_name": "表格数据读写",
       "aliases": [
-        "算法分析报告",
-        "算法报告"
+        "数据读取",
+        "表格读写",
+        "读取 CSV 数据",
+        "pd.read_csv",
+        "read_csv",
+        "读取CSV",
+        "读取 CSV",
+        "读取 Excel 数据",
+        "pd.read_excel",
+        "read_excel",
+        "读取Excel",
+        "读取 Excel"
       ],
       "related_concepts": [
-        "参赛流程",
-        "答辩报告"
+        "data_collection",
+        "data_merge"
       ],
-      "chapter": "第10章",
-      "section": "10.3.1"
+      "chapter": "第4章",
+      "section": "4.1.1",
+      "summary": "表格数据在 CSV、Excel 等存储格式与内存中的数据结构之间转换。",
+      "learning_points": [
+        {
+          "title": "读取 CSV 数据",
+          "objective": "能使用 read_csv 将 CSV 文件读入 DataFrame。",
+          "question": "将 reviews.csv 读入变量 reviews，应使用哪个 Pandas 函数？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 52,
+              "source_page": 60,
+              "quote": "读取 CSV 文件可以使用read_csv(）函数，读取 XLSX文件可以使用read_excel(）函数，代码如下：import pandas as pd # 导入 pandas 库 book=pd.read_csv(\"book.csv\") # 使用 read_csv(）函数读取 CSV 文件 student=pd.read_excel(\"student.xlsx\")\nread_csv(）函数包"
+            }
+          ]
+        },
+        {
+          "title": "读取 Excel 数据",
+          "objective": "能使用 read_excel 读取 XLSX 表格。",
+          "question": "读取 student.xlsx 与读取 CSV 文件应分别使用什么函数？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 52,
+              "source_page": 60,
+              "quote": "读取 XLSX文件可以使用read_excel(）函数，代码如下：import pandas as pd # 导入 pandas 库 book=pd.read_csv(\"book.csv\") # 使用 read_csv(）函数读取 CSV 文件 student=pd.read_excel(\"student.xlsx\")\nread_csv(）函数包含很多参数。例如，可以指定index_col参数，将"
+            }
+          ]
+        }
+      ]
     },
     {
-      "canonical_id": "defense_report",
-      "display_name": "答辩报告",
+      "canonical_id": "data_mapping",
+      "display_name": "数据映射",
       "aliases": [
-        "答辩报告",
-        "比赛答辩"
+        "数据映射",
+        "Pandas映射",
+        "用 apply 批量映射",
+        "Pandas apply",
+        "apply映射",
+        "apply 映射",
+        "批量映射"
       ],
       "related_concepts": [
-        "算法分析报告",
-        "参赛流程"
+        "data_cleaning",
+        "python_functions"
       ],
-      "chapter": "第10章",
-      "section": "10.3.2"
+      "chapter": "第4章",
+      "section": "4.1.3",
+      "summary": "依据统一规则将数据值转换为新的表示，可用于编码、派生特征和批量变换。",
+      "learning_points": [
+        {
+          "title": "用 apply 批量映射",
+          "objective": "能向 apply 传入函数并选择 axis，按行或按列生成结果。",
+          "question": "df.apply(check_verify, axis=1) 为什么传函数名，而且 axis 取 1？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 62,
+              "source_page": 70,
+              "quote": "调用时check_verify不能带括号，如果带上括号就是将函数的返回结果作为输入，发送给apply(）方法。此外，squid.apply(check_verify,axis=1）中参数axis的取值是0或者1,0代表按照每列进行计算，1代表按照每行进行计算，此处是每次取一行数据，然后判断指定字段是 True还是 False，因此参数axis需要设置为1。4.1.4 组合与排序\n1.组合\n4.1."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "canonical_id": "data_sorting",
+      "display_name": "数据排序",
+      "aliases": [
+        "数据排序",
+        "Pandas排序",
+        "按字段与方向排序",
+        "sort_values",
+        "多字段排序"
+      ],
+      "related_concepts": [
+        "groupby_aggregation"
+      ],
+      "chapter": "第4章",
+      "section": "4.1.4",
+      "summary": "按一个或多个字段及指定顺序组织记录，以支持比较、排名和后续分析。",
+      "learning_points": [
+        {
+          "title": "按字段与方向排序",
+          "objective": "能用 sort_values 指定排序字段和升降序。",
+          "question": "如何将 followers 从大到小排序？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 63,
+              "source_page": 71,
+              "quote": "sort_values(）方法默认将数据从小到大排序，若要从大到小排序，可以设置参数 ascending=False。此外，如果按照多个字段排序，可以将这些字段名称组成列表，使用by"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "canonical_id": "data_type_conversion",
+      "display_name": "数据类型转换",
+      "aliases": [
+        "数据类型转换",
+        "类型转换",
+        "检查并转换列类型",
+        "astype",
+        "Pandas类型转换",
+        "列类型转换"
+      ],
+      "related_concepts": [
+        "missing_values"
+      ],
+      "chapter": "第4章",
+      "section": "4.1.5",
+      "summary": "统一或调整数据的类型表示，使字段满足计算、存储及跨表处理的要求。",
+      "learning_points": [
+        {
+          "title": "检查并转换列类型",
+          "objective": "能区分 dtype 与 dtypes，并用 astype 批量转换某列类型。",
+          "question": "将 followers 列转为 int32，并检查转换结果，应如何操作？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 65,
+              "source_page": 73,
+              "quote": "使用astype(）方法，可以更改数据类型，在处理包含相同字段的多个数据表时，常常会遇到不同表中同一字段名的数据类型不一致的问题。可以使用astype(）方法修改数据的类型。这种修改方法会对一个数据表中的某一列进行批量转换，而非对单个数值进行转换。例如，将user_followers字段的数据类型改为int32，代码如下：squid[\"user_followers_32\"]=squid[\"user"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "canonical_id": "train_test_split",
+      "display_name": "训练集与测试集",
+      "aliases": [
+        "训练集与测试集",
+        "训练测试集划分",
+        "训练集",
+        "测试集",
+        "划分训练集与测试集",
+        "train_test_split"
+      ],
+      "related_concepts": [],
+      "chapter": "第4章",
+      "section": "4.2.1",
+      "summary": "区分用于拟合模型的数据与用于检验泛化表现的数据，是模型评估的基础。",
+      "learning_points": [
+        {
+          "title": "划分训练集与测试集",
+          "objective": "能解释训练集和测试集的用途，并使用 train_test_split 划分数据。",
+          "question": "训练集与测试集分别用于什么？为什么不能仅报告训练集表现？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 67,
+              "source_page": 75,
+              "quote": "训练集用于模型拟合数据，测试集用于验证模型的泛化性。下面以鸢尾花数据集为例，使用支持向量机（supportvectormachine,SVM）算法，构建一个分类模型。鸢尾花数据集是一份经典的机器学习数据集，常被用于分类问题的研究和算法性能评估。鸢尾花数据集包含3个不同种类的鸢尾花：山鸢尾（iris-setosa)、变色鸢尾（iris-versicolor）和维吉尼亚鸢尾 (iris-virgini"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "canonical_id": "feature_standardization",
+      "display_name": "特征标准化",
+      "aliases": [
+        "特征标准化",
+        "标准化",
+        "复用训练集的标准化参数",
+        "StandardScaler",
+        "训练集标准化",
+        "标准化参数复用"
+      ],
+      "related_concepts": [
+        "knn",
+        "pca",
+        "svm"
+      ],
+      "chapter": "第4章",
+      "section": "4.2.1",
+      "summary": "利用训练数据的统计量调整特征尺度，并将同一变换应用于后续数据。",
+      "learning_points": [
+        {
+          "title": "复用训练集的标准化参数",
+          "objective": "能在训练集上拟合 StandardScaler，并用同一个变换处理测试集。",
+          "question": "为什么训练集用 fit_transform，而测试集用 transform？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 69,
+              "source_page": 77,
+              "quote": "X_train=scaler.fit_transform(X_train) X_test=scaler.transform(X_test)\n创建一个SVM 分类器，即SVC类型的对象，并使用训练集数据进行训练。最后使用测试集数据进行预测，并计算分类器的准确率（accuracy)，代码如下：svm=SVC(kernel='linear',C=1,random_state=42) # 使用训练集数据进"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "canonical_id": "image_representation",
+      "display_name": "图像表示",
+      "aliases": [
+        "图像表示",
+        "图像通道",
+        "像素表示",
+        "读取图像尺寸与通道",
+        "图像尺寸与通道",
+        "img.shape",
+        "图像宽高"
+      ],
+      "related_concepts": [
+        "unstructured_data"
+      ],
+      "chapter": "第4章",
+      "section": "4.3.2",
+      "summary": "用像素数组、空间尺寸与颜色通道描述图像，是图像处理与变换的基础。",
+      "learning_points": [
+        {
+          "title": "读取图像尺寸与通道",
+          "objective": "能由图像数组形状读取高度与宽度，并区分彩色与灰度图的通道。",
+          "question": "height, width = img.shape[:2] 中先取得的是宽度还是高度？",
+          "sources": [
+            {
+              "source_id": "ds-course-textbook-816dd50235ebeafe",
+              "title": "数据科学导论（案例版）",
+              "book_page": 72,
+              "source_page": 80,
+              "quote": "height,width=img.shape[:2] print('图像大小：',height,width)\nUUUU\nUUUU\n图4-12 不同位置的像素值大小图像的像素值大小取值在0~255之间。如图4-12所示，图像中帽子处的像素值为【58,66,133]，头发处的像素值为【23,40,83]，图像的像素值越接近0，表示当前位置越暗，图像的像素值越接近255，表示当前位置越亮。4.3.3 图"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "source": "data_literacy",
+      "target": "data_thinking",
+      "relation_type": "prerequisite_of",
+      "rationale": "先理解数据素养的构成，才能形成系统的数据思维。"
+    },
+    {
+      "source": "data_skills",
+      "target": "data_thinking",
+      "relation_type": "prerequisite_of",
+      "rationale": "数据思维需要以基本的数据获取、处理和表达能力为实践基础。"
+    },
+    {
+      "source": "data_thinking",
+      "target": "digital_leadership",
+      "relation_type": "prerequisite_of",
+      "rationale": "数字领导力建立在用数据理解问题和支持决策的能力上。"
+    },
+    {
+      "source": "data_thinking",
+      "target": "digital_economy",
+      "relation_type": "prerequisite_of",
+      "rationale": "理解数据驱动的思考方式有助于认识数据在数字经济中的作用。"
+    },
+    {
+      "source": "data_engineering_workflow",
+      "target": "feature_discovery",
+      "relation_type": "prerequisite_of",
+      "rationale": "先理解数据工程流程，才能定位特征发现所在的处理阶段。"
+    },
+    {
+      "source": "data_engineering_workflow",
+      "target": "text_recommendation",
+      "relation_type": "prerequisite_of",
+      "rationale": "文本推荐案例依赖数据采集、处理、建模和应用的完整流程。"
+    },
+    {
+      "source": "data_engineering_workflow",
+      "target": "intelligent_manufacturing",
+      "relation_type": "prerequisite_of",
+      "rationale": "智能制造案例需要放在多源数据处理与决策流程中理解。"
+    },
+    {
+      "source": "data_engineering_workflow",
+      "target": "technology_forecasting",
+      "relation_type": "prerequisite_of",
+      "rationale": "技术预测案例需要先理解从数据到分析结论的工程流程。"
+    },
+    {
+      "source": "dikw_pyramid",
+      "target": "data_science_definition",
+      "relation_type": "prerequisite_of",
+      "rationale": "DIKW 层次帮助区分原始数据与由数据形成的知识和决策。"
+    },
+    {
+      "source": "data_classification",
+      "target": "structured_data",
+      "relation_type": "prerequisite_of",
+      "rationale": "结构化数据是按组织形式划分数据后的一个类别。"
+    },
+    {
+      "source": "data_classification",
+      "target": "semi_structured_data",
+      "relation_type": "prerequisite_of",
+      "rationale": "半结构化数据是按组织形式划分数据后的一个类别。"
+    },
+    {
+      "source": "data_classification",
+      "target": "unstructured_data",
+      "relation_type": "prerequisite_of",
+      "rationale": "非结构化数据是按组织形式划分数据后的一个类别。"
+    },
+    {
+      "source": "data_science_definition",
+      "target": "data_science_history",
+      "relation_type": "prerequisite_of",
+      "rationale": "先明确数据科学的研究对象，再理解其发展脉络。"
+    },
+    {
+      "source": "data_science_definition",
+      "target": "data_science_knowledge_system",
+      "relation_type": "prerequisite_of",
+      "rationale": "数据科学知识体系是对其概念边界和交叉领域的展开。"
+    },
+    {
+      "source": "data_science_definition",
+      "target": "data_science_tasks",
+      "relation_type": "prerequisite_of",
+      "rationale": "数据科学任务来源于数据科学的目标与研究对象。"
+    },
+    {
+      "source": "data_science_tasks",
+      "target": "data_insight",
+      "relation_type": "prerequisite_of",
+      "rationale": "数据洞见是数据科学任务产生价值的重要结果。"
+    },
+    {
+      "source": "data_science_tasks",
+      "target": "data_businessization",
+      "relation_type": "prerequisite_of",
+      "rationale": "数据业务化需要先理解数据科学解决的业务任务。"
+    },
+    {
+      "source": "data_collection",
+      "target": "data_fusion",
+      "relation_type": "prerequisite_of",
+      "rationale": "多源数据只有先被采集，才能进行对齐与融合。"
+    },
+    {
+      "source": "data_collection",
+      "target": "streaming_computing",
+      "relation_type": "prerequisite_of",
+      "rationale": "流式计算处理持续到达的数据，先要理解数据采集来源与方式。"
+    },
+    {
+      "source": "python_language",
+      "target": "python_ide",
+      "relation_type": "prerequisite_of",
+      "rationale": "先认识 Python 及其运行方式，再选择和配置开发环境。"
+    },
+    {
+      "source": "python_language",
+      "target": "python_syntax",
+      "relation_type": "prerequisite_of",
+      "rationale": "Python 语法是使用该语言进行数据处理的基础。"
+    },
+    {
+      "source": "python_syntax",
+      "target": "python_data_types",
+      "relation_type": "prerequisite_of",
+      "rationale": "变量、表达式和控制结构为理解内置数据类型提供语法基础。"
+    },
+    {
+      "source": "python_syntax",
+      "target": "python_functions",
+      "relation_type": "prerequisite_of",
+      "rationale": "函数定义与调用建立在基本语法和流程控制之上。"
+    },
+    {
+      "source": "python_functions",
+      "target": "object_oriented_programming",
+      "relation_type": "prerequisite_of",
+      "rationale": "方法与对象行为的理解需要函数、参数和返回值基础。"
+    },
+    {
+      "source": "url_concept",
+      "target": "web_crawler",
+      "relation_type": "prerequisite_of",
+      "rationale": "网络爬虫需要先能定位和请求目标资源。"
+    },
+    {
+      "source": "html_document",
+      "target": "web_crawler",
+      "relation_type": "prerequisite_of",
+      "rationale": "网页数据提取需要理解 HTML 文档的基本结构。"
+    },
+    {
+      "source": "web_crawler",
+      "target": "crawler_security",
+      "relation_type": "prerequisite_of",
+      "rationale": "先理解爬虫工作方式，才能判断访问边界与合规风险。"
+    },
+    {
+      "source": "robots_protocol",
+      "target": "crawler_security",
+      "relation_type": "prerequisite_of",
+      "rationale": "robots.txt 是理解爬虫访问约束的重要协议基础。"
+    },
+    {
+      "source": "pandas",
+      "target": "series",
+      "relation_type": "prerequisite_of",
+      "rationale": "Series 是 Pandas 提供的核心一维数据结构。"
+    },
+    {
+      "source": "pandas",
+      "target": "dataframe",
+      "relation_type": "prerequisite_of",
+      "rationale": "DataFrame 是 Pandas 提供的核心二维数据结构。"
+    },
+    {
+      "source": "pandas",
+      "target": "tabular_data_io",
+      "relation_type": "prerequisite_of",
+      "rationale": "表格读写使用 Pandas 的统一数据加载接口。"
+    },
+    {
+      "source": "dataframe",
+      "target": "data_indexing",
+      "relation_type": "prerequisite_of",
+      "rationale": "理解表格的行、列和索引后，才能准确选择数据。"
+    },
+    {
+      "source": "data_indexing",
+      "target": "loc_iloc",
+      "relation_type": "prerequisite_of",
+      "rationale": "标签与位置是数据索引的两种不同语义。"
+    },
+    {
+      "source": "dataframe",
+      "target": "descriptive_statistics",
+      "relation_type": "prerequisite_of",
+      "rationale": "描述性统计需要先理解字段、记录和列类型。"
+    },
+    {
+      "source": "dataframe",
+      "target": "data_mapping",
+      "relation_type": "prerequisite_of",
+      "rationale": "映射操作建立在对数据列和行结构的理解上。"
+    },
+    {
+      "source": "data_indexing",
+      "target": "groupby_aggregation",
+      "relation_type": "prerequisite_of",
+      "rationale": "分组聚合需要先识别分组字段和统计对象。"
+    },
+    {
+      "source": "data_indexing",
+      "target": "data_sorting",
+      "relation_type": "prerequisite_of",
+      "rationale": "排序前需要能够选择排序字段并理解其值。"
+    },
+    {
+      "source": "data_cleaning",
+      "target": "missing_values",
+      "relation_type": "prerequisite_of",
+      "rationale": "缺失值是数据清洗需要识别和处理的一类质量问题。"
+    },
+    {
+      "source": "dataframe",
+      "target": "data_type_conversion",
+      "relation_type": "prerequisite_of",
+      "rationale": "列类型转换需要先理解 DataFrame 的字段与数据类型。"
+    },
+    {
+      "source": "dataframe",
+      "target": "data_merge",
+      "relation_type": "prerequisite_of",
+      "rationale": "拼接数据前需要理解表格的列结构与索引。"
+    },
+    {
+      "source": "scikit_learn",
+      "target": "train_test_split",
+      "relation_type": "prerequisite_of",
+      "rationale": "训练测试集划分使用 scikit-learn 的统一建模工具接口。"
+    },
+    {
+      "source": "train_test_split",
+      "target": "feature_standardization",
+      "relation_type": "prerequisite_of",
+      "rationale": "先区分训练数据与测试数据，再确定标准化统计量的拟合范围。"
+    },
+    {
+      "source": "train_test_split",
+      "target": "model_evaluation",
+      "relation_type": "prerequisite_of",
+      "rationale": "评估泛化表现需要区分拟合数据与独立测试数据。"
+    },
+    {
+      "source": "opencv",
+      "target": "image_representation",
+      "relation_type": "prerequisite_of",
+      "rationale": "先读入图像，才能检查其像素数组、尺寸和颜色通道。"
+    },
+    {
+      "source": "image_representation",
+      "target": "image_transformation",
+      "relation_type": "prerequisite_of",
+      "rationale": "图像的尺寸、坐标和像素表示是空间变换的基础。"
+    },
+    {
+      "source": "image_representation",
+      "target": "edge_detection",
+      "relation_type": "prerequisite_of",
+      "rationale": "理解像素变化与通道表示有助于解释边缘检测。"
+    },
+    {
+      "source": "data_visualization",
+      "target": "visualization_classification",
+      "relation_type": "prerequisite_of",
+      "rationale": "先明确数据可视化的目标，再区分科学可视化、信息可视化与可视分析。"
+    },
+    {
+      "source": "data_visualization",
+      "target": "visual_encoding",
+      "relation_type": "prerequisite_of",
+      "rationale": "视觉编码把数据属性映射为位置、颜色、形状等视觉变量。"
+    },
+    {
+      "source": "visualization_classification",
+      "target": "scientific_visualization",
+      "relation_type": "prerequisite_of",
+      "rationale": "科学可视化是课程中的一类数据可视化。"
+    },
+    {
+      "source": "visualization_classification",
+      "target": "information_visualization",
+      "relation_type": "prerequisite_of",
+      "rationale": "信息可视化是课程中的一类数据可视化。"
+    },
+    {
+      "source": "visualization_classification",
+      "target": "visual_analytics",
+      "relation_type": "prerequisite_of",
+      "rationale": "可视分析结合自动分析与人的交互判断。"
+    },
+    {
+      "source": "visual_encoding",
+      "target": "wordcloud",
+      "relation_type": "prerequisite_of",
+      "rationale": "理解视觉变量有助于判断词频如何映射为字号等视觉属性。"
+    },
+    {
+      "source": "visual_encoding",
+      "target": "dashboard",
+      "relation_type": "prerequisite_of",
+      "rationale": "仪表板需要综合使用位置、颜色和图形等视觉编码。"
+    },
+    {
+      "source": "eda",
+      "target": "tableau",
+      "relation_type": "prerequisite_of",
+      "rationale": "Tableau 数据探索以探索性分析问题和变量关系为起点。"
+    },
+    {
+      "source": "data_visualization",
+      "target": "matplotlib",
+      "relation_type": "prerequisite_of",
+      "rationale": "Matplotlib 是实现 Python 数据可视化的基础绘图库。"
+    },
+    {
+      "source": "matplotlib",
+      "target": "seaborn",
+      "relation_type": "prerequisite_of",
+      "rationale": "Seaborn 在 Matplotlib 基础上提供统计可视化接口。"
+    },
+    {
+      "source": "data_visualization",
+      "target": "pyecharts",
+      "relation_type": "prerequisite_of",
+      "rationale": "pyecharts 用于以 Python 构建交互式图表。"
+    },
+    {
+      "source": "supervised_learning",
+      "target": "classification_problem",
+      "relation_type": "prerequisite_of",
+      "rationale": "分类是使用带标签样本进行学习的一类监督学习任务。"
+    },
+    {
+      "source": "supervised_learning",
+      "target": "regression_problem",
+      "relation_type": "prerequisite_of",
+      "rationale": "回归是使用带标签样本预测连续值的一类监督学习任务。"
+    },
+    {
+      "source": "classification_problem",
+      "target": "logistic_regression",
+      "relation_type": "prerequisite_of",
+      "rationale": "逻辑回归以类别概率建模解决分类问题。"
+    },
+    {
+      "source": "classification_problem",
+      "target": "knn",
+      "relation_type": "prerequisite_of",
+      "rationale": "K 近邻根据邻近样本的类别完成分类。"
+    },
+    {
+      "source": "classification_problem",
+      "target": "svm",
+      "relation_type": "prerequisite_of",
+      "rationale": "支持向量机通过分类间隔构造决策边界。"
+    },
+    {
+      "source": "svm",
+      "target": "svm_kernel",
+      "relation_type": "prerequisite_of",
+      "rationale": "核函数用于扩展支持向量机处理非线性边界的能力。"
+    },
+    {
+      "source": "classification_problem",
+      "target": "naive_bayes",
+      "relation_type": "prerequisite_of",
+      "rationale": "朴素贝叶斯利用条件概率完成分类。"
+    },
+    {
+      "source": "classification_problem",
+      "target": "decision_tree",
+      "relation_type": "prerequisite_of",
+      "rationale": "决策树通过特征条件递归划分类别。"
+    },
+    {
+      "source": "model_evaluation",
+      "target": "classification_evaluation",
+      "relation_type": "prerequisite_of",
+      "rationale": "分类模型需要使用面向离散类别预测的评价指标。"
+    },
+    {
+      "source": "model_evaluation",
+      "target": "regression_evaluation",
+      "relation_type": "prerequisite_of",
+      "rationale": "回归模型需要使用面向连续数值误差的评价指标。"
+    },
+    {
+      "source": "model_evaluation",
+      "target": "cross_validation",
+      "relation_type": "prerequisite_of",
+      "rationale": "交叉验证通过重复划分数据估计模型的泛化表现。"
+    },
+    {
+      "source": "regression_problem",
+      "target": "linear_regression",
+      "relation_type": "prerequisite_of",
+      "rationale": "线性回归是建立连续目标与特征线性关系的基础模型。"
+    },
+    {
+      "source": "regression_problem",
+      "target": "nonlinear_regression",
+      "relation_type": "prerequisite_of",
+      "rationale": "非线性回归用于表达连续目标与特征间的非线性关系。"
+    },
+    {
+      "source": "decision_tree",
+      "target": "ensemble_learning",
+      "relation_type": "prerequisite_of",
+      "rationale": "树模型是随机森林和梯度提升树的重要基学习器。"
+    },
+    {
+      "source": "ensemble_learning",
+      "target": "random_forest",
+      "relation_type": "prerequisite_of",
+      "rationale": "随机森林通过组合多棵随机化决策树进行学习。"
+    },
+    {
+      "source": "ensemble_learning",
+      "target": "gradient_boosting_tree",
+      "relation_type": "prerequisite_of",
+      "rationale": "梯度提升树按序组合弱学习器以修正残差。"
+    },
+    {
+      "source": "unsupervised_learning",
+      "target": "clustering",
+      "relation_type": "prerequisite_of",
+      "rationale": "聚类是在无标签数据中发现样本分组的典型无监督任务。"
+    },
+    {
+      "source": "clustering",
+      "target": "kmeans",
+      "relation_type": "prerequisite_of",
+      "rationale": "K-means 是基于中心和距离划分样本的基础聚类算法。"
+    },
+    {
+      "source": "clustering",
+      "target": "dbscan",
+      "relation_type": "prerequisite_of",
+      "rationale": "密度聚类依据局部密度发现任意形状的簇。"
+    },
+    {
+      "source": "clustering",
+      "target": "hierarchical_clustering",
+      "relation_type": "prerequisite_of",
+      "rationale": "层次聚类通过逐步合并或拆分形成聚类层次。"
+    },
+    {
+      "source": "clustering",
+      "target": "clustering_evaluation",
+      "relation_type": "prerequisite_of",
+      "rationale": "比较聚类结果需要先理解聚类目标及簇的含义。"
+    },
+    {
+      "source": "unsupervised_learning",
+      "target": "dimensionality_reduction",
+      "relation_type": "prerequisite_of",
+      "rationale": "降维是在无标签结构中提取低维表示的重要方法。"
+    },
+    {
+      "source": "dimensionality_reduction",
+      "target": "pca",
+      "relation_type": "prerequisite_of",
+      "rationale": "PCA 是通过线性投影保留主要变化方向的基础降维方法。"
+    },
+    {
+      "source": "pca",
+      "target": "kernel_pca",
+      "relation_type": "prerequisite_of",
+      "rationale": "核主成分分析在 PCA 思想上引入核映射处理非线性结构。"
+    },
+    {
+      "source": "clustering",
+      "target": "spectral_clustering",
+      "relation_type": "prerequisite_of",
+      "rationale": "谱聚类利用样本图的谱结构进行分组。"
+    },
+    {
+      "source": "unsupervised_learning",
+      "target": "lda_topic_model",
+      "relation_type": "prerequisite_of",
+      "rationale": "LDA 从无标签文本中发现潜在主题分布。"
+    },
+    {
+      "source": "artificial_intelligence",
+      "target": "neural_network",
+      "relation_type": "prerequisite_of",
+      "rationale": "神经网络是人工智能中用于学习复杂映射的一类模型。"
+    },
+    {
+      "source": "neural_network",
+      "target": "activation_function",
+      "relation_type": "prerequisite_of",
+      "rationale": "激活函数为神经网络引入非线性表达能力。"
+    },
+    {
+      "source": "neural_network",
+      "target": "backpropagation",
+      "relation_type": "prerequisite_of",
+      "rationale": "反向传播建立在网络结构、参数与损失计算的理解上。"
+    },
+    {
+      "source": "activation_function",
+      "target": "backpropagation",
+      "relation_type": "prerequisite_of",
+      "rationale": "反向传播需要计算激活函数参与的复合函数梯度。"
+    },
+    {
+      "source": "neural_network",
+      "target": "deep_learning_tasks",
+      "relation_type": "prerequisite_of",
+      "rationale": "深度学习任务建立在多层神经网络的表示能力上。"
+    },
+    {
+      "source": "neural_network",
+      "target": "deep_learning_frameworks",
+      "relation_type": "prerequisite_of",
+      "rationale": "深度学习框架用于定义、训练和部署神经网络。"
+    },
+    {
+      "source": "neural_network",
+      "target": "convolutional_neural_network",
+      "relation_type": "prerequisite_of",
+      "rationale": "卷积神经网络是在神经网络基础上引入局部连接与参数共享的结构。"
+    },
+    {
+      "source": "convolutional_neural_network",
+      "target": "lenet5",
+      "relation_type": "prerequisite_of",
+      "rationale": "LeNet-5 是理解经典卷积网络层次结构的代表模型。"
+    },
+    {
+      "source": "neural_network",
+      "target": "recurrent_neural_network",
+      "relation_type": "prerequisite_of",
+      "rationale": "循环神经网络是在神经网络基础上处理序列依赖的结构。"
+    },
+    {
+      "source": "recurrent_neural_network",
+      "target": "lstm",
+      "relation_type": "prerequisite_of",
+      "rationale": "LSTM 通过门控机制改进标准循环神经网络的长期依赖建模。"
+    },
+    {
+      "source": "backpropagation",
+      "target": "gradient_descent",
+      "relation_type": "prerequisite_of",
+      "rationale": "反向传播得到梯度后，梯度下降据此更新模型参数。"
+    },
+    {
+      "source": "train_test_split",
+      "target": "overfitting",
+      "relation_type": "prerequisite_of",
+      "rationale": "区分训练与测试表现后，才能识别模型是否过拟合。"
+    },
+    {
+      "source": "overfitting",
+      "target": "regularization",
+      "relation_type": "prerequisite_of",
+      "rationale": "正则化是控制模型复杂度、缓解过拟合的常用方法。"
+    },
+    {
+      "source": "natural_language_processing",
+      "target": "question_answering",
+      "relation_type": "prerequisite_of",
+      "rationale": "智能问答需要对自然语言问题和答案进行理解与生成。"
+    },
+    {
+      "source": "natural_language_processing",
+      "target": "large_language_model",
+      "relation_type": "prerequisite_of",
+      "rationale": "大语言模型建立在大规模自然语言建模任务之上。"
+    },
+    {
+      "source": "large_language_model",
+      "target": "prompt_engineering",
+      "relation_type": "prerequisite_of",
+      "rationale": "提示工程通过输入设计引导大语言模型完成任务。"
+    },
+    {
+      "source": "data_science_competition",
+      "target": "competition_workflow",
+      "relation_type": "prerequisite_of",
+      "rationale": "先了解竞赛目标与形式，再进入问题分析、建模和提交流程。"
+    },
+    {
+      "source": "competition_workflow",
+      "target": "feature_engineering",
+      "relation_type": "prerequisite_of",
+      "rationale": "特征工程是竞赛建模流程中的核心数据准备步骤。"
+    },
+    {
+      "source": "data_literacy",
+      "target": "data_skills",
+      "relation_type": "confusable_with",
+      "rationale": "数据素养是综合意识与能力，数据技能侧重可操作的方法和工具。"
+    },
+    {
+      "source": "data_thinking",
+      "target": "digitization",
+      "relation_type": "confusable_with",
+      "rationale": "数据思维是一种分析问题的方式，数字化是组织或业务的转型过程。"
+    },
+    {
+      "source": "structured_data",
+      "target": "semi_structured_data",
+      "relation_type": "confusable_with",
+      "rationale": "结构化数据遵循固定模式，半结构化数据保留标签或层次但模式更灵活。"
+    },
+    {
+      "source": "semi_structured_data",
+      "target": "unstructured_data",
+      "relation_type": "confusable_with",
+      "rationale": "半结构化数据仍有可解析结构，非结构化数据通常没有预定义表格模式。"
+    },
+    {
+      "source": "dataframe",
+      "target": "series",
+      "relation_type": "confusable_with",
+      "rationale": "DataFrame 是二维表格，Series 是一维带索引序列。"
+    },
+    {
+      "source": "data_cleaning",
+      "target": "data_fusion",
+      "relation_type": "confusable_with",
+      "rationale": "数据清洗修复单份或多份数据的质量问题，数据融合强调多源数据的对齐与整合。"
+    },
+    {
+      "source": "feature_standardization",
+      "target": "data_type_conversion",
+      "relation_type": "confusable_with",
+      "rationale": "标准化改变特征尺度，类型转换改变数据的类型表示。"
+    },
+    {
+      "source": "scientific_visualization",
+      "target": "information_visualization",
+      "relation_type": "confusable_with",
+      "rationale": "科学可视化侧重具有空间或物理结构的数据，信息可视化侧重抽象数据。"
+    },
+    {
+      "source": "information_visualization",
+      "target": "visual_analytics",
+      "relation_type": "confusable_with",
+      "rationale": "信息可视化强调视觉表达，可视分析还结合自动分析与交互推理。"
+    },
+    {
+      "source": "classification_problem",
+      "target": "regression_problem",
+      "relation_type": "confusable_with",
+      "rationale": "分类预测离散类别，回归预测连续数值。"
+    },
+    {
+      "source": "classification_evaluation",
+      "target": "regression_evaluation",
+      "relation_type": "confusable_with",
+      "rationale": "离散类别预测与连续数值预测需要不同的评价指标。"
+    },
+    {
+      "source": "logistic_regression",
+      "target": "linear_regression",
+      "relation_type": "confusable_with",
+      "rationale": "逻辑回归用于分类概率，线性回归用于连续数值预测。"
+    },
+    {
+      "source": "supervised_learning",
+      "target": "unsupervised_learning",
+      "relation_type": "confusable_with",
+      "rationale": "监督学习使用标签信号，无监督学习主要从无标签数据中发现结构。"
+    },
+    {
+      "source": "clustering",
+      "target": "classification_problem",
+      "relation_type": "confusable_with",
+      "rationale": "聚类从无标签数据发现分组，分类根据已有标签预测类别。"
+    },
+    {
+      "source": "convolutional_neural_network",
+      "target": "recurrent_neural_network",
+      "relation_type": "confusable_with",
+      "rationale": "卷积网络擅长局部空间模式，循环网络面向序列依赖。"
+    },
+    {
+      "source": "natural_language_processing",
+      "target": "text_mining",
+      "relation_type": "confusable_with",
+      "rationale": "自然语言处理关注语言计算方法，文本挖掘关注从文本中发现信息和模式。"
+    },
+    {
+      "source": "prompt_engineering",
+      "target": "large_language_model_applications",
+      "relation_type": "prerequisite_of",
+      "rationale": "大语言模型应用需要用提示明确任务、材料、输出结构和业务边界。"
+    },
+    {
+      "source": "data_science_competition",
+      "target": "competition_platforms",
+      "relation_type": "prerequisite_of",
+      "rationale": "先理解数据科学竞赛的目标与组织方式，再比较不同竞赛平台的定位。"
     }
   ]
 }

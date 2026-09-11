@@ -3,6 +3,7 @@ Knowledge Mapper 回归测试
 用真实学生问题验证三层映射策略
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -269,6 +270,21 @@ def test_embedding_fallback_uses_offline_cache_only_when_rules_miss(monkeypatch)
     matches = mapper.map_question("语义上指向泛化变差但没有显式别名", top_k=1, embedding_threshold=0.8)
 
     assert [(match.concept_id, match.method) for match in matches] == [("overfitting", "embedding")]
+
+
+def test_stale_embedding_cache_entries_are_ignored(monkeypatch, tmp_path):
+    cache_path = tmp_path / "knowledge_graph_embeddings.json"
+    cache_path.write_text(json.dumps({"svm": [1.0, 0.0], "deleted_concept": [1.0, 0.0]}))
+    monkeypatch.setenv("KNOWLEDGE_MAPPER_EMBEDDING_CACHE", str(cache_path))
+    monkeypatch.setattr("ds_course_agent.shared.config.CONCEPT_MAP_EMBEDDING_MODE", "offline_first")
+
+    graph = KnowledgeGraph()
+    mapper = KnowledgeMapper(graph)
+    monkeypatch.setattr(mapper, "_embed_text", lambda text: np.array([1.0, 0.0]))
+
+    assert set(graph.embeddings) == {"svm"}
+    matches = mapper.map_question("没有显式别名的语义查询", top_k=1, embedding_threshold=0.8)
+    assert [(match.concept_id, match.method) for match in matches] == [("svm", "embedding")]
 
 
 def test_concept_query_embedding_cannot_mutate_shared_circuit(monkeypatch):

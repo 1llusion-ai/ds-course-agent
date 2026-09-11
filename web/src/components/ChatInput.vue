@@ -7,7 +7,7 @@
         class="input-field"
         :placeholder="placeholder"
         @keydown.enter="handleEnterKey"
-        @input="autoResize"
+        @input="handleInput"
         ref="textareaRef"
       />
       <div class="composer-toolbar" :class="{ 'composer-toolbar--hero': hero }">
@@ -54,12 +54,13 @@
 </template>
 
 <script setup>
-import { computed, ref, nextTick } from 'vue'
+import { computed, ref, nextTick, watch } from 'vue'
 
 const props = defineProps({
   loading: Boolean,
   hero: Boolean,
   webSearchEnabled: Boolean,
+  initialText: { type: String, default: '' },
   webSearchHint: {
     type: String,
     default: ''
@@ -69,6 +70,16 @@ const emit = defineEmits(['send', 'toggle-web-search', 'cancel'])
 
 const inputText = ref('')
 const textareaRef = ref(null)
+const initialTextApplied = ref('')
+const userEdited = ref(false)
+
+watch(() => props.initialText, value => {
+  if (!userEdited.value && (!inputText.value || inputText.value === initialTextApplied.value)) {
+    inputText.value = value
+    initialTextApplied.value = value
+    autoResize()
+  }
+}, { immediate: true })
 const placeholder = computed(() => props.hero
   ? '问一个数据科学问题、公式推导或代码练习...'
   : '问一个课程概念、公式推导或代码问题...'
@@ -87,11 +98,18 @@ function autoResize() {
   })
 }
 
+function handleInput() {
+  userEdited.value = true
+  autoResize()
+}
+
 function handleSend() {
   const text = inputText.value.trim()
   if (!text || props.loading) return
   emit('send', text, { webSearch: props.webSearchEnabled })
   inputText.value = ''
+  userEdited.value = false
+  initialTextApplied.value = ''
   nextTick(() => {
     if (textareaRef.value) textareaRef.value.style.height = 'auto'
   })

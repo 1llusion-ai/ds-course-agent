@@ -56,6 +56,7 @@ These should not be promoted to tools or skills unless their role changes.
 | --- | --- |
 | `src/ds_course_agent/teaching/memory_core.py` | profile aggregation, weak-spot detection, resolved-history bookkeeping |
 | `src/ds_course_agent/teaching/knowledge_mapper.py` | concept matching and related-concept lookup |
+| `src/ds_course_agent/teaching/knowledge_map.py` | validated course-map projection and exact-concept learner-state overlay; exposed through an authenticated HTTP read |
 | `skills/learning-path/scripts/planner.py` | internal route ranking and step ordering |
 | `skills/personalized-explanation/scripts/strategy.py` | internal relevance filtering and scaffold strategy |
 | retrieval fusion / rerank logic | internal ranking implementation rather than a user-facing capability |
