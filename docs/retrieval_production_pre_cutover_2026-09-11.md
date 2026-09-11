@@ -147,13 +147,13 @@ Rollback does not re-ingest or re-embed documents.
 ## 7. Validation Gates
 
 - Focused retrieval, promotion, report, and archive tests: 42 passed.
-- Route tests: 37 passed.
+- Route tests: 38 passed.
 - Route harness: 119/119; unexpected RAG count 0.
 - Evidence panel v2: valid (36 quality-gate, 43 robustness, 7
   interpretation-sensitive, 5 boundary samples).
-- Full suite: 714 passed, 14 skipped, one existing optional-reranker warning.
+- Full suite: 734 passed, 14 skipped, one existing optional-reranker warning.
 - Ruff check: passed.
-- Ruff format: 274 Python files passed.
+- Ruff format: 276 Python files passed.
 - Live `RAGService()` manifest/startup and `ret-0053` retrieval smoke: passed.
 
 ## 8. Executed Cutover
@@ -181,3 +181,111 @@ Rollback does not re-ingest or re-embed documents.
   returned `{"status":"ok","service":"rag-tutor-backend"}`.
 
 Keep the rollback archive unchanged through the observation period.
+
+## 9. Post-Cutover Term Resolution Hardening
+
+Live testing exposed two failure modes after the index switch:
+
+1. The optional 0.5-second concept-mapping embedding request shared the same
+   circuit-breaker mutation path as required RAG embeddings. Its timeout could
+   incorrectly block required retrieval for 60 seconds.
+2. A missing short acronym still received semantic Top-10 neighbors, which
+   displayed unrelated course sources and encouraged an unsupported answer.
+
+The production path now uses typed embedding circuit modes. Required RAG
+embeddings use the managed breaker, while optional concept mapping observes
+failures without opening it.
+
+Single explicit short-term queries also pass through a conservative course-term
+index before vector retrieval:
+
+- Exact terms use only chunks that directly contain the term.
+- A typo is corrected only when one same-length course acronym is uniquely
+  close enough; the correction is disclosed before answering.
+- An unresolved term returns zero documents and zero displayed sources instead
+  of semantic neighbors.
+- Normal multi-term questions remain on the raw-vector Top-10 path.
+
+Live SSE validation on 2026-09-11 confirmed:
+
+- `DMKI是什么？` resolves to the textbook term `DIKW`, answers using the
+  corrected query, and displays only the direct evidence on book pages 16 and
+  23.
+- `ZZZZ是什么？` does not call answer generation, returns a deterministic
+  spelling/context request, and displays no sources.
+- Both responses match persisted chat history and complete without degradation.
+
+A later browser regression showed that contextual follow-up rewriting could
+prepend a previous acronym to the semantic retrieval query. For example, a
+previous `BCA` turn caused the enriched `DWKI是什么？` query to contain two
+acronyms, so conservative term resolution treated it as inapplicable and fell
+back to vector Top-10. Retrieval now receives the enriched semantic query and
+the current original user query as separate typed parameters. Term resolution
+uses only the current query, while normal vector retrieval retains conversational
+context. The reproduced `BCA` then `DWKI` sequence now resolves to `DIKW` and
+returns only book pages 16 and 23.
+
+Explicit short-term definition questions now also have a typed,
+deterministic route before the semantic learning router. Bounded frames such as
+`BCA是什么？`, `请解释 OOP`, and `SVM 的定义` route directly to required
+course retrieval, so a semantic-router timeout cannot prevent term resolution.
+The route does not resolve the term itself; the course-term index still owns
+exact matching, unique typo correction, and zero-evidence rejection. Broader
+requests such as `PCA怎么学比较好？` and personalized explanations remain on
+their learning-path or teaching-skill routes. The route harness remains
+119/119 with zero unexpected RAG cases.
+
+## 10. Acceptance Repairs
+
+The 2026-09-11 acceptance run found two retrieval regressions and repeated
+embedding failures in the running development backend. The repairs preserve
+the promoted index and the frozen raw-vector/context policy:
+
+- Short-term parsing now accepts only complete definition frames. Procedures,
+  mixed Chinese/English comparisons, and compound names such as `K-means`
+  retain their full semantic query. `Pandas` and `Kaggle` mentions no longer
+  replace those queries with page-ordered literal matches.
+- Retrieval cache keys preserve capitalization and token boundaries in both
+  the semantic query and original term query. Warming `DMKI` no longer changes
+  the result for `dmki`. Automatic typo correction still requires uppercase;
+  deterministic definition routing supports either case.
+- Explicit requests beginning with `根据教材`, `依据课程资料`, and equivalent
+  supported source instructions set `QueryContext.course_evidence_requested`.
+  The existing grounded-learning rule consumes that typed signal before
+  semantic fallback. Boundary, web, code, and teaching-strategy rules retain
+  their earlier priorities.
+- Managed query embeddings retry transient failures once. Three consecutive
+  exhausted requests, rather than one timeout, open the existing breaker.
+  Success resets the consecutive failure count. Optional concept mapping
+  neither retries nor changes that count. The configured timeout remains a
+  per-attempt limit, so the current 5-second limit permits up to two attempts.
+
+The former local backend inherited `CODEX_SANDBOX_NETWORK_DISABLED=1` and the
+workspace permission profile. It was replaced by a persistent Herdr terminal
+process without those inherited restrictions, still serving `127.0.0.1:8084`.
+Launch command from the project root:
+
+```bash
+.venv/bin/python main.py api --host 127.0.0.1 --port 8084 >> var/logs/retrieval-api-20260911.log 2>&1
+```
+
+Verification artifacts live under
+`var/artifacts/kb_eval/retrieval_repair_20260911/`:
+
+- Full pytest: 772 passed, 14 skipped, one existing optional-reranker warning.
+- Ruff check and format: passed; route harness 119/119, unexpected RAG 0.
+- All 36 quality-gate queries regained complete evidence under both
+  independent annotations, measured through actual production `retrieve()`.
+  `ret-0016` includes book pages 62/63; `ret-0036` includes book page 216;
+  `ret-0053` retains source pages 114/119 in 2760 tokens.
+- The 48-query live run completed 47 initially. Four requests recovered through
+  the added retry; one non-gate query exhausted both attempts, then passed a
+  separately recorded recheck. No subsequent batch-wide circuit rejection
+  occurred. This is evidence of recovery, not a claim of zero provider failures.
+- Browser checks confirmed repaired Pandas/Kaggle references, zero references
+  for the lowercase unknown term, and identical content after refresh.
+
+The acceptance directory retains failed runs and rechecks separately. External
+model latency remains variable; the old degraded-status propagation issue and
+mobile sidebar layout are separate issues recorded in the original acceptance
+report.
