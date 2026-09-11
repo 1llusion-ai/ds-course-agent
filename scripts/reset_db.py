@@ -16,15 +16,19 @@ def archive_database(directory: Path, md5_path: Path, runtime_root: Path) -> Pat
     root = runtime_root.resolve()
     directory, md5_path = directory.resolve(), md5_path.resolve()
     archive_root = root / "artifacts" / "kb_backups"
-    for target in (directory, md5_path):
-        if not target.is_relative_to(root) or target == root:
-            raise ValueError(f"Refusing a reset outside a dedicated runtime path: {target}")
-        if archive_root.is_relative_to(target) or target.is_relative_to(archive_root):
-            raise ValueError(f"Reset target overlaps backup storage: {target}")
+    if not directory.is_relative_to(root) or directory == root:
+        raise ValueError(f"Refusing a reset outside a dedicated runtime path: {directory}")
+    if archive_root.is_relative_to(directory) or directory.is_relative_to(archive_root):
+        raise ValueError(f"Reset target overlaps backup storage: {directory}")
     if not directory.is_dir():
         raise ValueError(f"Knowledge-base directory does not exist: {directory}")
-    if md5_path.exists() and not md5_path.is_file():
-        raise ValueError(f"Hash-record target is not a file: {md5_path}")
+    if md5_path.exists():
+        if not md5_path.is_relative_to(root) or md5_path == root:
+            raise ValueError(f"Refusing a reset outside a dedicated runtime path: {md5_path}")
+        if archive_root.is_relative_to(md5_path) or md5_path.is_relative_to(archive_root):
+            raise ValueError(f"Reset target overlaps backup storage: {md5_path}")
+        if not md5_path.is_file():
+            raise ValueError(f"Hash-record target is not a file: {md5_path}")
     archive = archive_root / f"{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex[:8]}"
     archive.mkdir(parents=True, exist_ok=False)
     shutil.move(str(directory), str(archive / "database"))

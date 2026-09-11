@@ -46,6 +46,37 @@ def test_reset_archives_database_and_hash_records(tmp_path):
     assert database.is_dir() and not list(database.iterdir())
 
 
+def test_reset_allows_missing_legacy_hash_path_outside_runtime(tmp_path):
+    from scripts.reset_db import archive_database
+
+    root = tmp_path / "var"
+    database = root / "chroma_db"
+    database.mkdir(parents=True)
+    (database / "chroma.sqlite3").write_bytes(b"preserved database")
+
+    archive = archive_database(database, tmp_path / "missing-md5.text", root)
+
+    assert (archive / "database" / "chroma.sqlite3").read_bytes() == b"preserved database"
+    assert not (archive / "hash-record").exists()
+    assert database.is_dir() and not list(database.iterdir())
+
+
+def test_reset_rejects_existing_hash_record_outside_runtime(tmp_path):
+    from scripts.reset_db import archive_database
+
+    root = tmp_path / "var"
+    database = root / "chroma_db"
+    database.mkdir(parents=True)
+    hashes = tmp_path / "md5.text"
+    hashes.write_text("must not move")
+
+    with pytest.raises(ValueError, match="outside a dedicated runtime path"):
+        archive_database(database, hashes, root)
+
+    assert database.is_dir()
+    assert hashes.read_text() == "must not move"
+
+
 @pytest.mark.parametrize("target", ["root", "outside", "archive"])
 def test_reset_rejects_broad_or_overlapping_paths(tmp_path, target):
     from scripts.reset_db import archive_database
