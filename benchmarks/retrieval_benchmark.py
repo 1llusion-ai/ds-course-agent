@@ -17,6 +17,7 @@ from benchmarks.metrics.retrieval import (
     calculate_recall_at_k,
 )
 from benchmarks.qa_dataset import find_missing_annotated_chunk_ids, load_retrieval_qa_dataset
+from ds_course_agent.retrieval.hybrid_retriever import HybridRetriever
 from ds_course_agent.retrieval.service import RAGService
 
 try:
@@ -86,7 +87,7 @@ def validate_dataset_integrity(
 
 
 def evaluate_method(
-    service: RAGService,
+    service: RAGService | HybridRetriever,
     qa_pairs: list[dict],
     top_k: int = 5,
     similarity_threshold: float | None = None,
@@ -98,12 +99,12 @@ def evaluate_method(
         acceptable_ids = qa["acceptable_ids"]
         relevance_scores = qa["relevance_scores"]
 
-        retrieval_kwargs = {"top_k": top_k}
-        if not service.use_hybrid:
-            retrieval_kwargs["similarity_threshold"] = similarity_threshold
-
-        retrieval = service.retrieve(query, **retrieval_kwargs)
-        retrieved_ids = [d.metadata.get("chunk_id", "") for d in retrieval.documents]
+        if isinstance(service, RAGService):
+            retrieval = service.retrieve(query, top_k=top_k, similarity_threshold=similarity_threshold)
+            documents = retrieval.documents
+        else:
+            documents = service.retrieve(query, top_k=top_k)
+        retrieved_ids = [document.metadata.get("chunk_id", "") for document in documents]
         matched_ids = [cid for cid in retrieved_ids[:top_k] if cid in acceptable_ids]
 
         results.append(
@@ -187,22 +188,25 @@ def run_benchmark(
 
     # 纯向量检索
     print("\n[1/3] 评估纯向量检索...")
-    vector_service = RAGService(use_hybrid=False)
-    vector_results = evaluate_method(
-        vector_service,
-        qa_pairs,
-        top_k=top_k,
-        similarity_threshold=None,
-    )
+    vector_service = RAGService()
+    try:
+        vector_results = evaluate_method(
+            vector_service,
+            qa_pairs,
+            top_k=top_k,
+            similarity_threshold=None,
+        )
+    finally:
+        vector_service.close()
 
     # 混合检索
     print("\n[2/3] 评估 BM25 混合检索...")
-    hybrid_service = RAGService(use_hybrid=True, use_rerank=False)
+    hybrid_service = HybridRetriever(k=top_k, use_rerank=False)
     hybrid_results = evaluate_method(hybrid_service, qa_pairs, top_k=top_k)
 
     # 混合+rerank检索
     print("\n[3/3] 评估 BM25 混合+Rerank 检索...")
-    hybrid_rerank_service = RAGService(use_hybrid=True, use_rerank=True)
+    hybrid_rerank_service = HybridRetriever(k=top_k, use_rerank=True)
     rerank_available = hybrid_rerank_service.use_rerank
     if rerank_available:
         hybrid_rerank_results = evaluate_method(hybrid_rerank_service, qa_pairs, top_k=top_k)

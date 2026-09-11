@@ -65,9 +65,13 @@ _SETTING_NAMES = [
     "CONTEXT_LARGE_MESSAGE_TOKENS",
     "CONTEXT_SEMANTIC_SUMMARY_ENABLED",
     "CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS",
-    "RAG_CONTEXT_TRIM_ENABLED",
-    "RAG_CONTEXT_MAX_CHARS",
-    "RAG_CONTEXT_DOC_MAX_CHARS",
+    "RAG_CANDIDATE_DEPTH",
+    "RAG_CONTEXT_MAX_TOKENS",
+    "RAG_CONTEXT_TOKENIZER_POLICY",
+    "RAG_CONTEXT_DEDUPLICATION_MODE",
+    "RAG_CONTEXT_OVERFLOW_POLICY",
+    "RAG_CONTEXT_HEADER_POLICY",
+    "RAG_INDEX_MANIFEST_PATH",
     "RAG_ANSWER_MAX_TOKENS",
     "RAG_ANSWER_TIMEOUT_SECONDS",
     "RAG_ANSWER_CACHE_ENABLED",
@@ -185,9 +189,13 @@ context_budget_ratio = CONTEXT_BUDGET_RATIO
 context_large_message_tokens = CONTEXT_LARGE_MESSAGE_TOKENS
 context_semantic_summary_enabled = CONTEXT_SEMANTIC_SUMMARY_ENABLED
 context_semantic_summary_timeout_seconds = CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS
-rag_context_trim_enabled = RAG_CONTEXT_TRIM_ENABLED
-rag_context_max_chars = RAG_CONTEXT_MAX_CHARS
-rag_context_doc_max_chars = RAG_CONTEXT_DOC_MAX_CHARS
+rag_candidate_depth = RAG_CANDIDATE_DEPTH
+rag_context_max_tokens = RAG_CONTEXT_MAX_TOKENS
+rag_context_tokenizer_policy = RAG_CONTEXT_TOKENIZER_POLICY
+rag_context_deduplication_mode = RAG_CONTEXT_DEDUPLICATION_MODE
+rag_context_overflow_policy = RAG_CONTEXT_OVERFLOW_POLICY
+rag_context_header_policy = RAG_CONTEXT_HEADER_POLICY
+rag_index_manifest_path = RAG_INDEX_MANIFEST_PATH
 rag_answer_max_tokens = RAG_ANSWER_MAX_TOKENS
 rag_answer_timeout_seconds = RAG_ANSWER_TIMEOUT_SECONDS
 rag_answer_cache_enabled = RAG_ANSWER_CACHE_ENABLED
@@ -292,9 +300,13 @@ __all__ = [
     "context_large_message_tokens",
     "context_semantic_summary_enabled",
     "context_semantic_summary_timeout_seconds",
-    "rag_context_trim_enabled",
-    "rag_context_max_chars",
-    "rag_context_doc_max_chars",
+    "rag_candidate_depth",
+    "rag_context_max_tokens",
+    "rag_context_tokenizer_policy",
+    "rag_context_deduplication_mode",
+    "rag_context_overflow_policy",
+    "rag_context_header_policy",
+    "rag_index_manifest_path",
     "rag_answer_max_tokens",
     "rag_answer_timeout_seconds",
     "rag_answer_cache_enabled",

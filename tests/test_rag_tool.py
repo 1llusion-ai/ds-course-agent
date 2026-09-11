@@ -2,6 +2,7 @@
 RAG Tool 单元测试
 """
 
+import hashlib
 import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -379,6 +380,7 @@ class TestCheckKnowledgeBaseStatus:
 
 class TestRAGPayloadWarnings:
     def test_retrieve_warns_on_large_formatted_context_without_changing_result(self, monkeypatch):
+        import ds_course_agent.retrieval.service as rag_service_module
         import ds_course_agent.shared.context_governor as context_governor
         from ds_course_agent.retrieval.service import RAGService
         from ds_course_agent.shared.context_governor import ContextBudget
@@ -390,11 +392,34 @@ class TestRAGPayloadWarnings:
         )
 
         service = RAGService.__new__(RAGService)
-        service.use_hybrid = True
-        service.hybrid_retriever = MagicMock()
-        service.hybrid_retriever.retrieve.return_value = [
-            Document(page_content="教材片段" * 20, metadata={"source": "test.pdf"})
-        ]
+        text = "教材片段" * 20
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        service.embedding = object()
+        service._token_counter = SimpleNamespace(policy_version="cl100k_base_v1", count=len)
+        service.vector_store_service = MagicMock()
+        service.vector_store_service.query.return_value = {
+            "ids": [["chunk-1"]],
+            "documents": [[text]],
+            "metadatas": [
+                [
+                    {
+                        "metadata_schema_version": "retrieval-provenance/1.0",
+                        "source": "test.pdf",
+                        "source_id": "test",
+                        "source_page": 9,
+                        "book_page": 1,
+                        "source_char_start": 0,
+                        "source_char_end": len(text),
+                        "content_sha256": digest,
+                        "source_page_sha256": digest,
+                        "source_page_text": text,
+                    }
+                ]
+            ],
+            "distances": [[0.1]],
+        }
+        monkeypatch.setattr(rag_service_module, "embed_query_cached", lambda *args, **kwargs: [1.0])
+        monkeypatch.setattr(rag_service_module.config, "RAG_CONTEXT_MAX_TOKENS", 10_000, raising=False)
 
         token = begin_query_trace({"entrypoint": "unit_test"})
         result = service.retrieve("测试问题", top_k=1)

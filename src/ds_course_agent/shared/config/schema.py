@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -36,7 +37,7 @@ class Settings(BaseSettings):
 
     EMBEDDING_API_KEY: str = ""
     EMBEDDING_BASE_URL: str = "https://api.siliconflow.cn/v1"
-    EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"
+    EMBEDDING_MODEL: str = "Qwen/Qwen3-Embedding-8B"
     EMBEDDING_TIMEOUT_SECONDS: float = 8.0
     EMBEDDING_MAX_RETRIES: int = 0
     EMBEDDING_QUERY_CACHE_SIZE: int = 512
@@ -106,12 +107,15 @@ class Settings(BaseSettings):
     CONTEXT_SEMANTIC_SUMMARY_ENABLED: bool = False
     CONTEXT_SEMANTIC_SUMMARY_TIMEOUT_SECONDS: float = 3.0
 
-    # RAG prompt/context trimming.  This is separate from the history/tool
-    # artifact compactor: it reduces the *current turn* retrieved context before
-    # it is sent to the answer LLM.
-    RAG_CONTEXT_TRIM_ENABLED: bool = True
-    RAG_CONTEXT_MAX_CHARS: int = 4500
-    RAG_CONTEXT_DOC_MAX_CHARS: int = 1500
+    # Frozen production retrieval/context policy. Retrieved chunks require exact
+    # source intervals and are assembled once in raw vector rank order.
+    RAG_CANDIDATE_DEPTH: int = Field(default=10, ge=1)
+    RAG_CONTEXT_MAX_TOKENS: int = Field(default=4096, ge=1)
+    RAG_CONTEXT_TOKENIZER_POLICY: Literal["cl100k_base_v1"] = "cl100k_base_v1"
+    RAG_CONTEXT_DEDUPLICATION_MODE: Literal["exact_source_interval_v1"] = "exact_source_interval_v1"
+    RAG_CONTEXT_OVERFLOW_POLICY: Literal["stop_v1"] = "stop_v1"
+    RAG_CONTEXT_HEADER_POLICY: Literal["compact_page_v1"] = "compact_page_v1"
+    RAG_INDEX_MANIFEST_PATH: str = ""
     RAG_ANSWER_MAX_TOKENS: int = 768
     RAG_ANSWER_TIMEOUT_SECONDS: float = 30.0
     RAG_ANSWER_CACHE_ENABLED: bool = True

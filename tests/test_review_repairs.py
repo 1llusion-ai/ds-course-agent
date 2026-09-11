@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -63,7 +64,7 @@ def test_recreated_chroma_collection_is_reacquired(tmp_path, monkeypatch):
 
 
 def test_live_corpus_replacement_and_clear_refresh_bm25_and_cache(tmp_path, monkeypatch):
-    import ds_course_agent.retrieval.hybrid_retriever as hybrid
+    import ds_course_agent.retrieval.service as rag
     import ds_course_agent.shared.config as config
     from ds_course_agent.retrieval.service import RAGService, clear_rag_retrieval_cache
 
@@ -71,37 +72,52 @@ def test_live_corpus_replacement_and_clear_refresh_bm25_and_cache(tmp_path, monk
     monkeypatch.setattr(config, "collection_name", "review")
     monkeypatch.setattr(config, "RAG_RETRIEVAL_CACHE_ENABLED", True)
     documents = ["old corpus"]
-    collection = Mock()
-    collection.get.side_effect = lambda **kw: {"documents": list(documents), "metadatas": [{} for _ in documents]}
-    collection.query.side_effect = lambda **kw: {
+
+    def metadata(text):
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        return {
+            "metadata_schema_version": "retrieval-provenance/1.0",
+            "source_id": "review",
+            "source_page": 9,
+            "book_page": 1,
+            "source_char_start": 0,
+            "source_char_end": len(text),
+            "content_sha256": digest,
+            "source_page_sha256": digest,
+            "source_page_text": text,
+        }
+
+    vector_store = Mock()
+    vector_store.query.side_effect = lambda **kw: {
+        "ids": [[f"doc-{index}" for index in range(len(documents))]],
         "documents": [list(documents)],
+        "metadatas": [[metadata(text) for text in documents]],
         "distances": [[0.1 for _ in documents]],
     }
-    client = Mock()
-    client.get_collection.return_value = collection
-    monkeypatch.setattr(hybrid.chromadb, "PersistentClient", lambda **kw: client)
-    monkeypatch.setattr(hybrid, "OpenAIEmbeddings", lambda **kw: object())
-    monkeypatch.setattr(hybrid, "embed_query_cached", lambda *args, **kw: [1.0])
-    retriever = hybrid.HybridRetriever(collection_name="review", use_rerank=False)
+    monkeypatch.setattr(rag, "embed_query_cached", lambda *args, **kw: [1.0])
+
+    class CharacterTokenCounter:
+        policy_version = "cl100k_base_v1"
+
+        def count(self, text):
+            return len(text)
+
     service = RAGService.__new__(RAGService)
-    service.use_hybrid = True
-    service.hybrid_retriever = retriever
-    service._format_documents = lambda docs: "|".join(doc.page_content for doc in docs)
+    service.embedding = object()
+    service.vector_store_service = vector_store
+    service._token_counter = CharacterTokenCounter()
     clear_rag_retrieval_cache()
     try:
-        assert service.retrieve("corpus").formatted_context == "old corpus"
-        assert service.retrieve("corpus").formatted_context == "old corpus"
-        assert collection.get.call_count == 1
-        with knowledge_base_write("review"):
+        assert service.retrieve("corpus").documents[0].page_content == "old corpus"
+        assert service.retrieve("corpus").documents[0].page_content == "old corpus"
+        assert vector_store.query.call_count == 1
+        with knowledge_base_write("review", str(tmp_path)):
             documents[:] = ["new corpus"]
-        assert service.retrieve("corpus").formatted_context == "new corpus"
-        assert retriever.documents[0].page_content == "new corpus"
-        assert collection.get.call_count == 2
-        with knowledge_base_write("review"):
+        assert service.retrieve("corpus").documents[0].page_content == "new corpus"
+        assert vector_store.query.call_count == 2
+        with knowledge_base_write("review", str(tmp_path)):
             documents.clear()
         assert not service.retrieve("corpus").has_results
-        assert retriever.bm25_retriever.bm25 is None
-        assert retriever.bm25_retriever.retrieve("corpus") == []
     finally:
         clear_rag_retrieval_cache()
 
