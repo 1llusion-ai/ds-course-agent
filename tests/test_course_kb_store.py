@@ -172,6 +172,7 @@ class TestMetadataBuild:
             content="2.2 数据科学",
             metadata=ChunkMetadataV2(
                 source_file="book.pdf",
+                parser_source="marker",
                 source_pages=[28],
                 book_pages=[20],
                 chunk_type="semantic",
@@ -193,6 +194,7 @@ class TestMetadataBuild:
         assert metadata["book_pages"] == "[20]"
         assert metadata["chapter_no"] == "第2章"
         assert metadata["chapter"] == "数据科学基本知识"
+        assert metadata["parser_source"] == "marker"
 
     def test_v2_metadata_keeps_front_matter_without_book_page(self):
         from ds_course_agent.kb.chunker import ChunkMetadataV2, ChunkV2

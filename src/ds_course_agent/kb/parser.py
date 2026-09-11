@@ -4,9 +4,12 @@
 解析策略：
 - 默认使用本地 Marker 解析（避免未显式授权时上传 PDF）
 - 可显式选择 Datalab 云端 API（Marker 云端版，无需本地 GPU），并支持 auto 回退
+- 对已有文本层的 PDF，可使用 PyPDF plain/layout 作为轻量本地基线
 - 支持页码范围选择
 - 输出 Markdown 格式，保留结构信息
 """
+
+from __future__ import annotations
 
 import json
 import os
@@ -15,37 +18,124 @@ import shutil
 import subprocess
 import tempfile
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import Literal
+
+ParserMode = Literal["marker", "auto", "datalab", "pypdf-plain", "pypdf-layout"]
+PyPDFExtractionMode = Literal["plain", "layout"]
+DEFAULT_MARKER_TIMEOUT_SECONDS = 7200
+IGNORED_MARKER_BLOCK_TYPES = frozenset(
+    {
+        "Diagram",
+        "Figure",
+        "FigureGroup",
+        "Handwriting",
+        "PageFooter",
+        "PageHeader",
+        "Picture",
+        "PictureGroup",
+    }
+)
+MARKER_REPLACEMENT_GLYPH = "\ufffd\ufffd"
+MARKER_TILDE_BASES = "CKϕφ"
+
+
+def _repair_marker_private_glyphs(text: str) -> str:
+    """修复教材内嵌数学字体被 Marker 转成替换字符的问题。"""
+    if "\ufffd" not in text:
+        return text
+
+    glyph = re.escape(MARKER_REPLACEMENT_GLYPH)
+
+    # PDF 将波浪号存成私有字形。Marker 有时把它放在变量后，有时放在下标后。
+    text = re.sub(
+        rf"(?P<base>[{MARKER_TILDE_BASES}])(?P<suffix>test|[tiX])\s+{glyph}",
+        lambda match: f"{match.group('base')}\u0303{match.group('suffix')}",
+        text,
+    )
+    text = re.sub(
+        rf"(?P<base>[{MARKER_TILDE_BASES}])\s*{glyph}(?:\s*(?P<suffix>test|[tiX]))?",
+        lambda match: f"{match.group('base')}\u0303{match.group('suffix') or ''}",
+        text,
+    )
+
+    # 剩余替换字符来自跨行公式的大型括号分片，本身不承载公式语义。
+    text = re.sub(r"(?:\ufffd\s*)+", " ", text)
+    return re.sub(r"[ \t]+", " ", text).strip()
 
 
 class HTMLTextExtractor(HTMLParser):
     """从 HTML 中提取纯文本"""
 
-    def __init__(self):
+    BLOCK_TAGS = {
+        "blockquote",
+        "br",
+        "div",
+        "figcaption",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "li",
+        "p",
+        "pre",
+        "table",
+        "tr",
+    }
+    CELL_TAGS = {"td", "th"}
+
+    def __init__(self) -> None:
         super().__init__()
-        self.texts = []
-        self.skip = False
+        self.texts: list[str] = []
+        self.skip_depth = 0
+        self.math_delimiters: list[str] = []
 
-    def handle_starttag(self, tag, attrs):
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in {"script", "style"}:
-            self.skip = True
+            self.skip_depth += 1
+        elif not self.skip_depth and tag == "math":
+            attributes = dict(attrs)
+            delimiter = "$$" if attributes.get("display") == "block" else "$"
+            self.math_delimiters.append(delimiter)
+            self.texts.append(f"\n{delimiter}" if delimiter == "$$" else delimiter)
+        elif not self.skip_depth and tag in self.BLOCK_TAGS:
+            self.texts.append("\n")
 
-    def handle_endtag(self, tag):
+    def handle_endtag(self, tag: str) -> None:
         if tag in {"script", "style"}:
-            self.skip = False
+            self.skip_depth = max(0, self.skip_depth - 1)
+        elif not self.skip_depth and tag == "math" and self.math_delimiters:
+            delimiter = self.math_delimiters.pop()
+            self.texts.append(f"{delimiter}\n" if delimiter == "$$" else delimiter)
+        elif not self.skip_depth and tag in self.BLOCK_TAGS:
+            self.texts.append("\n")
+        elif not self.skip_depth and tag in self.CELL_TAGS:
+            self.texts.append("\t")
 
-    def handle_data(self, data):
-        if not self.skip:
+    def handle_data(self, data: str) -> None:
+        if not self.skip_depth:
             self.texts.append(data)
 
-    def get_text(self):
+    def get_text(self) -> str:
         text = "".join(self.texts)
-        # Clean up whitespace
-        text = re.sub(r"\s+", " ", text).strip()
-        return text
+        lines = [re.sub(r"[^\S\n]+", " ", line).strip() for line in text.splitlines()]
+        return "\n".join(line for line in lines if line)
+
+
+@dataclass
+class ParsedBlock:
+    """Marker/Datalab 页面中的一个可检索内容块。"""
+
+    block_type: str
+    text: str
+    block_id: str = ""
+    bbox: tuple[float, float, float, float] | None = None
+    section_hierarchy: tuple[tuple[int, str], ...] = ()
 
 
 @dataclass
@@ -58,6 +148,7 @@ class PageResult:
     char_count: int = 0
     original_char_count: int = 0
     error: str | None = None
+    blocks: list[ParsedBlock] = field(default_factory=list)
 
 
 @dataclass
@@ -71,6 +162,7 @@ class PDFParseResult:
     success_rate: float = 0.0
     full_text: str = ""
     parser_mode: str = "marker"
+    error: str | None = None
 
 
 @dataclass
@@ -88,17 +180,16 @@ def _get_marker_executable() -> str:
     """获取当前 Python 环境对应的 marker_single 可执行文件路径"""
     import sys
 
-    python_dir = os.path.dirname(sys.executable)
-    # Windows: Scripts/marker_single.exe; Unix: bin/marker_single
+    python_dir = Path(sys.executable).resolve().parent
+    # marker_single 与当前环境的 Python 可执行文件位于同一 Scripts/bin 目录。
     candidates = [
-        os.path.join(python_dir, "Scripts", "marker_single.exe"),
-        os.path.join(python_dir, "bin", "marker_single"),
-        "marker_single",
+        python_dir / "marker_single.exe",
+        python_dir / "marker_single",
     ]
     for candidate in candidates:
-        if os.path.isfile(candidate) or candidate == "marker_single":
-            return candidate
-    return "marker_single"
+        if candidate.is_file():
+            return str(candidate)
+    return shutil.which("marker_single") or "marker_single"
 
 
 MARKER_EXE = _get_marker_executable()
@@ -223,7 +314,14 @@ def parse_with_datalab(
 
 
 def parse_with_marker(
-    pdf_path: str, output_dir: str = None, max_pages: int = 0, page_start: int = 1
+    pdf_path: str,
+    output_dir: str | None = None,
+    max_pages: int = 0,
+    page_start: int = 1,
+    timeout_seconds: int = DEFAULT_MARKER_TIMEOUT_SECONDS,
+    enable_ocr: bool = False,
+    page_numbers: tuple[int, ...] = (),
+    equation_ocr_only: bool = False,
 ) -> tuple[bool, str, dict]:
     """
     使用 Marker 解析 PDF
@@ -233,20 +331,49 @@ def parse_with_marker(
     """
     if not os.path.exists(pdf_path):
         return False, "", {}
+    if page_numbers and (max_pages > 0 or page_start != 1):
+        return False, "page_numbers cannot be combined with max_pages or page_start", {}
+    if any(page_number < 1 for page_number in page_numbers):
+        return False, "page_numbers must use 1-based positive indexes", {}
+    if equation_ocr_only and not enable_ocr:
+        return False, "equation_ocr_only requires enable_ocr=True", {}
 
     if output_dir is None:
         output_dir = tempfile.mkdtemp()
 
-    cmd = [MARKER_EXE, pdf_path, "--output_dir", output_dir, "--output_format", "json"]
+    cmd = [
+        MARKER_EXE,
+        pdf_path,
+        "--output_dir",
+        output_dir,
+        "--output_format",
+        "json",
+        "--mode",
+        "fast",
+        "--disable_image_extraction",
+    ]
+    if not enable_ocr:
+        # 课程教材已有完整文本层；关闭 OCR 可避免重复文本和额外模型下载。
+        cmd.append("--disable_ocr")
+    if equation_ocr_only:
+        cmd.extend(
+            [
+                "--converter_cls",
+                "scripts.marker_equation_converter.EquationOcrPdfConverter",
+            ]
+        )
 
-    if max_pages > 0:
+    if page_numbers:
+        page_range = ",".join(str(page_number - 1) for page_number in sorted(set(page_numbers)))
+        cmd.extend(["--page_range", page_range])
+    elif max_pages > 0:
         # Marker 使用 0-based 索引，page_range 格式为 "0-4"
         page_start_idx = page_start - 1
         page_end_idx = page_start_idx + max_pages - 1
         cmd.extend(["--page_range", f"{page_start_idx}-{page_end_idx}"])
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds)
 
         if result.returncode != 0:
             return False, f"Marker failed: {result.stderr}", {}
@@ -271,32 +398,135 @@ def parse_with_marker(
         return True, json.dumps(data, ensure_ascii=False), data
 
     except subprocess.TimeoutExpired:
-        return False, "Marker timeout", {}
+        return False, f"Marker timeout after {timeout_seconds}s", {}
     except Exception as e:
         return False, f"Marker error: {str(e)}", {}
 
 
+def parse_with_pypdf(
+    pdf_path: str,
+    max_pages: int = 0,
+    page_start: int = 1,
+    extraction_mode: PyPDFExtractionMode = "layout",
+) -> tuple[bool, str, list[PageResult]]:
+    """使用 PDF 自带文本层逐页提取文本，不执行 OCR。"""
+    if not os.path.exists(pdf_path):
+        return False, f"File not found: {pdf_path}", []
+    if page_start < 1:
+        return False, "page_start must be >= 1", []
+
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        return False, "pypdf package is not installed", []
+
+    try:
+        reader = PdfReader(pdf_path)
+        start_idx = page_start - 1
+        end_idx = len(reader.pages) if max_pages <= 0 else min(len(reader.pages), start_idx + max_pages)
+        if start_idx >= len(reader.pages):
+            return False, f"page_start exceeds PDF page count: {len(reader.pages)}", []
+
+        pages: list[PageResult] = []
+        parser_name = f"pypdf-{extraction_mode}"
+        for page_idx in range(start_idx, end_idx):
+            try:
+                text = reader.pages[page_idx].extract_text(extraction_mode=extraction_mode) or ""
+                text = text.strip()
+                pages.append(
+                    PageResult(
+                        page_num=page_idx + 1,
+                        text=text,
+                        parser=parser_name,
+                        char_count=len(text),
+                        original_char_count=len(text),
+                    )
+                )
+            except Exception as exc:
+                pages.append(
+                    PageResult(
+                        page_num=page_idx + 1,
+                        text="",
+                        parser=parser_name,
+                        error=str(exc),
+                    )
+                )
+        return True, "", pages
+    except Exception as exc:
+        return False, f"PyPDF error: {exc}", []
+
+
+def _parse_bbox(value: object) -> tuple[float, float, float, float] | None:
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return None
+    try:
+        x1, y1, x2, y2 = (float(item) for item in value)
+        return x1, y1, x2, y2
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_section_hierarchy(value: object) -> tuple[tuple[int, str], ...]:
+    if not isinstance(value, dict):
+        return ()
+    hierarchy: list[tuple[int, str]] = []
+    for level, heading in value.items():
+        try:
+            normalized_level = int(level)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(heading, str) and heading.strip():
+            hierarchy.append((normalized_level, heading.strip()))
+    return tuple(sorted(hierarchy))
+
+
+def _extract_page_blocks(page_data: dict) -> list[ParsedBlock]:
+    """按文档顺序提取 Marker/Datalab 叶子内容块。"""
+
+    def extract_blocks_from_node(node: object) -> list[ParsedBlock]:
+        if not isinstance(node, dict):
+            return []
+
+        child_blocks = [block for child in node.get("children") or [] for block in extract_blocks_from_node(child)]
+        if child_blocks:
+            # Marker 风格 JSON 的父节点 HTML 通常是整个子树的渲染结果。
+            # 同时抽取父子 HTML 会把段落重复写入页面文本，因此层级节点只取叶子内容。
+            return child_blocks
+
+        block_type = str(node.get("block_type") or "Unknown")
+        if block_type in IGNORED_MARKER_BLOCK_TYPES:
+            return []
+
+        html = node.get("html", "")
+        if not isinstance(html, str) or not html or html.startswith("<content-ref"):
+            return []
+
+        extractor = HTMLTextExtractor()
+        try:
+            extractor.feed(html)
+            text = _repair_marker_private_glyphs(extractor.get_text())
+        except Exception:
+            return []
+        if not text:
+            return []
+
+        return [
+            ParsedBlock(
+                block_type=block_type,
+                text=text,
+                block_id=str(node.get("id") or ""),
+                bbox=_parse_bbox(node.get("bbox") or node.get("polygon")),
+                section_hierarchy=_parse_section_hierarchy(node.get("section_hierarchy")),
+            )
+        ]
+
+    return extract_blocks_from_node(page_data)
+
+
 def _extract_page_text(page_data: dict) -> str:
-    """从 Marker/Datalab JSON 的 Page 节点中提取纯文本"""
+    """从 Marker/Datalab JSON 的 Page 节点中提取纯文本。"""
 
-    def extract_text_from_node(node):
-        texts = []
-        if isinstance(node, dict):
-            html = node.get("html", "")
-            if html and not html.startswith("<content-ref"):
-                extractor = HTMLTextExtractor()
-                try:
-                    extractor.feed(html)
-                    text = extractor.get_text()
-                    if text:
-                        texts.append(text)
-                except Exception:
-                    pass
-            for child in node.get("children") or []:
-                texts.extend(extract_text_from_node(child))
-        return texts
-
-    return "\n".join(extract_text_from_node(page_data))
+    return "\n".join(block.text for block in _extract_page_blocks(page_data))
 
 
 def _extract_pages_from_json(data: dict, max_pages: int = 0, parser: str = "marker") -> list[PageResult]:
@@ -320,20 +550,40 @@ def _extract_pages_from_json(data: dict, max_pages: int = 0, parser: str = "mark
     pages_results = []
     for idx, page_data in enumerate(all_pages):
         page_text = ""
+        blocks: list[ParsedBlock] = []
         if isinstance(page_data, dict):
-            page_text = _extract_page_text(page_data)
+            blocks = _extract_page_blocks(page_data)
+            page_text = "\n".join(block.text for block in blocks)
 
         pages_results.append(
             PageResult(
-                page_num=idx + 1,
+                page_num=_marker_page_number(page_data, fallback=idx + 1),
                 text=page_text,
                 parser=parser,
                 char_count=len(page_text),
                 original_char_count=len(page_text),
+                blocks=blocks,
             )
         )
 
     return pages_results
+
+
+def _marker_page_number(page_data: object, fallback: int) -> int:
+    """从 Marker 页面 ID 恢复原 PDF 页码，旧格式缺失时使用顺序页码。"""
+    if not isinstance(page_data, dict):
+        return fallback
+
+    page_id = page_data.get("page_id")
+    if isinstance(page_id, int) and page_id >= 0:
+        return page_id + 1
+
+    block_id = page_data.get("id")
+    if isinstance(block_id, str):
+        match = re.match(r"^/page/(\d+)/", block_id)
+        if match:
+            return int(match.group(1)) + 1
+    return fallback
 
 
 def _build_result(file_name: str, pages: list[PageResult], parser_mode: str) -> PDFParseResult:
@@ -347,15 +597,18 @@ def _build_result(file_name: str, pages: list[PageResult], parser_mode: str) -> 
         file_name=file_name,
         total_pages=len(pages),
         pages=pages,
-        marker_pages=len(pages),
-        success_rate=1.0 if pages else 0.0,
+        marker_pages=sum(page.parser in {"marker", "datalab"} for page in pages),
+        success_rate=(sum(page.error is None for page in pages) / len(pages) if pages else 0.0),
         full_text="\n\n".join(full_text_parts),
         parser_mode=parser_mode,
     )
 
 
 def parse_pdf_file(
-    pdf_path: str, max_pages: int = 0, save_trace: bool = True, parser_mode: str = "marker"
+    pdf_path: str,
+    max_pages: int = 0,
+    save_trace: bool = True,
+    parser_mode: ParserMode = "marker",
 ) -> PDFParseResult:
     """
     解析 PDF 文件
@@ -364,14 +617,41 @@ def parse_pdf_file(
         pdf_path: PDF 文件路径
         max_pages: 最大解析页数，0 表示全部解析
         save_trace: 是否保存解析追踪记录
-        parser_mode: 解析模式 - marker / auto / datalab
+        parser_mode: 解析模式 - marker / auto / datalab / pypdf-plain / pypdf-layout
             marker: 使用本地 Marker（默认，避免未显式授权时上传 PDF）
             auto: 优先 Datalab 云端，失败回退本地 Marker
             datalab: 仅用 Datalab
+            pypdf-plain: 按 PDF 文本流顺序提取，不执行 OCR
+            pypdf-layout: 尽量保留 PDF 文本层版面，不执行 OCR
     """
     file_name = os.path.basename(pdf_path)
 
     print(f"\n[PDF] {file_name}: 开始解析...")
+
+    if parser_mode in {"pypdf-plain", "pypdf-layout"}:
+        extraction_mode: PyPDFExtractionMode = "plain" if parser_mode == "pypdf-plain" else "layout"
+        print(f"  解析器: PyPDF ({extraction_mode})")
+        success, message, pages = parse_with_pypdf(
+            pdf_path,
+            max_pages=max_pages,
+            extraction_mode=extraction_mode,
+        )
+        if not success:
+            print(f"  [ERROR] {message}")
+            return PDFParseResult(
+                file_name=file_name,
+                total_pages=0,
+                pages=[],
+                parser_mode=parser_mode,
+                error=message,
+            )
+
+        result = _build_result(file_name, pages, parser_mode)
+        print(f"[PDF] {file_name}: 解析完成")
+        print(f"  PyPDF: {result.total_pages} 页, 成功率 {result.success_rate:.1%}")
+        if save_trace:
+            save_parse_trace(result)
+        return result
 
     # === 尝试 Datalab 云端 API ===
     if parser_mode in ("auto", "datalab"):
@@ -400,11 +680,24 @@ def parse_pdf_file(
             else:
                 print(f"  [Datalab 失败] {content}")
                 if parser_mode == "datalab":
-                    return PDFParseResult(file_name=file_name, total_pages=0, pages=[], parser_mode="datalab")
+                    return PDFParseResult(
+                        file_name=file_name,
+                        total_pages=0,
+                        pages=[],
+                        parser_mode="datalab",
+                        error=content,
+                    )
                 print("  回退到本地 Marker...")
         elif parser_mode == "datalab":
-            print("  [ERROR] DATALAB_API_KEY 未设置")
-            return PDFParseResult(file_name=file_name, total_pages=0, pages=[], parser_mode="datalab")
+            error = "DATALAB_API_KEY 未设置"
+            print(f"  [ERROR] {error}")
+            return PDFParseResult(
+                file_name=file_name,
+                total_pages=0,
+                pages=[],
+                parser_mode="datalab",
+                error=error,
+            )
 
     # === 本地 Marker 解析 ===
     print("  解析器: 本地 Marker")
@@ -415,7 +708,13 @@ def parse_pdf_file(
 
         if not success:
             print(f"  [ERROR] {content}")
-            return PDFParseResult(file_name=file_name, total_pages=0, pages=[], parser_mode="marker")
+            return PDFParseResult(
+                file_name=file_name,
+                total_pages=0,
+                pages=[],
+                parser_mode="marker",
+                error=content,
+            )
 
         pages_results = _extract_pages_from_json(data, max_pages, parser="marker")
         print(f"[PDF] {file_name}: 解析完成")
@@ -434,7 +733,7 @@ def parse_pdf_file(
                 pass
 
 
-def save_parse_trace(parse_result: PDFParseResult, output_path: str = "artifacts/parse_trace.json"):
+def save_parse_trace(parse_result: PDFParseResult, output_path: str = "var/artifacts/parse_trace.json") -> None:
     """保存解析追踪记录"""
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
@@ -444,7 +743,14 @@ def save_parse_trace(parse_result: PDFParseResult, output_path: str = "artifacts
         parser_mode=parse_result.parser_mode,
         generated_at=datetime.now().isoformat(),
         pages=[
-            {"page_num": p.page_num, "parser": p.parser, "char_count": p.char_count, "error": p.error}
+            {
+                "page_num": p.page_num,
+                "parser": p.parser,
+                "char_count": p.char_count,
+                "block_count": len(p.blocks),
+                "block_types": sorted({block.block_type for block in p.blocks}),
+                "error": p.error,
+            }
             for p in parse_result.pages
         ],
     )

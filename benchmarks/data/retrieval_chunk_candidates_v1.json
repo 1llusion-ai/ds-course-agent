@@ -1,0 +1,23 @@
+{
+  "schema_version": "retrieval-chunk-candidates/1.0",
+  "candidates": [
+    {
+      "id": "fine_700_140",
+      "chunk_size": 700,
+      "chunk_overlap": 140,
+      "max_chunk_size": 900
+    },
+    {
+      "id": "baseline_1300_300",
+      "chunk_size": 1300,
+      "chunk_overlap": 300,
+      "max_chunk_size": 1500
+    },
+    {
+      "id": "coarse_1800_360",
+      "chunk_size": 1800,
+      "chunk_overlap": 360,
+      "max_chunk_size": 2000
+    }
+  ]
+}

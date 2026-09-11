@@ -69,6 +69,21 @@ def _normalize_latin_tokens(text: str) -> str:
     return re.sub(r"[A-Za-z]{2,}", lambda match: match.group(0).upper(), text)
 
 
+def reciprocal_rank_fusion(
+    result_sets: list[list[tuple[int, float]]],
+    rank_constant: int = 60,
+) -> list[tuple[int, float]]:
+    """Fuse ranked document indexes without depending on incomparable raw scores."""
+    if rank_constant <= 0:
+        raise ValueError("rank_constant must be positive")
+    fusion_scores: dict[int, float] = {}
+    for results in result_sets:
+        ranked = sorted(results, key=lambda item: item[1], reverse=True)
+        for rank, (doc_idx, _) in enumerate(ranked, start=1):
+            fusion_scores[doc_idx] = fusion_scores.get(doc_idx, 0.0) + 1.0 / (rank_constant + rank)
+    return sorted(fusion_scores.items(), key=lambda item: item[1], reverse=True)
+
+
 class BM25Retriever:
     """BM25稀疏检索器"""
 
@@ -361,38 +376,6 @@ class HybridRetriever:
         unique_results.sort(key=lambda x: x[1], reverse=True)
         return unique_results[:top_k]
 
-    def _reciprocal_rank_fusion(
-        self, bm25_results: list[tuple[int, float]], vector_results: list[tuple[int, float]], k: int = 60
-    ) -> list[tuple[int, float]]:
-        """
-        RRF (Reciprocal Rank Fusion) 融合排序
-
-        score = Σ(1 / (k + rank))
-
-        Args:
-            bm25_results: [(doc_idx, score), ...]
-            vector_results: [(doc_idx, score), ...]
-            k: RRF常数，通常取60
-
-        Returns:
-            [(doc_idx, fused_score), ...] 按分数降序排列
-        """
-        fusion_scores = {}
-
-        # BM25结果 - 按分数排序得到排名
-        bm25_ranked = sorted(bm25_results, key=lambda x: x[1], reverse=True)
-        for rank, (doc_idx, _) in enumerate(bm25_ranked, start=1):
-            fusion_scores[doc_idx] = fusion_scores.get(doc_idx, 0) + 1.0 / (k + rank)
-
-        # 向量结果 - 按分数排序得到排名
-        vector_ranked = sorted(vector_results, key=lambda x: x[1], reverse=True)
-        for rank, (doc_idx, _) in enumerate(vector_ranked, start=1):
-            fusion_scores[doc_idx] = fusion_scores.get(doc_idx, 0) + 1.0 / (k + rank)
-
-        # 按融合分数排序
-        sorted_results = sorted(fusion_scores.items(), key=lambda x: x[1], reverse=True)
-        return sorted_results
-
     def retrieve(self, query: str, top_k: int | None = None) -> list[Document]:
         """Refresh atomically, then retrieve without serializing remote embedding calls."""
 
@@ -463,7 +446,7 @@ class HybridRetriever:
 
         # RRF融合
         with trace_span("retriever.rrf"):
-            fused_results = self._reciprocal_rank_fusion(bm25_results, vector_results)
+            fused_results = reciprocal_rank_fusion([bm25_results, vector_results])
         logger.debug("融合后 %d 个结果", len(fused_results))
 
         # 获取候选文档（若启用rerank，取rerank_top_k；否则取k）

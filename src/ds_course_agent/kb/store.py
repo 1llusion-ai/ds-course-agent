@@ -183,7 +183,7 @@ class CourseKnowledgeBase:
                 "source_page_start": source_start,
                 "source_page_end": source_end,
                 "source_pages": source_pages_json,
-                "parser_source": "marker_v2",
+                "parser_source": metadata.parser_source,
                 "chunk_id": f"{metadata.source_file}_{zlib.crc32(chunk.content.encode('utf-8')) & 0xFFFFFFFF:08x}",
                 "char_count": len(chunk.content),
                 "position": 0,

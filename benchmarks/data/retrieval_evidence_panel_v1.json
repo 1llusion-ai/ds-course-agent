@@ -1,0 +1,155 @@
+{
+  "schema_version": "retrieval-evidence-panel/1.0",
+  "panel_version": "1.0.0",
+  "created_at": "2026-09-10T16:00:00+08:00",
+  "source_manifest": {
+    "path": "var/artifacts/retrieval_gold_dual_agent_20260910/source_manifest.json",
+    "sha256": "792fc88ad16449122fe28f355e1fb87bc4008502d22e786cf90b14f194b8d570"
+  },
+  "source_manifest_canonical_sha256": "d051c4fcf76b976a522c90f7ad97c04f36407210400f3acad756a740acf44c01",
+  "queries": {
+    "path": "benchmarks/data/retrieval_gold_queries_v1.json",
+    "sha256": "c14b67b39818b50c607495653bbef8006980acd46a186067bc98c93ec47de4f8"
+  },
+  "annotations": [
+    {
+      "annotator_id": "terra-a",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "max",
+      "submitted_at": "2026-09-10T12:20:21.354729+08:00",
+      "artifact": {
+        "path": "benchmarks/data/retrieval_gold_annotation_agent_a_v1.json",
+        "sha256": "ca027a0b0bd28e795c746e1e78a8811fd1c279d7f272e33f6d70e4240742d00b"
+      }
+    },
+    {
+      "annotator_id": "terra-b",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "max",
+      "submitted_at": "2026-09-10T15:30:45+08:00",
+      "artifact": {
+        "path": "benchmarks/data/retrieval_gold_annotation_agent_b_v1.json",
+        "sha256": "b4d45ede331e52e8602fe862e789e15a24aee4e0f0261ba424129a7b817ce43a"
+      }
+    }
+  ],
+  "comparison": {
+    "path": "var/artifacts/retrieval_gold_dual_agent_20260910/annotation_comparison_v2.json",
+    "sha256": "c38e63d6b58174165153f87d3c7644b030edc4f7e55e14ed1bf8c810a0b3b9c2"
+  },
+  "groups": {
+    "quality_gate": [
+      "ret-0001",
+      "ret-0002",
+      "ret-0004",
+      "ret-0005",
+      "ret-0006",
+      "ret-0008",
+      "ret-0009",
+      "ret-0010",
+      "ret-0011",
+      "ret-0012",
+      "ret-0014",
+      "ret-0016",
+      "ret-0019",
+      "ret-0020",
+      "ret-0021",
+      "ret-0022",
+      "ret-0023",
+      "ret-0026",
+      "ret-0027",
+      "ret-0028",
+      "ret-0029",
+      "ret-0031",
+      "ret-0032",
+      "ret-0034",
+      "ret-0036",
+      "ret-0037",
+      "ret-0038",
+      "ret-0040",
+      "ret-0041",
+      "ret-0042",
+      "ret-0044",
+      "ret-0045",
+      "ret-0046",
+      "ret-0047"
+    ],
+    "robustness": [
+      "ret-0001",
+      "ret-0002",
+      "ret-0004",
+      "ret-0005",
+      "ret-0006",
+      "ret-0007",
+      "ret-0008",
+      "ret-0009",
+      "ret-0010",
+      "ret-0011",
+      "ret-0012",
+      "ret-0013",
+      "ret-0014",
+      "ret-0015",
+      "ret-0016",
+      "ret-0018",
+      "ret-0019",
+      "ret-0020",
+      "ret-0021",
+      "ret-0022",
+      "ret-0023",
+      "ret-0024",
+      "ret-0026",
+      "ret-0027",
+      "ret-0028",
+      "ret-0029",
+      "ret-0031",
+      "ret-0032",
+      "ret-0033",
+      "ret-0034",
+      "ret-0036",
+      "ret-0037",
+      "ret-0038",
+      "ret-0039",
+      "ret-0040",
+      "ret-0041",
+      "ret-0042",
+      "ret-0043",
+      "ret-0044",
+      "ret-0045",
+      "ret-0046",
+      "ret-0047",
+      "ret-0048"
+    ],
+    "interpretation_sensitive": [
+      "ret-0007",
+      "ret-0013",
+      "ret-0015",
+      "ret-0018",
+      "ret-0024",
+      "ret-0033",
+      "ret-0039",
+      "ret-0043",
+      "ret-0048"
+    ],
+    "boundary": [
+      "ret-0003",
+      "ret-0017",
+      "ret-0025",
+      "ret-0030",
+      "ret-0035"
+    ]
+  },
+  "selection_policy": {
+    "annotation_agreement_f1_threshold": 0.5,
+    "tuning_split": "dev",
+    "final_evaluation_split": "test",
+    "label_handling": "score_each_agent_separately",
+    "candidate_aggregation": "report_each_agent_mean_and_minimum",
+    "quality_gate_role": "primary_candidate_selection",
+    "robustness_role": "secondary_robustness_report",
+    "interpretation_sensitive_role": "diagnostic_not_silently_dropped",
+    "boundary_role": "exclude_from_positive_recall_and_report_separately",
+    "ranking_depths": [1, 3, 5, 10],
+    "primary_ranking_depth": 5,
+    "context_token_budgets": [2048, 4096]
+  }
+}

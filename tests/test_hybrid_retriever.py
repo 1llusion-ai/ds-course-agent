@@ -5,7 +5,12 @@ from unittest.mock import MagicMock, patch
 from chromadb.errors import NotFoundError
 from langchain_core.documents import Document
 
-from ds_course_agent.retrieval.hybrid_retriever import BM25Retriever, HybridRetriever, _normalize_latin_tokens
+from ds_course_agent.retrieval.hybrid_retriever import (
+    BM25Retriever,
+    HybridRetriever,
+    _normalize_latin_tokens,
+    reciprocal_rank_fusion,
+)
 from ds_course_agent.shared import embeddings
 from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 
@@ -20,6 +25,18 @@ def test_tokenize_treats_lowercase_acronyms_as_textbook_terms():
 
     assert retriever._tokenize("pca的公式 是什么？") == ["PCA", "公式", "什么"]
     assert retriever._tokenize("svm是什么？") == ["SVM", "什么"]
+
+
+def test_reciprocal_rank_fusion_rewards_agreement() -> None:
+    fused = reciprocal_rank_fusion(
+        [
+            [(0, 9.0), (1, 8.0)],
+            [(1, 0.9), (2, 0.8)],
+        ],
+        rank_constant=60,
+    )
+
+    assert [doc_idx for doc_idx, _ in fused] == [1, 0, 2]
 
 
 @patch("ds_course_agent.retrieval.hybrid_retriever.chromadb.PersistentClient")

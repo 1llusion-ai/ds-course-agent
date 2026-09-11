@@ -1,0 +1,24 @@
+{
+  "schema_version": "retrieval-context-candidates/1.0",
+  "tokenizer": "cl100k_base",
+  "candidate_depth": 10,
+  "overflow_policy": "stop",
+  "context_header_format": "compact_page_v1",
+  "strategies": [
+    {
+      "id": "rank_prefix",
+      "selection_mode": "rank_prefix",
+      "mmr_lambda": null
+    },
+    {
+      "id": "source_overlap_dedup",
+      "selection_mode": "source_overlap_dedup",
+      "mmr_lambda": null
+    },
+    {
+      "id": "mmr_source_dedup_085",
+      "selection_mode": "mmr_source_dedup",
+      "mmr_lambda": 0.85
+    }
+  ]
+}
