@@ -24,6 +24,7 @@ from ds_course_agent.retrieval.context_assembler import (
     subtract_interval,
 )
 from ds_course_agent.retrieval.service import RAGService, clear_rag_retrieval_cache
+from ds_course_agent.retrieval.term_resolution import CourseTermIndex, CourseTermMatchKind
 from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.tools.course_rag import build_sources_from_documents
 
@@ -306,6 +307,7 @@ def _service_with_vector_results(monkeypatch, documents: list[Document]) -> RAGS
         "metadatas": [[document.metadata for document in documents]],
         "distances": [[index / 100 for index in range(len(documents))]],
     }
+    service.course_term_index = CourseTermIndex(documents)
     return service
 
 
@@ -324,6 +326,93 @@ def test_retrieve_returns_only_documents_in_assembled_context(monkeypatch):
     assert service.vector_store_service.query.call_args.kwargs["n_results"] == 3
     assert "教材第12页" in result.formatted_context
     assert result.assembly.used_tokens <= result.assembly.token_budget
+    assert result.retrieval_query == "测试问题"
+    assert result.term_resolution is None
+
+
+def test_term_typo_uses_only_direct_course_evidence(monkeypatch):
+    dikw_page_16 = _document(source_text="DIKW 金字塔模型", end=len("DIKW 金字塔模型"), book_page=16)
+    dikw_page_23 = _document(
+        source_page=31,
+        source_text="DIKW 表示从数据到智慧的转化",
+        end=len("DIKW 表示从数据到智慧的转化"),
+        book_page=23,
+    )
+    service = _service_with_vector_results(monkeypatch, [_document(source_text="不相关片段")])
+    service.course_term_index = CourseTermIndex([dikw_page_16, dikw_page_23])
+    monkeypatch.setattr(
+        rag_module,
+        "embed_query_cached",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("term lookup must not embed")),
+    )
+
+    result = service.retrieve("DMKI是什么？")
+
+    assert result.has_results is True
+    assert result.retrieval_query == "DIKW是什么？"
+    assert result.term_resolution is not None
+    assert result.term_resolution.match_kind is CourseTermMatchKind.CORRECTED
+    assert [document.metadata["book_page"] for document in result.documents] == [16, 23]
+    service.vector_store_service.query.assert_not_called()
+
+
+def test_unknown_term_returns_empty_without_vector_neighbors(monkeypatch):
+    service = _service_with_vector_results(monkeypatch, [_document(source_text="不相关片段")])
+    service.course_term_index = CourseTermIndex(
+        [
+            _document(source_text="DIKW 金字塔模型", end=len("DIKW 金字塔模型"), book_page=16),
+            _document(
+                source_page=31,
+                source_text="DIKW 表示从数据到智慧的转化",
+                end=len("DIKW 表示从数据到智慧的转化"),
+                book_page=23,
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        rag_module,
+        "embed_query_cached",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("unknown term must not embed")),
+    )
+
+    result = service.retrieve("ZZZZ是什么？")
+
+    assert result.has_results is False
+    assert result.documents == []
+    assert result.term_resolution is not None
+    assert result.term_resolution.match_kind is CourseTermMatchKind.UNRESOLVED
+    service.vector_store_service.query.assert_not_called()
+
+
+def test_term_resolution_uses_current_query_instead_of_enriched_history(monkeypatch):
+    dikw_documents = [
+        _document(source_text="DIKW 金字塔模型", end=len("DIKW 金字塔模型"), book_page=16),
+        _document(
+            source_page=31,
+            source_text="DIKW 表示从数据到智慧的转化",
+            end=len("DIKW 表示从数据到智慧的转化"),
+            book_page=23,
+        ),
+    ]
+    service = _service_with_vector_results(monkeypatch, [_document(source_text="不相关附录")])
+    service.course_term_index = CourseTermIndex(dikw_documents)
+    enriched_query = (
+        "最近对话上下文：\n用户: BCA是什么？\n助手: 请补充具体问题。\n\n"
+        "请结合上下文理解学生当前追问，再检索课程资料回答。\n当前问题：DWKI是什么？"
+    )
+    monkeypatch.setattr(
+        rag_module,
+        "embed_query_cached",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("corrected term must not embed")),
+    )
+
+    result = service.retrieve(enriched_query, term_resolution_query="DWKI是什么？")
+
+    assert result.retrieval_query == "DIKW是什么？"
+    assert result.term_resolution is not None
+    assert result.term_resolution.match_kind is CourseTermMatchKind.CORRECTED
+    assert [document.metadata["book_page"] for document in result.documents] == [16, 23]
+    service.vector_store_service.query.assert_not_called()
 
 
 def test_retrieve_cache_hit_returns_document_clones(monkeypatch):
@@ -335,7 +424,7 @@ def test_retrieve_cache_hit_returns_document_clones(monkeypatch):
     assert first.formatted_context == second.formatted_context
     assert first.documents[0].metadata == second.documents[0].metadata
     assert first.documents[0] is not second.documents[0]
-    assert service.vector_store_service.query.call_count == 1
+    assert service.vector_store_service.query.call_count == 0
 
 
 def test_retrieval_cache_key_changes_with_policy_index_and_model(monkeypatch):

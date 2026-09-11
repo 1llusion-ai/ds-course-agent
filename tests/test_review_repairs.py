@@ -106,6 +106,8 @@ def test_live_corpus_replacement_and_clear_refresh_bm25_and_cache(tmp_path, monk
     service.embedding = object()
     service.vector_store_service = vector_store
     service._token_counter = CharacterTokenCounter()
+    service.course_term_index = Mock()
+    service.course_term_index.lookup.return_value = None
     clear_rag_retrieval_cache()
     try:
         assert service.retrieve("corpus").documents[0].page_content == "old corpus"

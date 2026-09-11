@@ -15,6 +15,7 @@ from langchain_core.documents import Document
 from langchain_core.tools import tool
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.retrieval.term_resolution import CourseTermResolution
 from ds_course_agent.tools._shared import (
     RetrievalTrace,
     _track_retrieval,
@@ -256,9 +257,35 @@ def build_extractive_rag_fallback(
     return "\n".join(lines)
 
 
-def build_no_results_message() -> str:
+def build_term_correction_notice(term_resolution: CourseTermResolution | None) -> str:
+    """Return a deterministic notice when retrieval corrected a course term."""
+
+    if term_resolution is None or not term_resolution.corrected or not term_resolution.resolved_term:
+        return ""
+    return (
+        f"你输入的“{term_resolution.requested_term}”未在教材中出现，"
+        f"可能想问的是“{term_resolution.resolved_term}”。"
+        f"以下按教材中的“{term_resolution.resolved_term}”解释：\n\n"
+    )
+
+
+def build_no_results_message(
+    question: str = "",
+    term_resolution: CourseTermResolution | None = None,
+) -> str:
     """Return the standard no-results message for course RAG."""
 
+    if term_resolution is not None and term_resolution.resolved_term is None:
+        return (
+            f"根据课程资料，没有找到与“{term_resolution.requested_term}”直接相关的定义或解释。\n"
+            "建议你：\n"
+            "1. 检查术语拼写是否正确\n"
+            "2. 补充它出现的章节、课件或上下文\n"
+            "3. 如果这是课程外缩写，请提供全称后再询问\n\n"
+            "为避免误导，本次不会使用不相关的教材片段猜测其含义。"
+        )
+
+    _ = question
     return (
         f"抱歉，在《{config.COURSE_NAME}》课程资料中未找到与你问题直接相关的内容。\n"
         "建议你：\n"
@@ -397,37 +424,39 @@ def course_rag_tool(question: str) -> str:
 
         if not result.has_results:
             trace_step("tool.result", tool="course_rag_tool", status="no_results")
-            no_results_message = build_no_results_message()
+            no_results_message = build_no_results_message(question, result.term_resolution)
             _warn_large_tool_result("course_rag_tool", no_results_message, status="no_results")
             return no_results_message
 
-        cached_answer = _get_cached_answer(question, result.formatted_context)
+        correction_notice = build_term_correction_notice(result.term_resolution)
+        answer_question = result.retrieval_query
+        cached_answer = _get_cached_answer(answer_question, result.formatted_context)
         if cached_answer is not None:
             trace_step("tool.result", tool="course_rag_tool", status="cache_hit")
             _warn_large_tool_result("course_rag_tool", cached_answer, status="cache_hit")
-            return cached_answer
+            return f"{correction_notice}{cached_answer}"
 
         try:
             with trace_span("tool.course_rag.answer"):
                 answer_result = _answer_with_context_timeout_guard(
                     service,
-                    question,
+                    answer_question,
                     result.formatted_context,
                 )
             trace_step("tool.result", tool="course_rag_tool", status="ok")
             _warn_large_tool_result("course_rag_tool", answer_result.answer, status="ok")
-            _store_cached_answer(question, result.formatted_context, answer_result.answer)
-            return answer_result.answer
+            _store_cached_answer(answer_question, result.formatted_context, answer_result.answer)
+            return f"{correction_notice}{answer_result.answer}"
         except Exception as answer_exc:
             trace_answer_degraded(answer_exc, mode="sync")
             fallback = build_extractive_rag_fallback(
-                question,
+                answer_question,
                 result.documents,
                 error=answer_exc,
             )
             trace_step("tool.result", tool="course_rag_tool", status="degraded")
             _warn_large_tool_result("course_rag_tool", fallback, status="degraded")
-            return fallback
+            return f"{correction_notice}{fallback}"
     except Exception as exc:
         trace_error("tool.invoke", exc, tool="course_rag_tool")
         return f"检索过程中发生错误：{exc}。请稍后重试。"
@@ -442,6 +471,7 @@ __all__ = [
     "build_sources_from_documents",
     "build_extractive_rag_fallback",
     "build_no_results_message",
+    "build_term_correction_notice",
     "trace_answer_degraded",
     "clear_rag_answer_cache",
     "course_rag_tool",

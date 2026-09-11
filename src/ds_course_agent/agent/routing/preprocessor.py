@@ -9,6 +9,7 @@ import re
 import threading
 from typing import Any
 
+from ds_course_agent.shared.term_queries import parse_short_term_query
 from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
 
 from .models import DetectedConcept, QueryContext
@@ -163,6 +164,10 @@ class QueryPreprocessor:
             is_followup=is_followup,
             is_clarification_signal=is_clarification,
             is_mastery_signal=is_mastery,
+            short_term_query=parse_short_term_query(normalized_query),
+            course_evidence_requested=bool(
+                re.match(r"^(?:请\s*)?(?:根据|依据|基于|按照)\s*(?:教材|课本|课程资料|课件)", normalized_query)
+            ),
             skill_candidate_keys=skill_candidate_keys,
         )
 

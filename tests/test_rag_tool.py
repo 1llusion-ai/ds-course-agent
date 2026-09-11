@@ -11,6 +11,11 @@ import pytest
 from langchain_core.documents import Document
 
 import ds_course_agent.tools.course_rag as course_rag_module
+from ds_course_agent.retrieval.term_resolution import (
+    CourseTermIndex,
+    CourseTermMatchKind,
+    CourseTermResolution,
+)
 from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.tools.course_rag import (
     begin_retrieval_trace,
@@ -66,6 +71,8 @@ class TestCourseRAGTool:
         mock_result = MagicMock()
         mock_result.has_results = False
         mock_result.documents = []
+        mock_result.retrieval_query = "测试问题"
+        mock_result.term_resolution = None
         mock_service.retrieve.return_value = mock_result
         mock_get_service.return_value = mock_service
 
@@ -74,12 +81,70 @@ class TestCourseRAGTool:
         assert "未找到" in result or "无" in result or "建议" in result
 
     @patch("ds_course_agent.tools.course_rag.get_rag_service")
+    def test_unknown_course_term_returns_no_sources_or_unrelated_answer(self, mock_get_service):
+        mock_service = MagicMock()
+        resolution = CourseTermResolution(
+            requested_term="DMKI",
+            resolved_term=None,
+            resolved_query="DMKI是什么？",
+            match_kind=CourseTermMatchKind.UNRESOLVED,
+        )
+        mock_service.retrieve.return_value = SimpleNamespace(
+            has_results=False,
+            documents=[],
+            formatted_context="无相关资料",
+            retrieval_query="DMKI是什么？",
+            term_resolution=resolution,
+        )
+        mock_get_service.return_value = mock_service
+
+        token = begin_retrieval_trace()
+        try:
+            result = course_rag_tool.invoke("DMKI是什么？")
+        finally:
+            trace = end_retrieval_trace(token)
+
+        assert "没有找到与“DMKI”直接相关" in result
+        assert "不会使用不相关的教材片段" in result
+        assert trace.retrieval_attempted is True
+        assert trace.used_retrieval is False
+        assert trace.sources == []
+        mock_service.answer_with_context.assert_not_called()
+
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
+    def test_corrected_course_term_is_disclosed_and_answered_with_resolved_query(self, mock_get_service):
+        mock_service = MagicMock()
+        resolution = CourseTermResolution(
+            requested_term="DMKI",
+            resolved_term="DIKW",
+            resolved_query="DIKW是什么？",
+            match_kind=CourseTermMatchKind.CORRECTED,
+        )
+        mock_service.retrieve.return_value = SimpleNamespace(
+            has_results=True,
+            documents=[Document(page_content="DIKW 表示数据到智慧", metadata={"book_page": 16})],
+            formatted_context="DIKW 表示数据到智慧",
+            retrieval_query="DIKW是什么？",
+            term_resolution=resolution,
+        )
+        mock_service.answer_with_context.return_value = SimpleNamespace(answer="DIKW 是数据、信息、知识和智慧。")
+        mock_get_service.return_value = mock_service
+
+        result = course_rag_tool.invoke("DMKI是什么？")
+
+        assert result.startswith("你输入的“DMKI”未在教材中出现，可能想问的是“DIKW”")
+        assert result.endswith("DIKW 是数据、信息、知识和智慧。")
+        mock_service.answer_with_context.assert_called_once_with("DIKW是什么？", "DIKW 表示数据到智慧")
+
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_tool_tracks_retrieval_sources(self, mock_get_service):
         """测试检索轨迹会保留实际来源"""
         mock_service = MagicMock()
         mock_result = MagicMock()
         mock_result.has_results = True
         mock_result.formatted_context = "context"
+        mock_result.retrieval_query = "PCA 的公式是什么？"
+        mock_result.term_resolution = None
 
         doc = MagicMock()
         doc.metadata = {
@@ -132,6 +197,8 @@ class TestCourseRAGTool:
         mock_result = MagicMock()
         mock_result.has_results = True
         mock_result.formatted_context = "context"
+        mock_result.retrieval_query = "PCA 的核心思想是什么？"
+        mock_result.term_resolution = None
         mock_result.documents = [
             Document(
                 page_content="PCA 通过投影到方差最大的方向来实现降维，同时尽量保留数据中的主要信息。",
@@ -200,6 +267,8 @@ class TestCourseRAGTool:
         mock_result = MagicMock()
         mock_result.has_results = False
         mock_result.documents = []
+        mock_result.retrieval_query = "你好"
+        mock_result.term_resolution = None
         mock_service.retrieve.return_value = mock_result
         mock_get_service.return_value = mock_service
 
@@ -229,6 +298,8 @@ class TestCourseRAGTool:
         mock_result.has_results = True
         mock_result.formatted_context = "context"
         mock_result.documents = []
+        mock_result.retrieval_query = "测试问题"
+        mock_result.term_resolution = None
         mock_service.retrieve.return_value = mock_result
 
         large_answer = "教材回答" * 20
@@ -256,6 +327,8 @@ class TestCourseRAGTool:
         mock_result = MagicMock()
         mock_result.has_results = True
         mock_result.formatted_context = "教材上下文：PCA 是降维算法"
+        mock_result.retrieval_query = "PCA 有什么作用？"
+        mock_result.term_resolution = None
         mock_result.documents = [
             Document(page_content="PCA 是降维算法", metadata={"chapter_no": "第7章", "book_page": 140})
         ]
@@ -288,10 +361,14 @@ class TestCourseRAGTool:
         result_a.has_results = True
         result_a.formatted_context = "上下文 A：PCA 用于降维"
         result_a.documents = [Document(page_content="A", metadata={"source": "a.pdf"})]
+        result_a.retrieval_query = "PCA 有什么作用？"
+        result_a.term_resolution = None
         result_b = MagicMock()
         result_b.has_results = True
         result_b.formatted_context = "上下文 B：PCA 用于可视化"
         result_b.documents = [Document(page_content="B", metadata={"source": "b.pdf"})]
+        result_b.retrieval_query = "PCA 有什么作用？"
+        result_b.term_resolution = None
         mock_service.retrieve.side_effect = [result_a, result_b]
         mock_service.answer_with_context.side_effect = [
             SimpleNamespace(answer="答案 A"),
@@ -319,6 +396,8 @@ class TestCourseRAGTool:
                 return SimpleNamespace(
                     has_results=True,
                     formatted_context="context",
+                    retrieval_query=question,
+                    term_resolution=None,
                     documents=[
                         Document(
                             page_content="PCA 通过投影到方差最大的方向来实现降维。",
@@ -397,6 +476,7 @@ class TestRAGPayloadWarnings:
         service.embedding = object()
         service._token_counter = SimpleNamespace(policy_version="cl100k_base_v1", count=len)
         service.vector_store_service = MagicMock()
+        service.course_term_index = CourseTermIndex([])
         service.vector_store_service.query.return_value = {
             "ids": [["chunk-1"]],
             "documents": [[text]],

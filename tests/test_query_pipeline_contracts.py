@@ -192,6 +192,7 @@ def test_rule_table_is_priority_ordered_and_semantic_fallback_is_not_a_rule():
         "code_review",
         "code_execution",
         "code_learning",
+        "short_term_lookup",
         "learning_path",
         "misconception",
         "personalized_explanation",

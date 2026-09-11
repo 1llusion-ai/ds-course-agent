@@ -97,7 +97,28 @@ class TestQueryPreprocessor:
         assert "schedule" in schedule.detected_intents
         assert "concept_explanation" in concept.detected_intents
         assert "python_execution" in execution.detected_intents
+        assert concept.short_term_query is None
         assert all(not item.detected_concepts for item in (datetime, schedule, concept, execution))
+
+    def test_parses_explicit_short_term_query_as_typed_state(self):
+        context = _context("BCA是什么？")
+
+        assert context.short_term_query is not None
+        assert context.short_term_query.term == "BCA"
+        assert context.short_term_query.is_uppercase_identifier is True
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "PCA 应该怎么入门？",
+            "怎么安排 SVM 和核函数的学习顺序？",
+            "结合我之前的学习情况，按我学过的逻辑回归解释 SVM",
+        ],
+    )
+    def test_strategy_questions_are_not_explicit_short_term_lookups(self, query):
+        context = _context(query)
+
+        assert context.short_term_query is None
 
 
 class TestFastRouter:
@@ -120,6 +141,13 @@ class TestFastRouter:
             ),
             (
                 "什么是过拟合？",
+                RouteFamily.LEARNING,
+                RouteIntent.CONCEPT_QA,
+                ExecutionMode.GROUNDED_GENERATION,
+                RetrievalPolicy.REQUIRED,
+            ),
+            (
+                "BCA是什么？",
                 RouteFamily.LEARNING,
                 RouteIntent.CONCEPT_QA,
                 ExecutionMode.GROUNDED_GENERATION,
@@ -348,7 +376,7 @@ class TestSemanticRouterFallback:
         assert decision.execution_mode is ExecutionMode.STATIC_RESPONSE
         assert len(semantic.calls) == 1
 
-    def test_oop_query_remains_a_learning_concept_question(self):
+    def test_oop_query_uses_deterministic_short_term_route(self):
         query = "OOP 是什么？"
         router, semantic = _router({query: _SemanticOutput(RouteIntent.CONCEPT_QA, 0.94)})
 
@@ -361,7 +389,7 @@ class TestSemanticRouterFallback:
             mode=ExecutionMode.GROUNDED_GENERATION,
             policy=RetrievalPolicy.REQUIRED,
         )
-        assert len(semantic.calls) == 1
+        assert semantic.calls == []
 
     def test_agent_task_classification_is_not_logic_regression_course_rag(self):
         query = "你怎么做任务分类？"
@@ -637,8 +665,9 @@ def test_grounded_rag_stream_emits_sources_before_answer_completion(monkeypatch)
     )
 
     class FakeRagService:
-        def retrieve(self, question):
+        def retrieve(self, question, *, term_resolution_query=None):
             assert question == "什么是机器学习？"
+            assert term_resolution_query == "什么是机器学习？"
             return SimpleNamespace(
                 documents=[
                     Document(
@@ -648,6 +677,8 @@ def test_grounded_rag_stream_emits_sources_before_answer_completion(monkeypatch)
                 ],
                 formatted_context="机器学习教材内容",
                 has_results=True,
+                retrieval_query=question,
+                term_resolution=None,
             )
 
         def stream_answer_with_context(self, question, context):
@@ -695,8 +726,15 @@ def test_grounded_rag_stream_distinguishes_attempt_from_evidence_use(monkeypatch
     )
 
     class EmptyRagService:
-        def retrieve(self, question):
-            return SimpleNamespace(documents=[], formatted_context="", has_results=False)
+        def retrieve(self, question, *, term_resolution_query=None):
+            assert term_resolution_query == "课程里有没有量子计算？"
+            return SimpleNamespace(
+                documents=[],
+                formatted_context="",
+                has_results=False,
+                retrieval_query=question,
+                term_resolution=None,
+            )
 
     monkeypatch.setattr("ds_course_agent.tools.course_rag.get_rag_service", lambda: EmptyRagService())
 
@@ -709,6 +747,79 @@ def test_grounded_rag_stream_distinguishes_attempt_from_evidence_use(monkeypatch
     assert retrieval_event.sources == ()
     assert retrieval_event.message == "未找到可用课程来源"
     assert "未找到" in "".join(str(event) for event in events[1:])
+
+
+def test_grounded_rag_stream_discloses_term_correction_and_uses_resolved_query(monkeypatch):
+    from langchain_core.documents import Document
+
+    from ds_course_agent.agent.events import RetrievalEndEvent
+    from ds_course_agent.agent.routing import RouteState
+    from ds_course_agent.agent.service import AgentService
+    from ds_course_agent.retrieval.term_resolution import CourseTermMatchKind, CourseTermResolution
+
+    service = object.__new__(AgentService)
+    contextual_query = (
+        "最近对话上下文：\n"
+        "用户: BCA是什么？\n"
+        "助手: 请补充具体问题。\n\n"
+        "请结合上下文理解学生当前追问，再检索课程资料回答。\n"
+        "当前问题：DWKI是什么？"
+    )
+    context = QueryContext(
+        original_query="DWKI是什么？",
+        normalized_query="DWKI是什么",
+        session_id="session-rag-correction",
+        student_id="student-1",
+        chat_history=[],
+        grounded_tool_query=contextual_query,
+    )
+    state = RouteState(
+        student_id="student-1",
+        session_id="session-rag-correction",
+        history=None,
+        chat_history=[],
+        context=context,
+        decision=RouteDecision(
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.CONCEPT_QA,
+            execution_mode=ExecutionMode.GROUNDED_GENERATION,
+            confidence=0.9,
+            retrieval_policy=RetrievalPolicy.REQUIRED,
+        ),
+        stream_id="stream-correction",
+    )
+    resolution = CourseTermResolution(
+        requested_term="DWKI",
+        resolved_term="DIKW",
+        resolved_query="DIKW是什么？",
+        match_kind=CourseTermMatchKind.CORRECTED,
+    )
+
+    class CorrectedRagService:
+        def retrieve(self, question, *, term_resolution_query=None):
+            assert question == contextual_query
+            assert term_resolution_query == "DWKI是什么？"
+            return SimpleNamespace(
+                documents=[Document(page_content="DIKW 模型", metadata={"source": "course.pdf"})],
+                formatted_context="DIKW 模型",
+                has_results=True,
+                retrieval_query="DIKW是什么？",
+                term_resolution=resolution,
+            )
+
+        def stream_answer_with_context(self, question, context):
+            assert question == "DIKW是什么？"
+            assert context == "DIKW 模型"
+            yield "DIKW 回答"
+
+    monkeypatch.setattr("ds_course_agent.tools.course_rag.get_rag_service", lambda: CorrectedRagService())
+
+    events = list(service._iter_grounded_rag_response(state))
+
+    assert isinstance(events[0], RetrievalEndEvent)
+    text = "".join(str(event) for event in events[1:])
+    assert "可能想问的是“DIKW”" in text
+    assert text.endswith("DIKW 回答")
 
 
 def test_shared_query_predicates():

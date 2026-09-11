@@ -33,6 +33,8 @@ class TestAgentGroundedFallback:
         mock_result.has_results = True
         mock_result.formatted_context = "context"
         mock_result.documents = []
+        mock_result.retrieval_query = question
+        mock_result.term_resolution = None
         mock_service.retrieve.return_value = mock_result
 
         mock_answer = MagicMock()
