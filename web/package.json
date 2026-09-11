@@ -9,11 +9,13 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.0",
+    "3d-force-graph": "^1.80.0",
     "axios": "^1.6.0",
     "element-plus": "^2.5.0",
     "katex": "^0.16.45",
     "marked": "^18.0.0",
     "pinia": "^2.1.0",
+    "three": "^0.186.0",
     "vue": "^3.4.0",
     "vue-router": "^4.2.0"
   },

@@ -14,7 +14,7 @@ setup_logging(level=config.LOG_LEVEL)
 
 from .auth import models as auth_models
 from .auth.router import router as auth_router
-from .routers import chat, profile, sessions
+from .routers import chat, knowledge_map, profile, sessions
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,7 @@ app.include_router(auth_router)
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(profile.router, prefix="/api/profile", tags=["profile"])
+app.include_router(knowledge_map.router, prefix="/api/knowledge-map", tags=["knowledge-map"])
 
 
 @app.get("/health")

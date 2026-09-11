@@ -10,6 +10,7 @@
       </div>
 
       <div class="profile-header__actions">
+        <el-button plain @click="router.push('/knowledge-map')">知识地图</el-button>
         <el-button text @click="goBack">
           <el-icon class="mr-1"><ArrowLeft /></el-icon>
           返回对话

@@ -210,6 +210,13 @@
     </el-scrollbar>
 
     <div class="sidebar-footer">
+      <button type="button" class="utility-entry" title="知识地图" @click="router.push('/knowledge-map')">
+        <span class="utility-entry__icon"><el-icon><Connection /></el-icon></span>
+        <span v-if="!props.collapsed" class="utility-entry__body">
+          <span class="utility-entry__title">知识地图</span>
+          <span class="utility-entry__meta">探索知识关系与学习目标</span>
+        </span>
+      </button>
       <button type="button" class="utility-entry" title="学习画像" @click="handleProfileOpen">
         <span class="utility-entry__icon utility-entry__icon--profile">
           <svg class="profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">

@@ -225,8 +225,8 @@ class KnowledgeGraph:
             data = json.load(f)
 
         self.concepts: dict[str, dict] = {}
-        self.alias_to_concept: dict[str, str] = {}  # alias -> canonical_id
-        self.alias_specs: dict[str, AliasSpec] = {}
+        self.alias_to_concept: dict[str, tuple[str, ...]] = {}
+        self.alias_specs: dict[str, tuple[AliasSpec, ...]] = {}
         self.alias_policies = self._parse_alias_policies(data.get("alias_policies", {}))
         self.embeddings: dict[str, np.ndarray] = {}  # canonical_id -> embedding vector
 
@@ -234,10 +234,11 @@ class KnowledgeGraph:
             cid = concept["canonical_id"]
             self.concepts[cid] = concept
 
-            # 构建别名映射
-            for alias in concept["aliases"]:
+        for cid, concept in self.concepts.items():
+            # 展示名称与公开别名共享同一确定性索引；同一文本可以对应多个相关概念。
+            aliases = dict.fromkeys([concept["display_name"], *concept["aliases"]])
+            for alias in aliases:
                 normalized_alias = self._normalize_text(alias)
-                self.alias_to_concept[normalized_alias] = cid
                 policy = self.alias_policies.get(
                     normalized_alias,
                     self._default_alias_policy(normalized_alias),
@@ -248,13 +249,19 @@ class KnowledgeGraph:
                         rf"(?<![A-Za-z0-9_]){re.escape(normalized_alias)}(?![A-Za-z0-9_])",
                         re.I,
                     )
-                self.alias_specs[normalized_alias] = AliasSpec(
+                alias_spec = AliasSpec(
                     text=alias,
                     normalized_text=normalized_alias,
                     concept_id=cid,
                     policy=policy,
                     token_pattern=token_pattern,
                 )
+                concept_ids = self.alias_to_concept.get(normalized_alias, ())
+                if cid not in concept_ids:
+                    self.alias_to_concept[normalized_alias] = (*concept_ids, cid)
+                specs = self.alias_specs.get(normalized_alias, ())
+                if all(spec.concept_id != cid for spec in specs):
+                    self.alias_specs[normalized_alias] = (*specs, alias_spec)
 
         # 预编译正则规则（在精确匹配之后应用）
         self.regex_rules = self._build_regex_rules()
@@ -263,8 +270,10 @@ class KnowledgeGraph:
         self._precompute_embeddings()
 
     def _normalize_text(self, text: str) -> str:
-        """文本归一化：去标点、小写、统一空格"""
-        text = re.sub(r"[^\w\s]", "", text.lower())
+        """删除中文词间标点，同时保留代码标点形成的 token 边界。"""
+        text = text.lower()
+        text = re.sub(r"(?<=[\u3400-\u9fff])[^\w\s]+(?=[\u3400-\u9fff])", "", text)
+        text = re.sub(r"[^\w\s]", " ", text)
         text = re.sub(r"\s+", " ", text).strip()
         return text
 
@@ -346,7 +355,8 @@ class KnowledgeGraph:
                 with open(cache_path, encoding="utf-8") as f:
                     cache_data = json.load(f)
                 for cid, vec in cache_data.items():
-                    self.embeddings[cid] = np.array(vec)
+                    if cid in self.concepts:
+                        self.embeddings[cid] = np.array(vec)
                 logger.info("Loaded %d embeddings from cache (%s)", len(self.embeddings), cache_path)
                 return
             except Exception as e:
@@ -408,20 +418,21 @@ def _knowledge_graph_content_identity(graph: Any) -> str | None:
 
     try:
         alias_specs = []
-        for normalized_alias, spec in graph.alias_specs.items():
-            token_pattern = None
-            if spec.token_pattern is not None:
-                token_pattern = [spec.token_pattern.pattern, spec.token_pattern.flags]
-            alias_specs.append(
-                [
-                    normalized_alias,
-                    spec.text,
-                    spec.concept_id,
-                    spec.policy.match_mode.value,
-                    spec.policy.match_strength.value,
-                    token_pattern,
-                ]
-            )
+        for normalized_alias, specs in graph.alias_specs.items():
+            for spec in specs:
+                token_pattern = None
+                if spec.token_pattern is not None:
+                    token_pattern = [spec.token_pattern.pattern, spec.token_pattern.flags]
+                alias_specs.append(
+                    [
+                        normalized_alias,
+                        spec.text,
+                        spec.concept_id,
+                        spec.policy.match_mode.value,
+                        spec.policy.match_strength.value,
+                        token_pattern,
+                    ]
+                )
 
         regex_rules = [[pattern.pattern, pattern.flags, concept_id] for pattern, concept_id in graph.regex_rules]
         embeddings = {
@@ -567,6 +578,34 @@ class KnowledgeMapper:
 
         return 0.0
 
+    def _suppress_shadowed_aliases(
+        self,
+        normalized: str,
+        candidates: dict[str, tuple[float, AliasSpec]],
+    ) -> None:
+        """Drop a generic concept when the same text occurrence belongs to a matched subtype."""
+        display_names = {
+            cid: self.graph._normalize_text(self.graph.get_concept(cid)["display_name"]) for cid in candidates
+        }
+        for cid, (_, alias_spec) in tuple(candidates.items()):
+            subtype_aliases = sorted(
+                {
+                    candidate.normalized_text
+                    for other_cid, (_, candidate) in candidates.items()
+                    if other_cid != cid
+                    and alias_spec.normalized_text != candidate.normalized_text
+                    and alias_spec.normalized_text in candidate.normalized_text
+                    and display_names[cid] in display_names[other_cid]
+                },
+                key=len,
+                reverse=True,
+            )
+            residual = normalized
+            for subtype_alias in subtype_aliases:
+                residual = residual.replace(subtype_alias, " ")
+            if subtype_aliases and alias_spec.normalized_text not in residual:
+                candidates.pop(cid)
+
     def map_question(self, question: str, top_k: int = 3, embedding_threshold: float = 0.82) -> list[MatchedConcept]:
         """
         三层匹配策略：
@@ -588,13 +627,16 @@ class KnowledgeMapper:
         # ===== Layer 1: 别名精确匹配 =====
         normalized = self.graph._normalize_text(question)
         alias_candidates: dict[str, tuple[float, AliasSpec]] = {}
-        for alias_spec in self.graph.alias_specs.values():
-            score = self._score_alias_match(alias_spec, normalized)
-            if score < 0.55:
-                continue
-            previous = alias_candidates.get(alias_spec.concept_id)
-            if previous is None or score > previous[0]:
-                alias_candidates[alias_spec.concept_id] = (score, alias_spec)
+        for alias_specs in self.graph.alias_specs.values():
+            for alias_spec in alias_specs:
+                score = self._score_alias_match(alias_spec, normalized)
+                if score < 0.55:
+                    continue
+                previous = alias_candidates.get(alias_spec.concept_id)
+                if previous is None or score > previous[0]:
+                    alias_candidates[alias_spec.concept_id] = (score, alias_spec)
+
+        self._suppress_shadowed_aliases(normalized, alias_candidates)
 
         for cid, (score, alias_spec) in alias_candidates.items():
             concept = self.graph.get_concept(cid)
@@ -728,11 +770,15 @@ class KnowledgeMapper:
         return matches[:top_k]
 
     def get_related_concepts(self, concept_id: str) -> list[str]:
-        """获取相关概念列表"""
+        """获取相关概念的显示名称列表。"""
         concept = self.graph.get_concept(concept_id)
-        if concept:
-            return concept.get("related_concepts", [])
-        return []
+        if not concept:
+            return []
+        return [
+            related["display_name"]
+            for related_id in concept.get("related_concepts", [])
+            if (related := self.graph.get_concept(related_id)) is not None
+        ]
 
 
 # 全局单例

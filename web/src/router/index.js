@@ -10,6 +10,7 @@ const routes = [
   { path: '/chat', name: 'Chat', component: ChatView },
   { path: '/chat/:sessionId', name: 'ChatWithSession', component: ChatView },
   { path: '/profile', name: 'Profile', component: ProfileView },
+  { path: '/knowledge-map', name: 'KnowledgeMap', component: () => import('../views/KnowledgeMapView.vue') },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })

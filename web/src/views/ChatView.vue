@@ -70,6 +70,7 @@
               </p>
               <ChatInput
                 hero
+                :initial-text="mapQuestion"
                 :loading="chatStore.loading"
                 :web-search-enabled="webSearchEnabled"
                 :web-search-hint="webSearchHint"
@@ -107,6 +108,7 @@
 
         <div v-if="chatStore.messages.length > 0 && !showSessionLoading" class="input-area">
           <ChatInput
+            :initial-text="mapQuestion"
             :loading="chatStore.loading"
             :web-search-enabled="webSearchEnabled"
             :web-search-hint="webSearchHint"
@@ -178,6 +180,7 @@ import { useSessionStore } from '../stores/session'
 import { domainFromUrl, faviconUrl, isExternalUrl } from '../utils/url'
 
 const route = useRoute()
+const mapQuestion = computed(() => typeof route.query.question === 'string' ? route.query.question.slice(0, 2000) : '')
 const router = useRouter()
 const messagesContainer = ref(null)
 const messagesList = ref(null)
