@@ -1,6 +1,8 @@
 import json
 import threading
 
+import pytest
+
 from ds_course_agent.teaching.memory_core import MemoryCore
 
 
@@ -42,6 +44,31 @@ def test_concurrent_state_save_writes_valid_json(monkeypatch, tmp_path):
     payload = json.loads(state_file.read_text(encoding="utf-8"))
     assert len(payload["sessions"]) == 25
     assert len(payload["chat_history"]) == 25
+
+
+def test_state_save_keeps_previous_snapshot_when_replace_fails(monkeypatch, tmp_path):
+    from ds_course_agent.api import state
+
+    state_file = tmp_path / "backend_state.json"
+    monkeypatch.setattr(state, "STATE_FILE", state_file)
+    state._sessions.clear()
+    state._chat_history.clear()
+    state._deleted_session_ids.clear()
+    state._sessions["session-1"] = {"title": "旧状态"}
+    state._save()
+    original = state_file.read_bytes()
+
+    state._sessions["session-2"] = {"title": "新状态"}
+
+    def fail_replace(*args, **kwargs):
+        raise RuntimeError("replace failed")
+
+    monkeypatch.setattr(state.os, "replace", fail_replace)
+    with pytest.raises(RuntimeError, match="replace failed"):
+        state._save()
+
+    assert state_file.read_bytes() == original
+    assert not list(tmp_path.glob(".backend_state.json.*.tmp"))
 
 
 def test_memory_core_default_uses_config_chat_history_dir(monkeypatch, tmp_path):

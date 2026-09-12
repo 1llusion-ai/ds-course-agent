@@ -9,7 +9,9 @@ history files that predate the consolidated state file.
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -278,18 +280,31 @@ def _save():
     with _state_lock:
         with _save_lock:
             STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            STATE_FILE.write_text(
-                json.dumps(
-                    {
-                        "sessions": _sessions,
-                        "chat_history": _chat_history,
-                        "deleted_session_ids": sorted(_deleted_session_ids),
-                    },
-                    ensure_ascii=False,
-                    default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else str(obj),
-                ),
-                encoding="utf-8",
+            payload = json.dumps(
+                {
+                    "sessions": _sessions,
+                    "chat_history": _chat_history,
+                    "deleted_session_ids": sorted(_deleted_session_ids),
+                },
+                ensure_ascii=False,
+                default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else str(obj),
+            ).encode("utf-8")
+            file_descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{STATE_FILE.name}.",
+                suffix=".tmp",
+                dir=STATE_FILE.parent,
             )
+            try:
+                with os.fdopen(file_descriptor, "wb") as handle:
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary_name, STATE_FILE)
+            finally:
+                try:
+                    os.unlink(temporary_name)
+                except FileNotFoundError:
+                    pass
 
 
 _load()
