@@ -99,3 +99,38 @@ def test_scaffold_does_not_force_chapter_or_unrelated_history():
     assert "第7章" not in scaffold
     assert "过拟合" not in scaffold
     assert "协方差矩阵" in scaffold
+
+
+def test_personalized_explanation_streams_model_chunks():
+    executor_module = SkillRegistry().load_module("personalized-explanation")
+    learner_state = learner_state_from_profile(_build_profile())
+    skill = executor_module.PersonalizedExplanationSkill()
+
+    class FakeChunk:
+        def __init__(self, content):
+            self.content = content
+
+    class FakeModel:
+        def stream(self, prompt):
+            assert "测验" in prompt or "教学策略" in prompt
+            yield FakeChunk("第一段")
+            yield FakeChunk("第二段")
+
+    matched = [
+        SimpleNamespace(
+            concept_id="pca",
+            display_name="PCA",
+            chapter="第7章",
+            method="exact_alias",
+            score=0.95,
+        )
+    ]
+
+    rag_tool = SimpleNamespace(invoke=lambda question: "课程资料" * 30)
+    with (
+        patch.object(executor_module, "_get_llm", return_value=FakeModel()),
+        patch.object(executor_module, "course_rag_tool", rag_tool),
+    ):
+        chunks = list(skill.stream("请结合我的测验表现解释 PCA", learner_state, matched))
+
+    assert "第一段第二段" in "".join(chunks)

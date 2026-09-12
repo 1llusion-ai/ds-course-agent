@@ -12,6 +12,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+from ds_course_agent.runtime.model_stream import extract_model_text, iter_text_chunks
 from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
 from ds_course_agent.tools.course_rag import course_rag_tool
 
@@ -89,6 +90,45 @@ class PersonalizedExplanationSkill:
         response = _call_llm(prompt)
         scaffold = self._build_scaffold(strategy, matched_concepts)
         return self._merge_response(response, scaffold)
+
+    def stream(
+        self,
+        question: str,
+        learner_state: LearnerStateSnapshot,
+        matched_concepts: Sequence[Any],
+    ):
+        """Stream a personalized explanation while preserving its teaching context."""
+        matched_concepts = list(matched_concepts)
+
+        if not matched_concepts:
+            matched_concepts = self._infer_from_learner_state(question, learner_state)
+
+        if not matched_concepts:
+            yield from iter_text_chunks(self._fallback(question))
+            return
+
+        strategy = build_strategy(matched_concepts, learner_state, question)
+        knowledge = course_rag_tool.invoke(question)
+        prompt = self._build_prompt(
+            question=question,
+            matched_concepts=matched_concepts,
+            strategy=strategy,
+            knowledge=knowledge,
+        )
+        scaffold = self._build_scaffold(strategy, matched_concepts)
+        if scaffold:
+            yield f"{scaffold}\n\n"
+
+        llm = _get_llm()
+        stream_fn = getattr(llm, "stream", None)
+        if not callable(stream_fn):
+            yield from iter_text_chunks(_call_llm(prompt))
+            return
+
+        for chunk in stream_fn(prompt):
+            text = extract_model_text(chunk)
+            if text:
+                yield text
 
     def _infer_from_learner_state(self, question: str, learner_state: LearnerStateSnapshot) -> list:
         inferred = []

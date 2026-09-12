@@ -19,6 +19,7 @@ from ds_course_agent.agent.route_executor import (
     build_route_result_event,
     capture_retrieval,
     execute_selected_route_handler,
+    finalize_route_result,
     observe_stream_end,
 )
 from ds_course_agent.agent.routing import ExecutionMode, RouteExecutionResult, RouteIntent, RouteState
@@ -242,6 +243,48 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
                 )
             return build_route_result(route_state, skill(question, learner_state, matched_concepts))
         return build_route_result(route_state, skill(question, student_id, session_id))
+
+    def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str | TurnEvent]:
+        if route_state.decision.intent is not RouteIntent.PERSONALIZED_EXPLANATION:
+            yield from super().stream_execute(agent, route_state)
+            return
+
+        from ds_course_agent.shared.query_trace import trace_step
+
+        learner_state = route_state.learner_state
+        if learner_state is None:
+            raise RuntimeError("personalized_explanation requires learner state enrichment")
+
+        skill = getattr(agent, "explanation_skill", None)
+        stream_skill = getattr(skill, "stream", None)
+        if not callable(stream_skill):
+            yield from super().stream_execute(agent, route_state)
+            return
+
+        question = route_state.context.original_query
+        matched_concepts = route_state.matched_concepts or []
+        trace_step("agent.branch", branch="explanation_skill")
+        streamed_parts: list[str] = []
+        for chunk in stream_skill(question, learner_state, matched_concepts):
+            text = str(chunk or "")
+            if text:
+                streamed_parts.append(text)
+                yield text
+
+        content = "".join(streamed_parts)
+        if content.strip():
+            observe_stream_end(agent, route_state, content, stream=True)
+            yield build_route_result_event(build_route_result(route_state, content))
+            return
+
+        recovered = finalize_route_result(
+            agent,
+            route_state,
+            build_route_result(route_state, "", degraded=True),
+            stream=True,
+        )
+        yield from iter_text_chunks(recovered.content)
+        yield build_route_result_event(recovered)
 
 
 class GenericAgentRouteHandler:
