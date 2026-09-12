@@ -103,3 +103,36 @@ def test_search_web_disabled_returns_error_without_network(monkeypatch):
     assert response.ok is False
     assert response.error == "联网搜索未启用。"
     assert "WEB_SEARCH_ENABLED=true" in response.evidence_context
+
+
+def test_search_web_retries_one_transient_empty_provider_response(monkeypatch):
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_ENABLED", True)
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_PROVIDER", "tavily")
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_API_KEY", "key")
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_TOP_K", 2)
+    monkeypatch.setattr(web_search_module.time, "sleep", lambda _seconds: None)
+
+    calls = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls.append(json["query"])
+        payload = {"results": []}
+        if len(calls) == 2:
+            payload = {
+                "results": [
+                    {
+                        "title": "OPD",
+                        "url": "https://example.com/opd",
+                        "content": "On-Policy Distillation",
+                    }
+                ]
+            }
+        return _FakeResponse(payload)
+
+    monkeypatch.setattr(web_search_module.requests, "post", fake_post)
+
+    response = search_web("什么是OPD")
+
+    assert len(calls) == 2
+    assert response.ok is True
+    assert response.results[0].title == "OPD"

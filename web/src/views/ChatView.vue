@@ -118,14 +118,20 @@
       </div>
     </div>
 
-    <aside v-if="sourcesPanelOpen" class="sources-panel" aria-label="搜索来源">
+    <Transition name="sources-panel">
+      <aside v-if="sourcesPanelOpen" class="sources-panel" aria-label="搜索来源">
       <div class="sources-panel__header">
         <div>
-          <div class="sources-panel__kicker">WEB SOURCES</div>
           <h2>{{ sourcesPanelTitle }}</h2>
         </div>
-        <button type="button" class="sources-panel__close" aria-label="关闭来源面板" @click="closeSourcesPanel">
-          ×
+        <button
+          type="button"
+          class="sources-panel__toggle"
+          aria-label="收起来源面板"
+          title="收起来源面板"
+          @click="closeSourcesPanel"
+        >
+          <PanelToggleIcon side="end" />
         </button>
       </div>
 
@@ -160,7 +166,19 @@
           </span>
         </component>
       </div>
-    </aside>
+      </aside>
+    </Transition>
+
+    <button
+      v-if="!sourcesPanelOpen && sourcesPanelSources.length"
+      type="button"
+      class="sources-panel-toggle"
+      aria-label="展开来源面板"
+      title="展开来源面板"
+      @click="sourcesPanelOpen = true"
+    >
+      <PanelToggleIcon side="end" />
+    </button>
   </div>
 </template>
 
@@ -171,6 +189,7 @@ import { ElMessage } from 'element-plus'
 
 import ChatInput from '../components/ChatInput.vue'
 import ChatMessage from '../components/ChatMessage.vue'
+import PanelToggleIcon from '../components/PanelToggleIcon.vue'
 import { useChatStore } from '../stores/chat'
 import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
@@ -956,16 +975,26 @@ onBeforeUnmount(() => {
 }
 
 .sources-panel {
+  position: relative;
   width: min(390px, 34vw);
   min-width: 320px;
   height: 100%;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.86);
+  background: transparent;
   border-left: 1px solid rgba(214, 211, 209, 0.74);
-  box-shadow: -18px 0 42px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(18px);
+}
+
+.sources-panel-enter-active,
+.sources-panel-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.sources-panel-enter-from,
+.sources-panel-leave-to {
+  opacity: 0;
+  transform: translateX(18px);
 }
 
 .sources-panel__header {
@@ -977,13 +1006,6 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid rgba(226, 232, 240, 0.92);
 }
 
-.sources-panel__kicker {
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 850;
-  letter-spacing: 0.12em;
-}
-
 .sources-panel__header h2 {
   margin: 4px 0 0;
   color: #0f172a;
@@ -992,25 +1014,36 @@ onBeforeUnmount(() => {
   line-height: 1.35;
 }
 
-.sources-panel__close {
+.sources-panel__toggle,
+.sources-panel-toggle {
+  display: grid;
+  place-items: center;
   width: 32px;
   height: 32px;
   padding: 0;
   flex: 0 0 auto;
   color: #64748b;
-  background: rgba(248, 250, 252, 0.8);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 999px;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
   cursor: pointer;
-  font-size: 22px;
-  line-height: 1;
   transition: color 0.16s ease, background 0.16s ease, transform 0.16s ease;
 }
 
-.sources-panel__close:hover {
+.sources-panel__toggle:hover,
+.sources-panel-toggle:hover {
   color: #0f172a;
-  background: #fff;
+  background: rgba(226, 232, 240, 0.45);
   transform: translateY(-1px);
+}
+
+.sources-panel-toggle {
+  align-self: stretch;
+  width: 30px;
+  height: 76px;
+  margin: auto 0;
+  border-right: 0;
+  border-radius: 7px 0 0 7px;
 }
 
 .sources-panel__list {
@@ -1151,6 +1184,18 @@ onBeforeUnmount(() => {
     z-index: 30;
     width: min(92vw, 390px);
     min-width: 0;
+  }
+
+  .sources-panel-toggle {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    z-index: 20;
+    transform: translateY(-50%);
+  }
+
+  .sources-panel-toggle:hover {
+    transform: translateY(-50%);
   }
 }
 
