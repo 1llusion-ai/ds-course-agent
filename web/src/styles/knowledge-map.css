@@ -89,6 +89,7 @@
 }
 
 .map-search button,
+.map-inspector-toggle,
 .map-detail__heading button {
   display: grid;
   place-items: center;
@@ -104,6 +105,7 @@
 }
 
 .map-search button:hover,
+.map-inspector-toggle:hover,
 .map-detail__heading button:hover {
   color: #1c1917;
   background: #e7e5e4;
@@ -271,6 +273,17 @@
   gap: 18px;
   color: #78716c;
   font-size: 11px;
+}
+
+.map-stage__toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.map-inspector-toggle {
+  border: 1px solid var(--map-border);
+  background: var(--map-surface);
 }
 
 .map-stage__stats strong {
