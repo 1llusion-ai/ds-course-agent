@@ -129,12 +129,6 @@
   font-weight: 700;
 }
 
-.map-index__heading small {
-  color: #a8a29e;
-  font-size: 10px;
-  font-weight: 500;
-}
-
 .map-index__heading--concepts {
   margin-top: 12px;
   padding-top: 17px;
@@ -210,8 +204,6 @@
   background: #eeece9;
 }
 
-.map-overview small,
-.map-chapter small,
 .map-concept small {
   margin-left: auto;
   color: #a8a29e;
