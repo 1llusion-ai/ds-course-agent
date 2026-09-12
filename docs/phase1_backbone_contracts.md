@@ -66,6 +66,14 @@ version. Package ownership and migration status remain authoritative in
 
 ## Required Invariants (T1-T7)
 
+HTTP chat admission is owned by `api/admission.py`. Sync, new-stream and
+continuation requests reserve the same bounded process-wide/per-student capacity
+before changing history or emitting SSE headers. A detached stream transfers its
+typed lease to the worker; disconnecting or replaying an SSE consumer cannot
+release or consume additional generation capacity. Rejection never enters the
+turn producer. Tests in `tests/integration/api/test_chat_admission.py` enforce
+these HTTP/worker lifetime invariants without adding a second turn producer.
+
 - **T1 — Single preparation:** every normal turn obtains its `RouteState` from
   exactly one `QueryPipeline.prepare()` call.
 - **T2 — Typed control:** routing and execution control signals are explicit

@@ -249,7 +249,7 @@
 .profile-error strong { display: block; }
 .profile-error p { margin: 3px 0 0; font-size: 12px; }
 
-:global(html.theme-dark) .profile-page {
+html.theme-dark .profile-page {
   --profile-border: var(--dark-border);
   --profile-border-strong: #525252;
   --profile-surface: var(--dark-panel);
@@ -259,21 +259,21 @@
   --profile-faint: var(--dark-text-faint);
   background: var(--dark-bg);
 }
-:global(html.theme-dark) .profile-overview__copy > p,
-:global(html.theme-dark) .risk-row__heading strong,
-:global(html.theme-dark) .signal-list button,
-:global(html.theme-dark) .next-actions > button,
-:global(html.theme-dark) .chapter-chart__row span { color: var(--dark-text); }
-:global(html.theme-dark) .profile-metrics,
-:global(html.theme-dark) .signal-lane,
-:global(html.theme-dark) .risk-row,
-:global(html.theme-dark) .next-actions > button > span { background: var(--dark-panel-soft); }
-:global(html.theme-dark) .signal-list button,
-:global(html.theme-dark) .risk-row footer button { color: var(--dark-text-muted); background: var(--dark-panel); border-color: var(--dark-border); }
-:global(html.theme-dark) .status-label { color: #86efac; background: rgba(22, 163, 74, 0.12); border-color: rgba(74, 222, 128, 0.24); }
-:global(html.theme-dark) .risk-track,
-:global(html.theme-dark) .chapter-chart__track { background: var(--dark-bg-subtle); }
-:global(html.theme-dark) .profile-error { background: rgba(194, 65, 12, 0.12); border-color: rgba(251, 146, 60, 0.28); }
+html.theme-dark .profile-overview__copy > p,
+html.theme-dark .risk-row__heading strong,
+html.theme-dark .signal-list button,
+html.theme-dark .next-actions > button,
+html.theme-dark .chapter-chart__row span { color: var(--dark-text); }
+html.theme-dark .profile-metrics,
+html.theme-dark .signal-lane,
+html.theme-dark .risk-row,
+html.theme-dark .next-actions > button > span { background: var(--dark-panel-soft); }
+html.theme-dark .signal-list button,
+html.theme-dark .risk-row footer button { color: var(--dark-text-muted); background: var(--dark-panel); border-color: var(--dark-border); }
+html.theme-dark .status-label { color: #86efac; background: rgba(22, 163, 74, 0.12); border-color: rgba(74, 222, 128, 0.24); }
+html.theme-dark .risk-track,
+html.theme-dark .chapter-chart__track { background: var(--dark-bg-subtle); }
+html.theme-dark .profile-error { background: rgba(194, 65, 12, 0.12); border-color: rgba(251, 146, 60, 0.28); }
 
 @media (max-width: 1080px) {
   .profile-overview { grid-template-columns: 1fr; }

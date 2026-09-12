@@ -46,7 +46,7 @@ async def send_message_stream(
 ) -> StreamingResponse:
     """Start one streaming chat turn."""
 
-    return streaming_response(chat_application.stream_message_events(data, student_id))
+    return streaming_response(await chat_application.stream_message_events(data, student_id))
 
 
 @router.post("/continue/stream")
@@ -56,7 +56,7 @@ async def continue_message_stream(
 ) -> StreamingResponse:
     """Continue the latest stopped assistant response."""
 
-    return streaming_response(chat_application.continue_message_events(data, student_id))
+    return streaming_response(await chat_application.continue_message_events(data, student_id))
 
 
 @router.get("/resume/{session_id}")

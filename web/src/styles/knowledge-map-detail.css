@@ -202,23 +202,23 @@
   line-height: 1.7;
 }
 
-:global(html.theme-dark) .map-inspector > h2,
-:global(html.theme-dark) .map-inspector__empty h2,
-:global(html.theme-dark) .map-detail__summary,
-:global(html.theme-dark) .map-learning-state,
-:global(html.theme-dark) .map-neighbors button,
-:global(html.theme-dark) .map-references {
+html.theme-dark .map-inspector > h2,
+html.theme-dark .map-inspector__empty h2,
+html.theme-dark .map-detail__summary,
+html.theme-dark .map-learning-state,
+html.theme-dark .map-neighbors button,
+html.theme-dark .map-references {
   color: var(--dark-text);
 }
 
-:global(html.theme-dark) .map-detail__section,
-:global(html.theme-dark) .map-neighbors button,
-:global(html.theme-dark) .map-references,
-:global(html.theme-dark) .map-references > section {
+html.theme-dark .map-detail__section,
+html.theme-dark .map-neighbors button,
+html.theme-dark .map-references,
+html.theme-dark .map-references > section {
   border-color: var(--dark-border-soft);
 }
 
-:global(html.theme-dark) .map-references blockquote {
+html.theme-dark .map-references blockquote {
   color: var(--dark-text-muted);
   background: var(--dark-panel-soft);
   border-left-color: #525252;

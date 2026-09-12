@@ -18,6 +18,7 @@ from ds_course_agent.assessment.repository import AssessmentRepository
 
 from .auth import models as auth_models
 from .auth.router import router as auth_router
+from .auth.service import validate_auth_configuration
 from .routers import assessments, chat, knowledge_map, profile, sessions
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_auth_configuration()
     logger.info("RAG Tutor Backend Service starting...")
     auth_models.init_db()
     AssessmentRepository().init_db()

@@ -62,7 +62,10 @@ function createFetchSseStream(url, { method = 'GET', data } = {}) {
         if (response.status === 401) {
           redirectToLogin()
         }
-        throw new Error(`stream request failed with status ${response.status}`)
+        const error = new Error(`stream request failed with status ${response.status}`)
+        error.status = response.status
+        error.retryAfter = response.headers.get('retry-after') || ''
+        throw error
       }
 
       if (!response.body) {

@@ -27,6 +27,7 @@ export const useChatStore = defineStore('chat', () => {
   const activeRequestsBySession = new Map()
   const historyRequestVersions = new Map()
   const reconnectTimersBySession = new Map()
+  let stateVersion = 0
 
   const loading = computed(() => {
     const sessionId = activeSessionId.value
@@ -87,6 +88,18 @@ export const useChatStore = defineStore('chat', () => {
       return nextMessage
     })
     return replaced ? nextMessages : [...currentMessages, nextMessage]
+  }
+
+  function removeRequestTurn(sessionId, requestId) {
+    const currentMessages = messagesBySession.value[sessionId] || []
+    setSessionMessages(
+      sessionId,
+      currentMessages.filter(message => message.requestId !== requestId)
+    )
+  }
+
+  function isAdmissionRejected(error) {
+    return Number(error?.status || error?.response?.status) === 429
   }
 
   function getPendingMessage(sessionId, requestId) {
@@ -201,7 +214,9 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function markMessageAsGenerating(sessionId, targetMessage) {
-    const requestId = targetMessage.requestId || `continue_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    // A continuation is a new request. Reusing the original user-turn id makes
+    // admission failure remove both the user question and the stopped answer.
+    const requestId = `continue_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const nextMessages = (messagesBySession.value[sessionId] || []).map(message => {
       if (message !== targetMessage && message.timestamp !== targetMessage.timestamp) return message
       return {
@@ -217,11 +232,27 @@ export const useChatStore = defineStore('chat', () => {
     return requestId
   }
 
+  function restoreAfterAdmissionRejection(sessionId, requestId, targetMessage) {
+    const currentMessages = messagesBySession.value[sessionId] || []
+    const restored = currentMessages.map(message => {
+      if (message.requestId !== requestId) return message
+      return {
+        ...targetMessage,
+        isLoading: false,
+        isError: false,
+        generation_status: targetMessage.generation_status || 'stopped',
+        generation_error: null
+      }
+    })
+    setSessionMessages(sessionId, restored)
+  }
+
   function consumeStream(sessionId, requestId, source, options = {}) {
     return new Promise((resolve, reject) => {
       let settled = false
       let longWaitTimer = null
       let idleTimeoutTimer = null
+      const requestStateVersion = stateVersion
 
       const clearStreamTimers = () => {
         if (longWaitTimer !== null) {
@@ -241,6 +272,11 @@ export const useChatStore = defineStore('chat', () => {
         clearActiveRequest(sessionId, requestId)
         source.close()
 
+        if (requestStateVersion !== stateVersion) {
+          reject(error)
+          return
+        }
+
         const pendingMessage = getPendingMessage(sessionId, requestId)
         if (pendingMessage) {
           const stoppedMessage = buildStoppedMessage(pendingMessage)
@@ -257,6 +293,11 @@ export const useChatStore = defineStore('chat', () => {
         clearStreamTimers()
         clearActiveRequest(sessionId, requestId)
         source.close()
+
+        if (requestStateVersion !== stateVersion) {
+          reject(error)
+          return
+        }
 
         const pendingMessage = getPendingMessage(sessionId, requestId)
         const errorMessage = buildErrorMessage(content, {
@@ -296,8 +337,16 @@ export const useChatStore = defineStore('chat', () => {
         }, STREAM_IDLE_TIMEOUT_MS)
       }
 
+      const closeSilently = () => {
+        if (settled) return
+        settled = true
+        clearStreamTimers()
+        source.close()
+      }
+
       activeRequestsBySession.set(sessionId, {
         requestId,
+        close: closeSilently,
         cancel: async () => {
           try {
             await chatApi.cancelStream(sessionId)
@@ -312,6 +361,7 @@ export const useChatStore = defineStore('chat', () => {
       armStreamTimers()
 
       source.onmessage = event => {
+        if (requestStateVersion !== stateVersion || settled) return
         armStreamTimers()
         let payload
         try {
@@ -361,6 +411,23 @@ export const useChatStore = defineStore('chat', () => {
 
       source.onerror = error => {
         if (settled) return
+
+        if (isAdmissionRejected(error)) {
+          settled = true
+          clearStreamTimers()
+          clearActiveRequest(sessionId, requestId)
+          source.close()
+          if (requestStateVersion === stateVersion) {
+            if (options.onAdmissionRejected) {
+              options.onAdmissionRejected()
+            } else {
+              removeRequestTurn(sessionId, requestId)
+            }
+            options.onProgress?.()
+          }
+          reject(error)
+          return
+        }
 
         if (options.resuming) {
           settled = true
@@ -437,11 +504,13 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function sendMessageViaHttp(sessionId, message, requestId, options = {}) {
+    const requestStateVersion = stateVersion
     const response = await chatApi.send({
       session_id: sessionId,
       message,
       web_search: Boolean(options.webSearch)
     })
+    if (requestStateVersion !== stateVersion) return null
     const nextMessage = finalizeSessionMessage(sessionId, requestId, response.message)
     syncSessionAfterReply(sessionId, nextMessage)
     options.onProgress?.()
@@ -458,11 +527,13 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function sendMessage(sessionId, message, options = {}) {
+    const requestStateVersion = stateVersion
     const requestId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const userMessage = {
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
+      requestId,
       metadata: options.webSearch ? { web_search: true } : undefined
     }
     const optimisticMessages = [
@@ -482,7 +553,11 @@ export const useChatStore = defineStore('chat', () => {
       }
       return await sendMessageViaHttp(sessionId, message, requestId, options)
     } catch (error) {
-      if (getPendingMessage(sessionId, requestId)?.isLoading) {
+      if (requestStateVersion === stateVersion && isAdmissionRejected(error)) {
+        removeRequestTurn(sessionId, requestId)
+        throw error
+      }
+      if (requestStateVersion === stateVersion && getPendingMessage(sessionId, requestId)?.isLoading) {
         const timeoutMessage = error?.code === 'ECONNABORTED'
           ? '⚠️ 本次回答生成时间过长，请稍后重试。'
           : `⚠️ 发送失败：${error.message || '网络错误'}`
@@ -492,13 +567,16 @@ export const useChatStore = defineStore('chat', () => {
       }
       throw error
     } finally {
-      updatePendingCount(sessionId, -1)
+      if (requestStateVersion === stateVersion) {
+        updatePendingCount(sessionId, -1)
+      }
     }
   }
 
   async function continueMessage(sessionId, targetMessage, options = {}) {
     if (!sessionId || !targetMessage?.timestamp || isSessionPending(sessionId)) return null
 
+    const requestStateVersion = stateVersion
     const requestId = markMessageAsGenerating(sessionId, targetMessage)
     updatePendingCount(sessionId, 1)
     options.onProgress?.()
@@ -508,9 +586,14 @@ export const useChatStore = defineStore('chat', () => {
         session_id: sessionId,
         message_timestamp: targetMessage.timestamp
       })
-      return await consumeStream(sessionId, requestId, source, options)
+      return await consumeStream(sessionId, requestId, source, {
+        ...options,
+        onAdmissionRejected: () => restoreAfterAdmissionRejection(sessionId, requestId, targetMessage)
+      })
     } finally {
-      updatePendingCount(sessionId, -1)
+      if (requestStateVersion === stateVersion) {
+        updatePendingCount(sessionId, -1)
+      }
     }
   }
 
@@ -558,6 +641,22 @@ export const useChatStore = defineStore('chat', () => {
     return true
   }
 
+  function resetForUser() {
+    stateVersion += 1
+    for (const activeRequest of activeRequestsBySession.values()) {
+      activeRequest.close?.()
+    }
+    activeRequestsBySession.clear()
+    for (const sessionId of reconnectTimersBySession.keys()) {
+      clearReconnectTimer(sessionId)
+    }
+    historyRequestVersions.clear()
+    messages.value = []
+    activeSessionId.value = null
+    messagesBySession.value = {}
+    pendingCountsBySession.value = {}
+  }
+
   return {
     messages,
     loading,
@@ -568,6 +667,7 @@ export const useChatStore = defineStore('chat', () => {
     continueMessage,
     setActiveSession,
     clearMessages,
-    cancelActiveRequest
+    cancelActiveRequest,
+    resetForUser
   }
 })

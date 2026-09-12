@@ -9,12 +9,18 @@ history files that predate the consolidated state file.
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
+import tempfile
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
+from uuid import uuid4
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.api.timestamps import parse_timestamp
@@ -25,6 +31,7 @@ from ds_course_agent.api.title_generation import (
 )
 
 STATE_FILE = Path(config.CHAT_HISTORY_DIR) / "backend_state.json"
+logger = logging.getLogger(__name__)
 
 _sessions: dict[str, dict] = {}
 _chat_history: dict[str, list[dict]] = {}
@@ -32,11 +39,131 @@ _deleted_session_ids: set[str] = set()
 _state_lock = threading.RLock()
 _save_lock = threading.Lock()
 _last_save_time: float = 0.0
+_primary_identity: tuple[int, int, int, int] | None = None
+_primary_path: Path | None = None
 
 _UUID_PATTERN = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
+
+
+class StatePersistenceError(RuntimeError):
+    """History cannot be safely recovered or replaced; the original is preserved."""
+
+
+@dataclass(frozen=True)
+class _PersistedState:
+    sessions: dict[str, dict[str, Any]]
+    history: dict[str, list[dict[str, Any]]]
+    deleted_ids: set[str]
+
+
+def _decode_state(data: bytes) -> _PersistedState:
+    payload = json.loads(data)
+    if not isinstance(payload, dict):
+        raise ValueError("state must be an object")
+    sessions = payload.get("sessions")
+    history = payload.get("chat_history")
+    deleted = payload.get("deleted_session_ids", [])
+    if not isinstance(sessions, dict) or not all(isinstance(value, dict) for value in sessions.values()):
+        raise ValueError("invalid sessions")
+    if not isinstance(history, dict) or not all(
+        isinstance(messages, list) and all(isinstance(item, dict) for item in messages) for messages in history.values()
+    ):
+        raise ValueError("invalid chat history")
+    if not isinstance(deleted, list) or not all(isinstance(item, str) for item in deleted):
+        raise ValueError("invalid deleted session ids")
+    return _PersistedState(sessions, history, set(deleted))
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
+    """Publish a complete, flushed file; a failed write leaves the old file intact."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        if hasattr(os, "O_DIRECTORY"):
+            directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _file_identity(path: Path) -> tuple[int, int, int, int] | None:
+    """Return a cheap replacement detector without parsing the full snapshot."""
+
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+
+
+def _quarantine(path: Path, *, label: str) -> Path | None:
+    """Move an unreadable snapshot aside so startup can continue without deletion."""
+
+    if not path.exists():
+        return None
+    archive = path.with_name(f"{path.name}.{label}.{uuid4().hex}")
+    try:
+        os.replace(path, archive)
+    except OSError:
+        logger.exception("Unable to quarantine corrupt history file: %s", path)
+        return None
+    return archive
+
+
+def _read_persisted_state() -> _PersistedState:
+    global _primary_identity, _primary_path
+    _primary_path = STATE_FILE
+    backup = STATE_FILE.with_suffix(".json.bak")
+    original = STATE_FILE.read_bytes() if STATE_FILE.exists() else None
+    if original is not None:
+        try:
+            return _decode_state(original)
+        except (ValueError, UnicodeError):
+            logger.error("Chat history is invalid; attempting recovery from its last valid snapshot")
+    elif not backup.exists():
+        _quarantine(STATE_FILE, label="corrupt")
+        _primary_identity = None
+        logger.critical(
+            "Chat history primary snapshot was unreadable and no backup exists; corrupt file was quarantined and service starts with empty history"
+        )
+        return _PersistedState({}, {}, set())
+    try:
+        backup_data = backup.read_bytes()
+        restored = _decode_state(backup_data)
+    except (OSError, ValueError, UnicodeError) as exc:
+        _quarantine(STATE_FILE, label="corrupt")
+        _quarantine(backup, label="corrupt")
+        _primary_identity = None
+        logger.critical(
+            "Chat history snapshots were unreadable; corrupt files were quarantined and service starts with empty history: %s",
+            exc,
+        )
+        return _PersistedState({}, {}, set())
+    if original is not None:
+        if _quarantine(STATE_FILE, label="corrupt") is None and STATE_FILE.exists():
+            raise StatePersistenceError("Chat history recovery could not quarantine the corrupt primary snapshot")
+    _atomic_write(STATE_FILE, backup_data)
+    _primary_identity = _file_identity(STATE_FILE)
+    logger.warning(
+        "Chat history recovered from its last valid snapshot; newer changes may need recovery from the archive"
+    )
+    return restored
 
 
 @contextmanager
@@ -237,24 +364,18 @@ def purge_session(session_id: str) -> bool:
         return changed
 
 
-def _load():
-    global _sessions, _chat_history, _deleted_session_ids
+def _load() -> None:
+    global _primary_identity, _primary_path
+    _primary_path = STATE_FILE
+    restored = _read_persisted_state()
     changed = False
-
-    if STATE_FILE.exists():
-        try:
-            data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-            _sessions = data.get("sessions", {})
-            _chat_history = data.get("chat_history", {})
-            _deleted_session_ids = set(data.get("deleted_session_ids", []))
-        except Exception:
-            _sessions = {}
-            _chat_history = {}
-            _deleted_session_ids = set()
-    else:
-        _sessions = {}
-        _chat_history = {}
-        _deleted_session_ids = set()
+    # Consumers hold references to these containers; reloading must not orphan them.
+    _sessions.clear()
+    _sessions.update(restored.sessions)
+    _chat_history.clear()
+    _chat_history.update(restored.history)
+    _deleted_session_ids.clear()
+    _deleted_session_ids.update(restored.deleted_ids)
 
     # 清理 _deleted_session_ids 中不存在的 session（只做内存清理，不修改文件）
     for session_id in list(_deleted_session_ids):
@@ -272,24 +393,70 @@ def _load():
     changed = _repair_session_metadata() or changed
     if changed:
         _save()
+    else:
+        _primary_identity = _file_identity(STATE_FILE)
 
 
-def _save():
+def _save() -> None:
+    global _primary_identity, _primary_path
     with _state_lock:
         with _save_lock:
-            STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            STATE_FILE.write_text(
-                json.dumps(
-                    {
-                        "sessions": _sessions,
-                        "chat_history": _chat_history,
-                        "deleted_session_ids": sorted(_deleted_session_ids),
-                    },
-                    ensure_ascii=False,
-                    default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else str(obj),
-                ),
-                encoding="utf-8",
-            )
+            data = json.dumps(
+                {
+                    "sessions": _sessions,
+                    "chat_history": _chat_history,
+                    "deleted_session_ids": sorted(_deleted_session_ids),
+                },
+                ensure_ascii=False,
+                default=lambda obj: obj.isoformat() if hasattr(obj, "isoformat") else str(obj),
+            ).encode("utf-8")
+            current_identity = _file_identity(STATE_FILE)
+            if _primary_path != STATE_FILE:
+                _primary_path = STATE_FILE
+                _primary_identity = current_identity
+            if _primary_identity != current_identity:
+                raise StatePersistenceError(
+                    "Refusing to overwrite history changed outside this process; reload or recover the snapshot"
+                )
+
+            temporary: Path | None = None
+            backup_temporary: Path | None = None
+            backup = STATE_FILE.with_suffix(".json.bak")
+            try:
+                STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+                with tempfile.NamedTemporaryFile(
+                    dir=STATE_FILE.parent,
+                    prefix=f".{STATE_FILE.name}.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as handle:
+                    temporary = Path(handle.name)
+                    handle.write(data)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+
+                # Preserve the previous valid inode without rereading or copying
+                # the complete JSON. Hard links make the backup update metadata-only.
+                if STATE_FILE.exists():
+                    try:
+                        backup_temporary = backup.with_name(f".{backup.name}.{uuid4().hex}.tmp")
+                        os.link(STATE_FILE, backup_temporary)
+                        os.replace(backup_temporary, backup)
+                        backup_temporary = None
+                    except OSError:
+                        logger.warning("Unable to refresh history backup with a hard link; retaining the prior backup")
+                os.replace(temporary, STATE_FILE)
+                directory_fd = os.open(STATE_FILE.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+                _primary_identity = _file_identity(STATE_FILE)
+            finally:
+                if temporary is not None:
+                    temporary.unlink(missing_ok=True)
+                if backup_temporary is not None:
+                    backup_temporary.unlink(missing_ok=True)
 
 
 _load()

@@ -40,13 +40,18 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowLeft, ArrowRight, Check, Warning } from '@element-plus/icons-vue'
 
 import AssessmentQuestion from '../components/AssessmentQuestion.vue'
 import { useAssessmentStore } from '../stores/assessment'
+import { useAuthStore } from '../stores/auth'
+import { workspaceConfirmOptions } from '../utils/feedback'
+import { accountStorageKey, readLocalStorage, removeLocalStorage, writeLocalStorage } from '../utils/storage'
 
 const route = useRoute()
 const router = useRouter()
 const store = useAssessmentStore()
+const authStore = useAuthStore()
 const assessment = computed(() => store.current)
 const currentIndex = ref(0)
 const answers = ref({})
@@ -55,15 +60,27 @@ const changeCounts = ref({})
 const questionStartedAt = ref(performance.now())
 const error = ref('')
 const submitted = ref(false)
+const activeDraftKey = ref('')
 let loadVersion = 0
 const currentQuestion = computed(() => assessment.value.questions[currentIndex.value])
 const answeredCount = computed(() => Object.values(answers.value).filter(Boolean).length)
-const draftKey = computed(() => `ds-course-agent.assessment-draft.${route.params.assessmentId}`)
+const draftKey = computed(() => accountStorageKey(
+  `ds-course-agent.assessment-draft.${route.params.assessmentId}`,
+  authStore.user
+))
+
+function clearLocalAnswerState() {
+  answers.value = {}
+  timings.value = {}
+  changeCounts.value = {}
+  currentIndex.value = 0
+  submitted.value = false
+}
 
 function saveDraft() {
-  if (typeof window === 'undefined' || !assessment.value) return
+  if (typeof window === 'undefined' || !assessment.value || activeDraftKey.value !== draftKey.value) return
   try {
-    window.localStorage.setItem(draftKey.value, JSON.stringify({
+    writeLocalStorage(activeDraftKey.value, JSON.stringify({
       questionIds: assessment.value.questions.map(question => question.id),
       currentIndex: currentIndex.value,
       answers: answers.value,
@@ -71,14 +88,14 @@ function saveDraft() {
       changeCounts: changeCounts.value
     }))
   } catch {
-    // Draft persistence is best-effort; answering must remain usable if storage is unavailable.
+    // Draft persistence is optional; answering remains usable if storage is unavailable.
   }
 }
 
-function restoreDraft() {
-  if (typeof window === 'undefined' || !assessment.value) return
+function restoreDraft(key) {
+  if (typeof window === 'undefined' || !assessment.value || key !== draftKey.value) return
   try {
-    const draft = JSON.parse(window.localStorage.getItem(draftKey.value) || 'null')
+    const draft = JSON.parse(readLocalStorage(key) || 'null')
     const questionIds = assessment.value.questions.map(question => question.id)
     if (!draft || JSON.stringify(draft.questionIds) !== JSON.stringify(questionIds)) return
     answers.value = draft.answers || {}
@@ -86,12 +103,12 @@ function restoreDraft() {
     changeCounts.value = draft.changeCounts || {}
     currentIndex.value = Math.min(Math.max(Number(draft.currentIndex) || 0, 0), questionIds.length - 1)
   } catch {
-    window.localStorage.removeItem(draftKey.value)
+    removeLocalStorage(key)
   }
 }
 
 function clearDraft() {
-  if (typeof window !== 'undefined') window.localStorage.removeItem(draftKey.value)
+  if (activeDraftKey.value) removeLocalStorage(activeDraftKey.value)
 }
 
 function recordElapsed() {
@@ -123,8 +140,19 @@ async function confirmSubmit() {
     return
   }
   try {
-    await ElMessageBox.confirm('提交后不能修改答案，确认提交本次测验？', '提交测验', { confirmButtonText: '确认提交', cancelButtonText: '继续检查', type: 'warning' })
-  } catch { return }
+    await ElMessageBox.confirm(
+      '提交后不能修改答案，确认提交本次测验？',
+      '提交测验',
+      {
+        type: 'warning',
+        ...workspaceConfirmOptions,
+        confirmButtonText: '确认提交',
+        cancelButtonText: '继续检查'
+      }
+    )
+  } catch {
+    return
+  }
 
   const payload = assessment.value.questions.map(question => ({
     question_id: question.id,
@@ -133,7 +161,8 @@ async function confirmSubmit() {
     answer_change_count: changeCounts.value[question.id] || 0
   }))
   try {
-    await store.submitAssessment(route.params.assessmentId, payload)
+    const result = await store.submitAssessment(route.params.assessmentId, payload)
+    if (!result || activeDraftKey.value !== draftKey.value) return
     submitted.value = true
     clearDraft()
     router.replace(`/assessments/${route.params.assessmentId}/result`)
@@ -144,20 +173,19 @@ async function confirmSubmit() {
 
 async function loadAssessment() {
   const version = ++loadVersion
+  const requestedDraftKey = draftKey.value
   error.value = ''
-  answers.value = {}
-  timings.value = {}
-  changeCounts.value = {}
-  currentIndex.value = 0
-  submitted.value = false
+  activeDraftKey.value = ''
+  clearLocalAnswerState()
   try {
     store.current = null
     await store.openAssessment(route.params.assessmentId)
-    if (version !== loadVersion) return
-    restoreDraft()
+    if (version !== loadVersion || requestedDraftKey !== draftKey.value || !assessment.value) return
+    activeDraftKey.value = requestedDraftKey
+    restoreDraft(requestedDraftKey)
     questionStartedAt.value = performance.now()
   } catch (requestError) {
-    if (version !== loadVersion) return
+    if (version !== loadVersion || requestedDraftKey !== draftKey.value) return
     if (requestError.response?.status === 409) {
       router.replace(`/assessments/${route.params.assessmentId}/result`)
       return
@@ -168,6 +196,12 @@ async function loadAssessment() {
 
 onMounted(loadAssessment)
 watch(() => route.params.assessmentId, loadAssessment)
+watch(draftKey, (nextKey, previousKey) => {
+  if (!previousKey || nextKey === previousKey) return
+  loadVersion += 1
+  activeDraftKey.value = ''
+  clearLocalAnswerState()
+})
 
 onBeforeUnmount(() => {
   if (submitted.value) return

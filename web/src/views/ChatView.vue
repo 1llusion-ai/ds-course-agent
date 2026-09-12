@@ -28,23 +28,6 @@
             <el-icon v-if="canRenameCurrentSession" class="thread-title-edit-icon"><EditPen /></el-icon>
           </button>
         </div>
-        <div class="header-status">
-          <button
-            type="button"
-            class="theme-toggle"
-            :aria-label="isDarkTheme ? '切换到日间模式' : '切换到夜间模式'"
-            :title="isDarkTheme ? '日间模式' : '夜间模式'"
-            @click="toggleTheme"
-          >
-            <svg v-if="isDarkTheme" class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.36-6.36-1.42 1.42M7.06 16.94l-1.42 1.42m12.72 0-1.42-1.42M7.06 7.06 5.64 5.64" />
-              <circle cx="12" cy="12" r="4" stroke-width="2" />
-            </svg>
-            <svg v-else class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12.79A8.5 8.5 0 1 1 11.21 3 6.7 6.7 0 0 0 21 12.79Z" />
-            </svg>
-          </button>
-        </div>
       </header>
 
       <div class="chat-content">
@@ -168,13 +151,16 @@
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { EditPen } from '@element-plus/icons-vue'
 
 import ChatInput from '../components/ChatInput.vue'
 import ChatMessage from '../components/ChatMessage.vue'
 import { useChatStore } from '../stores/chat'
+import { useAuthStore } from '../stores/auth'
 import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
 import { domainFromUrl, faviconUrl, isExternalUrl } from '../utils/url'
+import { accountStorageKey } from '../utils/storage'
 
 const appShell = inject('ds-course-agent.app-shell', null)
 const route = useRoute()
@@ -188,6 +174,7 @@ const stickToBottom = ref(true)
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
 const profileStore = useProfileStore()
+const authStore = useAuthStore()
 const webSearchEnabled = ref(readWebSearchPreference())
 const webSearchTurnNotice = ref('')
 const sourcesPanelOpen = ref(false)
@@ -199,8 +186,6 @@ const headerRenameTitle = ref('')
 const headerRenameSaving = ref(false)
 const sessionBootstrapPending = appShell?.sessionBootstrapPending || ref(!sessionStore.loaded)
 const sessionLoading = ref(false)
-const isDarkTheme = appShell?.isDarkTheme || computed(() => false)
-const toggleTheme = appShell?.toggleTheme || (() => {})
 let sessionLoadToken = 0
 let scrollFrameId = null
 let messagesResizeObserver = null
@@ -310,13 +295,14 @@ async function loadSession(sessionId) {
   }
 }
 
-async function handleSend(message, sendOptions = {}) {
+async function handleSend(message, sendOptions = {}, restoreDraft = () => {}) {
   const useWebSearch = Boolean(sendOptions?.webSearch ?? webSearchEnabled.value)
   const streamOptions = { onProgress: scrollToBottom, webSearch: useWebSearch }
   const currentSessionId = sessionStore.currentSessionId
   let targetSessionId = currentSessionId
   let shouldRefreshTitle = false
   let sendPromise = null
+  let admissionRejected = false
   stickToBottom.value = true
   clearWebSearchTurnNotice()
 
@@ -341,12 +327,16 @@ async function handleSend(message, sendOptions = {}) {
     const assistantMessage = await sendPromise
     updateWebSearchTurnNotice(assistantMessage)
   } catch (error) {
-    if (error?.code !== 'REQUEST_CANCELLED') {
+    if (isAdmissionRejected(error)) {
+      admissionRejected = true
+      restoreDraft()
+      ElMessage.warning(admissionRejectedMessage(error))
+    } else if (error?.code !== 'REQUEST_CANCELLED') {
       console.error('发送消息失败:', error)
       ElMessage.error('发送失败，请稍后重试。')
     }
   } finally {
-    if (shouldRefreshTitle && targetSessionId) {
+    if (shouldRefreshTitle && targetSessionId && !admissionRejected) {
       await refreshSessionTitle(targetSessionId)
     }
     try {
@@ -443,7 +433,11 @@ async function commitHeaderRename() {
 
 function readWebSearchPreference() {
   if (typeof window === 'undefined') return false
-  return window.localStorage.getItem('ds-course-agent.webSearchEnabled') === 'true'
+  return window.localStorage.getItem(webSearchStorageKey()) === 'true'
+}
+
+function webSearchStorageKey() {
+  return accountStorageKey('ds-course-agent.webSearchEnabled', authStore.user)
 }
 
 function clearWebSearchTurnNotice() {
@@ -455,10 +449,23 @@ function setWebSearchEnabled(nextValue) {
   clearWebSearchTurnNotice()
   if (typeof window !== 'undefined') {
     window.localStorage.setItem(
-      'ds-course-agent.webSearchEnabled',
+      webSearchStorageKey(),
       webSearchEnabled.value ? 'true' : 'false'
     )
   }
+}
+
+function isAdmissionRejected(error) {
+  return Number(error?.status || error?.response?.status) === 429
+}
+
+function admissionRejectedMessage(error) {
+  const rawRetryAfter = error?.retryAfter || error?.response?.headers?.['retry-after']
+  const retryAfter = Number.parseInt(rawRetryAfter, 10)
+  if (Number.isFinite(retryAfter) && retryAfter > 0) {
+    return `当前请求较多，请在约 ${Math.min(retryAfter, 300)} 秒后重试。`
+  }
+  return '当前请求较多，请稍后重试。'
 }
 
 function updateWebSearchTurnNotice(message = {}) {

@@ -306,6 +306,10 @@ docker compose -f deploy/compose.yaml up --build
 
 - Compose 提供 **backend**（`0.0.0.0:8000`，`/health` healthcheck）与 **frontend**（nginx 80）两个服务；
 - 生产密钥与浏览器来源通过环境变量注入（`AUTH_SECRET_KEY`、`CORS_ALLOW_ORIGINS` 等），`api.Dockerfile` 不把 `.env` 打进镜像。
+- Compose 默认 `APP_ENV=production`：必须设置至少 32 字节随机签名密钥，并在前端前配置 HTTPS 终止代理；生产 Cookie 始终带 `Secure`。纯本地 HTTP 演示需显式设置 `APP_ENV=development`。开发环境未设置密钥时使用进程内随机密钥，重启后需要重新登录。
+- 当前仅支持单 API 进程和单副本；启动命令固定 `--workers 1`，不能直接靠增加 worker 扩容。历史文件、SSE 回放与任务准入状态尚未跨进程共享。
+- 聊天默认最多 8 个并发任务、每学生最多 2 个，超限返回 `429` 和 `Retry-After`，不创建新 turn；SSE 断连不会释放仍在生成的任务额度。登录默认每分钟每账号 10 次、每 IP 60 次。代理仅应信任已配置的上游，不接受任意客户端伪造的转发 IP。
+- 历史写入使用同目录临时文件、刷盘和原子替换，并通过元数据硬链接保存上一份有效 `.json.bak`；损坏主文件恢复前归档为 `.corrupt.*`。主文件和备份都不可读时，损坏文件会被隔离归档、记录 critical 日志，服务以明确的空历史启动，避免启动崩溃或静默覆盖证据。备份恢复可能回退最近一次写入，需结合归档与日志检查。
 
 ---
 

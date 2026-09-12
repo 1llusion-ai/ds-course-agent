@@ -1,17 +1,16 @@
 <template>
   <div class="app-shell">
-    <div
+    <aside
+      v-if="!narrowViewport"
       class="app-shell__sidebar"
       :class="{
         'app-shell__sidebar--collapsed': sidebarCollapsed,
-        'app-shell__sidebar--narrow': narrowViewport,
         'app-shell__sidebar--resizing': sidebarResizing
       }"
       :style="{ width: `${sidebarWidth}px` }"
     >
       <ChatSidebar
-        :collapsed="sidebarCollapsed || narrowViewport"
-        style="width: 100%"
+        :collapsed="sidebarCollapsed"
         @toggle-collapse="toggleSidebar"
         @new-chat="handleNewChat"
       />
@@ -26,37 +25,84 @@
         @resize-keydown="resizeSidebarFromKeyboard"
         @reset="resetSidebarWidth"
       />
-    </div>
+    </aside>
 
-    <main class="app-shell__workspace" aria-label="课程学习工作区">
+    <button
+      v-if="narrowViewport"
+      ref="mobileMenuButtonRef"
+      type="button"
+      class="app-shell__mobile-menu"
+      :aria-expanded="mobileDrawerOpen"
+      aria-controls="mobile-navigation-drawer"
+      aria-label="打开课程导航"
+      title="课程导航"
+      @click="openMobileDrawer"
+    >
+      <el-icon><Menu /></el-icon>
+    </button>
+
+    <div
+      v-if="narrowViewport && mobileDrawerOpen"
+      class="app-shell__drawer-backdrop"
+      aria-hidden="true"
+      @click="closeMobileDrawer"
+    />
+
+    <aside
+      v-if="narrowViewport && mobileDrawerOpen"
+      id="mobile-navigation-drawer"
+      ref="mobileDrawerRef"
+      class="app-shell__mobile-drawer"
+      aria-label="课程导航"
+      aria-modal="true"
+      role="dialog"
+      @keydown="handleMobileDrawerKeydown"
+    >
+      <ChatSidebar
+        mobile
+        @new-chat="handleNewChat"
+        @mobile-close="closeMobileDrawer"
+      />
+    </aside>
+
+    <main
+      class="app-shell__workspace"
+      :inert="narrowViewport && mobileDrawerOpen"
+      aria-label="课程学习工作区"
+    >
       <router-view />
     </main>
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Menu } from '@element-plus/icons-vue'
 
 import ChatSidebar from '../components/ChatSidebar.vue'
 import PanelResizeHandle from '../components/PanelResizeHandle.vue'
 import { useResizablePanel } from '../composables/useResizablePanel'
 import { useChatStore } from '../stores/chat'
 import { useSessionStore } from '../stores/session'
+import { readLocalStorage, writeLocalStorage } from '../utils/storage'
 
 const APP_SHELL_CONTEXT_KEY = 'ds-course-agent.app-shell'
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'ds-course-agent.sidebarCollapsed'
 const SIDEBAR_WIDTH_STORAGE_KEY = 'ds-course-agent.sidebarWidth'
 const SIDEBAR_MIN_WIDTH = 224
 const SIDEBAR_MAX_WIDTH = 380
-const THEME_STORAGE_KEY = 'ds-course-agent.theme'
 
 const router = useRouter()
 const chatStore = useChatStore()
 const sessionStore = useSessionStore()
 const sidebarCollapsed = ref(readSidebarCollapsedPreference())
 const narrowViewport = ref(false)
+const mobileDrawerOpen = ref(false)
+const mobileMenuButtonRef = ref(null)
+const mobileDrawerRef = ref(null)
+const mobileDrawerReturnFocus = ref(null)
 const {
   width: sidebarWidth,
   isResizing: sidebarResizing,
@@ -70,33 +116,23 @@ const {
   maxWidth: SIDEBAR_MAX_WIDTH,
   side: 'start'
 })
-const theme = ref(readThemePreference())
 const sessionBootstrapPending = ref(!sessionStore.loaded)
-const isDarkTheme = computed(() => theme.value === 'dark')
-const updateViewport = () => { narrowViewport.value = window.innerWidth <= 760 }
 
-provide(APP_SHELL_CONTEXT_KEY, {
-  isDarkTheme,
-  sessionBootstrapPending,
-  toggleTheme
-})
-
-watch(theme, applyThemePreference, { immediate: true })
+provide(APP_SHELL_CONTEXT_KEY, { sessionBootstrapPending, openMobileDrawer })
 
 function readSidebarCollapsedPreference() {
   if (typeof window === 'undefined') return false
-  return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true'
+  return readLocalStorage(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true'
 }
 
-function readThemePreference() {
-  if (typeof window === 'undefined') return 'light'
-  return window.localStorage.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light'
+function updateViewport() {
+  narrowViewport.value = window.innerWidth <= 760
 }
 
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value
   if (typeof window !== 'undefined') {
-    window.localStorage.setItem(
+    writeLocalStorage(
       SIDEBAR_COLLAPSED_STORAGE_KEY,
       sidebarCollapsed.value ? 'true' : 'false'
     )
@@ -107,23 +143,67 @@ function handleNewChat() {
   sessionStore.setCurrentSession(null)
   chatStore.setActiveSession(null)
   chatStore.clearMessages()
+  closeMobileDrawer({ restoreFocus: false })
   router.push('/chat')
 }
 
-function applyThemePreference(value) {
-  if (typeof document === 'undefined') return
-  document.documentElement.classList.toggle('theme-dark', value === 'dark')
-  document.body?.classList.toggle('theme-dark', value === 'dark')
-  document.getElementById('app')?.classList.toggle('theme-dark', value === 'dark')
-  document.documentElement.style.colorScheme = value === 'dark' ? 'dark' : 'light'
+function openMobileDrawer() {
+  if (!narrowViewport.value) return
+  mobileDrawerReturnFocus.value = document.activeElement
+  mobileDrawerOpen.value = true
 }
 
-function toggleTheme() {
-  theme.value = isDarkTheme.value ? 'light' : 'dark'
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme.value)
+function closeMobileDrawer({ restoreFocus = true } = {}) {
+  if (!mobileDrawerOpen.value) return
+  mobileDrawerOpen.value = false
+  if (restoreFocus) {
+    nextTick(() => {
+      const focusTarget = mobileDrawerReturnFocus.value || mobileMenuButtonRef.value
+      focusTarget?.focus?.()
+    })
   }
 }
+
+function focusMobileDrawer() {
+  const drawer = mobileDrawerRef.value
+  const focusTarget = drawer?.querySelector('[data-mobile-drawer-focus], button, input, [href], [tabindex]:not([tabindex="-1"])')
+  focusTarget?.focus?.()
+}
+
+function handleMobileDrawerKeydown(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeMobileDrawer()
+    return
+  }
+
+  if (event.key !== 'Tab') return
+  const focusable = [...mobileDrawerRef.value?.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+  ) || []]
+  if (!focusable.length) {
+    event.preventDefault()
+    return
+  }
+
+  const first = focusable[0]
+  const last = focusable.at(-1)
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+watch(mobileDrawerOpen, open => {
+  if (open) nextTick(focusMobileDrawer)
+})
+
+watch(narrowViewport, narrow => {
+  if (!narrow) closeMobileDrawer({ restoreFocus: false })
+})
 
 onMounted(async () => {
   updateViewport()
@@ -151,10 +231,10 @@ onBeforeUnmount(() => window.removeEventListener('resize', updateViewport))
   display: flex;
   width: 100%;
   height: 100%;
-  min-height: 100vh;
   min-height: 100dvh;
   overflow: hidden;
-  background: #f7f7f7;
+  color: var(--text);
+  background: var(--app-bg);
 }
 
 .app-shell__workspace {
@@ -164,22 +244,21 @@ onBeforeUnmount(() => window.removeEventListener('resize', updateViewport))
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .app-shell__sidebar {
   position: relative;
   flex-shrink: 0;
   height: 100%;
-  transition: width 0.18s ease;
+  overflow: hidden;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  transition: width 160ms ease;
 }
 
 .app-shell__sidebar--collapsed {
-  width: 4rem !important;
-}
-
-.app-shell__sidebar--narrow {
-  width: 4rem !important;
+  width: 64px !important;
 }
 
 .app-shell__sidebar--resizing {
@@ -193,8 +272,50 @@ onBeforeUnmount(() => window.removeEventListener('resize', updateViewport))
   min-height: 0;
 }
 
-:global(html.theme-dark) .app-shell,
-:global(html.theme-dark) .app-shell__workspace {
-  background: var(--dark-bg) !important;
+.app-shell__mobile-menu {
+  position: fixed;
+  z-index: 24;
+  top: 10px;
+  left: 10px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  place-items: center;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.app-shell__mobile-menu:hover {
+  background: var(--surface-hover);
+}
+
+.app-shell__drawer-backdrop {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  background: var(--overlay);
+}
+
+.app-shell__mobile-drawer {
+  position: fixed;
+  z-index: 31;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(332px, calc(100vw - 40px));
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+}
+
+@media (max-width: 760px) {
+  .app-shell__workspace {
+    width: 100%;
+  }
 }
 </style>
