@@ -37,9 +37,7 @@
           title="折叠边栏"
           @click="handleSidebarToggle"
         >
-          <svg class="sidebar-collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-            <path stroke-linecap="round" stroke-width="2" d="M5 7h14M5 12h14M5 17h14" />
-          </svg>
+          <PanelToggleIcon side="start" />
         </button>
       </div>
     </div>
@@ -274,6 +272,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+import PanelToggleIcon from './PanelToggleIcon.vue'
 import { useChatStore } from '../stores/chat'
 import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
@@ -744,13 +743,6 @@ onBeforeUnmount(() => {
 .sidebar-search-button .el-icon {
   font-size: 17px;
 }
-
-.sidebar-collapse-icon {
-  width: 18px;
-  height: 18px;
-}
-
-
 
 .sidebar-top {
   display: flex;

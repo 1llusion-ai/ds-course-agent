@@ -114,7 +114,7 @@
               title="展开详情面板"
               @click="inspectorOpen = true"
             >
-              <span class="map-panel-toggle-icon" aria-hidden="true" />
+              <PanelToggleIcon side="end" />
             </button>
           </div>
         </div>
@@ -181,7 +181,7 @@
               title="收起详情面板"
               @click="inspectorOpen = false"
             >
-              <span class="map-panel-toggle-icon" aria-hidden="true" />
+              <PanelToggleIcon side="end" />
             </button>
           </div>
           <template v-if="selectedNode">
@@ -239,6 +239,7 @@ import { Aim, ArrowRight, Close, Connection, Search } from '@element-plus/icons-
 import { knowledgeMapApi } from '../api/knowledgeMap'
 import KnowledgeMapCanvas from '../components/KnowledgeMapCanvas.vue'
 import PanelResizeHandle from '../components/PanelResizeHandle.vue'
+import PanelToggleIcon from '../components/PanelToggleIcon.vue'
 import { useResizablePanel } from '../composables/useResizablePanel'
 import { chapterColor, learningStateMeta, learningStates, neighborsOf, questionForNode, relationTypes } from '../utils/knowledgeMap'
 
