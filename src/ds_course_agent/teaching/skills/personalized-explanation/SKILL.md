@@ -7,6 +7,10 @@ allowed_tools:
 context: inline
 priority: 70
 trigger_keywords:
+  - 结合我的测验表现
+  - 根据我的测验表现
+  - 结合我的学习情况
+  - 根据我的学习情况
   - 结合我现在的情况
   - 结合我之前
   - 再解释一遍

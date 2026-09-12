@@ -42,6 +42,14 @@ def test_skill_loader_selects_candidates_from_frontmatter_keywords():
     assert keys[0] == "learning-path"
 
 
+def test_skill_loader_selects_personalized_explanation_for_assessment_evidence():
+    loader = SkillRegistry()
+
+    matches = loader.select_candidates("请结合我的测验表现讲解数据科学")
+
+    assert "personalized-explanation" in [item.skill.key for item in matches]
+
+
 def test_skill_loader_blocks_conflicting_skill_with_avoid_keywords():
     loader = SkillRegistry()
 

@@ -170,6 +170,20 @@ def test_contextual_alias_policy_does_not_emit_independent_match(monkeypatch):
     assert logistic_match.routing_eligible is True
 
 
+def test_course_name_alias_does_not_compete_with_specific_concept(monkeypatch):
+    """“数据科学”作为课程范围词时，不应污染更具体的知识点。"""
+    import ds_course_agent.shared.config as config
+
+    monkeypatch.setattr(config, "CONCEPT_MAP_EMBEDDING_MODE", "disabled")
+    mapper = KnowledgeMapper()
+
+    matches = mapper.map_question("数据科学爬虫案例分析")
+    assert [match.concept_id for match in matches] == ["web_crawler"]
+
+    explicit_definition = mapper.map_question("什么是数据科学？")
+    assert explicit_definition[0].concept_id == "data_science_definition"
+
+
 def test_regex_and_embedding_matches_expose_routing_strength(monkeypatch):
     """正则命中可驱动路由，Embedding 只提供 supporting 语义信号。"""
     import ds_course_agent.shared.config as config

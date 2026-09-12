@@ -320,11 +320,22 @@ class AssessmentService:
             return [], rejected
 
         accepted = []
-        for question in evidence_accepted:
-            with trace.stage(AssessmentStage.CRITIQUE, round_index=round_index, count=1):
-                critiques = self._critic.critique(request, [question], [*accepted_questions, *accepted])
-                if len(critiques) != 1 or critiques[0].question_index != 0:
-                    raise AssessmentCritiqueError("assessment critic returned incomplete question coverage")
+        for index, question in enumerate(evidence_accepted):
+            try:
+                with trace.stage(AssessmentStage.CRITIQUE, round_index=round_index, count=1):
+                    critiques = self._critic.critique(request, [question], [*accepted_questions, *accepted])
+            except AssessmentCritiqueError as exc:
+                logger.warning(
+                    "assessment request_id=%s stage=critique_degraded round=%s remaining=%s error_type=%s",
+                    trace.request_id,
+                    round_index,
+                    len(evidence_accepted) - index,
+                    type(exc).__name__,
+                )
+                accepted.extend(evidence_accepted[index:])
+                break
+            if len(critiques) != 1 or critiques[0].question_index != 0:
+                raise AssessmentCritiqueError("assessment critic returned incomplete question coverage")
             critique = critiques[0]
             rejection_codes = self._critique_rejection_codes(question, critique)
             if not rejection_codes:

@@ -106,9 +106,21 @@ def test_session_to_assessment_to_profile_to_next_teaching(tmp_path) -> None:
     state = RuleBasedLearnerStateProvider(lambda: fresh_memory).get_state("student")
     assert state.practice["overfitting"].level is PracticeLevel.NEEDS_PRACTICE
     assert state.practice["overfitting"].answered_count == 2
+    assert [item.question_stem for item in state.practice["overfitting"].recent_attempts] == [
+        "Case 0: which evidence supports this conclusion?",
+        "Case 1: which evidence supports this conclusion?",
+    ]
+    assert all(item.selected_option_text == "Evidence B" for item in state.practice["overfitting"].recent_attempts)
+    assert all(item.correct_option_text == "Evidence A" for item in state.practice["overfitting"].recent_attempts)
     assert "underfitting" not in state.practice
-    assert "基础对比例子" in build_practice_guidance(state, ["overfitting"])
+    guidance = build_practice_guidance(state, ["overfitting"])
+    assert "基础对比例子" in guidance
+    assert "Case 0" in guidance
+    assert "学生选择“Evidence B”" in guidance
     assert build_practice_guidance(state, ["svm"]) == ""
+    missing = build_practice_guidance(state, ["svm"], evidence_requested=True)
+    assert "没有已提交的测验作答证据" in missing
+    assert "不得声称学生答对、答错、已掌握" in missing
 
 
 def test_readiness_uses_answers_and_assessment_diversity_not_mentions(tmp_path) -> None:

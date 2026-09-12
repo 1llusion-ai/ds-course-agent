@@ -639,7 +639,7 @@ def test_evidence_rejection_does_not_call_item_quality_critic() -> None:
     assert critic.calls == []
 
 
-def test_critic_failure_rejects_the_request_without_regeneration() -> None:
+def test_critic_failure_degrades_to_evidence_verified_questions() -> None:
     class FailingCritic:
         def critique(self, *args: Any, **kwargs: Any) -> tuple[ItemCritique, ...]:
             raise AssessmentCritiqueError("critic unavailable")
@@ -652,8 +652,9 @@ def test_critic_failure_rejects_the_request_without_regeneration() -> None:
         critic=FailingCritic(),
     )
 
-    with pytest.raises(AssessmentCritiqueError):
-        service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
+    quiz = service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
+
+    assert len(quiz.questions) == 1
     assert model.invoke_count == 1
 
 

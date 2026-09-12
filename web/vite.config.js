@@ -19,6 +19,8 @@ export default defineConfig({
     }
   },
   server: {
+    // Vite 8 emits an invalid client placeholder in agent environments unless this is explicit.
+    forwardConsole: { unhandledErrors: false, logLevels: [] },
     port: 5185,
     host: '127.0.0.1',
     proxy: {

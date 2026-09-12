@@ -285,6 +285,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  Connection,
+  DocumentChecked,
+  EditPen,
+  Search,
+  Setting
+} from '@element-plus/icons-vue'
 
 import PanelToggleIcon from './PanelToggleIcon.vue'
 import { useChatStore } from '../stores/chat'

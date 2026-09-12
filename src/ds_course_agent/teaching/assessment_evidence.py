@@ -27,6 +27,7 @@ class AssessmentEvidenceRecorder:
         events = []
         for question_id, question in zip(record.question_ids, record.quiz.questions, strict=True):
             answer = answers[question_id]
+            option_text = {option.id: option.text for option in question.options}
             events.append(
                 QuestionAnsweredEvent(
                     event_id=f"assessment:{record.id}:{question_id}",
@@ -45,6 +46,8 @@ class AssessmentEvidenceRecorder:
                         correct_option_id=question.correct_option_id,
                         question_stem=question.stem,
                         answer_change_count=answer.answer_change_count,
+                        selected_option_text=option_text.get(answer.selected_option_id),
+                        correct_option_text=option_text.get(question.correct_option_id),
                     ),
                 )
             )

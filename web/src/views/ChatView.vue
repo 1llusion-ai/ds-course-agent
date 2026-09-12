@@ -94,7 +94,7 @@
           <div v-else ref="messagesList" class="messages-list">
             <ChatMessage
               v-for="(message, index) in chatStore.messages"
-              :key="message.requestId || `${message.timestamp || index}-${index}`"
+              :key="messageKey(message, index)"
               :message="message"
               :can-continue="canContinueMessage(message, index)"
               @open-sources="openSourcesPanel"
@@ -222,6 +222,11 @@ const starterPrompts = [
   '帮我区分过拟合和欠拟合',
   '请用 Python 演示一次交叉验证'
 ]
+
+function messageKey(message, index) {
+  const identity = message.requestId || `${message.timestamp || 'message'}-${index}`
+  return `${message.role || 'message'}-${identity}`
+}
 
 watch(
   [() => route.params.sessionId, () => sessionStore.loaded, () => sessionStore.sortedSessions.length],

@@ -30,6 +30,18 @@ class PracticeObservation:
     correct_option_id: str
     question_stem: str
     answer_change_count: int | None = None
+    selected_option_text: str | None = None
+    correct_option_text: str | None = None
+
+
+@dataclass(frozen=True)
+class PracticeAttempt:
+    """Bounded question-level evidence retained for later teaching adaptation."""
+
+    question_stem: str
+    is_correct: bool
+    selected_option_text: str | None = None
+    correct_option_text: str | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +58,7 @@ class ConceptPractice:
     last_answered_at: float
     level: PracticeLevel
     last_incorrect_stem: str | None
+    recent_attempts: tuple[PracticeAttempt, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Project the summary for profile persistence."""
@@ -56,7 +69,14 @@ class ConceptPractice:
     def from_dict(cls, data: dict[str, Any]) -> ConceptPractice:
         """Restore a persisted summary with its finite readiness state."""
 
-        return cls(**{**data, "level": PracticeLevel(data["level"])})
+        recent_attempts = tuple(PracticeAttempt(**item) for item in data.get("recent_attempts", ()))
+        return cls(
+            **{
+                **data,
+                "level": PracticeLevel(data["level"]),
+                "recent_attempts": recent_attempts,
+            }
+        )
 
 
 def summarize_practice(observations: list[tuple[float, PracticeObservation]]) -> ConceptPractice:
@@ -86,4 +106,13 @@ def summarize_practice(observations: list[tuple[float, PracticeObservation]]) ->
         last_answered_at=ordered[-1][0],
         level=level,
         last_incorrect_stem=next((item.question_stem for item in reversed(recent) if not item.is_correct), None),
+        recent_attempts=tuple(
+            PracticeAttempt(
+                question_stem=item.question_stem,
+                is_correct=item.is_correct,
+                selected_option_text=item.selected_option_text,
+                correct_option_text=item.correct_option_text,
+            )
+            for item in recent[-3:]
+        ),
     )

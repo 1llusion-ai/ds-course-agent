@@ -40,6 +40,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowLeft, ArrowRight, Check, Warning } from '@element-plus/icons-vue'
 
 import AssessmentQuestion from '../components/AssessmentQuestion.vue'
 import { useAssessmentStore } from '../stores/assessment'

@@ -186,6 +186,14 @@ function isSameStoredMessage(left = {}, right = {}) {
   return left.role === right.role && (left.content || '') === (right.content || '')
 }
 
+function hasRemoteCounterpart(message = {}, history = []) {
+  return history.some(remoteMessage => {
+    if (remoteMessage.role !== message.role) return false
+    if (isSameStoredMessage(remoteMessage, message)) return true
+    return sameMessageTimestamp(remoteMessage.timestamp, message.timestamp)
+  })
+}
+
 export function mergeHistoryWithLocalProgress(history = [], localMessages = []) {
   if (!history.length) {
     return localMessages.some(message => message.isLoading || message.requestId || message.role === 'user')
@@ -241,7 +249,9 @@ export function mergeHistoryWithLocalProgress(history = [], localMessages = []) 
     }
   })
   const unmatchedLocal = localMessages.filter((message, index) => (
-    !usedLocalIndexes.has(index) && (message.isLoading || message.requestId || message.role === 'user')
+    !usedLocalIndexes.has(index) &&
+    (message.isLoading || message.requestId || message.role === 'user') &&
+    !hasRemoteCounterpart(message, history)
   ))
   return [...merged, ...unmatchedLocal]
 }

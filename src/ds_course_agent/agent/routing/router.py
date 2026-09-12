@@ -400,7 +400,11 @@ class QueryRouter:
 
     def _is_personalization_request(self, query: str) -> bool:
         """判断是否是个性化解释请求。"""
+        from ds_course_agent.teaching.practice_guidance import requests_assessment_personalization
+
         normalized = self._normalize(query)
+        if requests_assessment_personalization(normalized):
+            return True
         cues = [
             "结合我现在的进度",
             "按我现在的进度",

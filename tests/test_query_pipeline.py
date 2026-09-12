@@ -263,6 +263,30 @@ class TestFastRouter:
         assert decision.enrichment.load_learner_state is True
         assert semantic.calls == []
 
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "请结合我的测验表现讲解数据科学",
+            "结合我的学习情况解释网络爬虫",
+        ],
+    )
+    def test_assessment_and_learning_state_requests_use_personalized_explanation(self, query):
+        router, semantic = _router()
+        context = _context(query)
+        context.skill_candidate_keys.add("personalized-explanation")
+
+        decision = router.route(context)
+
+        _assert_route(
+            decision,
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.PERSONALIZED_EXPLANATION,
+            mode=ExecutionMode.TEACHING_SKILL,
+            policy=RetrievalPolicy.REQUIRED,
+        )
+        assert decision.enrichment.load_learner_state is True
+        assert semantic.calls == []
+
     def test_course_service_precedes_explicit_web_button(self):
         router, semantic = _router()
         context = _context("现在几点？")

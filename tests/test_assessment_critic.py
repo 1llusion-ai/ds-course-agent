@@ -344,6 +344,20 @@ def test_critic_provider_failure_fails_closed_without_retry() -> None:
     assert model.invoke_count == 1
 
 
+def test_critic_normalizes_duplicate_set_like_findings() -> None:
+    payload = _critique_payload()
+    payload["pedagogical_defects"] = ["weak_distractors", "weak_distractors"]
+    payload["leakage_signals"] = [
+        {"option_id": "A", "signal": "wording_echo"},
+        {"option_id": "A", "signal": "wording_echo"},
+    ]
+
+    critiques = AssessmentQualityCritic(model=_Model({"critiques": [payload]})).critique(_request(), [_question()])
+
+    assert [item.value for item in critiques[0].pedagogical_defects] == ["weak_distractors"]
+    assert [(item.option_id, item.signal.value) for item in critiques[0].leakage_signals] == [("A", "wording_echo")]
+
+
 def test_real_critic_adapter_sends_bounded_schema_without_reviewing_history() -> None:
     import json
 

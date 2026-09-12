@@ -11,7 +11,10 @@ from ds_course_agent.teaching.learner_state import (
     rank_active_weak_spots,
     rank_recent_concepts,
 )
-from ds_course_agent.teaching.practice_guidance import build_practice_guidance
+from ds_course_agent.teaching.practice_guidance import (
+    build_practice_guidance,
+    requests_assessment_personalization,
+)
 
 
 @dataclass
@@ -40,8 +43,6 @@ def build_strategy(
     question: str,
 ) -> TeachingStrategy:
     """Build a focused teaching strategy for the current question."""
-    del question
-
     if not matched_concepts:
         return TeachingStrategy()
 
@@ -75,7 +76,11 @@ def build_strategy(
         relevant_weak_spots=_dedupe_keep_order(relevant_weak)[:2],
         relevant_known_concepts=_dedupe_keep_order(relevant_known)[:2],
         suggest_examples=bool(relevant_weak),
-        practice_guidance=build_practice_guidance(learner_state, target_ids),
+        practice_guidance=build_practice_guidance(
+            learner_state,
+            target_ids,
+            evidence_requested=requests_assessment_personalization(question),
+        ),
     )
 
 

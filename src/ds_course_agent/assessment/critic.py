@@ -249,7 +249,35 @@ class AssessmentQualityCritic:
             return raw_output
         if isinstance(raw_output, Mapping):
             try:
-                return CritiqueBatch.model_validate(dict(raw_output))
+                payload = dict(raw_output)
+                critiques = payload.get("critiques")
+                if isinstance(critiques, list):
+                    normalized = []
+                    for item in critiques:
+                        if not isinstance(item, Mapping):
+                            normalized.append(item)
+                            continue
+                        critique = dict(item)
+                        defects = critique.get("pedagogical_defects")
+                        if isinstance(defects, list):
+                            critique["pedagogical_defects"] = list(dict.fromkeys(defects))
+                        leakage = critique.get("leakage_signals")
+                        if isinstance(leakage, list):
+                            seen = set()
+                            unique_leakage = []
+                            for signal in leakage:
+                                if not isinstance(signal, Mapping):
+                                    unique_leakage.append(signal)
+                                    continue
+                                key = (signal.get("option_id"), signal.get("signal"))
+                                if key in seen:
+                                    continue
+                                seen.add(key)
+                                unique_leakage.append(dict(signal))
+                            critique["leakage_signals"] = unique_leakage
+                        normalized.append(critique)
+                    payload["critiques"] = normalized
+                return CritiqueBatch.model_validate(payload)
             except ValidationError as exc:
                 raise AssessmentCritiqueError("assessment critic returned invalid structured output") from exc
         raise AssessmentCritiqueError("structured assessment critique output is not a critique payload")

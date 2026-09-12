@@ -39,7 +39,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ChatDotRound, User } from '@element-plus/icons-vue'
+import { ArrowLeft, ChatDotRound, User, Warning } from '@element-plus/icons-vue'
 
 import AssessmentSource from '../components/AssessmentSource.vue'
 import { useAssessmentStore } from '../stores/assessment'

@@ -2,6 +2,10 @@
   "course_name": "数据科学导论",
   "version": "1.7",
   "alias_policies": {
+    "数据科学": {
+      "match_mode": "contextual",
+      "match_strength": "supporting"
+    },
     "分类": {
       "match_mode": "contextual",
       "match_strength": "supporting"
