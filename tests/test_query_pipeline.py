@@ -92,13 +92,28 @@ class TestQueryPreprocessor:
         schedule = preprocessor.process("第3周讲什么？", "s", "u", [])
         concept = preprocessor.process("什么是过拟合？", "s", "u", [])
         execution = preprocessor.process("请运行这段代码并告诉我输出：print(1 + 1)", "s", "u", [])
+        assessment = preprocessor.process("给我出几道决策树练习题", "s", "u", [])
 
         assert "datetime" in datetime.detected_intents
         assert "schedule" in schedule.detected_intents
         assert "concept_explanation" in concept.detected_intents
         assert "python_execution" in execution.detected_intents
+        assert "assessment_assignment" in assessment.detected_intents
         assert concept.short_term_query is None
         assert all(not item.detected_concepts for item in (datetime, schedule, concept, execution))
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "练习题是什么意思？",
+            "请解释教材练习题中的交叉验证",
+            "这道练习题为什么选A？",
+        ],
+    )
+    def test_assessment_intent_requires_an_explicit_assignment_action(self, query):
+        context = _context(query)
+
+        assert "assessment_assignment" not in context.detected_intents
 
     def test_parses_explicit_short_term_query_as_typed_state(self):
         context = _context("BCA是什么？")
@@ -179,6 +194,13 @@ class TestFastRouter:
                 RouteFamily.LEARNING,
                 RouteIntent.CODE_EXECUTION,
                 ExecutionMode.PYTHON_SANDBOX,
+                RetrievalPolicy.DISABLED,
+            ),
+            (
+                "给我出几道决策树练习题",
+                RouteFamily.LEARNING,
+                RouteIntent.ASSESSMENT_ASSIGNMENT,
+                ExecutionMode.DETERMINISTIC_TOOL,
                 RetrievalPolicy.DISABLED,
             ),
         ],

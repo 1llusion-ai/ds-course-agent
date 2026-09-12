@@ -38,6 +38,7 @@ These expose data access or deterministic query behaviors to the agent.
 | Textbook retrieval | Query textbook chunks and return grounded context | `src/ds_course_agent/tools/course_rag.py` |
 | KB status check | Deterministic environment/status check | `src/ds_course_agent/tools/knowledge_base_status.py` |
 | Course schedule query | Query course time/location from structured schedule data | `src/ds_course_agent/tools/course_schedule.py` |
+| Assessment assignment | One explicit, side-effecting command that generates and persists a student assessment; route-gated and never bound to the generic model | `src/ds_course_agent/tools/assessment.py` |
 
 ### Skills
 
@@ -57,6 +58,8 @@ These should not be promoted to tools or skills unless their role changes.
 | `src/ds_course_agent/teaching/memory_core.py` | profile aggregation, weak-spot detection, resolved-history bookkeeping |
 | `src/ds_course_agent/teaching/knowledge_mapper.py` | concept matching and related-concept lookup |
 | `src/ds_course_agent/teaching/knowledge_map.py` | validated course-map projection and exact-concept learner-state overlay; exposed through an authenticated HTTP read |
+| `src/ds_course_agent/teaching/assessment_assignment.py` | learner-state-aware KC, difficulty, and question-count policy behind the assignment tool |
+| `src/ds_course_agent/assessment/` | evidence selection, generation, verification, persistence, lifecycle, and scoring behind the assignment tool and HTTP API |
 | `skills/learning-path/scripts/planner.py` | internal route ranking and step ordering |
 | `skills/personalized-explanation/scripts/strategy.py` | internal relevance filtering and scaffold strategy |
 | retrieval fusion / rerank logic | internal ranking implementation rather than a user-facing capability |

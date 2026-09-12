@@ -17,9 +17,13 @@ PACKAGE = Path(__file__).resolve().parents[1] / "src" / "ds_course_agent"
 
 
 def test_runtime_and_shared_imports_do_not_depend_on_domains() -> None:
-    """Inspect local imports too, so lazy imports cannot bypass the boundary."""
+    """Enforce the foundation dependency direction, including lazy imports."""
 
     violations = []
+    allowed_layers = {
+        "runtime": {"runtime", "shared"},
+        "shared": {"shared"},
+    }
     for layer in ("runtime", "shared"):
         for path in (PACKAGE / layer).rglob("*.py"):
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
@@ -37,7 +41,7 @@ def test_runtime_and_shared_imports_do_not_depend_on_domains() -> None:
                     if module == "ds_course_agent":
                         modules = [f"{module}.{alias.name}" for alias in node.names]
                 for module in modules:
-                    if module.startswith("ds_course_agent.") and module.split(".")[1] not in {"runtime", "shared"}:
+                    if module.startswith("ds_course_agent.") and module.split(".")[1] not in allowed_layers[layer]:
                         violations.append(f"{path.relative_to(PACKAGE)}:{node.lineno}: {module}")
     assert not violations, violations
 
@@ -54,7 +58,7 @@ from langchain_core.messages import HumanMessage
 token = begin_query_trace()
 govern_context_budget([HumanMessage(content='hello')], location='runtime.import_test')
 end_query_trace(token)
-forbidden = ('rag', 'agent', 'teaching', 'retrieval', 'research', 'tools', 'api', 'hooks')
+forbidden = ('rag', 'agent', 'teaching', 'retrieval', 'assessment', 'research', 'tools', 'api', 'hooks')
 loaded = [name for name in sys.modules if any(
     name == 'ds_course_agent.' + part or name.startswith('ds_course_agent.' + part + '.')
     for part in forbidden

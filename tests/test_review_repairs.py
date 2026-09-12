@@ -124,6 +124,49 @@ def test_live_corpus_replacement_and_clear_refresh_bm25_and_cache(tmp_path, monk
         clear_rag_retrieval_cache()
 
 
+def test_assessment_evidence_window_uses_loaded_pages_without_vector_calls() -> None:
+    from langchain_core.documents import Document
+
+    from ds_course_agent.retrieval.service import RAGService, _build_evidence_page_index
+
+    revision = "a" * 64
+    documents = []
+    metadatas = []
+    ids = []
+    for page_number, text in ((125, "上一页完整内容。"), (126, "本页决策树信息增益内容。"), (127, "下一页完整内容。")):
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        ids.append(f"c-{page_number}")
+        documents.append(text)
+        metadatas.append(
+            {
+                "metadata_schema_version": "retrieval-provenance/1.0",
+                "collection_revision": revision,
+                "source": "book.pdf",
+                "source_id": "book",
+                "source_page": page_number,
+                "book_page": page_number - 8,
+                "source_char_start": 0,
+                "source_char_end": len(text),
+                "content_sha256": digest,
+                "source_page_sha256": digest,
+                "source_page_text": text,
+                "chunk_id": f"c-{page_number}",
+            }
+        )
+    service = RAGService.__new__(RAGService)
+    service.index_manifest = SimpleNamespace(collection_revision=revision)
+    service._evidence_pages = _build_evidence_page_index({"ids": ids, "documents": documents, "metadatas": metadatas})
+    service.embedding = Mock()
+    service.vector_store_service = Mock()
+
+    window = service.read_evidence_window(Document(page_content=documents[1], metadata=metadatas[1]))
+
+    assert [page.metadata["source_page"] for page in window] == [125, 126, 127]
+    assert [page.page_content for page in window] == documents
+    service.embedding.embed_query.assert_not_called()
+    service.vector_store_service.query.assert_not_called()
+
+
 def test_ingest_publishes_revision_for_failed_batch(tmp_path):
     from ds_course_agent.kb.store import CourseKnowledgeBase
 

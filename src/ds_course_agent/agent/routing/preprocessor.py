@@ -234,6 +234,16 @@ class QueryPreprocessor:
         if any(kw in q for kw in ["学习路线", "怎么学", "先学", "后学", "顺序"]):
             intents.append("learning_path")
 
+        # 只接受明确的创建/开始动作；谈论或解释“练习题”本身不触发持久化副作用。
+        assessment_actions = (
+            r"(?:给|帮)我出(?:一套|几道|\d+道)?[^？?]{0,20}(?:题|测验)",
+            r"开始(?:做题|做练习|测验)",
+            r"(?:创建|生成|安排)(?:一次|一套)?[^？?]{0,12}(?:测验|练习)",
+            r"(?:我想|我要|想要)(?:开始)?(?:做题|做练习|测验)",
+        )
+        if any(re.search(pattern, q) for pattern in assessment_actions):
+            intents.append("assessment_assignment")
+
         # 概念解释
         if any(kw in q for kw in ["什么是", "是什么", "定义", "含义", "解释"]):
             intents.append("concept_explanation")

@@ -88,6 +88,42 @@ class CurrentDatetimeRouteHandler(BufferedRouteHandlerMixin):
         return build_route_result(route_state, result)
 
 
+class AssessmentAssignmentRouteHandler(BufferedRouteHandlerMixin):
+    """Invoke the one coarse assessment tool with trusted turn context."""
+
+    def can_handle(self, agent: Any, route_state: RouteState) -> bool:
+        return route_state.decision.intent is RouteIntent.ASSESSMENT_ASSIGNMENT
+
+    def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> RouteExecutionResult:
+        from ds_course_agent.shared.error_response import build_error_response
+        from ds_course_agent.shared.query_trace import trace_error, trace_step
+        from ds_course_agent.teaching.assessment_assignment import AssessmentAssignmentPlanner
+        from ds_course_agent.tools.assessment import AssessmentAssignmentInput
+
+        trace_step("agent.branch", branch="assessment_assignment")
+        request = AssessmentAssignmentPlanner().plan(route_state.matched_concepts, route_state.learner_state)
+        registry = agent.tool_registry
+        tool = registry.get("assign_assessment_tool").tool
+        try:
+            summary = tool.invoke(AssessmentAssignmentInput(student_id=route_state.student_id, request=request))
+        except Exception as exc:
+            trace_error("tool.assign_assessment", exc)
+            logger.error("assessment assignment failed: %s", exc)
+            return build_route_result(
+                route_state,
+                build_error_response(
+                    "测验创建失败",
+                    "暂时无法根据课程资料生成测验，请稍后重试。",
+                    retryable=True,
+                ),
+                degraded=True,
+            )
+        return build_route_result(
+            route_state,
+            f"已为你准备好《{summary.title}》，共 {summary.question_count} 题。请到“我的测验”开始作答。",
+        )
+
+
 class GroundedRagRouteHandler:
     def can_handle(self, agent: Any, route_state: RouteState) -> bool:
         return route_state.decision.execution_mode == ExecutionMode.GROUNDED_GENERATION
@@ -347,6 +383,7 @@ def default_route_handlers() -> list[RouteHandler]:
         SpecialCaseRouteHandler(),
         CourseScheduleRouteHandler(),
         CurrentDatetimeRouteHandler(),
+        AssessmentAssignmentRouteHandler(),
         GroundedRagRouteHandler(),
         WebSearchRouteHandler(),
         PythonExecRouteHandler(),
@@ -362,6 +399,7 @@ __all__ = [
     "SpecialCaseRouteHandler",
     "CourseScheduleRouteHandler",
     "CurrentDatetimeRouteHandler",
+    "AssessmentAssignmentRouteHandler",
     "GroundedRagRouteHandler",
     "WebSearchRouteHandler",
     "PythonExecRouteHandler",

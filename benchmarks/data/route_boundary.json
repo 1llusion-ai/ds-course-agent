@@ -1723,6 +1723,74 @@
       "disallowed_execution_modes": [
         "grounded_generation"
       ]
+    },
+    {
+      "id": "assessment_assignment_001",
+      "category": "assessment_assignment",
+      "query": "给我出几道决策树练习题",
+      "expected_family": "learning",
+      "expected_intent": "assessment_assignment",
+      "expected_execution_mode": "deterministic_tool",
+      "expected_retrieval_policy": "disabled",
+      "expected_allowed_tools": [],
+      "disallowed_execution_modes": [
+        "grounded_generation",
+        "tool_agent"
+      ]
+    },
+    {
+      "id": "assessment_term_explanation_001",
+      "category": "assessment_adversarial",
+      "query": "练习题是什么意思？",
+      "expected_family": "learning",
+      "expected_intent": "concept_qa",
+      "expected_execution_mode": "grounded_generation",
+      "expected_retrieval_policy": "required",
+      "expected_allowed_tools": [],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      },
+      "disallowed_execution_modes": [
+        "deterministic_tool"
+      ]
+    },
+    {
+      "id": "assessment_textbook_explanation_001",
+      "category": "assessment_adversarial",
+      "query": "请解释教材练习题中的交叉验证",
+      "expected_family": "learning",
+      "expected_intent": "concept_qa",
+      "expected_execution_mode": "grounded_generation",
+      "expected_retrieval_policy": "required",
+      "expected_allowed_tools": [],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      },
+      "disallowed_execution_modes": [
+        "deterministic_tool"
+      ]
+    },
+    {
+      "id": "assessment_answer_explanation_001",
+      "category": "assessment_adversarial",
+      "query": "这道练习题为什么选A？",
+      "expected_family": "learning",
+      "expected_intent": "concept_qa",
+      "expected_execution_mode": "grounded_generation",
+      "expected_retrieval_policy": "required",
+      "expected_allowed_tools": [],
+      "semantic_router_output": {
+        "intent": "concept_qa",
+        "confidence": 0.93,
+        "needs_clarification": false
+      },
+      "disallowed_execution_modes": [
+        "deterministic_tool"
+      ]
     }
   ]
 }

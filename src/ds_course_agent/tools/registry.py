@@ -212,6 +212,7 @@ class ToolRegistry:
 def build_default_tool_registry() -> ToolRegistry:
     """Build the default registry from split one-tool modules."""
 
+    from ds_course_agent.tools.assessment import assign_assessment_tool
     from ds_course_agent.tools.course_rag import course_rag_tool
     from ds_course_agent.tools.course_schedule import course_schedule_tool
     from ds_course_agent.tools.datetime_tool import current_datetime_tool
@@ -274,6 +275,18 @@ def build_default_tool_registry() -> ToolRegistry:
                 progress_label="正在执行 Python 代码...",
                 result_policy="offload_candidate",
                 description="在受限 sandbox 中执行 Python 代码。",
+            ),
+            ToolSpec(
+                name="assign_assessment_tool",
+                tool=assign_assessment_tool,
+                read_only=False,
+                side_effect=True,
+                concurrency_safe=False,
+                cost_class="llm_retrieval_write",
+                progress_label="正在生成并分配测验...",
+                expose_to_agent=False,
+                exclusive=True,
+                description="根据可信学生上下文生成、持久化并分配一套教材测验。",
             ),
             ToolSpec(
                 name="web_search_tool",

@@ -118,7 +118,7 @@ def test_canonical_route_dataset_uses_new_contract_and_required_regressions():
     metadata, cases = load_route_cases(DEFAULT_CASE_PATH)
 
     assert metadata["version"] == "3.0"
-    assert len(cases) >= 119
+    assert len(cases) >= 123
     assert all("expected_family" in case for case in cases)
     assert all("expected_intent" in case for case in cases)
     assert all("expected_execution_mode" in case for case in cases)
@@ -136,6 +136,10 @@ def test_canonical_route_dataset_uses_new_contract_and_required_regressions():
         "generic_code_001",
         "code_review_001",
         "python_exec_001",
+        "assessment_assignment_001",
+        "assessment_term_explanation_001",
+        "assessment_textbook_explanation_001",
+        "assessment_answer_explanation_001",
     } <= case_ids
 
 

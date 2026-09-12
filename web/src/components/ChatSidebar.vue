@@ -89,6 +89,20 @@
       <button
         type="button"
         class="utility-entry"
+        :class="{ 'utility-entry--active': isAssessmentActive }"
+        :aria-current="isAssessmentActive ? 'page' : undefined"
+        title="我的测验"
+        @click="router.push('/assessments')"
+      >
+        <span class="utility-entry__icon"><el-icon><DocumentChecked /></el-icon></span>
+        <span v-if="!props.collapsed" class="utility-entry__body">
+          <span class="utility-entry__title">我的测验</span>
+          <span class="utility-entry__meta">完成 Agent 安排的练习</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        class="utility-entry"
         :class="{ 'utility-entry--active': isKnowledgeMapActive }"
         :aria-current="isKnowledgeMapActive ? 'page' : undefined"
         title="知识地图"
@@ -308,6 +322,7 @@ const activeSessionId = computed(() => (
 ))
 const isProfileActive = computed(() => route.name === 'Profile')
 const isKnowledgeMapActive = computed(() => route.name === 'KnowledgeMap')
+const isAssessmentActive = computed(() => String(route.name || '').startsWith('Assessment'))
 
 const hasSearchQuery = computed(() => Boolean(normalizeSearchText(searchQuery.value)))
 
