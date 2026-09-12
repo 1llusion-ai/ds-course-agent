@@ -31,13 +31,13 @@
 
 .map-workspace {
   display: grid;
-  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-columns: var(--map-index-width, 232px) minmax(0, 1fr);
   height: 100%;
   min-height: 0;
 }
 
 .map-workspace--inspector-open {
-  grid-template-columns: 232px minmax(0, 1fr) 310px;
+  grid-template-columns: var(--map-index-width, 232px) minmax(0, 1fr) var(--map-inspector-width, 310px);
 }
 
 .map-index,
@@ -47,6 +47,7 @@
 }
 
 .map-index {
+  position: relative;
   display: flex;
   flex-direction: column;
   padding: 16px 12px 0;
@@ -406,14 +407,6 @@
 }
 
 @media (max-width: 1120px) {
-  .map-workspace {
-    grid-template-columns: 210px minmax(0, 1fr);
-  }
-
-  .map-workspace--inspector-open {
-    grid-template-columns: 210px minmax(0, 1fr) 280px;
-  }
-
   .map-stage__toolbar,
   .map-filterbar {
     padding-inline: 14px;

@@ -9,6 +9,10 @@
       v-else-if="graph"
       class="map-workspace"
       :class="{ 'map-workspace--inspector-open': selectedNode }"
+      :style="{
+        '--map-index-width': `${indexWidth}px`,
+        '--map-inspector-width': `${inspectorWidth}px`
+      }"
     >
       <aside class="map-index" aria-label="知识点导航">
         <label class="map-search">
@@ -77,6 +81,16 @@
             <small v-if="search.trim()">{{ node.chapter }}</small>
           </button>
         </div>
+        <PanelResizeHandle
+          side="start"
+          label="调整知识点目录宽度"
+          :value="indexWidth"
+          :min="INDEX_MIN_WIDTH"
+          :max="INDEX_MAX_WIDTH"
+          @resize-start="startIndexResize"
+          @resize-keydown="resizeIndexFromKeyboard"
+          @reset="resetIndexWidth"
+        />
       </aside>
 
       <section class="map-stage" aria-label="知识图谱浏览区">
@@ -127,6 +141,16 @@
 
       <Transition name="map-inspector">
         <aside v-if="selectedNode" class="map-inspector" aria-label="知识点详情">
+          <PanelResizeHandle
+            side="end"
+            label="调整知识点详情宽度"
+            :value="inspectorWidth"
+            :min="INSPECTOR_MIN_WIDTH"
+            :max="INSPECTOR_MAX_WIDTH"
+            @resize-start="startInspectorResize"
+            @resize-keydown="resizeInspectorFromKeyboard"
+            @reset="resetInspectorWidth"
+          />
           <div class="map-detail__heading">
             <span><i :style="{ background: chapterColor(selectedNode.chapter) }" />{{ selectedNode.chapter }}</span>
             <button
@@ -185,8 +209,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { Aim, ArrowRight, Close, Connection, Search } from '@element-plus/icons-vue'
 import { knowledgeMapApi } from '../api/knowledgeMap'
 import KnowledgeMapCanvas from '../components/KnowledgeMapCanvas.vue'
+import PanelResizeHandle from '../components/PanelResizeHandle.vue'
+import { useResizablePanel } from '../composables/useResizablePanel'
 import { chapterColor, learningStateMeta, learningStates, neighborsOf, questionForNode, relationTypes } from '../utils/knowledgeMap'
 
+const INDEX_MIN_WIDTH = 190
+const INDEX_MAX_WIDTH = 360
+const INSPECTOR_MIN_WIDTH = 260
+const INSPECTOR_MAX_WIDTH = 520
 const route = useRoute()
 const router = useRouter()
 const graph = ref(null)
@@ -199,6 +229,30 @@ const selectedId = ref('')
 const localOnly = ref(false)
 const showPersonalState = ref(false)
 const enabledRelations = ref(Object.keys(relationTypes))
+const {
+  width: indexWidth,
+  startResize: startIndexResize,
+  resizeFromKeyboard: resizeIndexFromKeyboard,
+  resetWidth: resetIndexWidth
+} = useResizablePanel({
+  storageKey: 'ds-course-agent.knowledgeMapIndexWidth',
+  defaultWidth: 232,
+  minWidth: INDEX_MIN_WIDTH,
+  maxWidth: INDEX_MAX_WIDTH,
+  side: 'start'
+})
+const {
+  width: inspectorWidth,
+  startResize: startInspectorResize,
+  resizeFromKeyboard: resizeInspectorFromKeyboard,
+  resetWidth: resetInspectorWidth
+} = useResizablePanel({
+  storageKey: 'ds-course-agent.knowledgeMapInspectorWidth',
+  defaultWidth: 310,
+  minWidth: INSPECTOR_MIN_WIDTH,
+  maxWidth: INSPECTOR_MAX_WIDTH,
+  side: 'end'
+})
 const byId = computed(() => new Map((graph.value?.nodes || []).map(node => [node.canonical_id, node])))
 const concepts = computed(() => graph.value?.nodes.filter(node => node.node_type === 'kc') || [])
 const kcCount = computed(() => concepts.value.length)
