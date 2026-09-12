@@ -2,6 +2,39 @@
   <router-view />
 </template>
 
+<script setup>
+import { watch } from 'vue'
+
+import { useAssessmentStore } from './stores/assessment'
+import { useAuthStore } from './stores/auth'
+import { useChatStore } from './stores/chat'
+import { useProfileStore } from './stores/profile'
+import { useSessionStore } from './stores/session'
+
+const authStore = useAuthStore()
+const chatStore = useChatStore()
+const sessionStore = useSessionStore()
+const assessmentStore = useAssessmentStore()
+const profileStore = useProfileStore()
+
+watch(
+  () => [
+    authStore.user?.id,
+    authStore.user?.student_id,
+    authStore.user?.username,
+    authStore.user?.email
+  ].find(Boolean) || null,
+  (accountId, previousAccountId) => {
+    if (accountId === previousAccountId) return
+    chatStore.resetForUser()
+    sessionStore.resetForUser()
+    assessmentStore.resetForUser()
+    profileStore.resetForUser()
+  },
+  { immediate: true }
+)
+</script>
+
 <style>
 @import './styles/main.scss';
 

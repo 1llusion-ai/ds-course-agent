@@ -27,6 +27,7 @@ export const useChatStore = defineStore('chat', () => {
   const activeRequestsBySession = new Map()
   const historyRequestVersions = new Map()
   const reconnectTimersBySession = new Map()
+  let stateVersion = 0
 
   const loading = computed(() => {
     const sessionId = activeSessionId.value
@@ -222,6 +223,7 @@ export const useChatStore = defineStore('chat', () => {
       let settled = false
       let longWaitTimer = null
       let idleTimeoutTimer = null
+      const requestStateVersion = stateVersion
 
       const clearStreamTimers = () => {
         if (longWaitTimer !== null) {
@@ -241,6 +243,11 @@ export const useChatStore = defineStore('chat', () => {
         clearActiveRequest(sessionId, requestId)
         source.close()
 
+        if (requestStateVersion !== stateVersion) {
+          reject(error)
+          return
+        }
+
         const pendingMessage = getPendingMessage(sessionId, requestId)
         if (pendingMessage) {
           const stoppedMessage = buildStoppedMessage(pendingMessage)
@@ -257,6 +264,11 @@ export const useChatStore = defineStore('chat', () => {
         clearStreamTimers()
         clearActiveRequest(sessionId, requestId)
         source.close()
+
+        if (requestStateVersion !== stateVersion) {
+          reject(error)
+          return
+        }
 
         const pendingMessage = getPendingMessage(sessionId, requestId)
         const errorMessage = buildErrorMessage(content, {
@@ -296,8 +308,16 @@ export const useChatStore = defineStore('chat', () => {
         }, STREAM_IDLE_TIMEOUT_MS)
       }
 
+      const closeSilently = () => {
+        if (settled) return
+        settled = true
+        clearStreamTimers()
+        source.close()
+      }
+
       activeRequestsBySession.set(sessionId, {
         requestId,
+        close: closeSilently,
         cancel: async () => {
           try {
             await chatApi.cancelStream(sessionId)
@@ -312,6 +332,7 @@ export const useChatStore = defineStore('chat', () => {
       armStreamTimers()
 
       source.onmessage = event => {
+        if (requestStateVersion !== stateVersion || settled) return
         armStreamTimers()
         let payload
         try {
@@ -362,6 +383,15 @@ export const useChatStore = defineStore('chat', () => {
       source.onerror = error => {
         if (settled) return
 
+        if (requestStateVersion !== stateVersion) {
+          settled = true
+          clearStreamTimers()
+          clearActiveRequest(sessionId, requestId)
+          source.close()
+          reject(error || new Error('stream request invalidated'))
+          return
+        }
+
         if (options.resuming) {
           settled = true
           clearStreamTimers()
@@ -404,9 +434,10 @@ export const useChatStore = defineStore('chat', () => {
 
   async function fetchHistory(sessionId) {
     const requestVersion = (historyRequestVersions.get(sessionId) || 0) + 1
+    const requestStateVersion = stateVersion
     historyRequestVersions.set(sessionId, requestVersion)
     const response = await chatApi.getHistory(sessionId)
-    if (historyRequestVersions.get(sessionId) !== requestVersion) return response
+    if (requestStateVersion !== stateVersion || historyRequestVersions.get(sessionId) !== requestVersion) return response
     const history = Array.isArray(response.messages)
       ? response.messages.map(normalizeHistoryMessage)
       : []
@@ -437,11 +468,13 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function sendMessageViaHttp(sessionId, message, requestId, options = {}) {
+    const requestStateVersion = stateVersion
     const response = await chatApi.send({
       session_id: sessionId,
       message,
       web_search: Boolean(options.webSearch)
     })
+    if (requestStateVersion !== stateVersion) return null
     const nextMessage = finalizeSessionMessage(sessionId, requestId, response.message)
     syncSessionAfterReply(sessionId, nextMessage)
     options.onProgress?.()
@@ -458,6 +491,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function sendMessage(sessionId, message, options = {}) {
+    const requestStateVersion = stateVersion
     const requestId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const userMessage = {
       role: 'user',
@@ -482,7 +516,7 @@ export const useChatStore = defineStore('chat', () => {
       }
       return await sendMessageViaHttp(sessionId, message, requestId, options)
     } catch (error) {
-      if (getPendingMessage(sessionId, requestId)?.isLoading) {
+      if (requestStateVersion === stateVersion && getPendingMessage(sessionId, requestId)?.isLoading) {
         const timeoutMessage = error?.code === 'ECONNABORTED'
           ? '⚠️ 本次回答生成时间过长，请稍后重试。'
           : `⚠️ 发送失败：${error.message || '网络错误'}`
@@ -492,13 +526,16 @@ export const useChatStore = defineStore('chat', () => {
       }
       throw error
     } finally {
-      updatePendingCount(sessionId, -1)
+      if (requestStateVersion === stateVersion) {
+        updatePendingCount(sessionId, -1)
+      }
     }
   }
 
   async function continueMessage(sessionId, targetMessage, options = {}) {
     if (!sessionId || !targetMessage?.timestamp || isSessionPending(sessionId)) return null
 
+    const requestStateVersion = stateVersion
     const requestId = markMessageAsGenerating(sessionId, targetMessage)
     updatePendingCount(sessionId, 1)
     options.onProgress?.()
@@ -510,7 +547,9 @@ export const useChatStore = defineStore('chat', () => {
       })
       return await consumeStream(sessionId, requestId, source, options)
     } finally {
-      updatePendingCount(sessionId, -1)
+      if (requestStateVersion === stateVersion) {
+        updatePendingCount(sessionId, -1)
+      }
     }
   }
 
@@ -558,6 +597,22 @@ export const useChatStore = defineStore('chat', () => {
     return true
   }
 
+  function resetForUser() {
+    stateVersion += 1
+    for (const activeRequest of activeRequestsBySession.values()) {
+      activeRequest.close?.()
+    }
+    activeRequestsBySession.clear()
+    for (const sessionId of reconnectTimersBySession.keys()) {
+      clearReconnectTimer(sessionId)
+    }
+    historyRequestVersions.clear()
+    messages.value = []
+    activeSessionId.value = null
+    messagesBySession.value = {}
+    pendingCountsBySession.value = {}
+  }
+
   return {
     messages,
     loading,
@@ -568,6 +623,7 @@ export const useChatStore = defineStore('chat', () => {
     continueMessage,
     setActiveSession,
     clearMessages,
-    cancelActiveRequest
+    cancelActiveRequest,
+    resetForUser
   }
 })

@@ -45,6 +45,7 @@ export const useSessionStore = defineStore('session', () => {
   const unreadCounts = ref({})
   const pinnedSessionIds = ref(readPinnedSessionIds(authStore.user))
   let fetchPromise = null
+  let stateVersion = 0
 
   const currentSession = computed(() =>
     sessions.value.find(session => session.id === currentSessionId.value)
@@ -62,12 +63,16 @@ export const useSessionStore = defineStore('session', () => {
   )
 
   async function runFetchSessions() {
+    const requestStateVersion = stateVersion
     let lastError = null
 
     for (let attempt = 0; attempt <= SESSION_FETCH_RETRIES; attempt += 1) {
       try {
         const response = await sessionsApi.list()
         const nextSessions = Array.isArray(response.sessions) ? response.sessions : []
+        if (requestStateVersion !== stateVersion) {
+          return nextSessions
+        }
         sessions.value = nextSessions
         prunePinnedSessions(nextSessions)
         loaded.value = true
@@ -90,13 +95,14 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     loading.value = true
-    fetchPromise = runFetchSessions()
-      .finally(() => {
+    const request = runFetchSessions()
+    fetchPromise = request
+    return request.finally(() => {
+      if (fetchPromise === request) {
         loading.value = false
         fetchPromise = null
-      })
-
-    return fetchPromise
+      }
+    })
   }
 
   async function createSession(title = DEFAULT_SESSION_TITLE) {
@@ -177,6 +183,17 @@ export const useSessionStore = defineStore('session', () => {
     unreadCounts.value[sessionId] = (unreadCounts.value[sessionId] || 0) + 1
   }
 
+  function resetForUser() {
+    stateVersion += 1
+    fetchPromise = null
+    sessions.value = []
+    currentSessionId.value = null
+    unreadCounts.value = {}
+    pinnedSessionIds.value = readPinnedSessionIds(authStore.user)
+    loading.value = false
+    loaded.value = false
+  }
+
   return {
     sessions,
     currentSessionId,
@@ -196,6 +213,7 @@ export const useSessionStore = defineStore('session', () => {
     deleteSession,
     setCurrentSession,
     markRead,
-    incrementUnread
+    incrementUnread,
+    resetForUser
   }
 })
