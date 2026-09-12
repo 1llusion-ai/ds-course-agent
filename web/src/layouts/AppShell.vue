@@ -29,7 +29,11 @@
     </div>
 
     <main class="app-shell__workspace" aria-label="课程学习工作区">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <KeepAlive include="KnowledgeMapView">
+          <component :is="Component" />
+        </KeepAlive>
+      </router-view>
     </main>
   </div>
 </template>

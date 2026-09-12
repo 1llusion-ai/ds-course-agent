@@ -21,7 +21,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { RefreshRight, VideoPause, VideoPlay, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import ForceGraph3D from '3d-force-graph'
 import { chapterColor, learningStateMeta, neighborsOf, relationTypes, sceneGraphData } from '../utils/knowledgeMap'
@@ -185,6 +185,14 @@ function visibilityChanged() {
   else graph3d.resumeAnimation()
 }
 
+function routeActivated() {
+  graph3d?.resumeAnimation()
+}
+
+function routeDeactivated() {
+  graph3d?.pauseAnimation()
+}
+
 function motionPreferenceChanged(event) {
   reducedMotion.value = event.matches
   if (event.matches) stopRotation()
@@ -205,6 +213,8 @@ function teardown() {
 
 watch(() => [props.selectedId, props.chapter], focusSelection)
 watch(() => [props.showPersonalState, props.enabledRelations], updateAppearance, { deep: true })
+onActivated(routeActivated)
+onDeactivated(routeDeactivated)
 
 onMounted(async () => {
   try {
