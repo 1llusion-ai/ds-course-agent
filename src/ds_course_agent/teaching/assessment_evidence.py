@@ -51,5 +51,10 @@ class AssessmentEvidenceRecorder:
                     ),
                 )
             )
-        memory.record_events(tuple(events))
+        existing_event_ids = {
+            event.event_id
+            for event in memory.load_events(record.student_id)
+            if event.event_id.startswith(f"assessment:{record.id}:")
+        }
+        memory.record_events(tuple(event for event in events if event.event_id not in existing_event_ids))
         memory.aggregate_profile(record.student_id)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from threading import Event
 
 import pytest
@@ -173,10 +174,42 @@ def test_saved_submission_recovers_evidence_after_recorder_failure(tmp_path) -> 
         submission_recorder=interrupted,
     )
     assessment = service.assign("student", GenerateQuestionsRequest(target_kc_id="overfitting", count=1))
+    opened = service.open(assessment.id, "student")
+    answers = tuple(
+        AnswerSubmission(question_id=item.id, selected_option_id="A", response_time_ms=1200)
+        for item in opened.questions
+    )
     with pytest.raises(OSError):
-        submit(service, assessment.id)
+        service.submit(assessment.id, "student", answers)
     assert service.result(assessment.id, "student").correct_count == 1
-    service.result(assessment.id, "student")
+    service.submit(assessment.id, "student", answers)
+    assert len(memory.load_events("student", [EventType.QUESTION_ANSWERED])) == 1
+
+
+def test_assessment_recorder_accepts_legacy_event_payloads(tmp_path) -> None:
+    memory = MemoryCore(str(tmp_path / "history"))
+    recorder = AssessmentEvidenceRecorder(lambda: memory)
+    repository = AssessmentRepository(tmp_path / "db")
+    service = AssessmentApplicationService(repository, FixtureGenerator())
+    assessment = service.assign("student", GenerateQuestionsRequest(target_kc_id="overfitting", count=1))
+    opened = service.open(assessment.id, "student")
+    answer = AnswerSubmission(question_id=opened.questions[0].id, selected_option_id="A", response_time_ms=100)
+    result = service.submit(assessment.id, "student", (answer,))
+
+    record = repository.get(assessment.id, "student")
+    assert record is not None
+    recorder(record)
+    event_path = tmp_path / "history" / "learning_events" / "student_events.jsonl"
+    legacy_lines = []
+    for line in event_path.read_text(encoding="utf-8").splitlines():
+        payload = json.loads(line)
+        payload["payload"].pop("selected_option_text", None)
+        payload["payload"].pop("correct_option_text", None)
+        legacy_lines.append(json.dumps(payload, ensure_ascii=False))
+    event_path.write_text("\n".join(legacy_lines) + "\n", encoding="utf-8")
+
+    recorder(record)
+    assert service.result(assessment.id, "student") == result
     assert len(memory.load_events("student", [EventType.QUESTION_ANSWERED])) == 1
 
 
