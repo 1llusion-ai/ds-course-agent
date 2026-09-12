@@ -2,6 +2,8 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { sessionsApi } from '../api/sessions'
+import { useAuthStore } from './auth'
+import { accountStorageKey, readLocalStorage, writeLocalStorage } from '../utils/storage'
 
 const DEFAULT_SESSION_TITLE = '新会话'
 const SESSION_FETCH_RETRIES = 2
@@ -12,33 +14,36 @@ function sleep(ms) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
-function readPinnedSessionIds() {
+function readPinnedSessionIds(user) {
   if (typeof window === 'undefined') {
     return []
   }
 
   try {
-    const value = JSON.parse(window.localStorage.getItem(PINNED_SESSIONS_STORAGE_KEY) || '[]')
+    const key = accountStorageKey(PINNED_SESSIONS_STORAGE_KEY, user)
+    const value = JSON.parse(readLocalStorage(key) || '[]')
     return Array.isArray(value) ? value.filter(Boolean) : []
   } catch (error) {
     return []
   }
 }
 
-function persistPinnedSessionIds(ids) {
+function persistPinnedSessionIds(ids, user) {
   if (typeof window === 'undefined') {
     return
   }
-  window.localStorage.setItem(PINNED_SESSIONS_STORAGE_KEY, JSON.stringify(ids))
+  const key = accountStorageKey(PINNED_SESSIONS_STORAGE_KEY, user)
+  writeLocalStorage(key, JSON.stringify(ids))
 }
 
 export const useSessionStore = defineStore('session', () => {
+  const authStore = useAuthStore()
   const sessions = ref([])
   const currentSessionId = ref(null)
   const loading = ref(false)
   const loaded = ref(false)
   const unreadCounts = ref({})
-  const pinnedSessionIds = ref(readPinnedSessionIds())
+  const pinnedSessionIds = ref(readPinnedSessionIds(authStore.user))
   let fetchPromise = null
 
   const currentSession = computed(() =>
@@ -120,7 +125,7 @@ export const useSessionStore = defineStore('session', () => {
     const nextPinned = pinnedSessionIds.value.filter(id => validIds.has(id))
     if (nextPinned.length !== pinnedSessionIds.value.length) {
       pinnedSessionIds.value = nextPinned
-      persistPinnedSessionIds(nextPinned)
+      persistPinnedSessionIds(nextPinned, authStore.user)
     }
   }
 
@@ -135,7 +140,7 @@ export const useSessionStore = defineStore('session', () => {
       ? pinnedSessionIds.value.filter(id => id !== sessionId)
       : [sessionId, ...pinnedSessionIds.value]
     pinnedSessionIds.value = nextPinned
-    persistPinnedSessionIds(nextPinned)
+    persistPinnedSessionIds(nextPinned, authStore.user)
   }
 
   function shouldAutoTitle(sessionId) {
