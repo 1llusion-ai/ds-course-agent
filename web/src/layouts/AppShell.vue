@@ -1,10 +1,31 @@
 <template>
   <div class="app-shell">
-    <ChatSidebar
-      :collapsed="sidebarCollapsed"
-      @toggle-collapse="toggleSidebar"
-      @new-chat="handleNewChat"
-    />
+    <div
+      class="app-shell__sidebar"
+      :class="{
+        'app-shell__sidebar--collapsed': sidebarCollapsed,
+        'app-shell__sidebar--resizing': sidebarResizing
+      }"
+      :style="{ width: `${sidebarWidth}px` }"
+    >
+      <ChatSidebar
+        :collapsed="sidebarCollapsed"
+        style="width: 100%"
+        @toggle-collapse="toggleSidebar"
+        @new-chat="handleNewChat"
+      />
+      <PanelResizeHandle
+        v-if="!sidebarCollapsed"
+        side="start"
+        label="调整导航栏宽度"
+        :value="sidebarWidth"
+        :min="SIDEBAR_MIN_WIDTH"
+        :max="SIDEBAR_MAX_WIDTH"
+        @resize-start="startSidebarResize"
+        @resize-keydown="resizeSidebarFromKeyboard"
+        @reset="resetSidebarWidth"
+      />
+    </div>
 
     <main class="app-shell__workspace" aria-label="课程学习工作区">
       <router-view />
@@ -18,17 +39,35 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import ChatSidebar from '../components/ChatSidebar.vue'
+import PanelResizeHandle from '../components/PanelResizeHandle.vue'
+import { useResizablePanel } from '../composables/useResizablePanel'
 import { useChatStore } from '../stores/chat'
 import { useSessionStore } from '../stores/session'
 
 const APP_SHELL_CONTEXT_KEY = 'ds-course-agent.app-shell'
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'ds-course-agent.sidebarCollapsed'
+const SIDEBAR_WIDTH_STORAGE_KEY = 'ds-course-agent.sidebarWidth'
+const SIDEBAR_MIN_WIDTH = 224
+const SIDEBAR_MAX_WIDTH = 380
 const THEME_STORAGE_KEY = 'ds-course-agent.theme'
 
 const router = useRouter()
 const chatStore = useChatStore()
 const sessionStore = useSessionStore()
 const sidebarCollapsed = ref(readSidebarCollapsedPreference())
+const {
+  width: sidebarWidth,
+  isResizing: sidebarResizing,
+  startResize: startSidebarResize,
+  resizeFromKeyboard: resizeSidebarFromKeyboard,
+  resetWidth: resetSidebarWidth
+} = useResizablePanel({
+  storageKey: SIDEBAR_WIDTH_STORAGE_KEY,
+  defaultWidth: 288,
+  minWidth: SIDEBAR_MIN_WIDTH,
+  maxWidth: SIDEBAR_MAX_WIDTH,
+  side: 'start'
+})
 const theme = ref(readThemePreference())
 const sessionBootstrapPending = ref(!sessionStore.loaded)
 const isDarkTheme = computed(() => theme.value === 'dark')
@@ -119,6 +158,21 @@ onMounted(async () => {
   min-height: 0;
   overflow: hidden;
   background: #ffffff;
+}
+
+.app-shell__sidebar {
+  position: relative;
+  flex-shrink: 0;
+  height: 100%;
+  transition: width 0.18s ease;
+}
+
+.app-shell__sidebar--collapsed {
+  width: 4rem !important;
+}
+
+.app-shell__sidebar--resizing {
+  transition: none;
 }
 
 .app-shell__workspace > :deep(*) {
