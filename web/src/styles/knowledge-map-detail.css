@@ -4,31 +4,15 @@
   border-left: 1px solid var(--map-border);
 }
 
-.map-inspector__empty {
-  display: grid;
-  place-items: center;
-  min-height: 260px;
-  padding: 30px 12px;
-  color: #a8a29e;
-  text-align: center;
+.map-inspector-enter-active,
+.map-inspector-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
-.map-inspector__empty > .el-icon {
-  margin-bottom: 14px;
-  font-size: 26px;
-}
-
-.map-inspector__empty h2 {
-  margin: 0 0 8px;
-  color: #57534e;
-  font-size: 15px;
-}
-
-.map-inspector__empty p {
-  max-width: 220px;
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.7;
+.map-inspector-enter-from,
+.map-inspector-leave-to {
+  opacity: 0;
+  transform: translateX(18px);
 }
 
 .map-detail__heading {
@@ -188,4 +172,25 @@
   background: #f5f5f4;
   border-left: 2px solid #d6d3d1;
   line-height: 1.7;
+}
+
+:global(html.theme-dark) .map-inspector > h2,
+:global(html.theme-dark) .map-detail__summary,
+:global(html.theme-dark) .map-learning-state,
+:global(html.theme-dark) .map-neighbors button,
+:global(html.theme-dark) .map-references {
+  color: var(--dark-text);
+}
+
+:global(html.theme-dark) .map-detail__section,
+:global(html.theme-dark) .map-neighbors button,
+:global(html.theme-dark) .map-references,
+:global(html.theme-dark) .map-references > section {
+  border-color: var(--dark-border-soft);
+}
+
+:global(html.theme-dark) .map-references blockquote {
+  color: var(--dark-text-muted);
+  background: var(--dark-panel-soft);
+  border-left-color: #525252;
 }

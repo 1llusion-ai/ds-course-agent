@@ -1,6 +1,12 @@
 <template>
   <section class="constellation" aria-label="三维知识网络">
-    <div ref="container" class="constellation__canvas" role="img" aria-label="拖动旋转、滚轮缩放的三维知识图谱，也可用左侧列表选择知识点" />
+    <div
+      ref="container"
+      class="constellation__canvas"
+      :class="{ 'constellation__canvas--ready': sceneReady }"
+      role="img"
+      aria-label="拖动旋转、滚轮缩放的三维知识图谱，也可用左侧列表选择知识点"
+    />
     <div v-if="failure" class="constellation__failure" role="status">三维视图暂时无法加载，仍可通过左侧知识点列表浏览。</div>
     <div v-else class="constellation__controls" aria-label="三维视图控制">
       <button type="button" :aria-pressed="rotating" :aria-label="rotating ? '暂停旋转' : '自动旋转'" :title="rotating ? '暂停旋转' : '自动旋转'" @click="toggleRotation">
@@ -33,6 +39,7 @@ const emit = defineEmits(['select', 'ready'])
 const container = ref(null)
 const failure = ref(false)
 const rotating = ref(false)
+const sceneReady = ref(false)
 let graph3d
 let observer
 let objects
@@ -107,24 +114,25 @@ function stopRotation() {
   if (graph3d) graph3d.controls().autoRotate = false
 }
 
-function focusSelection() {
+function focusSelection(animate = true) {
   if (!graph3d || !sceneData) return
   stopRotation()
   updateAppearance()
+  const duration = animate ? cameraDuration() : 0
   const selected = sceneData.nodes.find(node => node.id === props.selectedId)
   if (selected) {
     const camera = graph3d.cameraPosition()
     const dx = camera.x - selected.x, dy = camera.y - selected.y, dz = camera.z - selected.z
     const distance = Math.hypot(dx, dy, dz) || 1
-    graph3d.cameraPosition({ x: selected.x + dx / distance * 135, y: selected.y + dy / distance * 135, z: selected.z + dz / distance * 135 }, selected, cameraDuration())
+    graph3d.cameraPosition({ x: selected.x + dx / distance * 135, y: selected.y + dy / distance * 135, z: selected.z + dz / distance * 135 }, selected, duration)
   } else if (props.chapter) {
-    focusChapter()
+    focusChapter(animate)
   } else {
-    overview()
+    overview(animate)
   }
 }
 
-function focusChapter() {
+function focusChapter(animate = true) {
   const nodes = sceneData.nodes.filter(node => node.chapter === props.chapter)
   if (!nodes.length) return
   const axes = ['x', 'y', 'z']
@@ -143,14 +151,21 @@ function focusChapter() {
     x: center.x + dx / currentDistance * targetDistance,
     y: center.y + dy / currentDistance * targetDistance,
     z: center.z + dz / currentDistance * targetDistance
-  }, center, cameraDuration())
+  }, center, animate ? cameraDuration() : 0)
 }
 
-function overview() {
+function overview(animate = true) {
   if (!graph3d) return
-  graph3d.zoomToFit(0, 10)
+  stopRotation()
+  graph3d.zoomToFit(0, 36)
   const camera = graph3d.cameraPosition()
-  graph3d.cameraPosition({ x: camera.x * 0.72, y: camera.y * 0.72, z: camera.z * 0.72 }, { x: 0, y: 0, z: 0 }, cameraDuration())
+  const target = graph3d.controls().target
+  const zoomFactor = 0.7
+  graph3d.cameraPosition({
+    x: target.x + (camera.x - target.x) * zoomFactor,
+    y: target.y + (camera.y - target.y) * zoomFactor,
+    z: target.z + (camera.z - target.z) * zoomFactor
+  }, target, animate ? cameraDuration() : 0)
 }
 
 function toggleRotation() {
@@ -206,7 +221,14 @@ onMounted(async () => {
       .onNodeClick(node => emit('select', node.id))
       .onNodeHover(node => { hoveredId = node?.id || ''; updateAppearance() })
       .onEngineStop(() => {
-        if (firstLayout) { firstLayout = false; focusSelection(); emit('ready') }
+        if (firstLayout) {
+          firstLayout = false
+          focusSelection(false)
+          window.requestAnimationFrame(() => {
+            sceneReady.value = true
+            emit('ready')
+          })
+        }
       })
     graph3d.d3Force('charge').strength(-28)
     graph3d.d3Force('link').distance(link => link.kind === 'part_of' ? 36 : 130).strength(link => link.kind === 'part_of' ? 0.55 : 0.025)
@@ -235,11 +257,17 @@ onBeforeUnmount(teardown)
 
 <style scoped>
 .constellation { position: relative; width: 100%; height: 100%; min-height: 420px; }
-.constellation__canvas { position: absolute; inset: 0; }
+.constellation__canvas { position: absolute; inset: 0; visibility: hidden; }
+.constellation__canvas--ready { visibility: visible; }
 .constellation__controls { position: absolute; top: 14px; right: 14px; display: flex; align-items: center; gap: 2px; padding: 4px; border: 1px solid #e7e5e4; border-radius: 7px; background: rgba(255,255,255,.9); box-shadow: 0 4px 14px rgba(28,25,23,.06); }
 .constellation__controls button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; color: #57534e; border: 0; background: transparent; border-radius: 5px; cursor: pointer; }
 .constellation__controls button:hover, .constellation__controls button[aria-pressed="true"] { color: #1c1917; background: #f5f5f4; }
 .constellation__controls > span { width: 1px; height: 18px; margin: 0 2px; background: #e7e5e4; }
 .constellation__failure { position: absolute; top: 40%; left: 15%; right: 15%; padding: 20px; color: #78716c; text-align: center; font-size: 13px; line-height: 1.8; }
+:global(html.theme-dark) .constellation__controls { color: var(--dark-text-muted); background: rgba(42,42,42,.92); border-color: var(--dark-border); box-shadow: none; }
+:global(html.theme-dark) .constellation__controls button { color: var(--dark-text-muted); }
+:global(html.theme-dark) .constellation__controls button:hover,
+:global(html.theme-dark) .constellation__controls button[aria-pressed="true"] { color: var(--dark-text); background: var(--dark-hover); }
+:global(html.theme-dark) .constellation__controls > span { background: var(--dark-border); }
 @media (max-width: 720px) { .constellation { min-height: 430px; } .constellation__controls { top: 10px; right: 10px; } }
 </style>

@@ -1,27 +1,15 @@
 <template>
   <main class="knowledge-map-page">
-    <header class="map-header">
-      <div class="map-header__title">
-        <img src="/icon/thought_mark.png" alt="" />
-        <div>
-          <p>课程学习空间</p>
-          <h1>知识地图</h1>
-        </div>
-      </div>
-      <nav class="map-header__actions" aria-label="学习空间导航">
-        <el-button text @click="router.push('/profile')">学习画像</el-button>
-        <el-button plain @click="router.push('/chat')">
-          <el-icon><ArrowLeft /></el-icon>
-          返回对话
-        </el-button>
-      </nav>
-    </header>
     <div v-if="loading" class="map-message" role="status">正在加载知识地图…</div>
     <div v-else-if="error" class="map-message" role="alert">
       {{ error }}
       <el-button plain @click="load">重新加载</el-button>
     </div>
-    <div v-else-if="graph" class="map-workspace">
+    <div
+      v-else-if="graph"
+      class="map-workspace"
+      :class="{ 'map-workspace--inspector-open': selectedNode }"
+    >
       <aside class="map-index" aria-label="知识点导航">
         <label class="map-search">
           <el-icon><Search /></el-icon>
@@ -94,7 +82,7 @@
       <section class="map-stage" aria-label="知识图谱浏览区">
         <div class="map-stage__toolbar">
           <div>
-            <p>{{ chapter ? '章节视图' : '课程全景' }}</p>
+            <p>知识地图 · {{ chapter ? '章节视图' : '课程全景' }}</p>
             <h2>{{ chapter ? chapterTitle : '全部知识关系' }}</h2>
           </div>
           <div class="map-stage__stats">
@@ -137,13 +125,8 @@
         </div>
       </section>
 
-      <aside class="map-inspector" aria-label="知识点详情">
-        <div v-if="!selectedNode" class="map-inspector__empty">
-          <el-icon><Connection /></el-icon>
-          <h2>选择一个 KC</h2>
-          <p>查看它所属的章节、前置知识与相关概念。</p>
-        </div>
-        <template v-else>
+      <Transition name="map-inspector">
+        <aside v-if="selectedNode" class="map-inspector" aria-label="知识点详情">
           <div class="map-detail__heading">
             <span><i :style="{ background: chapterColor(selectedNode.chapter) }" />{{ selectedNode.chapter }}</span>
             <button type="button" aria-label="关闭知识点详情" title="关闭" @click="selectedId = ''"><el-icon><Close /></el-icon></button>
@@ -183,8 +166,8 @@
               </details>
             </section>
           </details>
-        </template>
-      </aside>
+        </aside>
+      </Transition>
     </div>
   </main>
 </template>
@@ -192,7 +175,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Aim, ArrowLeft, ArrowRight, Close, Connection, Search } from '@element-plus/icons-vue'
+import { Aim, ArrowRight, Close, Connection, Search } from '@element-plus/icons-vue'
 import { knowledgeMapApi } from '../api/knowledgeMap'
 import KnowledgeMapCanvas from '../components/KnowledgeMapCanvas.vue'
 import { chapterColor, learningStateMeta, learningStates, neighborsOf, questionForNode, relationTypes } from '../utils/knowledgeMap'
