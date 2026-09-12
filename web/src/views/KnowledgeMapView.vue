@@ -24,9 +24,6 @@
         </label>
 
         <div class="map-index__scroll">
-          <div class="map-index__heading">
-            <span>课程结构</span>
-          </div>
           <button type="button" class="map-overview" :class="{ active: !chapter }" @click="selectChapter('')">
             <el-icon><Connection /></el-icon>
             <span>全部章节</span>
@@ -92,14 +89,9 @@
       <section class="map-stage" aria-label="知识图谱浏览区">
         <div class="map-stage__toolbar">
           <div>
-            <p>知识地图 · {{ chapter ? '章节视图' : '课程全景' }}</p>
             <h2>{{ chapter ? chapterTitle : '全部知识关系' }}</h2>
           </div>
           <div class="map-stage__toolbar-actions">
-            <div class="map-stage__stats">
-              <span><strong>{{ visibleKcCount }}</strong> KC</span>
-              <span><strong>{{ visibleRelationCount }}</strong> 关系</span>
-            </div>
             <button
               v-if="!inspectorOpen"
               type="button"
@@ -283,16 +275,6 @@ const {
 const byId = computed(() => new Map((graph.value?.nodes || []).map(node => [node.canonical_id, node])))
 const concepts = computed(() => graph.value?.nodes.filter(node => node.node_type === 'kc') || [])
 const chapterTitle = computed(() => graph.value.chapters.find(item => item.chapter === chapter.value)?.title)
-const scopedNodeIds = computed(() => {
-  if (selectedId.value) return neighborsOf(graph.value, selectedId.value, enabledRelations.value)
-  if (!chapter.value) return new Set(graph.value.nodes.map(node => node.canonical_id))
-  return new Set(graph.value.nodes.filter(node => node.chapter === chapter.value).map(node => node.canonical_id))
-})
-const visibleKcCount = computed(() => concepts.value.filter(node => scopedNodeIds.value.has(node.canonical_id)).length)
-const visibleRelationCount = computed(() => {
-  const ids = scopedNodeIds.value
-  return graph.value.edges.filter(edge => enabledRelations.value.includes(edge.relation_type) && ids.has(edge.source) && ids.has(edge.target)).length
-})
 const selectedNode = computed(() => byId.value.get(selectedId.value))
 const listedNodes = computed(() => {
   const needle = search.value.trim().toLowerCase().replace(/\s+/g, '')
