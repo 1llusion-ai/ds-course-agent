@@ -2,7 +2,7 @@
   <main class="assessment-page assessment-result-page">
     <header class="assessment-page-toolbar">
       <div><small>测验结果</small><h1>{{ result?.title || '结果' }}</h1></div>
-      <el-button plain @click="router.push('/assessments')"><el-icon><ArrowLeft /></el-icon>返回测验</el-button>
+      <el-button plain @click="router.push({ path: '/assessments', query: { tab: 'completed' } })"><el-icon><ArrowLeft /></el-icon>返回测验</el-button>
     </header>
 
     <div v-if="store.loading && !result" class="assessment-loading"><el-skeleton :rows="8" animated /></div>

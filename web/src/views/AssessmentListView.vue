@@ -62,7 +62,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, ChatDotRound, DocumentChecked, Loading, Refresh, Warning } from '@element-plus/icons-vue'
 
 import { assessmentsApi } from '../api/assessments'
@@ -74,10 +74,11 @@ const POLL_INTERVAL_MS = 10_000
 const PENDING_PREPARATION_STATUSES = new Set(['pending', 'queued', 'generating'])
 
 const router = useRouter()
+const route = useRoute()
 const store = useAssessmentStore()
 const sessionStore = useSessionStore()
 const sessionFilter = ref(sessionStore.currentSessionId || '')
-const activeTab = ref('active')
+const activeTab = ref(route.query.tab === 'completed' ? 'completed' : 'active')
 const error = ref('')
 const retrying = ref('')
 let pollTimer = null
@@ -150,7 +151,19 @@ function handleVisibilityChange() {
   }
 }
 
-watch(activeTab, () => load())
+watch(activeTab, (tab) => {
+  const query = { ...route.query }
+  if (tab === 'completed') query.tab = 'completed'
+  else delete query.tab
+  if (route.query.tab !== query.tab) {
+    router.replace({ query })
+  }
+  load()
+})
+watch(() => route.query.tab, (tab) => {
+  const nextTab = tab === 'completed' ? 'completed' : 'active'
+  if (activeTab.value !== nextTab) activeTab.value = nextTab
+})
 onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
   load()
