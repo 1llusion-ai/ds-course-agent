@@ -129,7 +129,14 @@
         <aside v-if="selectedNode" class="map-inspector" aria-label="知识点详情">
           <div class="map-detail__heading">
             <span><i :style="{ background: chapterColor(selectedNode.chapter) }" />{{ selectedNode.chapter }}</span>
-            <button type="button" aria-label="关闭知识点详情" title="关闭" @click="selectedId = ''"><el-icon><Close /></el-icon></button>
+            <button
+              type="button"
+              aria-label="收起知识点详情面板"
+              title="收起详情面板"
+              @click="selectedId = ''"
+            >
+              <span class="map-panel-toggle-icon" aria-hidden="true" />
+            </button>
           </div>
           <h2>{{ selectedNode.display_name }}</h2>
           <p v-if="selectedNode.summary" class="map-detail__summary">{{ selectedNode.summary }}</p>
