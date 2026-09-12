@@ -65,8 +65,8 @@ defineEmits(['resize-start', 'resize-keydown', 'reset'])
   box-shadow: 0 0 0 1px rgba(168, 162, 158, 0.16);
 }
 
-:global(html.theme-dark) .panel-resize-handle:hover::after,
-:global(html.theme-dark) .panel-resize-handle:focus-visible::after {
+html.theme-dark .panel-resize-handle:hover::after,
+html.theme-dark .panel-resize-handle:focus-visible::after {
   background: #737373;
   box-shadow: none;
 }

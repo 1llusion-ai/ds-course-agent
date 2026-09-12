@@ -150,9 +150,9 @@
   .assessment-review-options small { grid-column: 2; }
 }
 
-:global(html.theme-dark) .assessment-page { --assessment-text: var(--dark-text); --assessment-muted: var(--dark-text-muted); --assessment-border: var(--dark-border); --assessment-surface: var(--dark-panel); --assessment-soft: var(--dark-panel-soft); --assessment-accent: #818cf8; background: var(--dark-bg); }
-:global(html.theme-dark) .assessment-header, :global(html.theme-dark) .assessment-list-item, :global(html.theme-dark) .assessment-stage, :global(html.theme-dark) .assessment-index, :global(html.theme-dark) .assessment-scoreband, :global(html.theme-dark) .assessment-review-item { background: var(--dark-panel); border-color: var(--dark-border); }
-:global(html.theme-dark) .assessment-option { color: var(--dark-text); background: var(--dark-panel-soft); border-color: var(--dark-border); }
-:global(html.theme-dark) .assessment-option--selected { background: rgba(99, 102, 241, .16); border-color: #818cf8; }
-:global(html.theme-dark) .assessment-explanation p,
-:global(html.theme-dark) .assessment-source blockquote { color: var(--dark-text-muted); }
+html.theme-dark .assessment-page { --assessment-text: var(--dark-text); --assessment-muted: var(--dark-text-muted); --assessment-border: var(--dark-border); --assessment-surface: var(--dark-panel); --assessment-soft: var(--dark-panel-soft); --assessment-accent: #818cf8; background: var(--dark-bg); }
+html.theme-dark .assessment-header, html.theme-dark .assessment-list-item, html.theme-dark .assessment-stage, html.theme-dark .assessment-index, html.theme-dark .assessment-scoreband, html.theme-dark .assessment-review-item { background: var(--dark-panel); border-color: var(--dark-border); }
+html.theme-dark .assessment-option { color: var(--dark-text); background: var(--dark-panel-soft); border-color: var(--dark-border); }
+html.theme-dark .assessment-option--selected { background: rgba(99, 102, 241, .16); border-color: #818cf8; }
+html.theme-dark .assessment-explanation p,
+html.theme-dark .assessment-source blockquote { color: var(--dark-text-muted); }

@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     CHAT_MAX_RETRIES: int = 2
     CHAT_DISABLE_THINKING: bool = True
     CHAT_SYSTEM_SUFFIX: str = "/no_think"
+    API_CHAT_MAX_CONCURRENT: int = Field(default=8, ge=1)
+    API_CHAT_MAX_PER_STUDENT: int = Field(default=2, ge=1)
 
     # Assessment author and verifier may use different models while sharing the
     # same provider connection and bounded call budget.
@@ -96,10 +98,14 @@ class Settings(BaseSettings):
     MD5_RECORD_FILE: str = "md5.text"
 
     # Local login / cookie session authentication.
+    APP_ENV: Literal["development", "test", "production"] = "development"
     AUTH_SECRET_KEY: str = ""
     AUTH_SESSION_TTL_HOURS: int = 12
     AUTH_COOKIE_SECURE: bool = False
     AUTH_DB_PATH: str = "var/auth.db"
+    AUTH_LOGIN_WINDOW_SECONDS: int = Field(default=60, ge=1)
+    AUTH_LOGIN_MAX_PER_ACCOUNT: int = Field(default=10, ge=1)
+    AUTH_LOGIN_MAX_PER_IP: int = Field(default=60, ge=1)
     CORS_ALLOW_ORIGINS: str = ""
 
     COLLECTION_NAME: str = "rag_knowledge_base"

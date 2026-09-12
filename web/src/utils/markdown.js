@@ -1,8 +1,49 @@
 import { marked } from 'marked'
 import katex from 'katex'
+import createDOMPurify from 'dompurify'
 
-const BLOCKED_TAGS = new Set(['script', 'style', 'iframe', 'object', 'embed'])
-const URL_ATTRS = new Set(['href', 'src', 'xlink:href', 'formaction', 'action'])
+const MARKDOWN_TAGS = [
+  'p', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'code',
+  'strong', 'em', 'b', 'i', 'del', 's', 'ul', 'ol', 'li', 'table', 'thead', 'tbody',
+  'tr', 'th', 'td', 'a', 'div', 'span', 'button', 'sup', 'sub'
+]
+const MARKDOWN_ATTRIBUTES = [
+  'class', 'href', 'title', 'target', 'rel', 'type', 'aria-label', 'aria-hidden',
+  'data-language', 'start', 'colspan', 'rowspan', 'align'
+]
+const CODE_CLASSES = new Set([
+  'code-block', 'code-block__header', 'code-block__lang', 'code-block__pre',
+  'code-block__footer', 'code-copy', 'copy-icon', 'copy-label', 'token-string',
+  'token-comment', 'token-keyword', 'token-function', 'token-number'
+])
+let markdownPurifier
+
+function getMarkdownPurifier() {
+  if (!markdownPurifier) {
+    markdownPurifier = createDOMPurify(window)
+    markdownPurifier.addHook('uponSanitizeAttribute', (_node, attribute) => {
+      if (attribute.attrName === 'class') {
+        attribute.attrValue = attribute.attrValue.split(/\s+/)
+          .filter(value => CODE_CLASSES.has(value) || /^language-[a-z0-9_-]+$/.test(value))
+          .join(' ')
+        attribute.keepAttr = Boolean(attribute.attrValue)
+      }
+      if (attribute.attrName === 'href') {
+        const value = attribute.attrValue.trim()
+        // Relative model-generated links could submit same-origin actions or spoof app routes.
+        attribute.keepAttr = /^(?:https?:|mailto:)/i.test(value) && !/[\u0000-\u0020\u007f]/.test(value)
+      }
+    })
+    markdownPurifier.addHook('afterSanitizeAttributes', node => {
+      if (node.tagName === 'A') {
+        node.setAttribute('target', '_blank')
+        node.setAttribute('rel', 'noopener noreferrer')
+      }
+      if (node.tagName === 'BUTTON') node.setAttribute('type', 'button')
+    })
+  }
+  return markdownPurifier
+}
 
 const LANGUAGE_LABELS = {
   bash: 'Bash',
@@ -235,28 +276,31 @@ function renderMath(code, displayMode) {
 }
 
 function injectMath(html, math) {
-  return math.reduce((result, item) => {
-    const rendered = renderMath(item.code, item.displayMode)
-    let next = result
-
-    if (item.displayMode) {
-      const paragraphWrapper = new RegExp(`<p>\\s*${item.marker}\\s*</p>`, 'g')
-      next = next.replace(paragraphWrapper, rendered)
+  if (!math.length || typeof document === 'undefined') return html
+  const template = document.createElement('template')
+  template.innerHTML = html
+  const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT)
+  const textNodes = []
+  while (walker.nextNode()) textNodes.push(walker.currentNode)
+  for (const node of textNodes) {
+    // Never interpolate generated markup into an HTML attribute or URL.
+    const matches = math.filter(item => node.textContent.includes(item.marker))
+    if (!matches.length) continue
+    const parts = node.textContent.split(/(@@MATH_(?:BLOCK|INLINE)_\d+@@)/g)
+    const fragment = document.createDocumentFragment()
+    for (const part of parts) {
+      const item = matches.find(value => value.marker === part)
+      if (!item) {
+        fragment.append(document.createTextNode(part))
+      } else {
+        const rendered = document.createElement('template')
+        rendered.innerHTML = renderMath(item.code, item.displayMode)
+        fragment.append(rendered.content)
+      }
     }
-
-    return next.split(item.marker).join(rendered)
-  }, html)
-}
-
-function fallbackSanitize(html) {
-  return html
-    .replace(/<\s*(script|style|iframe|object|embed)\b[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
-    .replace(/<\s*(script|style|iframe|object|embed)\b[^>]*\/?>/gi, '')
-    .replace(/\s+on[a-z0-9_-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/\s+(href|src|xlink:href|formaction|action)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, (match, _name, rawValue) => {
-      const value = rawValue.replace(/^['"]|['"]$/g, '')
-      return isJavascriptUrl(value) ? '' : match
-    })
+    node.replaceWith(fragment)
+  }
+  return template.innerHTML
 }
 
 function normalizeUrlForSafety(value = '') {
@@ -274,47 +318,17 @@ export function isJavascriptUrl(value = '') {
 }
 
 export function sanitizeHtml(html = '') {
-  if (typeof window === 'undefined' || typeof DOMParser === 'undefined') {
-    return fallbackSanitize(html)
-  }
-
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(`<div data-sanitizer-root>${html}</div>`, 'text/html')
-  const root = doc.body.firstElementChild
-
-  if (!root) {
-    return ''
-  }
-
-  root.querySelectorAll(Array.from(BLOCKED_TAGS).join(',')).forEach(node => node.remove())
-
-  root.querySelectorAll('*').forEach(node => {
-    Array.from(node.attributes).forEach(attribute => {
-      const name = attribute.name.toLowerCase()
-      const value = attribute.value || ''
-
-      if (name.startsWith('on') || name === 'srcdoc') {
-        node.removeAttribute(attribute.name)
-        return
-      }
-
-      if (URL_ATTRS.has(name) && isJavascriptUrl(value)) {
-        node.removeAttribute(attribute.name)
-        return
-      }
-
-      if (name === 'style' && /(?:javascript\s*:|expression\s*\()/i.test(value)) {
-        node.removeAttribute(attribute.name)
-      }
-    })
-
-    if (node.tagName?.toLowerCase() === 'a') {
-      node.setAttribute('target', '_blank')
-      node.setAttribute('rel', 'noopener noreferrer')
-    }
+  // Without a browser DOM, fail closed as text rather than maintain a second regex sanitizer.
+  if (typeof window === 'undefined' || typeof DOMParser === 'undefined') return escapeHtml(html)
+  return getMarkdownPurifier().sanitize(html, {
+    ALLOWED_TAGS: MARKDOWN_TAGS,
+    ALLOWED_ATTR: MARKDOWN_ATTRIBUTES,
+    ALLOW_DATA_ATTR: false,
+    ALLOW_ARIA_ATTR: false,
+    FORBID_ATTR: ['style', 'id', 'name'],
+    FORBID_TAGS: ['svg', 'math', 'form', 'input', 'img', 'video', 'audio'],
+    SANITIZE_NAMED_PROPS: true
   })
-
-  return root.innerHTML
 }
 
 export function renderMarkdownWithEnhancements(text = '') {
@@ -330,7 +344,6 @@ export function renderMarkdownWithEnhancements(text = '') {
     gfm: true,
     renderer: createRenderer()
   })
-  const htmlWithMath = injectMath(rawHtml, extracted.math)
-
-  return sanitizeHtml(htmlWithMath)
+  // Only KaTeX (trust:false) creates mathematical markup/styles after untrusted HTML is cleaned.
+  return injectMath(sanitizeHtml(rawHtml), extracted.math)
 }

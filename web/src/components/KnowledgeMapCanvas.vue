@@ -271,10 +271,10 @@ onBeforeUnmount(teardown)
 .constellation__controls button:hover, .constellation__controls button[aria-pressed="true"] { color: #1c1917; background: #f5f5f4; }
 .constellation__controls > span { width: 1px; height: 18px; margin: 0 2px; background: #e7e5e4; }
 .constellation__failure { position: absolute; top: 40%; left: 15%; right: 15%; padding: 20px; color: #78716c; text-align: center; font-size: 13px; line-height: 1.8; }
-:global(html.theme-dark) .constellation__controls { color: var(--dark-text-muted); background: rgba(42,42,42,.92); border-color: var(--dark-border); box-shadow: none; }
-:global(html.theme-dark) .constellation__controls button { color: var(--dark-text-muted); }
-:global(html.theme-dark) .constellation__controls button:hover,
-:global(html.theme-dark) .constellation__controls button[aria-pressed="true"] { color: var(--dark-text); background: var(--dark-hover); }
-:global(html.theme-dark) .constellation__controls > span { background: var(--dark-border); }
+html.theme-dark .constellation__controls { color: var(--dark-text-muted); background: rgba(42,42,42,.92); border-color: var(--dark-border); box-shadow: none; }
+html.theme-dark .constellation__controls button { color: var(--dark-text-muted); }
+html.theme-dark .constellation__controls button:hover,
+html.theme-dark .constellation__controls button[aria-pressed="true"] { color: var(--dark-text); background: var(--dark-hover); }
+html.theme-dark .constellation__controls > span { background: var(--dark-border); }
 @media (max-width: 720px) { .constellation { min-height: 430px; } .constellation__controls { top: 10px; right: 10px; } }
 </style>

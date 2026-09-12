@@ -106,7 +106,14 @@ function handleInput() {
 function handleSend() {
   const text = inputText.value.trim()
   if (!text || props.loading) return
-  emit('send', text, { webSearch: props.webSearchEnabled })
+  const restoreDraft = () => {
+    if (inputText.value.trim()) return
+    inputText.value = text
+    userEdited.value = true
+    autoResize()
+    nextTick(() => textareaRef.value?.focus())
+  }
+  emit('send', text, { webSearch: props.webSearchEnabled }, restoreDraft)
   inputText.value = ''
   userEdited.value = false
   initialTextApplied.value = ''
@@ -156,34 +163,24 @@ function handleEnterKey(event) {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.92));
-  border: 1px solid rgba(148, 163, 184, 0.26);
-  border-radius: 22px;
-  padding: 14px 14px 14px 18px;
-  box-shadow:
-    0 20px 50px rgba(15, 23, 42, 0.10),
-    0 1px 0 rgba(255, 255, 255, 0.88) inset;
-  backdrop-filter: blur(18px);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  gap: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px 12px 10px 14px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .chat-input-wrapper--hero .input-container {
-  border-color: rgba(15, 23, 42, 0.07);
-  border-radius: 28px;
-  padding: 20px 18px 16px 22px;
-  box-shadow:
-    0 24px 70px rgba(15, 23, 42, 0.10),
-    0 1px 0 rgba(255, 255, 255, 0.92) inset;
+  border-radius: 18px;
+  padding: 16px 14px 12px 18px;
+  box-shadow: var(--shadow-sm);
 }
 
 .input-container:focus-within {
-  border-color: rgba(79, 70, 229, 0.46);
-  box-shadow:
-    0 24px 60px rgba(79, 70, 229, 0.13),
-    0 0 0 4px rgba(79, 70, 229, 0.08);
-  transform: translateY(-1px);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .input-field {
@@ -194,7 +191,7 @@ function handleEnterKey(event) {
   resize: none;
   font-size: 16px;
   line-height: 1.68;
-  color: #44403c;
+  color: var(--text);
   min-height: 34px;
   max-height: 150px;
   font-family: inherit;
@@ -208,7 +205,7 @@ function handleEnterKey(event) {
 }
 
 .input-field::placeholder {
-  color: #a8a29e;
+  color: var(--text-faint);
 }
 
 .composer-toolbar {
@@ -233,12 +230,12 @@ function handleEnterKey(event) {
 }
 
 .web-search-toggle {
-  height: 34px;
-  padding: 0 13px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.30);
-  background: rgba(255, 255, 255, 0.78);
-  color: #64748b;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -247,22 +244,22 @@ function handleEnterKey(event) {
   flex-shrink: 0;
   font: inherit;
   font-size: 12px;
-  font-weight: 800;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
-  transition: all 0.18s ease;
+  font-weight: 650;
+  box-shadow: none;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
 }
 
 .web-search-toggle:hover:not(:disabled) {
-  color: #2563eb;
-  border-color: rgba(37, 99, 235, 0.36);
-  transform: translateY(-1px);
+  color: var(--text);
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
 }
 
 .web-search-toggle--active {
-  color: #0f766e;
-  border-color: rgba(15, 118, 110, 0.34);
-  background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(239, 246, 255, 0.96));
-  box-shadow: 0 12px 24px rgba(15, 118, 110, 0.12);
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  box-shadow: none;
 }
 
 .web-search-toggle:disabled {
@@ -276,38 +273,40 @@ function handleEnterKey(event) {
 }
 
 .chat-input-wrapper--hero .web-search-toggle {
-  height: 36px;
-  padding: 0 15px;
+  height: 34px;
+  padding: 0 11px;
 }
 
 .send-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 15px;
-  background: linear-gradient(135deg, #4f46e5 0%, #2563eb 52%, #0f766e 100%);
-  color: white;
-  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: 1px solid var(--accent);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: background 160ms ease, border-color 160ms ease;
   flex-shrink: 0;
-  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.25);
+  box-shadow: none;
 }
 
 .send-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 18px 34px rgba(37, 99, 235, 0.32);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .send-btn--stop {
-  background: linear-gradient(135deg, #64748b, #475569);
-  box-shadow: 0 12px 24px rgba(71, 85, 105, 0.22);
+  background: var(--text);
+  border-color: var(--text);
+  box-shadow: none;
 }
 
 .send-btn--stop:hover {
-  box-shadow: 0 16px 30px rgba(71, 85, 105, 0.30);
+  background: var(--text-muted);
+  border-color: var(--text-muted);
 }
 
 .send-btn:disabled {
@@ -331,7 +330,7 @@ function handleEnterKey(event) {
   gap: 14px;
   flex-wrap: wrap;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--text-faint);
   margin-top: 0;
   min-width: 0;
 }

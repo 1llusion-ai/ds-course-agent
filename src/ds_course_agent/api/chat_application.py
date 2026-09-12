@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 
 from ds_course_agent.api import chat_sessions, chat_streaming
+from ds_course_agent.api.admission import chat_admission
 from ds_course_agent.api.core_bridge import chat_with_history, stream_chat_with_history, stream_continue_with_history
 from ds_course_agent.api.schemas.chat import (
     ChatContinueRequest,
@@ -31,86 +32,91 @@ async def send_message(data: ChatRequest, student_id: str) -> ChatResponse:
     """Execute and persist one non-streaming chat turn."""
 
     chat_sessions.ensure_session_owner(data.session_id, student_id)
-    async with chat_sessions.session_operation_guard(data.session_id):
-        is_first_message = chat_sessions.message_count(data.session_id) == 0
-        user_msg = ChatMessage(role="user", content=data.message)
-        appended_user_item = chat_sessions.append_message_locked(data.session_id, user_msg, save=False)
-        chat_sessions.schedule_title_generation(
-            data.session_id,
-            data.message,
-            is_first_message=is_first_message,
-        )
+    lease = chat_admission.acquire(student_id)
+    try:
+        async with chat_sessions.session_operation_guard(data.session_id):
+            is_first_message = chat_sessions.message_count(data.session_id) == 0
+            user_msg = ChatMessage(role="user", content=data.message)
+            appended_user_item = chat_sessions.append_message_locked(data.session_id, user_msg, save=False)
+            chat_sessions.schedule_title_generation(
+                data.session_id,
+                data.message,
+                is_first_message=is_first_message,
+            )
 
-        try:
-            assistant_kwargs: dict[str, Any] = {
-                "message": data.message,
-                "session_id": data.session_id,
-                "student_id": student_id,
-            }
-            if data.web_search:
-                assistant_kwargs["web_search"] = True
-            assistant_result = await run_in_threadpool(chat_with_history, **assistant_kwargs)
-        except Exception as exc:
-            logger.error("Agent处理失败: %s", exc, exc_info=True)
-            chat_sessions.remove_message_by_identity(data.session_id, appended_user_item, save=False)
-            chat_sessions.save_state()
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "AGENT_ERROR",
-                    "message": f"Agent处理失败: {str(exc)}",
+            try:
+                assistant_kwargs: dict[str, Any] = {
+                    "message": data.message,
                     "session_id": data.session_id,
-                },
-            ) from exc
+                    "student_id": student_id,
+                }
+                if data.web_search:
+                    assistant_kwargs["web_search"] = True
+                assistant_result = await run_in_threadpool(chat_with_history, **assistant_kwargs)
+            except Exception as exc:
+                logger.error("Agent处理失败: %s", exc, exc_info=True)
+                chat_sessions.remove_message_by_identity(data.session_id, appended_user_item, save=False)
+                chat_sessions.save_state()
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "error": "AGENT_ERROR",
+                        "message": "回答暂时无法生成，请稍后重试。",
+                        "session_id": data.session_id,
+                    },
+                ) from exc
 
-        assistant_payload = assistant_result if isinstance(assistant_result, dict) else {}
-        assistant_content = assistant_payload.get("content", "") if assistant_payload else str(assistant_result)
-        assistant_sources = assistant_payload.get("sources")
-        query_trace = assistant_payload.get("query_trace")
-        assistant_family = assistant_payload.get("family")
-        assistant_intent = assistant_payload.get("intent")
-        assistant_execution_mode = assistant_payload.get("execution_mode")
+            assistant_payload = assistant_result if isinstance(assistant_result, dict) else {}
+            assistant_content = assistant_payload.get("content", "") if assistant_payload else str(assistant_result)
+            assistant_sources = assistant_payload.get("sources")
+            query_trace = assistant_payload.get("query_trace")
+            assistant_family = assistant_payload.get("family")
+            assistant_intent = assistant_payload.get("intent")
+            assistant_execution_mode = assistant_payload.get("execution_mode")
 
-        assistant_msg = ChatMessage(
-            role="assistant",
-            content=assistant_content,
-            sources=assistant_sources or None,
-            family=assistant_family,
-            intent=assistant_intent,
-            execution_mode=assistant_execution_mode,
-            retrieval_attempted=bool(assistant_payload.get("retrieval_attempted", False)),
-            used_retrieval=bool(assistant_payload.get("used_retrieval", False)),
-            degraded=bool(assistant_payload.get("degraded", False)),
-            **chat_streaming.web_search_turn_fields(
-                requested=bool(data.web_search),
-                used_retrieval=assistant_payload.get("used_retrieval", False),
-                query_trace=query_trace,
-                sources=assistant_sources,
-            ),
-            metadata={
-                "web_search": bool(data.web_search),
-            }
-            if assistant_payload
-            else None,
-        )
-        chat_sessions.append_message_locked(data.session_id, assistant_msg, save=False)
-        chat_sessions.update_session_metadata(
-            data.session_id,
-            assistant_msg.timestamp.isoformat(),
-            save=False,
-        )
-        chat_sessions.save_state()
-        return ChatResponse(message=assistant_msg, session_id=data.session_id)
+            assistant_msg = ChatMessage(
+                role="assistant",
+                content=assistant_content,
+                sources=assistant_sources or None,
+                family=assistant_family,
+                intent=assistant_intent,
+                execution_mode=assistant_execution_mode,
+                retrieval_attempted=bool(assistant_payload.get("retrieval_attempted", False)),
+                used_retrieval=bool(assistant_payload.get("used_retrieval", False)),
+                degraded=bool(assistant_payload.get("degraded", False)),
+                **chat_streaming.web_search_turn_fields(
+                    requested=bool(data.web_search),
+                    used_retrieval=assistant_payload.get("used_retrieval", False),
+                    query_trace=query_trace,
+                    sources=assistant_sources,
+                ),
+                metadata={
+                    "web_search": bool(data.web_search),
+                }
+                if assistant_payload
+                else None,
+            )
+            chat_sessions.append_message_locked(data.session_id, assistant_msg, save=False)
+            chat_sessions.update_session_metadata(
+                data.session_id,
+                assistant_msg.timestamp.isoformat(),
+                save=False,
+            )
+            chat_sessions.save_state()
+            return ChatResponse(message=assistant_msg, session_id=data.session_id)
+
+    finally:
+        lease.release()
 
 
-def stream_message_events(
+async def stream_message_events(
     data: ChatStreamRequest,
     student_id: str,
 ) -> AsyncGenerator[dict[str, Any], None]:
-    """Validate stream ownership before returning the lazy event generator."""
+    """Admit and launch generation before returning the SSE response iterator."""
 
     chat_sessions.ensure_session_owner(data.session_id, student_id)
-    return _stream_message_events(data, student_id)
+    return await _stream_message_events(data, student_id)
 
 
 async def _stream_message_events(
@@ -120,13 +126,15 @@ async def _stream_message_events(
     session_id = data.session_id
     operation_lock = chat_sessions.session_operation_lock(session_id)
     operation_lock_acquired = False
-    await chat_sessions.acquire_threading_lock(operation_lock)
-    operation_lock_acquired = True
+    lease = chat_admission.acquire(student_id)
+    transferred = False
 
     try:
+        await chat_sessions.acquire_threading_lock(operation_lock)
+        operation_lock_acquired = True
         is_first_message = chat_sessions.message_count(session_id) == 0
         user_message = ChatMessage(role="user", content=data.message)
-        chat_sessions.append_message_locked(session_id, user_message, save=False)
+        appended_user_item = chat_sessions.append_message_locked(session_id, user_message, save=False)
         chat_sessions.schedule_title_generation(
             session_id,
             data.message,
@@ -143,32 +151,40 @@ async def _stream_message_events(
                 stream_kwargs["web_search"] = True
             return stream_chat_with_history(**stream_kwargs)
 
-        job = chat_streaming.launch_stream_worker(
-            session_id=session_id,
-            student_id=student_id,
-            operation_lock=operation_lock,
-            event_source=event_source,
-            message_timestamp=datetime.now(),
-            web_search=bool(data.web_search),
-        )
+        try:
+            job = chat_streaming.launch_stream_worker(
+                session_id=session_id,
+                student_id=student_id,
+                operation_lock=operation_lock,
+                admission_lease=lease,
+                event_source=event_source,
+                message_timestamp=datetime.now(),
+                web_search=bool(data.web_search),
+            )
+        except BaseException:
+            chat_sessions.remove_message_by_identity(session_id, appended_user_item, save=False)
+            chat_sessions.save_state()
+            raise
         operation_lock_acquired = False
-        async for event in iter_stream_job_events(job, include_snapshot=False):
-            yield event
+        transferred = True
+        return iter_stream_job_events(job, include_snapshot=False)
     except (asyncio.CancelledError, GeneratorExit):
         raise
     finally:
         if operation_lock_acquired:
             operation_lock.release()
+        if not transferred:
+            lease.release()
 
 
-def continue_message_events(
+async def continue_message_events(
     data: ChatContinueRequest,
     student_id: str,
 ) -> AsyncGenerator[dict[str, Any], None]:
-    """Validate continuation ownership before returning the lazy event generator."""
+    """Admit and launch continuation before returning the SSE response iterator."""
 
     chat_sessions.ensure_session_owner(data.session_id, student_id)
-    return _continue_message_events(data, student_id)
+    return await _continue_message_events(data, student_id)
 
 
 async def _continue_message_events(
@@ -178,10 +194,12 @@ async def _continue_message_events(
     session_id = data.session_id
     operation_lock = chat_sessions.session_operation_lock(session_id)
     operation_lock_acquired = False
-    await chat_sessions.acquire_threading_lock(operation_lock)
-    operation_lock_acquired = True
+    lease = chat_admission.acquire(student_id)
+    transferred = False
 
     try:
+        await chat_sessions.acquire_threading_lock(operation_lock)
+        operation_lock_acquired = True
         target_item = chat_sessions.find_stopped_assistant_turn(session_id, data.message_timestamp)
         base_message = chat_sessions.message_from_dict(target_item)
 
@@ -196,6 +214,7 @@ async def _continue_message_events(
             session_id=session_id,
             student_id=student_id,
             operation_lock=operation_lock,
+            admission_lease=lease,
             event_source=event_source,
             message_timestamp=base_message.timestamp,
             web_search=base_message.web_search_requested,
@@ -205,13 +224,15 @@ async def _continue_message_events(
             base_message=base_message,
         )
         operation_lock_acquired = False
-        async for event in iter_stream_job_events(job, include_snapshot=False):
-            yield event
+        transferred = True
+        return iter_stream_job_events(job, include_snapshot=False)
     except (asyncio.CancelledError, GeneratorExit):
         raise
     finally:
         if operation_lock_acquired:
             operation_lock.release()
+        if not transferred:
+            lease.release()
 
 
 def get_resume_job(session_id: str, student_id: str) -> ActiveStreamJob:

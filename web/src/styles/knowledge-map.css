@@ -448,7 +448,7 @@
   }
 }
 
-:global(html.theme-dark) .knowledge-map-page {
+html.theme-dark .knowledge-map-page {
   --map-border: var(--dark-border);
   --map-border-strong: #525252;
   --map-surface: var(--dark-panel);
@@ -458,42 +458,42 @@
   background: var(--dark-bg);
 }
 
-:global(html.theme-dark) .map-index,
-:global(html.theme-dark) .map-inspector,
-:global(html.theme-dark) .map-stage__toolbar,
-:global(html.theme-dark) .map-filterbar,
-:global(html.theme-dark) .map-state-legend {
+html.theme-dark .map-index,
+html.theme-dark .map-inspector,
+html.theme-dark .map-stage__toolbar,
+html.theme-dark .map-filterbar,
+html.theme-dark .map-state-legend {
   color: var(--dark-text);
   background: var(--dark-panel);
   border-color: var(--dark-border);
 }
 
-:global(html.theme-dark) .map-stage,
-:global(html.theme-dark) .map-canvas-wrap {
+html.theme-dark .map-stage,
+html.theme-dark .map-canvas-wrap {
   background-color: var(--dark-bg);
   background-image: radial-gradient(#3f3f46 0.65px, transparent 0.65px);
 }
 
-:global(html.theme-dark) .map-search,
-:global(html.theme-dark) .map-overview:hover,
-:global(html.theme-dark) .map-chapter:hover,
-:global(html.theme-dark) .map-concept:hover,
-:global(html.theme-dark) .map-overview.active,
-:global(html.theme-dark) .map-chapter.active,
-:global(html.theme-dark) .map-concept.active,
-:global(html.theme-dark) .map-relation-filters label.active {
+html.theme-dark .map-search,
+html.theme-dark .map-overview:hover,
+html.theme-dark .map-chapter:hover,
+html.theme-dark .map-concept:hover,
+html.theme-dark .map-overview.active,
+html.theme-dark .map-chapter.active,
+html.theme-dark .map-concept.active,
+html.theme-dark .map-relation-filters label.active {
   color: var(--dark-text);
   background: var(--dark-panel-soft);
   border-color: var(--dark-border);
 }
 
-:global(html.theme-dark) .map-search input,
-:global(html.theme-dark) .map-stage__toolbar h2 {
+html.theme-dark .map-search input,
+html.theme-dark .map-stage__toolbar h2 {
   color: var(--dark-text);
 }
 
-:global(html.theme-dark) .map-overview,
-:global(html.theme-dark) .map-chapter,
-:global(html.theme-dark) .map-concept {
+html.theme-dark .map-overview,
+html.theme-dark .map-chapter,
+html.theme-dark .map-concept {
   color: var(--dark-text-muted);
 }

@@ -23,6 +23,7 @@ services:
       # - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - PYTHONUNBUFFERED=1
+      - APP_ENV=${APP_ENV:-production}
       # Default compose deployment is fail-closed: code execution is disabled
       # unless an operator explicitly enables the Docker sandbox and mounts a
       # Docker daemon socket above.

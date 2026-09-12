@@ -2,6 +2,8 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { sessionsApi } from '../api/sessions'
+import { useAuthStore } from './auth'
+import { accountStorageKey, readLocalStorage, writeLocalStorage } from '../utils/storage'
 
 const DEFAULT_SESSION_TITLE = '新会话'
 const SESSION_FETCH_RETRIES = 2
@@ -12,34 +14,38 @@ function sleep(ms) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
-function readPinnedSessionIds() {
+function readPinnedSessionIds(user) {
   if (typeof window === 'undefined') {
     return []
   }
 
   try {
-    const value = JSON.parse(window.localStorage.getItem(PINNED_SESSIONS_STORAGE_KEY) || '[]')
+    const key = accountStorageKey(PINNED_SESSIONS_STORAGE_KEY, user)
+    const value = JSON.parse(readLocalStorage(key) || '[]')
     return Array.isArray(value) ? value.filter(Boolean) : []
   } catch (error) {
     return []
   }
 }
 
-function persistPinnedSessionIds(ids) {
+function persistPinnedSessionIds(ids, user) {
   if (typeof window === 'undefined') {
     return
   }
-  window.localStorage.setItem(PINNED_SESSIONS_STORAGE_KEY, JSON.stringify(ids))
+  const key = accountStorageKey(PINNED_SESSIONS_STORAGE_KEY, user)
+  writeLocalStorage(key, JSON.stringify(ids))
 }
 
 export const useSessionStore = defineStore('session', () => {
+  const authStore = useAuthStore()
   const sessions = ref([])
   const currentSessionId = ref(null)
   const loading = ref(false)
   const loaded = ref(false)
   const unreadCounts = ref({})
-  const pinnedSessionIds = ref(readPinnedSessionIds())
+  const pinnedSessionIds = ref(readPinnedSessionIds(authStore.user))
   let fetchPromise = null
+  let stateVersion = 0
 
   const currentSession = computed(() =>
     sessions.value.find(session => session.id === currentSessionId.value)
@@ -57,12 +63,16 @@ export const useSessionStore = defineStore('session', () => {
   )
 
   async function runFetchSessions() {
+    const requestStateVersion = stateVersion
     let lastError = null
 
     for (let attempt = 0; attempt <= SESSION_FETCH_RETRIES; attempt += 1) {
       try {
         const response = await sessionsApi.list()
         const nextSessions = Array.isArray(response.sessions) ? response.sessions : []
+        if (requestStateVersion !== stateVersion) {
+          return nextSessions
+        }
         sessions.value = nextSessions
         prunePinnedSessions(nextSessions)
         loaded.value = true
@@ -85,13 +95,14 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     loading.value = true
-    fetchPromise = runFetchSessions()
-      .finally(() => {
+    const request = runFetchSessions()
+    fetchPromise = request
+    return request.finally(() => {
+      if (fetchPromise === request) {
         loading.value = false
         fetchPromise = null
-      })
-
-    return fetchPromise
+      }
+    })
   }
 
   async function createSession(title = DEFAULT_SESSION_TITLE) {
@@ -120,7 +131,7 @@ export const useSessionStore = defineStore('session', () => {
     const nextPinned = pinnedSessionIds.value.filter(id => validIds.has(id))
     if (nextPinned.length !== pinnedSessionIds.value.length) {
       pinnedSessionIds.value = nextPinned
-      persistPinnedSessionIds(nextPinned)
+      persistPinnedSessionIds(nextPinned, authStore.user)
     }
   }
 
@@ -135,7 +146,7 @@ export const useSessionStore = defineStore('session', () => {
       ? pinnedSessionIds.value.filter(id => id !== sessionId)
       : [sessionId, ...pinnedSessionIds.value]
     pinnedSessionIds.value = nextPinned
-    persistPinnedSessionIds(nextPinned)
+    persistPinnedSessionIds(nextPinned, authStore.user)
   }
 
   function shouldAutoTitle(sessionId) {
@@ -172,6 +183,17 @@ export const useSessionStore = defineStore('session', () => {
     unreadCounts.value[sessionId] = (unreadCounts.value[sessionId] || 0) + 1
   }
 
+  function resetForUser() {
+    stateVersion += 1
+    fetchPromise = null
+    sessions.value = []
+    currentSessionId.value = null
+    unreadCounts.value = {}
+    pinnedSessionIds.value = readPinnedSessionIds(authStore.user)
+    loading.value = false
+    loaded.value = false
+  }
+
   return {
     sessions,
     currentSessionId,
@@ -191,6 +213,7 @@ export const useSessionStore = defineStore('session', () => {
     deleteSession,
     setCurrentSession,
     markRead,
-    incrementUnread
+    incrementUnread,
+    resetForUser
   }
 })
