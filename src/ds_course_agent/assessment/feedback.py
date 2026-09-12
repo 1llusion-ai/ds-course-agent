@@ -27,6 +27,7 @@ class QuestionRejectionCode(str, Enum):
     SOURCE_MISMATCH = "source_mismatch"
     UNCERTAIN_EVIDENCE = "uncertain_evidence"
     UNKNOWN_SOURCE = "unknown_source"
+    UNKNOWN_EVIDENCE_REFERENCE = "unknown_evidence_reference"
 
 
 @dataclass(frozen=True)

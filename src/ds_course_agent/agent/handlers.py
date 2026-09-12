@@ -12,7 +12,7 @@ import logging
 from collections.abc import Iterator
 from typing import Any, Protocol
 
-from ds_course_agent.agent.events import TurnEvent
+from ds_course_agent.agent.events import RetrievalEndEvent, TurnEvent
 from ds_course_agent.agent.message_context import build_turn_system_context
 from ds_course_agent.agent.route_executor import (
     build_route_result,
@@ -101,11 +101,15 @@ class AssessmentAssignmentRouteHandler(BufferedRouteHandlerMixin):
         from ds_course_agent.tools.assessment import AssessmentAssignmentInput
 
         trace_step("agent.branch", branch="assessment_assignment")
-        request = AssessmentAssignmentPlanner().plan(route_state.matched_concepts, route_state.learner_state)
-        registry = agent.tool_registry
-        tool = registry.get("assign_assessment_tool").tool
         try:
-            summary = tool.invoke(AssessmentAssignmentInput(student_id=route_state.student_id, request=request))
+            request = AssessmentAssignmentPlanner().plan(route_state.matched_concepts, route_state.learner_state)
+            registry = agent.tool_registry
+            tool = registry.get("assign_assessment_tool").tool
+            summary = tool.invoke(
+                AssessmentAssignmentInput(
+                    student_id=route_state.student_id, session_id=route_state.session_id, request=request
+                )
+            )
         except Exception as exc:
             trace_error("tool.assign_assessment", exc)
             logger.error("assessment assignment failed: %s", exc)
@@ -129,24 +133,20 @@ class GroundedRagRouteHandler:
         return route_state.decision.execution_mode == ExecutionMode.GROUNDED_GENERATION
 
     def execute(self, agent: Any, route_state: RouteState, *, stream: bool = False) -> RouteExecutionResult:
-        from ds_course_agent.shared.query_trace import trace_span, trace_step
-        from ds_course_agent.tools.course_rag import course_rag_tool
+        degraded = False
 
-        context = route_state.context
-        decision = route_state.decision
-        execution_query = agent._route_execution_query(context, decision)
-
-        trace_step("agent.branch", branch="grounded_rag_direct")
-
-        # When QueryPipeline has already made a required grounded-RAG decision,
-        # avoid a second generic-agent LLM round just to decide whether to call
-        # the RAG tool.  The tool still records retrieval/source telemetry.
         def invoke() -> str:
-            with trace_span("execute.grounded_rag_tool"):
-                return course_rag_tool.invoke(execution_query)
+            nonlocal degraded
+            parts = []
+            for item in self.stream_execute(agent, route_state):
+                if isinstance(item, RetrievalEndEvent):
+                    degraded = degraded or item.degraded
+                elif isinstance(item, str):
+                    parts.append(item)
+            return "".join(parts)
 
         content, retrieval = capture_retrieval(invoke)
-        return build_route_result(route_state, content, retrieval=retrieval)
+        return build_route_result(route_state, content, retrieval=retrieval, degraded=degraded)
 
     def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str | TurnEvent]:
         yield from agent._iter_grounded_rag_response(route_state)

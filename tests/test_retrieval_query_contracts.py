@@ -10,8 +10,10 @@ from langchain_core.documents import Document
 
 import ds_course_agent.retrieval.service as rag_module
 from ds_course_agent.retrieval.context_assembler import load_token_counter
+from ds_course_agent.retrieval.hybrid_retriever import BM25Retriever
 from ds_course_agent.retrieval.service import RAGService, clear_rag_retrieval_cache
 from ds_course_agent.retrieval.term_resolution import CourseTermIndex, CourseTermMatchKind
+from ds_course_agent.shared.embeddings import EmbeddingUnavailable
 
 
 def _document(text: str, page: int) -> Document:
@@ -89,6 +91,20 @@ def test_full_query_retrieves_evidence_beyond_literal_term_mentions(service_fact
     assert mention not in result.formatted_context
     assert rag_module.embed_query_cached.call_args.args[1] == question
     service.vector_store_service.query.assert_called_once()
+
+
+def test_embedding_failure_uses_bm25_fallback(service_factory, monkeypatch):
+    evidence = _document("数据科学的基本流程从提出问题和明确目标开始。", 20)
+    service = service_factory([evidence], [])
+    service.bm25_retriever = BM25Retriever()
+    service.bm25_retriever.add_documents([evidence])
+    monkeypatch.setattr(rag_module, "embed_query_cached", MagicMock(side_effect=EmbeddingUnavailable("offline")))
+
+    result = service.retrieve("数据科学基本流程的第一个环节是什么？", top_k=1)
+
+    assert result.has_results
+    assert result.documents[0].page_content == evidence.page_content
+    service.vector_store_service.query.assert_not_called()
 
 
 def test_term_correction_is_independent_of_cache_warmup_and_service_instance(service_factory):

@@ -734,6 +734,9 @@ class TestAgentShortTermMemory:
                 return compacted
 
         class FakeMemory:
+            def aggregate_profile(self, student_id):
+                pass
+
             def get_profile(self, student_id):
                 return StudentProfile(student_id=student_id)
 

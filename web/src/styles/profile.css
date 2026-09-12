@@ -158,6 +158,13 @@
 .signal-list button:hover { color: #1c1917; border-color: var(--profile-border-strong); }
 .signal-list button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 650; }
 .signal-list button small { flex-shrink: 0; color: var(--profile-faint); font-size: 10px; }
+.signal-list .signal-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; padding: 12px; }
+.signal-list .signal-item strong { min-width: 0; overflow-wrap: anywhere; }
+.signal-list .signal-item small { grid-column: 1 / -1; }
+@media (max-width: 480px) {
+  .signal-list .signal-item { grid-template-columns: minmax(0, 1fr); }
+  .signal-list .signal-item span { white-space: normal; }
+}
 
 .risk-list { display: grid; gap: 10px; }
 .risk-row { padding: 14px; background: var(--profile-surface-soft); border: 1px solid var(--profile-border); border-radius: 7px; }

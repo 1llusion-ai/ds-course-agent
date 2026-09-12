@@ -13,7 +13,14 @@ from ds_course_agent.assessment.records import AssessmentSummary
 class AssessmentAssignmentService(Protocol):
     """Application boundary required by the assignment tool."""
 
-    def assign(self, student_id: str, request: GenerateQuestionsRequest) -> AssessmentSummary:
+    def assign(
+        self,
+        student_id: str,
+        request: GenerateQuestionsRequest,
+        *,
+        session_id: str | None = None,
+        assignment_id: str | None = None,
+    ) -> AssessmentSummary:
         """Generate, persist, and assign one assessment."""
 
 
@@ -23,6 +30,8 @@ class AssessmentAssignmentInput:
 
     student_id: str
     request: GenerateQuestionsRequest
+    session_id: str | None = None
+    assignment_id: str | None = None
 
 
 class AssessmentAssignmentTool:
@@ -41,7 +50,12 @@ class AssessmentAssignmentTool:
         student_id = tool_input.student_id.strip()
         if not student_id:
             raise ValueError("student_id must be non-empty")
-        return self._service().assign(student_id, tool_input.request)
+        return self._service().assign(
+            student_id,
+            tool_input.request,
+            session_id=tool_input.session_id,
+            assignment_id=tool_input.assignment_id,
+        )
 
     def _service(self) -> AssessmentAssignmentService:
         if self._service_factory is not None:

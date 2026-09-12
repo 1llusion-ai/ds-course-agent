@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from ds_course_agent.teaching.profile_models import StudentProfile
+
 
 class TestAgentGroundedFallback:
     @patch("ds_course_agent.shared.history.get_history")
@@ -23,9 +25,7 @@ class TestAgentGroundedFallback:
         mock_get_history.return_value = mock_history
 
         mock_memory = MagicMock()
-        mock_memory.get_profile.return_value = SimpleNamespace(
-            progress=SimpleNamespace(current_chapter=None),
-        )
+        mock_memory.get_profile.return_value = StudentProfile(student_id="test_session")
         mock_get_memory_core.return_value = mock_memory
 
         mock_service = MagicMock()
@@ -52,7 +52,7 @@ class TestAgentGroundedFallback:
         assert result.family.value == "learning"
         assert result.intent.value == "concept_qa"
         assert result.execution_mode.value == "grounded_generation"
-        mock_service.retrieve.assert_called_once_with(question)
+        mock_service.retrieve.assert_called_once_with(question, term_resolution_query=question)
 
     @patch("ds_course_agent.shared.history.get_history")
     @patch("ds_course_agent.agent.service.map_question_to_concepts", return_value=[])

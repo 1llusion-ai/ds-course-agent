@@ -29,19 +29,19 @@ _LEARNING_POLICIES: dict[RouteIntent, LearningExecutionPolicy] = {
         ExecutionMode.GROUNDED_GENERATION,
         RetrievalPolicy.REQUIRED,
         "course_rag",
-        EnrichmentPlan(map_concepts=True, rewrite_query=True, record_learning_event=True),
+        EnrichmentPlan(map_concepts=True, load_learner_state=True, rewrite_query=True, record_learning_event=True),
     ),
     RouteIntent.COMPARISON: LearningExecutionPolicy(
         ExecutionMode.GROUNDED_GENERATION,
         RetrievalPolicy.REQUIRED,
         "course_rag",
-        EnrichmentPlan(map_concepts=True, rewrite_query=True, record_learning_event=True),
+        EnrichmentPlan(map_concepts=True, load_learner_state=True, rewrite_query=True, record_learning_event=True),
     ),
     RouteIntent.FOLLOW_UP: LearningExecutionPolicy(
         ExecutionMode.GROUNDED_GENERATION,
         RetrievalPolicy.REQUIRED,
         "course_rag",
-        EnrichmentPlan(map_concepts=True, rewrite_query=True, record_learning_event=True),
+        EnrichmentPlan(map_concepts=True, load_learner_state=True, rewrite_query=True, record_learning_event=True),
     ),
     RouteIntent.CODE_EXAMPLE: LearningExecutionPolicy(
         ExecutionMode.DIRECT_MODEL,

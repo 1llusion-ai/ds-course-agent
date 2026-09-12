@@ -306,13 +306,13 @@ class AssessmentService:
         for question, verdict in zip(candidates, verdicts, strict=True):
             rejection_code = self._verification_rejection_code(question, verdict, catalog)
             if rejection_code is None:
+                try:
+                    explanation = catalog.student_explanation(verdict.answer_explanation)
+                except AssessmentVerificationError:
+                    rejected.append(QuestionRejection((QuestionRejectionCode.UNKNOWN_EVIDENCE_REFERENCE,), question))
+                    continue
                 evidence_accepted.append(
-                    GeneratedQuestion.model_validate(
-                        {
-                            **question.model_dump(),
-                            "explanation": catalog.student_explanation(verdict.answer_explanation),
-                        }
-                    )
+                    GeneratedQuestion.model_validate({**question.model_dump(), "explanation": explanation})
                 )
                 continue
             rejected.append(QuestionRejection((rejection_code,), question, verdict.answer_explanation))

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from ds_course_agent.teaching.memory_core import MemoryCore, get_memory_core
+from ds_course_agent.teaching.practice import ConceptPractice
 from ds_course_agent.teaching.profile_models import StudentProfile, WeakSpotCandidate
 
 
@@ -68,6 +69,7 @@ class LearnerStateSummary:
     pending_weak_spot_count: int
     resolved_weak_spot_count: int
     current_chapter: str | None
+    practice_concept_count: int = 0
 
     @property
     def has_personalization_context(self) -> bool:
@@ -78,6 +80,7 @@ class LearnerStateSummary:
             or self.recent_concept_count
             or self.active_weak_spot_count
             or self.pending_weak_spot_count
+            or self.practice_concept_count
         )
 
 
@@ -94,6 +97,7 @@ class LearnerStateSnapshot:
     stats: LearnerStats = field(default_factory=LearnerStats)
     provider: str = "rule_based"
     model_version: str = "rules-v1"
+    practice: Mapping[str, ConceptPractice] = field(default_factory=dict)
 
     def summary(self) -> LearnerStateSummary:
         """Project the full state into the fields allowed to affect routing."""
@@ -105,6 +109,7 @@ class LearnerStateSnapshot:
             pending_weak_spot_count=len(self.pending_weak_spots),
             resolved_weak_spot_count=len(self.resolved_weak_spots),
             current_chapter=self.progress.current_chapter,
+            practice_concept_count=len(self.practice),
         )
 
 
@@ -160,7 +165,9 @@ class RuleBasedLearnerStateProvider:
         concept_ids: Sequence[str] = (),
     ) -> LearnerStateSnapshot:
         del concept_ids
-        return learner_state_from_profile(self._memory_factory().get_profile(student_id))
+        memory = self._memory_factory()
+        memory.aggregate_profile(student_id)
+        return learner_state_from_profile(memory.get_profile(student_id))
 
 
 def learner_state_from_profile(profile: StudentProfile) -> LearnerStateSnapshot:
@@ -197,6 +204,7 @@ def learner_state_from_profile(profile: StudentProfile) -> LearnerStateSnapshot:
 
     return LearnerStateSnapshot(
         student_id=profile.student_id,
+        practice=dict(profile.practice),
         recent_concepts=recent_concepts,
         progress=LearnerProgress(
             current_chapter=profile.progress.current_chapter,

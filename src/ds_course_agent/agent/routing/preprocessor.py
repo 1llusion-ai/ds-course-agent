@@ -239,9 +239,10 @@ class QueryPreprocessor:
             r"(?:给|帮)我出(?:一套|几道|\d+道)?[^？?]{0,20}(?:题|测验)",
             r"开始(?:做题|做练习|测验)",
             r"(?:创建|生成|安排)(?:一次|一套)?[^？?]{0,12}(?:测验|练习)",
-            r"(?:我想|我要|想要)(?:开始)?(?:做题|做练习|测验)",
+            r"(?:我想|我要|想要)(?:开始)?(?:做题|做练习(?!册)|测验)",
         )
-        if any(re.search(pattern, q) for pattern in assessment_actions):
+        is_question = bool(re.search(r"(?:吗|么|呢|[？?])\s*$", q))
+        if not is_question and any(re.search(pattern, q) for pattern in assessment_actions):
             intents.append("assessment_assignment")
 
         # 概念解释

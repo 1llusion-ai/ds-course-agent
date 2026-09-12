@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from ds_course_agent.agent.message_context import build_turn_system_context
 from ds_course_agent.agent.service import AgentService
 from ds_course_agent.runtime.messages import build_chat_messages
+from ds_course_agent.teaching.learner_state import LearnerProgress, LearnerStateSnapshot
 
 
 def test_build_chat_messages_preserves_context_history_user_order() -> None:
@@ -37,16 +38,14 @@ def test_build_chat_messages_preserves_context_history_user_order() -> None:
 def test_build_turn_system_context_combines_typed_turn_state() -> None:
     """Learner, skill, and concept projections share one context builder."""
 
-    learner_state = SimpleNamespace(
-        progress=SimpleNamespace(current_chapter="第6章", covered_chapters=("第5章",)),
-        recent_concepts={},
-        weak_spot_candidates=(),
-        pending_weak_spots=(),
+    learner_state = LearnerStateSnapshot(
+        student_id="student",
+        progress=LearnerProgress(current_chapter="第6章", covered_chapters=("第5章",)),
     )
     route_state = SimpleNamespace(
         learner_state=learner_state,
         skill_candidate_keys={"personalized-explanation"},
-        matched_concepts=[SimpleNamespace(display_name="决策树", chapter="第6章")],
+        matched_concepts=[SimpleNamespace(concept_id="decision_tree", display_name="决策树", chapter="第6章")],
     )
 
     context = build_turn_system_context(route_state)

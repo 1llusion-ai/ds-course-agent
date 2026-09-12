@@ -160,6 +160,17 @@ class BM25Retriever:
         # 获取BM25分数
         scores = self.bm25.get_scores(tokenized_query)
 
+        # BM25's IDF is zero for a term that appears in every document (common
+        # in tiny test or newly built corpora). Keep lexical overlap useful as
+        # a fallback instead of returning an empty result set.
+        if len(scores) and max(scores) <= 0 and tokenized_query:
+            overlap = np.asarray(
+                [sum(token in tokens for token in set(tokenized_query)) for tokens in self.tokenized_corpus],
+                dtype=float,
+            )
+            if overlap.max(initial=0.0) > 0:
+                scores = overlap
+
         # 获取Top-K
         top_indices = np.argsort(scores)[::-1][:top_k]
 

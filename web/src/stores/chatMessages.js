@@ -187,11 +187,16 @@ function isSameStoredMessage(left = {}, right = {}) {
 }
 
 export function mergeHistoryWithLocalProgress(history = [], localMessages = []) {
-  if (!history.length || !localMessages.length) return history
+  if (!history.length) {
+    return localMessages.some(message => message.isLoading || message.requestId || message.role === 'user')
+      ? localMessages
+      : history
+  }
+  if (!localMessages.length) return history
 
   const usedLocalIndexes = new Set()
 
-  return history.map((remoteMessage, index) => {
+  const merged = history.map((remoteMessage, index) => {
     let localMessage = localMessages[index]
     let localIndex = index
 
@@ -235,4 +240,8 @@ export function mergeHistoryWithLocalProgress(history = [], localMessages = []) 
       progress_events: remoteMessage.progress_events || localMessage.progress_events || localProgressEvents
     }
   })
+  const unmatchedLocal = localMessages.filter((message, index) => (
+    !usedLocalIndexes.has(index) && (message.isLoading || message.requestId || message.role === 'user')
+  ))
+  return [...merged, ...unmatchedLocal]
 }

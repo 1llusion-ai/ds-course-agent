@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from threading import RLock
@@ -49,28 +50,50 @@ class AssessmentApplicationService:
         *,
         clock: Callable[[], datetime] | None = None,
         id_factory: Callable[[], str] | None = None,
+        submission_recorder: Callable[[AssessmentRecord], None] | None = None,
     ) -> None:
         self._repository = repository or AssessmentRepository()
         self._generator = generator
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._id_factory = id_factory or (lambda: str(uuid4()))
         self._lock = RLock()
+        self._submission_recorder = submission_recorder
 
-    def assign(self, student_id: str, request: GenerateQuestionsRequest) -> AssessmentSummary:
+    def assign(
+        self,
+        student_id: str,
+        request: GenerateQuestionsRequest,
+        *,
+        session_id: str | None = None,
+        assignment_id: str | None = None,
+    ) -> AssessmentSummary:
         """Generate and assign a quiz from agent-selected typed parameters."""
 
+        if assignment_id is not None:
+            existing = self._repository.get(assignment_id, student_id)
+            if existing is not None:
+                if existing.session_id != session_id or existing.request != request:
+                    raise AssessmentStateError("assignment identity conflicts with the persisted request")
+                return self._summary(existing)
         quiz = (self._generator or get_assessment_service()).generate(request)
         now = self._utc_now()
         record = AssessmentRecord(
-            id=self._id_factory(),
+            id=assignment_id or self._id_factory(),
             student_id=student_id,
+            session_id=session_id,
             request=request,
             quiz=quiz,
             question_ids=tuple(self._id_factory() for _ in quiz.questions),
             status=AssessmentStatus.READY,
             assigned_at=now,
         )
-        self._repository.create(record)
+        try:
+            self._repository.create(record)
+        except sqlite3.IntegrityError:
+            existing = self._repository.get(record.id, student_id)
+            if existing is None or existing.request != request or existing.session_id != session_id:
+                raise
+            return self._summary(existing)
         return self._summary(record)
 
     def list_assessments(
@@ -116,7 +139,9 @@ class AssessmentApplicationService:
         with self._lock:
             record = self._get(assessment_id, student_id)
             if record.status is AssessmentStatus.SUBMITTED:
+                self._validate_submissions(record, submissions)
                 self._require_same_submission(record, submissions)
+                self._record_submission(record)
                 return self._result(record)
             if record.status is not AssessmentStatus.IN_PROGRESS:
                 raise AssessmentStateError("assessment must be opened before submission")
@@ -137,6 +162,7 @@ class AssessmentApplicationService:
                 submitted_at=self._utc_now(),
                 answers=tuple(stored_answers),
             )
+        self._record_submission(record)
         return self._result(record)
 
     def result(self, assessment_id: str, student_id: str) -> AssessmentResult:
@@ -145,7 +171,12 @@ class AssessmentApplicationService:
         record = self._get(assessment_id, student_id)
         if record.status is not AssessmentStatus.SUBMITTED:
             raise AssessmentStateError("assessment result is unavailable before submission")
+        self._record_submission(record)
         return self._result(record)
+
+    def _record_submission(self, record: AssessmentRecord) -> None:
+        if self._submission_recorder is not None:
+            self._submission_recorder(record)
 
     def _get(self, assessment_id: str, student_id: str) -> AssessmentRecord:
         record = self._repository.get(assessment_id, student_id)
@@ -201,6 +232,7 @@ class AssessmentApplicationService:
     def _summary(record: AssessmentRecord) -> AssessmentSummary:
         return AssessmentSummary(
             id=record.id,
+            session_id=record.session_id,
             title=record.quiz.title,
             status=record.status,
             question_count=len(record.question_ids),
@@ -249,6 +281,7 @@ class AssessmentApplicationService:
         duration_ms = max(0, int((record.submitted_at - record.opened_at).total_seconds() * 1000))
         return AssessmentResult(
             id=record.id,
+            session_id=record.session_id,
             title=record.quiz.title,
             status=record.status,
             opened_at=record.opened_at,
@@ -272,7 +305,7 @@ _application_service_lock = RLock()
 
 
 def get_assessment_application_service() -> AssessmentApplicationService:
-    """Return the process-local assessment lifecycle service."""
+    """Return the process-local assignment service; submission observers are injected by callers."""
 
     global _application_service
     if _application_service is None:

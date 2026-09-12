@@ -29,8 +29,10 @@ def test_concept_graph_has_closed_curated_relations_and_keeps_sourced_references
     nodes = {node.canonical_id: node for node in graph.nodes}
     components = [node for node in graph.nodes if node.node_type is NodeType.KC]
     assert len(graph.chapters) == 10
-    assert len(components) == 128
-    assert graph.version == "1.6"
+    assert len(components) == 129
+    assert graph.version == "1.7"
+    assert nodes["underfitting"].display_name == "欠拟合"
+    assert "overfitting" in nodes["underfitting"].related_concepts
     assert "dataframe_create" not in nodes
     assert "pandas_fillna" not in nodes
     assert "opencv_image_io" not in nodes
@@ -64,8 +66,8 @@ def test_concept_graph_has_closed_curated_relations_and_keeps_sourced_references
     for edge in graph.edges:
         assert edge.source in nodes and edge.target in nodes
     assert Counter(edge.relation_type.value for edge in graph.edges) == {
-        "part_of": 128,
-        "related_to": 86,
+        "part_of": 129,
+        "related_to": 87,
         "prerequisite_of": 103,
         "confusable_with": 16,
     }

@@ -26,6 +26,7 @@ from ds_course_agent.retrieval.context_assembler import (
     clone_assembled_context,
     load_token_counter,
 )
+from ds_course_agent.retrieval.hybrid_retriever import BM25Retriever
 from ds_course_agent.retrieval.index_manifest import PromotedIndexManifest
 from ds_course_agent.retrieval.term_resolution import (
     COURSE_TERM_POLICY_VERSION,
@@ -55,10 +56,10 @@ def build_rag_prompt_template() -> ChatPromptTemplate:
     """Build the single production prompt used for grounded textbook answers."""
     return ChatPromptTemplate.from_messages(
         [
-            ("system", _RAG_ANSWER_SYSTEM_PROMPT),
+            ("system", _RAG_ANSWER_SYSTEM_PROMPT + "\n{answer_guidance}"),
             ("user", _RAG_ANSWER_USER_PROMPT),
         ]
-    )
+    ).partial(answer_guidance="")
 
 
 def _warn_large_rag_payload(payload: str, *, location: str, payload_type: str, **metadata) -> None:
@@ -343,9 +344,13 @@ def clear_rag_retrieval_cache() -> None:
         _RETRIEVAL_CACHE.clear()
 
 
-def _build_evidence_page_index(payload: dict) -> dict[tuple[str, int], Document]:
-    """Build one hash-validated source-page index from the loaded collection."""
+def _build_evidence_page_index(
+    payload: dict, *, return_issues: bool = False
+) -> dict[tuple[str, int], Document] | tuple[dict[tuple[str, int], Document], tuple[str, ...]]:
+    """Build a page index while isolating malformed chunks from live retrieval."""
     pages: dict[tuple[str, int], Document] = {}
+    invalid_keys: set[tuple[str, int]] = set()
+    issues: list[str] = []
     ids = payload.get("ids") or []
     documents = payload.get("documents") or []
     metadatas = payload.get("metadatas") or []
@@ -354,7 +359,11 @@ def _build_evidence_page_index(payload: dict) -> dict[tuple[str, int], Document]
     for chunk_id, text, raw_metadata in zip(ids, documents, metadatas, strict=True):
         metadata = dict(raw_metadata or {})
         metadata.setdefault("chunk_id", str(chunk_id))
-        provenance = ChunkProvenance.from_document(Document(page_content=str(text or ""), metadata=metadata))
+        try:
+            provenance = ChunkProvenance.from_document(Document(page_content=str(text or ""), metadata=metadata))
+        except Exception as exc:
+            issues.append(f"{chunk_id}: {exc}")
+            continue
         key = provenance.interval.key
         page_metadata = {
             "metadata_schema_version": "retrieval-source-page/1.0",
@@ -368,10 +377,14 @@ def _build_evidence_page_index(payload: dict) -> dict[tuple[str, int], Document]
         existing = pages.get(key)
         if existing is not None:
             if existing.page_content != provenance.source_page_text or existing.metadata != page_metadata:
-                raise ValueError(f"conflicting source-page provenance for {key}")
+                invalid_keys.add(key)
+                pages.pop(key, None)
+                issues.append(f"{chunk_id}: conflicting source-page provenance for {key}")
+            continue
+        if key in invalid_keys:
             continue
         pages[key] = Document(page_content=provenance.source_page_text, metadata=page_metadata)
-    return pages
+    return (pages, tuple(issues)) if return_issues else pages
 
 
 class RAGService:
@@ -388,7 +401,22 @@ class RAGService:
             raise RuntimeError("production retrieval collection count does not match its manifest")
         collection_payload = self.vector_store_service.get_all_documents()
         self.course_term_index = CourseTermIndex.from_collection_payload(collection_payload)
-        self._evidence_pages = _build_evidence_page_index(collection_payload)
+        self.bm25_retriever = BM25Retriever()
+        bm25_documents = []
+        for chunk_id, text, metadata in zip(
+            collection_payload.get("ids") or [],
+            collection_payload.get("documents") or [],
+            collection_payload.get("metadatas") or [],
+            strict=True,
+        ):
+            document_metadata = dict(metadata or {})
+            document_metadata.setdefault("chunk_id", str(chunk_id))
+            bm25_documents.append(Document(page_content=str(text or ""), metadata=document_metadata))
+        self.bm25_retriever.add_documents(bm25_documents)
+        self._evidence_pages, provenance_issues = _build_evidence_page_index(collection_payload, return_issues=True)
+        self.provenance_issues = provenance_issues
+        if provenance_issues:
+            logger.warning("Skipped %d malformed retrieval chunks during page-index build", len(provenance_issues))
         self.prompt_template = build_rag_prompt_template()
         self.chat_model = get_rag_text_model()
         self._token_counter = load_token_counter(PROJECT_ROOT / "var" / "cache" / "tiktoken")
@@ -485,25 +513,71 @@ class RAGService:
                 policy_version=term_resolution.policy_version,
             )
             for rank, document in enumerate(term_lookup.documents[:depth], start=1):
+                try:
+                    provenance = ChunkProvenance.from_document(document)
+                except Exception as exc:
+                    logger.warning("Skipping malformed term-match chunk: %s", exc)
+                    continue
                 candidates.append(
                     RankedContextCandidate(
                         document=document,
                         retrieval_rank=rank,
                         distance=0.0,
-                        provenance=ChunkProvenance.from_document(document),
+                        provenance=provenance,
                     )
                 )
         else:
-            query_embedding = embed_query_cached(
-                self.embedding,
-                question,
-                timeout_seconds=retrieval_embedding_timeout_seconds(),
-            )
-            results = self.vector_store_service.query(
-                query_embeddings=[query_embedding],
-                n_results=depth,
-                include=["documents", "metadatas", "distances"],
-            )
+            try:
+                query_embedding = embed_query_cached(
+                    self.embedding,
+                    question,
+                    timeout_seconds=retrieval_embedding_timeout_seconds(),
+                )
+            except Exception as embedding_error:
+                bm25_documents = []
+                bm25_retriever = getattr(self, "bm25_retriever", None)
+                if bm25_retriever is not None:
+                    for index, score in bm25_retriever.retrieve(question, top_k=depth):
+                        if index < len(bm25_retriever.documents):
+                            bm25_documents.append((score, bm25_retriever.documents[index]))
+                lexical_documents = [document for _, document in bm25_documents]
+                fallback_name = "bm25"
+                if not lexical_documents:
+                    lexical_documents = list(self.course_term_index.keyword_documents(question, limit=depth))
+                    fallback_name = "keyword"
+                if not lexical_documents:
+                    raise embedding_error
+                _trace_rag_event(
+                    "rag.retrieve.lexical_fallback",
+                    reason="embedding_unavailable",
+                    mode=fallback_name,
+                    document_count=len(lexical_documents),
+                )
+                for rank, document in enumerate(lexical_documents, start=1):
+                    try:
+                        provenance = ChunkProvenance.from_document(document)
+                    except Exception as exc:
+                        logger.warning("Skipping malformed lexical fallback chunk: %s", exc)
+                        continue
+                    candidates.append(
+                        RankedContextCandidate(
+                            document=document,
+                            retrieval_rank=rank,
+                            distance=0.0,
+                            provenance=provenance,
+                        )
+                    )
+                query_embedding = None
+            if query_embedding is None:
+                results = None
+            else:
+                results = self.vector_store_service.query(
+                    query_embeddings=[query_embedding],
+                    n_results=depth,
+                    include=["documents", "metadatas", "distances"],
+                )
+            if results is None:
+                results = {"documents": [[]], "metadatas": [[]], "distances": [[]], "ids": [[]]}
             documents = (results.get("documents") or [[]])[0]
             metadatas = (results.get("metadatas") or [[]])[0]
             distances = (results.get("distances") or [[]])[0]
@@ -521,12 +595,17 @@ class RAGService:
                 document_metadata = dict(metadata or {})
                 document_metadata.setdefault("chunk_id", str(chunk_id))
                 document = Document(page_content=str(text or ""), metadata=document_metadata)
+                try:
+                    provenance = ChunkProvenance.from_document(document)
+                except Exception as exc:
+                    logger.warning("Skipping malformed retrieved chunk %s: %s", chunk_id, exc)
+                    continue
                 candidates.append(
                     RankedContextCandidate(
                         document=document,
                         retrieval_rank=rank,
                         distance=distance_value,
-                        provenance=ChunkProvenance.from_document(document),
+                        provenance=provenance,
                     )
                 )
 
@@ -577,7 +656,7 @@ class RAGService:
         )
         return result
 
-    def _prepare_answer_prompt(self, question: str, context: str, *, mode: str) -> str:
+    def _prepare_answer_prompt(self, question: str, context: str, *, mode: str, answer_guidance: str = "") -> str:
         context_text = str(context or "")
         counter = self._get_token_counter()
         context_tokens = counter.count(context_text)
@@ -586,7 +665,7 @@ class RAGService:
                 f"retrieved context uses {context_tokens} tokens, exceeding {_context_token_budget()}"
             )
 
-        prompt = self.prompt_template.format(context=context_text, input=question)
+        prompt = self.prompt_template.format(context=context_text, input=question, answer_guidance=answer_guidance)
         if config.CHAT_SYSTEM_SUFFIX:
             prompt = f"{prompt}\n\n{config.CHAT_SYSTEM_SUFFIX}"
         prompt_tokens = counter.count(prompt)
@@ -616,20 +695,22 @@ class RAGService:
         )
         return prompt
 
-    def stream_answer_with_context(self, question: str, context: str) -> Iterator[str]:
+    def stream_answer_with_context(self, question: str, context: str, *, answer_guidance: str = "") -> Iterator[str]:
         """Stream an answer after validating the complete production prompt."""
-        prompt = self._prepare_answer_prompt(question, context, mode="stream")
+        prompt = self._prepare_answer_prompt(question, context, mode="stream", answer_guidance=answer_guidance)
         for chunk in self.chat_model.stream(prompt):
             content = getattr(chunk, "content", chunk)
             if isinstance(content, str) and content:
                 yield content
 
-    def answer_with_context(self, question: str, context: str, stream: bool = False) -> AnswerResult:
+    def answer_with_context(
+        self, question: str, context: str, stream: bool = False, *, answer_guidance: str = ""
+    ) -> AnswerResult:
         """Generate a grounded answer after validating the complete prompt budget."""
         if stream:
-            return self.stream_answer_with_context(question, context)
+            return self.stream_answer_with_context(question, context, answer_guidance=answer_guidance)
 
-        prompt = self._prepare_answer_prompt(question, context, mode="sync")
+        prompt = self._prepare_answer_prompt(question, context, mode="sync", answer_guidance=answer_guidance)
         answer_msg = self.chat_model.invoke(prompt)
         answer_content = answer_msg.content if hasattr(answer_msg, "content") else str(answer_msg)
         _warn_large_rag_payload(

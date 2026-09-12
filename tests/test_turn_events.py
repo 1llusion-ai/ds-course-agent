@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from types import SimpleNamespace
+
 import pytest
 
 from ds_course_agent.agent.events import (
@@ -14,6 +17,7 @@ from ds_course_agent.agent.events import (
 )
 from ds_course_agent.agent.hooks import HookManager
 from ds_course_agent.agent.routing import (
+    EnrichmentPlan,
     ExecutionMode,
     QueryContext,
     RetrievalPolicy,
@@ -98,6 +102,55 @@ def test_sync_turn_emits_typed_lifecycle_and_persists_once(monkeypatch) -> None:
     ]
     assert events[-1].result.content == "同步回答"
     assert [message.type for message in history.messages] == ["human", "ai"]
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("degraded", [False, True])
+def test_session_practice_runs_once_after_successful_persisted_turn(monkeypatch, stream, degraded) -> None:
+    history = _History()
+    state = _state(history)
+    state.decision = replace(state.decision, enrichment=EnrichmentPlan(record_learning_event=True))
+    service = AgentService.__new__(AgentService)
+    service._prepare_query_route = lambda *_args: state
+    calls = []
+
+    def schedule(student_id, session_id):
+        assert [message.type for message in history.messages] == ["human", "ai"]
+        calls.append((student_id, session_id))
+
+    service.learning_loop = SimpleNamespace(schedule=schedule)
+    result = replace(_result("教学回答"), degraded=degraded)
+    monkeypatch.setattr("ds_course_agent.agent.turn_runner.execute_route", lambda *_args, **_kwargs: result)
+    from ds_course_agent.agent.events import RouteResultEvent
+
+    monkeypatch.setattr(
+        "ds_course_agent.agent.turn_runner.iter_route_response",
+        lambda *_args: iter([RouteResultEvent(result=result)]),
+    )
+    events = list(iter_turn_events(service, "解释 PCA", "session-events", student_id="student-events", stream=stream))
+    assert isinstance(events[-1], TurnEndEvent)
+    assert calls == ([] if degraded else [("student-events", "session-events")])
+
+
+def test_empty_retrieval_does_not_schedule_practice(monkeypatch) -> None:
+    state = _state(_History())
+    state.decision = replace(
+        state.decision,
+        execution_mode=ExecutionMode.GROUNDED_GENERATION,
+        enrichment=EnrichmentPlan(record_learning_event=True),
+    )
+    service = AgentService.__new__(AgentService)
+    service._prepare_query_route = lambda *_args: state
+
+    def unexpected(*_args):
+        pytest.fail("a no-evidence response must not trigger a quiz")
+
+    service.learning_loop = SimpleNamespace(schedule=unexpected)
+    monkeypatch.setattr(
+        "ds_course_agent.agent.turn_runner.execute_route", lambda *_args, **_kwargs: _result("没有相关材料")
+    )
+    events = list(iter_turn_events(service, "问题", "session-events", stream=False))
+    assert isinstance(events[-1], TurnEndEvent)
 
 
 def test_sync_and_stream_public_methods_consume_shared_executor(monkeypatch) -> None:

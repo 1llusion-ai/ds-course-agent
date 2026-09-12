@@ -43,6 +43,7 @@ class AssessmentRecord(BaseModel):
 
     id: str
     student_id: str
+    session_id: str | None = None
     request: GenerateQuestionsRequest
     quiz: GeneratedQuiz
     question_ids: tuple[str, ...]
@@ -68,6 +69,9 @@ class AssessmentRecord(BaseModel):
                 raise ValueError("submitted assessments require opened_at and submitted_at")
             if len(self.answers) != len(self.question_ids):
                 raise ValueError("submitted assessments require one answer per question")
+            answer_ids = tuple(answer.question_id for answer in self.answers)
+            if set(answer_ids) != set(self.question_ids) or len(set(answer_ids)) != len(answer_ids):
+                raise ValueError("submitted assessments require exactly one answer per question ID")
         return self
 
 
@@ -77,6 +81,7 @@ class AssessmentSummary(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: str
+    session_id: str | None = None
     title: str
     status: AssessmentStatus
     question_count: int
@@ -149,6 +154,7 @@ class AssessmentResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: str
+    session_id: str | None = None
     title: str
     status: AssessmentStatus
     opened_at: datetime

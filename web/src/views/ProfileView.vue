@@ -67,6 +67,17 @@
       <div class="profile-workspace">
         <div class="profile-primary">
           <section class="profile-section">
+            <div class="section-heading"><h2>测验表现</h2></div>
+            <div v-if="practice.length" class="signal-list">
+              <button v-for="item in practice" :key="item.concept_id" type="button" class="signal-item" @click="askAboutConcept(item.display_name, '请结合我的测验表现讲解')">
+                <strong>{{ item.display_name }}</strong>
+                <span>最近 {{ item.recent_correct_count }} / {{ item.recent_answered_count }} 题正确</span>
+                <small>{{ practiceLabels[item.level] }} · 累计 {{ item.answered_count }} 题</small>
+              </button>
+            </div>
+            <p v-else class="empty-copy">暂无测验记录，掌握情况尚待了解。</p>
+          </section>
+          <section class="profile-section">
             <div class="section-heading">
               <div>
                 <span class="section-label">Learning signals</span>
@@ -279,6 +290,12 @@ const recentConcepts = computed(() => detail.value?.recent_concepts || [])
 const activeWeakSpots = computed(() => detail.value?.weak_spots || [])
 const pendingWeakSpots = computed(() => detail.value?.pending_weak_spots || [])
 const resolvedWeakSpots = computed(() => detail.value?.resolved_weak_spots || [])
+const practice = computed(() => detail.value?.practice || [])
+const practiceLabels = {
+  needs_practice: '仍需巩固',
+  practiced: '已有正确作答',
+  ready_for_extension: '可尝试拓展'
+}
 
 const focusConceptText = computed(() => {
   const names = recentConcepts.value.slice(0, 3).map(concept => concept.display_name).filter(Boolean)

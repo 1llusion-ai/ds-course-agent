@@ -45,7 +45,7 @@ def test_active_weak_spot_is_selected_at_basic_difficulty() -> None:
     assert request.difficulty is Difficulty.BASIC
 
 
-def test_recent_practiced_concept_advances_to_intermediate() -> None:
+def test_repeated_mentions_do_not_claim_practice_readiness() -> None:
     focus = LearnerConceptFocus(
         concept_id="cross_validation",
         display_name="交叉验证",
@@ -60,10 +60,10 @@ def test_recent_practiced_concept_advances_to_intermediate() -> None:
     request = AssessmentAssignmentPlanner().plan((), state)
 
     assert request.target_kc_id == "cross_validation"
-    assert request.difficulty is Difficulty.INTERMEDIATE
+    assert request.difficulty is Difficulty.BASIC
 
 
-def test_resolved_weak_spot_is_retested_at_advanced_difficulty() -> None:
+def test_self_reported_resolution_does_not_skip_basic_practice() -> None:
     resolved = _weak_spot("regularization", resolved=True)
     state = LearnerStateSnapshot(student_id="s1", resolved_weak_spots=(resolved,))
 
@@ -72,4 +72,4 @@ def test_resolved_weak_spot_is_retested_at_advanced_difficulty() -> None:
         state,
     )
 
-    assert request.difficulty is Difficulty.ADVANCED
+    assert request.difficulty is Difficulty.BASIC

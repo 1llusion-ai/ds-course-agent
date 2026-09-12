@@ -201,3 +201,46 @@ def test_status_filter_is_typed_and_rejects_unknown_values(client: TestClient) -
     assert valid.status_code == 200
     assert service.calls[0] == ("list", "student-1", (AssessmentStatus.SUBMITTED,))
     assert invalid.status_code == 422
+
+
+def test_real_submission_dependency_updates_profile_without_duplicate_evidence(client, monkeypatch, tmp_path) -> None:
+    from tests.test_session_learning_loop import FixtureGenerator, mention
+
+    import ds_course_agent.api.routers.profile as profile_module
+    import ds_course_agent.shared.config as config
+    import ds_course_agent.teaching.memory_core as memory_module
+    from ds_course_agent.assessment.application import AssessmentApplicationService
+    from ds_course_agent.assessment.models import GenerateQuestionsRequest
+    from ds_course_agent.assessment.repository import AssessmentRepository
+    from ds_course_agent.teaching.learning_events import EventType
+
+    memory = memory_module.MemoryCore(str(tmp_path / "history"))
+    monkeypatch.setattr(memory_module, "_memory_core", memory)
+    monkeypatch.setattr(profile_module, "get_memory", lambda: memory)
+    monkeypatch.setattr(config, "ASSESSMENT_DB_PATH", str(tmp_path / "assessments.db"))
+    mention(memory, "overfitting")
+    service = AssessmentApplicationService(AssessmentRepository(), FixtureGenerator())
+    summary = service.assign(
+        "student", GenerateQuestionsRequest(target_kc_id="overfitting", count=2), session_id="session"
+    )
+    headers = {"x-test-student-id": "student"}
+    opened = client.post(f"/api/assessments/{summary.id}/open", headers=headers).json()
+    payload = {
+        "answers": [
+            {"question_id": item["id"], "selected_option_id": "B", "response_time_ms": 1000}
+            for item in opened["questions"]
+        ]
+    }
+    response = client.post(f"/api/assessments/{summary.id}/submit", headers=headers, json=payload)
+    assert response.status_code == 200
+    assert response.json()["correct_count"] == 0
+    assert response.json()["session_id"] == "session"
+    repeat = client.post(f"/api/assessments/{summary.id}/submit", headers=headers, json=payload)
+    assert repeat.json() == response.json()
+    profile = client.get("/api/profile/detail", headers=headers).json()
+    assert profile["practice"][0]["concept_id"] == "overfitting"
+    assert profile["practice"][0]["answered_count"] == 2
+    assert profile["practice"][0]["level"] == "needs_practice"
+    assert len(memory.load_events("student", [EventType.QUESTION_ANSWERED])) == 2
+    other = client.get(f"/api/assessments/{summary.id}/result", headers={"x-test-student-id": "other"})
+    assert other.status_code == 404

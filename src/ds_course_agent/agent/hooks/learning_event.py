@@ -148,6 +148,23 @@ class LearningEventHook:
                 enable_hash=False,
             )
             record_event_fn(concept_event)
+            recorded_ids = {learning_concept["concept_id"]}
+            for concept in matched_concepts:
+                if concept.concept_id in recorded_ids or not getattr(concept, "event_eligible", True):
+                    continue
+                recorded_ids.add(concept.concept_id)
+                record_event_fn(
+                    build_concept_mentioned_event(
+                        session_id=session_id,
+                        student_id=student_id,
+                        concept_id=concept.concept_id,
+                        concept_name=concept.display_name,
+                        chapter=concept.chapter,
+                        question_type=classify_question_type_fn(question),
+                        matched_score=float(concept.score),
+                        raw_question=question,
+                    )
+                )
 
         distinction_event = None
         if (

@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from ds_course_agent.teaching.practice import ConceptPractice
+
 
 class ConceptFocus(BaseModel):
     concept_id: str
@@ -60,6 +62,7 @@ class ProfileSummary(BaseModel):
     weak_spots: list[WeakSpot]
     resolved_weak_spot_count: int = 0
     total_overcome_weak_spots: int = 0
+    practice: list[ConceptPractice] = Field(default_factory=list)
 
 
 class ProfileDetail(BaseModel):
@@ -72,3 +75,4 @@ class ProfileDetail(BaseModel):
     chapter_stats: dict[str, int]
     daily_activity: dict[str, int]
     stats: ProfileStats
+    practice: list[ConceptPractice] = Field(default_factory=list)

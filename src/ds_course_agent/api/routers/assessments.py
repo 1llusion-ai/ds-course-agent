@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel
 
+from ds_course_agent.agent.learning_loop import get_session_learning_loop
 from ds_course_agent.api.auth.deps import get_current_student_id
 from ds_course_agent.assessment.application import (
     AssessmentApplicationService,
@@ -12,8 +14,8 @@ from ds_course_agent.assessment.application import (
     AssessmentNotFoundError,
     AssessmentStateError,
     AssessmentSubmissionError,
-    get_assessment_application_service,
 )
+from ds_course_agent.assessment.preparation import PreparationStatus
 from ds_course_agent.assessment.records import (
     AssessmentResult,
     AssessmentStatus,
@@ -21,9 +23,41 @@ from ds_course_agent.assessment.records import (
     StudentAssessment,
     SubmitAssessmentRequest,
 )
+from ds_course_agent.teaching.assessment_evidence import AssessmentEvidenceRecorder
 
 router = APIRouter()
 DEFAULT_VISIBLE_STATUSES = (AssessmentStatus.READY, AssessmentStatus.IN_PROGRESS)
+
+
+class PreparationSummary(BaseModel):
+    """Student-visible preparation status without generation controls or answer keys."""
+
+    id: str
+    session_id: str
+    display_name: str
+    status: PreparationStatus
+    assessment_id: str | None
+
+
+@router.get("/preparations", response_model=tuple[PreparationSummary, ...])
+async def list_preparations(student_id: str = Depends(get_current_student_id)) -> tuple[PreparationSummary, ...]:
+    """Show automatic practice preparation after completed course conversations."""
+
+    jobs = await run_in_threadpool(get_session_learning_loop().list_preparations, student_id)
+    return tuple(PreparationSummary.model_validate(job, from_attributes=True) for job in jobs)
+
+
+@router.post("/preparations/{preparation_id}/retry", response_model=PreparationSummary)
+async def retry_preparation(
+    preparation_id: str, student_id: str = Depends(get_current_student_id)
+) -> PreparationSummary:
+    """Retry one failed preparation owned by the authenticated student."""
+
+    try:
+        job = await run_in_threadpool(get_session_learning_loop().retry, preparation_id, student_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Preparation not found.") from exc
+    return PreparationSummary.model_validate(job, from_attributes=True)
 
 
 def get_student_assessment_service(
@@ -31,7 +65,7 @@ def get_student_assessment_service(
 ) -> AssessmentApplicationService:
     """Resolve the lifecycle service only after student authentication succeeds."""
 
-    return get_assessment_application_service()
+    return AssessmentApplicationService(submission_recorder=AssessmentEvidenceRecorder())
 
 
 def _parse_statuses(raw_statuses: str) -> tuple[AssessmentStatus, ...]:

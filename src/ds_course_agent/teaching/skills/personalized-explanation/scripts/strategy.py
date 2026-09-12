@@ -11,6 +11,7 @@ from ds_course_agent.teaching.learner_state import (
     rank_active_weak_spots,
     rank_recent_concepts,
 )
+from ds_course_agent.teaching.practice_guidance import build_practice_guidance
 
 
 @dataclass
@@ -19,6 +20,7 @@ class TeachingStrategy:
     relevant_weak_spots: list[str] = field(default_factory=list)
     relevant_known_concepts: list[str] = field(default_factory=list)
     suggest_examples: bool = False
+    practice_guidance: str = ""
 
 
 def _dedupe_keep_order(items: Sequence[str]) -> list[str]:
@@ -73,12 +75,15 @@ def build_strategy(
         relevant_weak_spots=_dedupe_keep_order(relevant_weak)[:2],
         relevant_known_concepts=_dedupe_keep_order(relevant_known)[:2],
         suggest_examples=bool(relevant_weak),
+        practice_guidance=build_practice_guidance(learner_state, target_ids),
     )
 
 
 def strategy_to_string(strategy: TeachingStrategy, matched_concepts: list) -> str:
     """Render strategy into a short natural-language summary for prompting."""
     parts: list[str] = []
+    if strategy.practice_guidance:
+        parts.append(strategy.practice_guidance)
 
     if strategy.relevant_weak_spots:
         parts.append(f"学生在 {', '.join(strategy.relevant_weak_spots)} 上还有明显困惑，解释时要更直观，并强调区别。")

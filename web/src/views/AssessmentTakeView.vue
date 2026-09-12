@@ -37,7 +37,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -54,6 +54,8 @@ const timings = ref({})
 const changeCounts = ref({})
 const questionStartedAt = ref(performance.now())
 const error = ref('')
+const submitted = ref(false)
+let loadVersion = 0
 const currentQuestion = computed(() => assessment.value.questions[currentIndex.value])
 const answeredCount = computed(() => Object.values(answers.value).filter(Boolean).length)
 const draftKey = computed(() => `ds-course-agent.assessment-draft.${route.params.assessmentId}`)
@@ -127,11 +129,12 @@ async function confirmSubmit() {
   const payload = assessment.value.questions.map(question => ({
     question_id: question.id,
     selected_option_id: answers.value[question.id],
-    response_time_ms: Math.round(timings.value[question.id] || 0),
+    response_time_ms: Math.min(86_400_000, Math.round(timings.value[question.id] || 0)),
     answer_change_count: changeCounts.value[question.id] || 0
   }))
   try {
     await store.submitAssessment(route.params.assessmentId, payload)
+    submitted.value = true
     clearDraft()
     router.replace(`/assessments/${route.params.assessmentId}/result`)
   } catch (requestError) {
@@ -139,21 +142,35 @@ async function confirmSubmit() {
   }
 }
 
-onMounted(async () => {
+async function loadAssessment() {
+  const version = ++loadVersion
+  error.value = ''
+  answers.value = {}
+  timings.value = {}
+  changeCounts.value = {}
+  currentIndex.value = 0
+  submitted.value = false
   try {
+    store.current = null
     await store.openAssessment(route.params.assessmentId)
+    if (version !== loadVersion) return
     restoreDraft()
     questionStartedAt.value = performance.now()
   } catch (requestError) {
+    if (version !== loadVersion) return
     if (requestError.response?.status === 409) {
       router.replace(`/assessments/${route.params.assessmentId}/result`)
       return
     }
     error.value = requestError.response?.data?.detail || '请返回列表后重试。'
   }
-})
+}
+
+onMounted(loadAssessment)
+watch(() => route.params.assessmentId, loadAssessment)
 
 onBeforeUnmount(() => {
+  if (submitted.value) return
   recordElapsed()
   saveDraft()
 })
