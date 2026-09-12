@@ -26,12 +26,10 @@
         <div class="map-index__scroll">
           <div class="map-index__heading">
             <span>课程结构</span>
-            <small>{{ kcCount }} KC</small>
           </div>
           <button type="button" class="map-overview" :class="{ active: !chapter }" @click="selectChapter('')">
             <el-icon><Connection /></el-icon>
             <span>全部章节</span>
-            <small>{{ graph.chapters.length }}</small>
           </button>
           <div
             v-for="item in graph.chapters"
@@ -47,7 +45,6 @@
             >
               <i :style="{ background: chapterColor(item.chapter) }" />
               <span>{{ item.title }}</span>
-              <small>{{ item.kc_count }}</small>
               <el-icon class="map-chapter__chevron"><ArrowRight /></el-icon>
             </button>
             <div v-if="chapter === item.chapter && !search.trim()" class="map-chapter-kcs">
@@ -66,7 +63,6 @@
 
           <div v-if="search.trim()" class="map-index__heading map-index__heading--concepts">
             <span>搜索结果</span>
-            <small>{{ listedNodes.length }}</small>
           </div>
           <p v-if="search.trim() && !listedNodes.length" class="map-empty">没有找到匹配的知识点。</p>
           <button
@@ -286,7 +282,6 @@ const {
 })
 const byId = computed(() => new Map((graph.value?.nodes || []).map(node => [node.canonical_id, node])))
 const concepts = computed(() => graph.value?.nodes.filter(node => node.node_type === 'kc') || [])
-const kcCount = computed(() => concepts.value.length)
 const chapterTitle = computed(() => graph.value.chapters.find(item => item.chapter === chapter.value)?.title)
 const scopedNodeIds = computed(() => {
   if (selectedId.value) return neighborsOf(graph.value, selectedId.value, enabledRelations.value)
