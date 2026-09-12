@@ -30,26 +30,6 @@
   gap: 7px;
 }
 
-.map-panel-toggle-icon {
-  position: relative;
-  display: block;
-  width: 15px;
-  height: 13px;
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
-}
-
-.map-panel-toggle-icon::after {
-  position: absolute;
-  top: 1px;
-  right: 3px;
-  bottom: 1px;
-  width: 1.5px;
-  content: '';
-  background: currentColor;
-  border-radius: 1px;
-}
-
 .map-inspector__empty {
   display: grid;
   place-items: center;

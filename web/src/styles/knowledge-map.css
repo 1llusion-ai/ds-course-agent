@@ -281,11 +281,6 @@
   gap: 12px;
 }
 
-.map-inspector-toggle {
-  border: 1px solid var(--map-border);
-  background: var(--map-surface);
-}
-
 .map-stage__stats strong {
   margin-right: 3px;
   color: #292524;
