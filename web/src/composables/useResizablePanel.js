@@ -4,7 +4,15 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
 }
 
-export function useResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth, side = 'start' }) {
+export function useResizablePanel({
+  storageKey,
+  defaultWidth,
+  minWidth,
+  maxWidth,
+  side = 'start',
+  collapseThreshold = null,
+  onCollapse = null
+}) {
   const width = ref(readStoredWidth())
   const isResizing = ref(false)
   let resizeState = null
@@ -27,7 +35,7 @@ export function useResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth
     if (event.button !== 0) return
     event.preventDefault()
     isResizing.value = true
-    resizeState = { pointerX: event.clientX, width: width.value }
+    resizeState = { pointerX: event.clientX, width: width.value, collapseCommitted: false }
     previousCursor = document.documentElement.style.cursor
     previousUserSelect = document.documentElement.style.userSelect
     document.documentElement.style.cursor = 'col-resize'
@@ -40,16 +48,23 @@ export function useResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth
 
   function resizeFromPointer(event) {
     if (!resizeState) return
+    if (resizeState.collapseCommitted) return
     const direction = side === 'start' ? 1 : -1
-    width.value = clamp(
-      resizeState.width + ((event.clientX - resizeState.pointerX) * direction),
-      minWidth,
-      maxWidth
-    )
+    const nextWidth = resizeState.width + ((event.clientX - resizeState.pointerX) * direction)
+    if (Number.isFinite(collapseThreshold) && nextWidth <= collapseThreshold) {
+      resizeState.collapseCommitted = true
+      width.value = resizeState.width
+      onCollapse?.()
+      return
+    }
+
+    const pointerMinWidth = Number.isFinite(collapseThreshold) ? collapseThreshold : minWidth
+    width.value = clamp(nextWidth, pointerMinWidth, maxWidth)
   }
 
   function stopResize() {
     if (!resizeState) return
+    const { collapseCommitted } = resizeState
     resizeState = null
     isResizing.value = false
     document.documentElement.style.cursor = previousCursor
@@ -58,6 +73,8 @@ export function useResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth
     window.removeEventListener('pointerup', stopResize)
     window.removeEventListener('pointercancel', stopResize)
     window.removeEventListener('blur', stopResize)
+    if (collapseCommitted) return
+    if (width.value < minWidth) width.value = minWidth
     persistWidth()
   }
 

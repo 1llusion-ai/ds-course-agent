@@ -8,83 +8,92 @@
     <div
       v-else-if="graph"
       class="map-workspace"
-      :class="{ 'map-workspace--inspector-open': inspectorOpen }"
-      :style="{
-        '--map-index-width': `${indexWidth}px`,
-        '--map-inspector-width': `${inspectorWidth}px`
-      }"
     >
-      <aside class="map-index" aria-label="知识点导航">
-        <label class="map-search">
-          <el-icon><Search /></el-icon>
-          <input v-model="search" aria-label="搜索知识点" placeholder="搜索 KC 或别名" />
-          <button v-if="search" type="button" aria-label="清空搜索" title="清空搜索" @click="search = ''">
-            <el-icon><Close /></el-icon>
-          </button>
-        </label>
-
-        <div class="map-index__scroll">
-          <button type="button" class="map-overview" :class="{ active: !chapter }" @click="selectChapter('')">
-            <el-icon><Connection /></el-icon>
-            <span>全部章节</span>
-          </button>
-          <div
-            v-for="item in graph.chapters"
-            :key="item.chapter"
-            class="map-chapter-group"
-          >
+      <ResizableSidePanel
+        id="knowledge-map-index"
+        v-model:open="indexOpen"
+        class="map-index"
+        side="start"
+        label="知识点导航"
+        resize-label="调整知识点目录宽度"
+        storage-key="ds-course-agent.knowledgeMapIndexWidth"
+        :default-width="232"
+        :min-width="190"
+        :max-width="360"
+      >
+        <div class="map-index__content">
+          <div class="map-index__header">
+            <label class="map-search">
+              <el-icon><Search /></el-icon>
+              <input v-model="search" aria-label="搜索知识点" placeholder="搜索 KC 或别名" />
+              <button v-if="search" type="button" aria-label="清空搜索" title="清空搜索" @click="search = ''">
+                <el-icon><Close /></el-icon>
+              </button>
+            </label>
             <button
               type="button"
-              class="map-chapter"
-              :class="{ active: chapter === item.chapter }"
-              :aria-expanded="chapter === item.chapter"
-              @click="selectChapter(item.chapter)"
+              class="map-index-toggle"
+              aria-label="收起知识点导航"
+              title="收起知识点导航"
+              @click="collapseIndex"
             >
-              <i :style="{ background: chapterColor(item.chapter) }" />
-              <span>{{ item.title }}</span>
-              <el-icon class="map-chapter__chevron"><ArrowRight /></el-icon>
+              <PanelToggleIcon side="start" />
             </button>
-            <div v-if="chapter === item.chapter && !search.trim()" class="map-chapter-kcs">
-              <button
-                v-for="node in chapterNodes(item.chapter)"
-                :key="node.canonical_id"
-                type="button"
-                class="map-concept"
-                :class="{ active: selectedId === node.canonical_id }"
-                @click="selectNode(node.canonical_id)"
-              >
-                <span>{{ node.display_name }}</span>
-              </button>
-            </div>
           </div>
 
-          <div v-if="search.trim()" class="map-index__heading map-index__heading--concepts">
-            <span>搜索结果</span>
+          <div class="map-index__scroll">
+            <button type="button" class="map-overview" :class="{ active: !chapter }" @click="selectChapter('')">
+              <el-icon><Connection /></el-icon>
+              <span>全部章节</span>
+            </button>
+            <div
+              v-for="item in graph.chapters"
+              :key="item.chapter"
+              class="map-chapter-group"
+            >
+              <button
+                type="button"
+                class="map-chapter"
+                :class="{ active: chapter === item.chapter }"
+                :aria-expanded="chapter === item.chapter"
+                @click="selectChapter(item.chapter)"
+              >
+                <i :style="{ background: chapterColor(item.chapter) }" />
+                <span>{{ item.title }}</span>
+                <el-icon class="map-chapter__chevron"><ArrowRight /></el-icon>
+              </button>
+              <div v-if="chapter === item.chapter && !search.trim()" class="map-chapter-kcs">
+                <button
+                  v-for="node in chapterNodes(item.chapter)"
+                  :key="node.canonical_id"
+                  type="button"
+                  class="map-concept"
+                  :class="{ active: selectedId === node.canonical_id }"
+                  @click="selectNode(node.canonical_id)"
+                >
+                  <span>{{ node.display_name }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="search.trim()" class="map-index__heading map-index__heading--concepts">
+              <span>搜索结果</span>
+            </div>
+            <p v-if="search.trim() && !listedNodes.length" class="map-empty">没有找到匹配的知识点。</p>
+            <button
+              v-for="node in search.trim() ? listedNodes : []"
+              :key="node.canonical_id"
+              type="button"
+              class="map-concept"
+              :class="{ active: selectedId === node.canonical_id }"
+              @click="selectNode(node.canonical_id)"
+            >
+              <span>{{ node.display_name }}</span>
+              <small v-if="search.trim()">{{ node.chapter }}</small>
+            </button>
           </div>
-          <p v-if="search.trim() && !listedNodes.length" class="map-empty">没有找到匹配的知识点。</p>
-          <button
-            v-for="node in search.trim() ? listedNodes : []"
-            :key="node.canonical_id"
-            type="button"
-            class="map-concept"
-            :class="{ active: selectedId === node.canonical_id }"
-            @click="selectNode(node.canonical_id)"
-          >
-            <span>{{ node.display_name }}</span>
-            <small v-if="search.trim()">{{ node.chapter }}</small>
-          </button>
         </div>
-        <PanelResizeHandle
-          side="start"
-          label="调整知识点目录宽度"
-          :value="indexWidth"
-          :min="INDEX_MIN_WIDTH"
-          :max="INDEX_MAX_WIDTH"
-          @resize-start="startIndexResize"
-          @resize-keydown="resizeIndexFromKeyboard"
-          @reset="resetIndexWidth"
-        />
-      </aside>
+      </ResizableSidePanel>
 
       <section class="map-stage" aria-label="知识图谱浏览区">
         <div class="map-stage__toolbar">
@@ -93,6 +102,18 @@
           </div>
           <div class="map-stage__toolbar-actions">
             <button
+              v-if="!indexOpen"
+              type="button"
+              class="map-inspector-toggle"
+              aria-controls="knowledge-map-index"
+              :aria-expanded="indexOpen"
+              aria-label="展开知识点导航"
+              title="展开知识点导航"
+              @click="openIndex"
+            >
+              <PanelToggleIcon side="start" />
+            </button>
+            <button
               v-if="!inspectorOpen"
               type="button"
               class="map-inspector-toggle"
@@ -100,7 +121,7 @@
               :aria-expanded="inspectorOpen"
               aria-label="展开知识点详情面板"
               title="展开详情面板"
-              @click="inspectorOpen = true"
+              @click="openInspector"
             >
               <PanelToggleIcon side="end" />
             </button>
@@ -136,23 +157,19 @@
         </div>
       </section>
 
-      <Transition name="map-inspector">
-        <aside
-          v-if="inspectorOpen"
-          id="knowledge-map-inspector"
-          class="map-inspector"
-          aria-label="知识点详情"
-        >
-          <PanelResizeHandle
-            side="end"
-            label="调整知识点详情宽度"
-            :value="inspectorWidth"
-            :min="INSPECTOR_MIN_WIDTH"
-            :max="INSPECTOR_MAX_WIDTH"
-            @resize-start="startInspectorResize"
-            @resize-keydown="resizeInspectorFromKeyboard"
-            @reset="resetInspectorWidth"
-          />
+      <ResizableSidePanel
+        id="knowledge-map-inspector"
+        v-model:open="inspectorOpen"
+        class="map-inspector"
+        side="end"
+        label="知识点详情"
+        resize-label="调整知识点详情宽度"
+        storage-key="ds-course-agent.knowledgeMapInspectorWidth"
+        :default-width="310"
+        :min-width="260"
+        :max-width="520"
+      >
+        <div class="map-inspector__content">
           <div class="map-detail__heading">
             <span v-if="selectedNode"><i :style="{ background: chapterColor(selectedNode.chapter) }" />{{ selectedNode.chapter }}</span>
             <span v-else>知识点详情</span>
@@ -162,7 +179,7 @@
               :aria-expanded="inspectorOpen"
               aria-label="收起知识点详情面板"
               title="收起详情面板"
-              @click="inspectorOpen = false"
+              @click="collapseInspector"
             >
               <PanelToggleIcon side="end" />
             </button>
@@ -209,8 +226,8 @@
             <h2>选择一个 KC</h2>
             <p>从左侧目录或知识图谱中选择概念，查看它的关系与学习内容。</p>
           </div>
-        </aside>
-      </Transition>
+        </div>
+      </ResizableSidePanel>
     </div>
   </main>
 </template>
@@ -220,17 +237,12 @@ import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Close, Connection, Search } from '@element-plus/icons-vue'
 import { knowledgeMapApi } from '../api/knowledgeMap'
-import PanelResizeHandle from '../components/PanelResizeHandle.vue'
 import PanelToggleIcon from '../components/PanelToggleIcon.vue'
-import { useResizablePanel } from '../composables/useResizablePanel'
+import ResizableSidePanel from '../components/ResizableSidePanel.vue'
 import { chapterColor, learningStateMeta, learningStates, neighborsOf, questionForNode, relationTypes } from '../utils/knowledgeMap'
 
 const KnowledgeMapCanvas = defineAsyncComponent(() => import('../components/KnowledgeMapCanvas.vue'))
 
-const INDEX_MIN_WIDTH = 190
-const INDEX_MAX_WIDTH = 360
-const INSPECTOR_MIN_WIDTH = 260
-const INSPECTOR_MAX_WIDTH = 520
 const route = useRoute()
 const router = useRouter()
 const graph = ref(null)
@@ -240,33 +252,10 @@ const notice = ref('')
 const search = ref('')
 const chapter = ref('')
 const selectedId = ref('')
+const indexOpen = ref(true)
 const inspectorOpen = ref(false)
 const showPersonalState = ref(false)
 const enabledRelations = ref(Object.keys(relationTypes))
-const {
-  width: indexWidth,
-  startResize: startIndexResize,
-  resizeFromKeyboard: resizeIndexFromKeyboard,
-  resetWidth: resetIndexWidth
-} = useResizablePanel({
-  storageKey: 'ds-course-agent.knowledgeMapIndexWidth',
-  defaultWidth: 232,
-  minWidth: INDEX_MIN_WIDTH,
-  maxWidth: INDEX_MAX_WIDTH,
-  side: 'start'
-})
-const {
-  width: inspectorWidth,
-  startResize: startInspectorResize,
-  resizeFromKeyboard: resizeInspectorFromKeyboard,
-  resetWidth: resetInspectorWidth
-} = useResizablePanel({
-  storageKey: 'ds-course-agent.knowledgeMapInspectorWidth',
-  defaultWidth: 310,
-  minWidth: INSPECTOR_MIN_WIDTH,
-  maxWidth: INSPECTOR_MAX_WIDTH,
-  side: 'end'
-})
 const byId = computed(() => new Map((graph.value?.nodes || []).map(node => [node.canonical_id, node])))
 const concepts = computed(() => graph.value?.nodes?.filter(node => node.node_type === 'kc') || [])
 const chapterTitle = computed(() => graph.value?.chapters?.find(item => item.chapter === chapter.value)?.title)
@@ -298,8 +287,24 @@ function relationLabel(item) {
 function selectChapter(value) {
   chapter.value = chapter.value === value ? '' : value
   selectedId.value = ''
-  inspectorOpen.value = false
+  collapseInspector()
   notice.value = ''
+}
+
+function collapseIndex() {
+  indexOpen.value = false
+}
+
+function collapseInspector() {
+  inspectorOpen.value = false
+}
+
+function openIndex() {
+  indexOpen.value = true
+}
+
+function openInspector() {
+  inspectorOpen.value = true
 }
 
 function chapterNodes(value) {
@@ -312,7 +317,7 @@ function selectNode(id) {
   if (node.node_type === 'chapter') { selectChapter(node.chapter); return }
   if (chapter.value && chapter.value !== node.chapter) chapter.value = node.chapter
   selectedId.value = id
-  inspectorOpen.value = true
+  openInspector()
   notice.value = ''
 }
 

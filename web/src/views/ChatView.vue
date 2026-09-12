@@ -118,61 +118,74 @@
       </div>
     </div>
 
-    <Transition name="sources-panel">
-      <aside v-if="sourcesPanelOpen" class="sources-panel" aria-label="搜索来源">
-      <div class="sources-panel__header">
-        <div>
-          <h2>{{ sourcesPanelTitle }}</h2>
+    <ResizableSidePanel
+      id="chat-sources-panel"
+      v-model:open="sourcesPanelOpen"
+      class="sources-panel"
+      side="end"
+      label="搜索来源"
+      resize-label="调整搜索来源面板宽度"
+      storage-key="ds-course-agent.sourcesPanelWidth"
+      :default-width="390"
+      :min-width="320"
+      :max-width="520"
+      mobile-mode="overlay"
+    >
+      <div class="sources-panel__content">
+        <div class="sources-panel__header">
+          <div>
+            <h2>{{ sourcesPanelTitle }}</h2>
+          </div>
+          <button
+            type="button"
+            class="sources-panel__toggle"
+            aria-label="收起来源面板"
+            title="收起来源面板"
+            @click="closeSourcesPanel"
+          >
+            <PanelToggleIcon side="end" />
+          </button>
         </div>
-        <button
-          type="button"
-          class="sources-panel__toggle"
-          aria-label="收起来源面板"
-          title="收起来源面板"
-          @click="closeSourcesPanel"
-        >
-          <PanelToggleIcon side="end" />
-        </button>
-      </div>
 
-      <div class="sources-panel__list">
-        <component
-          :is="source.isExternal ? 'a' : 'div'"
-          v-for="source in sourcesPanelSources"
-          :key="source.key"
-          class="sources-panel__card"
-          :href="source.isExternal ? source.url : undefined"
-          :target="source.isExternal ? '_blank' : undefined"
-          :rel="source.isExternal ? 'noopener noreferrer' : undefined"
-          :title="source.title"
-        >
-          <span class="sources-panel__favicon-wrap">
-            <span class="sources-panel__favicon-fallback" aria-hidden="true">🌐</span>
-            <img
-              v-if="source.favicon"
-              class="sources-panel__favicon"
-              :src="source.favicon"
-              :alt="source.domain || source.label"
-              @error="$event.target.style.display = 'none'"
-            />
-          </span>
-          <span class="sources-panel__body">
-            <span class="sources-panel__title">{{ source.label }}</span>
-            <span class="sources-panel__domain">{{ source.domain || source.url }}</span>
-            <span v-if="source.snippet" class="sources-panel__snippet">{{ source.snippet }}</span>
-            <span v-if="source.provider || source.published_at" class="sources-panel__meta">
-              {{ [source.provider, source.published_at].filter(Boolean).join(' · ') }}
+        <div class="sources-panel__list">
+          <component
+            :is="source.isExternal ? 'a' : 'div'"
+            v-for="source in sourcesPanelSources"
+            :key="source.key"
+            class="sources-panel__card"
+            :href="source.isExternal ? source.url : undefined"
+            :target="source.isExternal ? '_blank' : undefined"
+            :rel="source.isExternal ? 'noopener noreferrer' : undefined"
+            :title="source.title"
+          >
+            <span class="sources-panel__favicon-wrap">
+              <span class="sources-panel__favicon-fallback" aria-hidden="true">🌐</span>
+              <img
+                v-if="source.favicon"
+                class="sources-panel__favicon"
+                :src="source.favicon"
+                :alt="source.domain || source.label"
+                @error="$event.target.style.display = 'none'"
+              />
             </span>
-          </span>
-        </component>
+            <span class="sources-panel__body">
+              <span class="sources-panel__title">{{ source.label }}</span>
+              <span class="sources-panel__domain">{{ source.domain || source.url }}</span>
+              <span v-if="source.snippet" class="sources-panel__snippet">{{ source.snippet }}</span>
+              <span v-if="source.provider || source.published_at" class="sources-panel__meta">
+                {{ [source.provider, source.published_at].filter(Boolean).join(' · ') }}
+              </span>
+            </span>
+          </component>
+        </div>
       </div>
-      </aside>
-    </Transition>
+    </ResizableSidePanel>
 
     <button
       v-if="!sourcesPanelOpen && sourcesPanelSources.length"
       type="button"
       class="sources-panel-toggle"
+      aria-controls="chat-sources-panel"
       aria-label="展开来源面板"
       title="展开来源面板"
       @click="sourcesPanelOpen = true"
@@ -186,10 +199,12 @@
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { EditPen } from '@element-plus/icons-vue'
 
 import ChatInput from '../components/ChatInput.vue'
 import ChatMessage from '../components/ChatMessage.vue'
 import PanelToggleIcon from '../components/PanelToggleIcon.vue'
+import ResizableSidePanel from '../components/ResizableSidePanel.vue'
 import { useChatStore } from '../stores/chat'
 import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
@@ -276,6 +291,9 @@ watch(
       if (sessionStore.currentSessionId !== newId) {
         sessionStore.setCurrentSession(newId)
       }
+      if (chatStore.activeSessionId !== newId) {
+        loadSession(newId)
+      }
       return
     }
 
@@ -288,19 +306,10 @@ watch(
   { immediate: true }
 )
 
-watch(() => sessionStore.currentSessionId, (newId) => {
-  cancelHeaderRename()
-  clearWebSearchTurnNotice()
-  if (!newId) return
-  const exists = sessionStore.sessions.some(session => session.id === newId)
-  if (!exists) return
-  if (chatStore.activeSessionId !== newId) {
-    loadSession(newId)
-  }
-})
-
 async function loadSession(sessionId) {
   const loadToken = ++sessionLoadToken
+  cancelHeaderRename()
+  clearWebSearchTurnNotice()
   sessionLoading.value = true
   sessionStore.setCurrentSession(sessionId)
   chatStore.setActiveSession(sessionId)
@@ -975,26 +984,20 @@ onBeforeUnmount(() => {
 }
 
 .sources-panel {
-  position: relative;
-  width: min(390px, 34vw);
-  min-width: 320px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
   background: transparent;
   border-left: 1px solid rgba(214, 211, 209, 0.74);
 }
 
-.sources-panel-enter-active,
-.sources-panel-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
+.sources-panel[aria-hidden="true"] {
+  border-left-width: 0;
 }
 
-.sources-panel-enter-from,
-.sources-panel-leave-to {
-  opacity: 0;
-  transform: translateX(18px);
+.sources-panel__content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: transparent;
 }
 
 .sources-panel__header {
@@ -1176,14 +1179,6 @@ onBeforeUnmount(() => {
 
   .input-area {
     padding: 12px 14px 14px;
-  }
-
-  .sources-panel {
-    position: absolute;
-    inset: 0 0 0 auto;
-    z-index: 30;
-    width: min(92vw, 390px);
-    min-width: 0;
   }
 
   .sources-panel-toggle {

@@ -7,7 +7,10 @@
         'app-shell__sidebar--narrow': narrowViewport,
         'app-shell__sidebar--resizing': sidebarResizing
       }"
-      :style="{ width: `${sidebarWidth}px` }"
+      :style="{
+        width: `${sidebarWidth}px`,
+        '--app-sidebar-expanded-width': `${sidebarWidth}px`
+      }"
     >
       <ChatSidebar
         :collapsed="sidebarCollapsed || narrowViewport"
@@ -55,6 +58,7 @@ const SIDEBAR_COLLAPSED_STORAGE_KEY = 'ds-course-agent.sidebarCollapsed'
 const SIDEBAR_WIDTH_STORAGE_KEY = 'ds-course-agent.sidebarWidth'
 const SIDEBAR_MIN_WIDTH = 224
 const SIDEBAR_MAX_WIDTH = 380
+const SIDEBAR_COLLAPSE_THRESHOLD = SIDEBAR_MIN_WIDTH - 20
 const THEME_STORAGE_KEY = 'ds-course-agent.theme'
 
 const router = useRouter()
@@ -73,7 +77,9 @@ const {
   defaultWidth: 288,
   minWidth: SIDEBAR_MIN_WIDTH,
   maxWidth: SIDEBAR_MAX_WIDTH,
-  side: 'start'
+  side: 'start',
+  collapseThreshold: SIDEBAR_COLLAPSE_THRESHOLD,
+  onCollapse: () => setSidebarCollapsed(true)
 })
 const theme = ref(readThemePreference())
 const sessionBootstrapPending = ref(!sessionStore.loaded)
@@ -100,7 +106,11 @@ function readThemePreference() {
 }
 
 function toggleSidebar() {
-  sidebarCollapsed.value = !sidebarCollapsed.value
+  setSidebarCollapsed(!sidebarCollapsed.value)
+}
+
+function setSidebarCollapsed(value) {
+  sidebarCollapsed.value = value
   if (typeof window !== 'undefined') {
     window.localStorage.setItem(
       SIDEBAR_COLLAPSED_STORAGE_KEY,
@@ -181,7 +191,16 @@ onBeforeUnmount(() => {
   position: relative;
   flex-shrink: 0;
   height: 100%;
-  transition: width 0.18s ease;
+  overflow: hidden;
+  transition: width 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-shell__sidebar > :deep(.chat-sidebar:not(.chat-sidebar--collapsed)) {
+  min-width: var(--app-sidebar-expanded-width);
+}
+
+.app-shell__sidebar > :deep(.panel-resize-handle--start) {
+  right: 0;
 }
 
 .app-shell__sidebar--collapsed {

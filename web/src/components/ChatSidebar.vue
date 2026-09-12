@@ -402,9 +402,8 @@ const groupedSessions = computed(() => {
 
 const showSessionEmpty = computed(() => hasSearchQuery.value && groupedSessions.value.length === 0)
 
-function selectSession(id) {
-  sessionStore.setCurrentSession(id)
-  router.push(`/chat/${id}`)
+async function selectSession(id) {
+  await router.push(`/chat/${id}`)
 }
 
 function handleProfileOpen() {
@@ -483,12 +482,12 @@ function handleBrandClick() {
   emit('new-chat')
 }
 
-function handleSessionClick(id, event) {
+async function handleSessionClick(id, event) {
   // 如果点击来自 dropdown 内部（按钮或菜单项），不触发会话切换
   if (event.target.closest('.el-dropdown') || event.target.closest('.el-dropdown-menu')) {
     return
   }
-  selectSession(id)
+  await selectSession(id)
 }
 
 function handleCreate() {

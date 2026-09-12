@@ -1,19 +1,10 @@
 .map-inspector {
-  position: relative;
-  padding: 20px;
-  overflow-y: auto;
   border-left: 1px solid var(--map-border);
 }
 
-.map-inspector-enter-active,
-.map-inspector-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-
-.map-inspector-enter-from,
-.map-inspector-leave-to {
-  opacity: 0;
-  transform: translateX(18px);
+.map-inspector__content {
+  padding: 20px;
+  overflow-y: auto;
 }
 
 .map-detail__heading {
@@ -57,8 +48,8 @@
   line-height: 1.7;
 }
 
-.map-inspector > h2,
-.map-inspector > template + h2 {
+.map-inspector__content > h2,
+.map-inspector__content > template + h2 {
   margin: 15px 0 9px;
   overflow-wrap: anywhere;
   font-size: 23px;
