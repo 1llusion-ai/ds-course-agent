@@ -127,6 +127,24 @@ def test_submit_scores_on_server_uses_server_duration_and_is_idempotent(lifecycl
     assert first.questions[0].sources[0].page == 121
 
 
+def test_reading_result_does_not_republish_submission_evidence(lifecycle) -> None:
+    service, _generator, _clock, summary = lifecycle
+    recorder_calls = []
+    service._submission_recorder = recorder_calls.append
+    assessment = service.open(summary.id, "student-1")
+    answer = AnswerSubmission(
+        question_id=assessment.questions[0].id,
+        selected_option_id="B",
+        response_time_ms=100,
+    )
+
+    service.submit(summary.id, "student-1", (answer,))
+    service.result(summary.id, "student-1")
+    service.result(summary.id, "student-1")
+
+    assert len(recorder_calls) == 1
+
+
 def test_submission_requires_open_complete_unique_answers_and_stable_retries(lifecycle) -> None:
     service, _generator, _clock, summary = lifecycle
     with pytest.raises(AssessmentStateError):

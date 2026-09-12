@@ -171,7 +171,6 @@ class AssessmentApplicationService:
         record = self._get(assessment_id, student_id)
         if record.status is not AssessmentStatus.SUBMITTED:
             raise AssessmentStateError("assessment result is unavailable before submission")
-        self._record_submission(record)
         return self._result(record)
 
     def _record_submission(self, record: AssessmentRecord) -> None:
