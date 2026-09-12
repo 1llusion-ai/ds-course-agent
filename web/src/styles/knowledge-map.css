@@ -330,11 +330,6 @@
   font-size: 11px;
 }
 
-.map-view-options .el-button {
-  margin: 0;
-  color: #57534e;
-}
-
 .map-canvas-wrap {
   position: relative;
   min-height: 0;
@@ -499,7 +494,6 @@
 
 :global(html.theme-dark) .map-overview,
 :global(html.theme-dark) .map-chapter,
-:global(html.theme-dark) .map-concept,
-:global(html.theme-dark) .map-view-options .el-button {
+:global(html.theme-dark) .map-concept {
   color: var(--dark-text-muted);
 }
