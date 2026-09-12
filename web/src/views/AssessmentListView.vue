@@ -1,16 +1,17 @@
 <template>
   <main class="assessment-page assessment-list-page">
     <section class="assessment-list-toolbar">
-      <div>
-        <small>我的测验</small>
-        <h1>{{ activeTab === 'active' ? '待完成测验' : '完成记录' }}</h1>
+      <div class="assessment-list-tabs">
+        <el-segmented v-model="activeTab" class="assessment-tabs" :options="tabs" />
       </div>
-      <div class="assessment-list-filters">
-        <el-select v-model="sessionFilter" aria-label="筛选会话" placeholder="全部会话">
-          <el-option label="全部会话" value="" />
-          <el-option v-for="session in sessionStore.sortedSessions" :key="session.id" :label="session.title || '未命名会话'" :value="session.id" />
-        </el-select>
-        <el-segmented v-model="activeTab" :options="tabs" />
+      <div class="assessment-list-heading-row">
+        <h1>{{ activeTab === 'active' ? '待完成测验' : '完成记录' }}</h1>
+        <div class="assessment-list-filters">
+          <el-select v-model="sessionFilter" aria-label="筛选会话" placeholder="全部会话">
+            <el-option label="全部会话" value="" />
+            <el-option v-for="session in sessionStore.sortedSessions" :key="session.id" :label="session.title || '未命名会话'" :value="session.id" />
+          </el-select>
+        </div>
       </div>
     </section>
 
