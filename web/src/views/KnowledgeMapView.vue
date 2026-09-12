@@ -8,7 +8,7 @@
     <div
       v-else-if="graph"
       class="map-workspace"
-      :class="{ 'map-workspace--inspector-open': selectedNode }"
+      :class="{ 'map-workspace--inspector-open': inspectorOpen }"
       :style="{
         '--map-index-width': `${indexWidth}px`,
         '--map-inspector-width': `${inspectorWidth}px`
@@ -99,9 +99,23 @@
             <p>知识地图 · {{ chapter ? '章节视图' : '课程全景' }}</p>
             <h2>{{ chapter ? chapterTitle : '全部知识关系' }}</h2>
           </div>
-          <div class="map-stage__stats">
-            <span><strong>{{ visibleKcCount }}</strong> KC</span>
-            <span><strong>{{ visibleRelationCount }}</strong> 关系</span>
+          <div class="map-stage__toolbar-actions">
+            <div class="map-stage__stats">
+              <span><strong>{{ visibleKcCount }}</strong> KC</span>
+              <span><strong>{{ visibleRelationCount }}</strong> 关系</span>
+            </div>
+            <button
+              v-if="!inspectorOpen"
+              type="button"
+              class="map-inspector-toggle"
+              aria-controls="knowledge-map-inspector"
+              :aria-expanded="inspectorOpen"
+              aria-label="展开知识点详情面板"
+              title="展开详情面板"
+              @click="inspectorOpen = true"
+            >
+              <span class="map-panel-toggle-icon" aria-hidden="true" />
+            </button>
           </div>
         </div>
 
@@ -140,7 +154,12 @@
       </section>
 
       <Transition name="map-inspector">
-        <aside v-if="selectedNode" class="map-inspector" aria-label="知识点详情">
+        <aside
+          v-if="inspectorOpen"
+          id="knowledge-map-inspector"
+          class="map-inspector"
+          aria-label="知识点详情"
+        >
           <PanelResizeHandle
             side="end"
             label="调整知识点详情宽度"
@@ -152,51 +171,61 @@
             @reset="resetInspectorWidth"
           />
           <div class="map-detail__heading">
-            <span><i :style="{ background: chapterColor(selectedNode.chapter) }" />{{ selectedNode.chapter }}</span>
+            <span v-if="selectedNode"><i :style="{ background: chapterColor(selectedNode.chapter) }" />{{ selectedNode.chapter }}</span>
+            <span v-else>知识点详情</span>
             <button
               type="button"
+              aria-controls="knowledge-map-inspector"
+              :aria-expanded="inspectorOpen"
               aria-label="收起知识点详情面板"
               title="收起详情面板"
-              @click="selectedId = ''"
+              @click="inspectorOpen = false"
             >
               <span class="map-panel-toggle-icon" aria-hidden="true" />
             </button>
           </div>
-          <h2>{{ selectedNode.display_name }}</h2>
-          <p v-if="selectedNode.summary" class="map-detail__summary">{{ selectedNode.summary }}</p>
-          <div v-if="showPersonalState" class="map-learning-state">
-            <i :style="{ background: learningStateMeta(selectedNode.learning_state).color }" />
-            {{ learningStateMeta(selectedNode.learning_state).label }}
-          </div>
-
-          <section class="map-detail__section">
-            <div class="map-detail__section-title"><h3>概念关系</h3><span>{{ relatedConcepts.length }}</span></div>
-            <p v-if="!relatedConcepts.length" class="map-empty">当前筛选下没有关联概念。</p>
-            <div class="map-neighbors">
-              <button v-for="item in relatedConcepts" :key="`${item.node.canonical_id}:${item.kind}`" type="button" @click="selectNode(item.node.canonical_id)">
-                <i :style="{ background: chapterColor(item.node.chapter) }" />
-                <span>{{ item.node.display_name }}<small>{{ relationLabel(item) }}</small></span>
-                <el-icon><ArrowRight /></el-icon>
-              </button>
+          <template v-if="selectedNode">
+            <h2>{{ selectedNode.display_name }}</h2>
+            <p v-if="selectedNode.summary" class="map-detail__summary">{{ selectedNode.summary }}</p>
+            <div v-if="showPersonalState" class="map-learning-state">
+              <i :style="{ background: learningStateMeta(selectedNode.learning_state).color }" />
+              {{ learningStateMeta(selectedNode.learning_state).label }}
             </div>
-          </section>
 
-          <div class="map-actions">
-            <el-button type="primary" @click="ask(false)">讨论这个概念</el-button>
-            <el-button plain @click="ask(true)">做一道理解题</el-button>
-          </div>
-
-          <details v-if="selectedNode.learning_points.length" class="map-references">
-            <summary>教材内容与出处 <span>{{ selectedNode.learning_points.length }}</span></summary>
-            <section v-for="point in selectedNode.learning_points" :key="point.title">
-              <h3>{{ point.title }}</h3>
-              <p>{{ point.objective }}</p>
-              <details v-for="source in point.sources" :key="`${source.source_id}:${source.book_page}`">
-                <summary>{{ source.title }} · 第 {{ source.book_page }} 页</summary>
-                <blockquote>{{ source.quote }}</blockquote>
-              </details>
+            <section class="map-detail__section">
+              <div class="map-detail__section-title"><h3>概念关系</h3><span>{{ relatedConcepts.length }}</span></div>
+              <p v-if="!relatedConcepts.length" class="map-empty">当前筛选下没有关联概念。</p>
+              <div class="map-neighbors">
+                <button v-for="item in relatedConcepts" :key="`${item.node.canonical_id}:${item.kind}`" type="button" @click="selectNode(item.node.canonical_id)">
+                  <i :style="{ background: chapterColor(item.node.chapter) }" />
+                  <span>{{ item.node.display_name }}<small>{{ relationLabel(item) }}</small></span>
+                  <el-icon><ArrowRight /></el-icon>
+                </button>
+              </div>
             </section>
-          </details>
+
+            <div class="map-actions">
+              <el-button type="primary" @click="ask(false)">讨论这个概念</el-button>
+              <el-button plain @click="ask(true)">做一道理解题</el-button>
+            </div>
+
+            <details v-if="selectedNode.learning_points.length" class="map-references">
+              <summary>教材内容与出处 <span>{{ selectedNode.learning_points.length }}</span></summary>
+              <section v-for="point in selectedNode.learning_points" :key="point.title">
+                <h3>{{ point.title }}</h3>
+                <p>{{ point.objective }}</p>
+                <details v-for="source in point.sources" :key="`${source.source_id}:${source.book_page}`">
+                  <summary>{{ source.title }} · 第 {{ source.book_page }} 页</summary>
+                  <blockquote>{{ source.quote }}</blockquote>
+                </details>
+              </section>
+            </details>
+          </template>
+          <div v-else class="map-inspector__empty">
+            <el-icon><Connection /></el-icon>
+            <h2>选择一个 KC</h2>
+            <p>从左侧目录或知识图谱中选择概念，查看它的关系与学习内容。</p>
+          </div>
         </aside>
       </Transition>
     </div>
@@ -226,6 +255,7 @@ const notice = ref('')
 const search = ref('')
 const chapter = ref('')
 const selectedId = ref('')
+const inspectorOpen = ref(false)
 const localOnly = ref(false)
 const showPersonalState = ref(false)
 const enabledRelations = ref(Object.keys(relationTypes))
@@ -295,6 +325,7 @@ function relationLabel(item) {
 function selectChapter(value) {
   chapter.value = chapter.value === value ? '' : value
   selectedId.value = ''
+  inspectorOpen.value = false
   notice.value = ''
 }
 
@@ -308,6 +339,7 @@ function selectNode(id) {
   if (node.node_type === 'chapter') { selectChapter(node.chapter); return }
   if (chapter.value && chapter.value !== node.chapter) chapter.value = node.chapter
   selectedId.value = id
+  inspectorOpen.value = true
   notice.value = ''
 }
 

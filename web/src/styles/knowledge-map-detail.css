@@ -50,6 +50,33 @@
   border-radius: 1px;
 }
 
+.map-inspector__empty {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  padding: 42px 12px;
+  color: #a8a29e;
+  text-align: center;
+}
+
+.map-inspector__empty > .el-icon {
+  margin-bottom: 14px;
+  font-size: 26px;
+}
+
+.map-inspector__empty h2 {
+  margin: 0 0 8px;
+  color: #57534e;
+  font-size: 15px;
+}
+
+.map-inspector__empty p {
+  max-width: 230px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
 .map-inspector > h2,
 .map-inspector > template + h2 {
   margin: 15px 0 9px;
@@ -196,6 +223,7 @@
 }
 
 :global(html.theme-dark) .map-inspector > h2,
+:global(html.theme-dark) .map-inspector__empty h2,
 :global(html.theme-dark) .map-detail__summary,
 :global(html.theme-dark) .map-learning-state,
 :global(html.theme-dark) .map-neighbors button,
