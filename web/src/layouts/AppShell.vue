@@ -44,6 +44,7 @@ import PanelResizeHandle from '../components/PanelResizeHandle.vue'
 import { useResizablePanel } from '../composables/useResizablePanel'
 import { useChatStore } from '../stores/chat'
 import { useSessionStore } from '../stores/session'
+import { scheduleKnowledgeMapPrefetch } from '../utils/prefetch'
 
 const APP_SHELL_CONTEXT_KEY = 'ds-course-agent.app-shell'
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'ds-course-agent.sidebarCollapsed'
@@ -72,6 +73,7 @@ const {
 })
 const theme = ref(readThemePreference())
 const sessionBootstrapPending = ref(!sessionStore.loaded)
+let cancelKnowledgeMapPrefetch = () => {}
 const isDarkTheme = computed(() => theme.value === 'dark')
 const updateViewport = () => { narrowViewport.value = window.innerWidth <= 760 }
 
@@ -126,6 +128,7 @@ function toggleTheme() {
 }
 
 onMounted(async () => {
+  cancelKnowledgeMapPrefetch = scheduleKnowledgeMapPrefetch()
   updateViewport()
   window.addEventListener('resize', updateViewport)
   if (sessionStore.loaded) {
@@ -143,7 +146,10 @@ onMounted(async () => {
   }
 })
 
-onBeforeUnmount(() => window.removeEventListener('resize', updateViewport))
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateViewport)
+  cancelKnowledgeMapPrefetch()
+})
 </script>
 
 <style scoped>
