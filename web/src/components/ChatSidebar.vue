@@ -125,6 +125,8 @@
         :class="{ 'utility-entry--active': isKnowledgeMapActive }"
         :aria-current="isKnowledgeMapActive ? 'page' : undefined"
         title="知识地图"
+        @mouseenter="warmKnowledgeMap"
+        @focus="warmKnowledgeMap"
         @click="navigateTo('/knowledge-map')"
       >
         <span class="utility-entry__icon"><el-icon><Connection /></el-icon></span>
@@ -345,6 +347,7 @@ import { useChatStore } from '../stores/chat'
 import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
 import { useUiStore } from '../stores/ui'
+import { prefetchKnowledgeMap } from '../utils/prefetch'
 
 const props = defineProps({
   collapsed: {
@@ -483,6 +486,10 @@ function handleProfileOpen() {
 function navigateTo(path) {
   router.push(path)
   closeMobileNavigation()
+}
+
+function warmKnowledgeMap() {
+  void prefetchKnowledgeMap()
 }
 
 function closeMobileNavigation() {
