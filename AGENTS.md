@@ -89,25 +89,17 @@
 
 - 每个模块和公共函数必须能回答：它做什么、怎么用、依赖什么。
 - 跨模块通信使用 dataclass、Protocol、enum 或其他类型化显式接口，不靠裸 dict 约定字段。
-- 文件超过约 600 行是职责过多的检查信号；优先拆到既有所有者，不创造无实际职责的层。
+- 文件超过约 600 行只是职责拆分的检查信号；只有职责确实混杂时才拆到既有所有者，不为凑行数创造新层。
 - 不把模型运行、路由执行、turn 编排或领域逻辑重新堆回 `agent/service.py`。
 
 ---
 
 ## 3. 统一代码风格
 
-### Python(权威 = ruff)
+### Python
 
-- 风格由 `pyproject.toml` 的 `[tool.ruff]` 强制；散文约定与 ruff 冲突时以 ruff 为准。
-- 局部 Python 改动和提交前适用的检查命令见“验证门槛”：
-  ```bash
-  ruff check src tests scripts benchmarks
-  ruff format --check src tests scripts benchmarks
-  ```
-- 新模块首行使用 `from __future__ import annotations`。
-- 公共函数和方法带完整参数与返回类型注解；模块、类和公共函数写用途 docstring。
-- import 保持标准库 / 第三方 / 本地三段式，缩进 4 空格。
-- 注释和 docstring 跟随所在文件既有语言，解释“为什么”，不复述代码。
+- `pyproject.toml`、ruff 和 `.editorconfig` 是代码风格权威；散文约定与工具配置冲突时以工具为准。
+- 新增或修改代码遵循周边模块已有的类型注解、docstring、import 和注释习惯，不为局部任务引入第二套风格。
 
 ### 前端(web/)
 
@@ -127,7 +119,8 @@
 按改动风险选择验证，不运行与改动无关的昂贵检查：
 
 - 文档、注释：检查格式、引用和 `git diff --check`，不要求 pytest。
-- 局部 Python 改动：运行直接相关测试，并执行：
+- 局部 Python 改动：运行直接相关测试，并对受影响路径执行 ruff 检查。
+- 跨模块改动或准备提交时，执行完整检查：
   ```bash
   ruff check src tests scripts benchmarks
   ruff format --check src tests scripts benchmarks
