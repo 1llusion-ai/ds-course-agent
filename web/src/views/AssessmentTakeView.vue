@@ -43,10 +43,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowRight, Check, Warning } from '@element-plus/icons-vue'
 
 import AssessmentQuestion from '../components/AssessmentQuestion.vue'
+import { accountStorageKey, readLocalStorage, removeLocalStorage, writeLocalStorage } from '../utils/storage'
+import { useAuthStore } from '../stores/auth'
 import { useAssessmentStore } from '../stores/assessment'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 const store = useAssessmentStore()
 const assessment = computed(() => store.current)
 const currentIndex = ref(0)
@@ -59,12 +62,15 @@ const submitted = ref(false)
 let loadVersion = 0
 const currentQuestion = computed(() => assessment.value.questions[currentIndex.value])
 const answeredCount = computed(() => Object.values(answers.value).filter(Boolean).length)
-const draftKey = computed(() => `ds-course-agent.assessment-draft.${route.params.assessmentId}`)
+const draftKey = computed(() => accountStorageKey(
+  `ds-course-agent.assessment-draft.${route.params.assessmentId}`,
+  authStore.user
+))
 
 function saveDraft() {
   if (typeof window === 'undefined' || !assessment.value) return
   try {
-    window.localStorage.setItem(draftKey.value, JSON.stringify({
+    writeLocalStorage(draftKey.value, JSON.stringify({
       questionIds: assessment.value.questions.map(question => question.id),
       currentIndex: currentIndex.value,
       answers: answers.value,
@@ -79,7 +85,7 @@ function saveDraft() {
 function restoreDraft() {
   if (typeof window === 'undefined' || !assessment.value) return
   try {
-    const draft = JSON.parse(window.localStorage.getItem(draftKey.value) || 'null')
+    const draft = JSON.parse(readLocalStorage(draftKey.value) || 'null')
     const questionIds = assessment.value.questions.map(question => question.id)
     if (!draft || JSON.stringify(draft.questionIds) !== JSON.stringify(questionIds)) return
     answers.value = draft.answers || {}
@@ -87,12 +93,12 @@ function restoreDraft() {
     changeCounts.value = draft.changeCounts || {}
     currentIndex.value = Math.min(Math.max(Number(draft.currentIndex) || 0, 0), questionIds.length - 1)
   } catch {
-    window.localStorage.removeItem(draftKey.value)
+    removeLocalStorage(draftKey.value)
   }
 }
 
 function clearDraft() {
-  if (typeof window !== 'undefined') window.localStorage.removeItem(draftKey.value)
+  if (typeof window !== 'undefined') removeLocalStorage(draftKey.value)
 }
 
 function recordElapsed() {
