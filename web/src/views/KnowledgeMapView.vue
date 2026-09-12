@@ -117,10 +117,6 @@
           </div>
           <div class="map-view-options">
             <label><span>学习状态</span><el-switch v-model="showPersonalState" size="small" /></label>
-            <el-button text :disabled="!selectedId && !chapter" @click="localOnly = !localOnly">
-              <el-icon><Aim /></el-icon>
-              {{ localOnly ? '显示全部' : '聚焦关联' }}
-            </el-button>
           </div>
         </div>
 
@@ -131,7 +127,6 @@
             :chapter="chapter"
             :selected-id="selectedId"
             :enabled-relations="enabledRelations"
-            :local-only="localOnly"
             :show-personal-state="showPersonalState"
             @select="selectNode"
           />
@@ -223,7 +218,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Aim, ArrowRight, Close, Connection, Search } from '@element-plus/icons-vue'
+import { ArrowRight, Close, Connection, Search } from '@element-plus/icons-vue'
 import { knowledgeMapApi } from '../api/knowledgeMap'
 import KnowledgeMapCanvas from '../components/KnowledgeMapCanvas.vue'
 import PanelResizeHandle from '../components/PanelResizeHandle.vue'
@@ -245,7 +240,6 @@ const search = ref('')
 const chapter = ref('')
 const selectedId = ref('')
 const inspectorOpen = ref(false)
-const localOnly = ref(false)
 const showPersonalState = ref(false)
 const enabledRelations = ref(Object.keys(relationTypes))
 const {

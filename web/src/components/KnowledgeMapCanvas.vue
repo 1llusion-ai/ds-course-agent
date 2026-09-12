@@ -31,7 +31,6 @@ const props = defineProps({
   graph: { type: Object, required: true },
   selectedId: { type: String, default: '' },
   chapter: { type: String, default: '' },
-  localOnly: { type: Boolean, default: false },
   showPersonalState: { type: Boolean, default: false },
   enabledRelations: { type: Array, required: true }
 })
@@ -86,17 +85,16 @@ function updateAppearance() {
     object.sphere.material.opacity = relevant ? 1 : 0.16
     object.ring.material.color.set(colorFor(node))
     object.ring.material.opacity = selected ? 0.72 : 0
-    object.group.visible = !props.localOnly || !emphasized || active.has(node.id)
-    object.label.visible = object.group.visible && (node.id === hoveredId
+    object.group.visible = true
+    object.label.visible = node.id === hoveredId
       || selected
       || node.kind === 'chapter'
       || (Boolean(props.selectedId) && relevant)
       || (Boolean(props.chapter) && relevant && node.degree >= 5)
-      || (!emphasized && node.degree >= 10))
+      || (!emphasized && node.degree >= 10)
     object.label.material.opacity = selected ? 1 : (node.kind === 'chapter' ? 0.9 : 0.78)
   }
-  const visibleNode = node => !props.localOnly || !emphasized || active.has(node.id)
-  graph3d.linkVisibility(link => props.enabledRelations.includes(link.kind) && visibleNode(link.source) && visibleNode(link.target))
+  graph3d.linkVisibility(link => props.enabledRelations.includes(link.kind))
     .linkColor(link => {
       const relevant = active.has(endId(link.source)) && active.has(endId(link.target))
       const opacity = emphasized ? (relevant ? 0.62 : 0.035) : (link.kind === 'part_of' ? 0.12 : 0.22)
@@ -203,7 +201,7 @@ function teardown() {
 }
 
 watch(() => [props.selectedId, props.chapter], focusSelection)
-watch(() => [props.localOnly, props.showPersonalState, props.enabledRelations], updateAppearance, { deep: true })
+watch(() => [props.showPersonalState, props.enabledRelations], updateAppearance, { deep: true })
 
 onMounted(async () => {
   try {
