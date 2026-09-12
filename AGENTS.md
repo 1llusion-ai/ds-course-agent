@@ -1,110 +1,190 @@
 # AGENTS.md — 工程宪法 (Engineering Constitution)
 
 > **唯一事实源。** 本仓库任何自动化 agent(Codex / Claude Code / 其他)与人类贡献者，
-> 在动手改代码前都必须读并遵守本文件。`CLAUDE.md` 是它的薄壳，只做补充，不得与之冲突。
-> 冲突时以 AGENTS.md 为准。
+> 在动手改代码前都必须读并遵守本文件。`CLAUDE.md` 只做补充，不得与之冲突。
+> 冲突时以 `AGENTS.md` 为准。
 >
-> 本文件的目的只有一个：**防止屎山**。具体是三件事——统一风格、砍旧实现不留兼容层、
-> 禁止偷懒打补丁。下面每一条都是约束(MUST/禁止)，不是建议。
+> 本文件只保留无法从代码可靠推断的项目边界、决策规则和完成标准。实现细节以代码、
+> 类型、测试和按需引用的权威文档为准。
 
 ---
 
-## 0. 项目边界(先读，避免做错方向)
+## 0. 项目边界与按需文档
 
-- 这是「数据科学导论」课程 RAG 教学助教：`Vue 3 (web/) → HTTP/SSE → FastAPI (src/ds_course_agent/api/) → ds_course_agent.agent.service`，领域实现分别位于 `teaching/`、`retrieval/`、`research/`。
-- 架构与能力边界的权威文档，改动前必须对齐、不得违反：
-  - `docs/architecture_reorg_plan.md` — 当前目录、目标分层与分阶段迁移状态；按已完成阶段更新调用方，不回退 src-layout。
-  - `docs/capability_model.md` — 什么该做成 `tool` / `skill` / 普通模块。**新增能力前按其决策清单判定**，不要「什么都做成 skill / 什么都塞进 agent」。
-  - `docs/nanobot_refactor_roadmap.md` — 不可动摇的边界(不换掉 QueryPipeline、不换掉 LearningEvent、前端不换 React、不引入 nanobot 通用 agent 表面)。
-  - `docs/phase1_backbone_contracts.md` — 主干框架的 5 个契约与 T1-T7 不变量(状态/控制信号/工具门控/路由即数据/单一入口)。主干重构以它为准。
-- 运行时状态一律写 `var/`(`var/chat_history`、`var/chroma_db`、`var/logs`、`var/artifacts`、`var/cache`)，绝不写进包目录或仓库根。
-- `runtime/` 仅依赖通用模型协议与 `shared/`；禁止导入 `agent/`、`teaching/`、`retrieval/`、`research/`、`tools/` 或 `api/`。领域能力通过显式接口注入。旧 `rag/`、顶层 `hooks/` 包已删除，不得恢复兼容转发。
+- 这是「数据科学导论」课程 RAG 教学助教：`Vue 3 (web/) → HTTP/SSE → FastAPI
+  (src/ds_course_agent/api/) → ds_course_agent.agent.service`。
+- 保留 `QueryPipeline`、`LearningEvent`、Vue 和 SSE；不引入通用 agent 产品表面替代课程助教架构。
+- 运行时状态一律写入 `var/`(`var/chat_history`、`var/chroma_db`、`var/logs`、
+  `var/artifacts`、`var/cache`)，不得写入包目录或仓库根。
+- 旧 `rag/` 和顶层 `hooks/` 包已删除，不得恢复兼容转发。
+
+只读取与当前任务直接相关的权威文档，不要求每次预读全部文档：
+
+- 移动模块、调整目录、职责或依赖方向：`docs/architecture_reorg_plan.md`。
+- 新增或调整 `tool` / `skill` / 普通能力：`docs/capability_model.md`。
+- 修改 QueryPipeline、turn state、控制信号、路由、工具门控或 turn 生命周期：
+  `docs/phase1_backbone_contracts.md`。
+- 调整主干架构方向或 roadmap 中的不可变边界：`docs/nanobot_refactor_roadmap.md`。
+- 纯文案、局部样式和不涉及上述边界的独立修正，不要求读取全部架构文档。
 
 ---
 
-## 1. 反屎山三铁律(本文件的核心)
+## 1. 代码架构契约
+
+### 单一职责所有者
+
+每类行为只能有一个权威所有者：
+
+- `api/`：HTTP、SSE、认证和请求响应适配；不得实现路由、检索、模型调用或教学策略。
+- `agent/`：turn 编排、路由、执行模式、生命周期事件和结果归并。
+- `runtime/`：通用模型调用、流解析、消息转换、上下文治理和重试协议；不感知课程领域。
+- `teaching/`：学习者状态、学习事件、课程图谱和教学策略。
+- `retrieval/`：检索、排序、证据选择和上下文组装。
+- `research/`：网页研究流程、证据策略和页面获取。
+- `tools/`：原子能力、工具契约、注册和执行隔离；工具不得接管 turn 编排。
+- `shared/`：无领域所有权的基础设施；不得成为杂项收容所。
+- `kb/`：离线知识库构建，不参与在线 turn 编排。
+- `web/`：展示和交互，不复制后端领域决策。
+
+同一职责不得在多个层重复实现。需要复用时调用其权威所有者，不复制逻辑或建立第二套入口。
+
+### 依赖方向
+
+- `runtime/` 只能依赖自身和 `shared/`；所有领域 fallback 和工具解析通过显式接口注入。
+- `shared/` 不得依赖 `api/`、`agent/`、`teaching/`、`retrieval/`、`research/` 或 `tools/`。
+- 领域包不得导入 `api/`；`api/` 可以组合和调用领域能力，但不能被领域包反向依赖。
+- 跨包调用使用公开、类型化接口；禁止通过私有实现、局部 import、转发模块或公共 `utils`
+  绕过所有权边界。
+- 不得新增反向依赖或循环依赖。现存例外及目标依赖方向以
+  `docs/architecture_reorg_plan.md` 为准，不得借当前例外扩大耦合。
+
+### 入口与组合
+
+- `agent/service.py` 是课程 agent 的组合入口，只负责装配依赖和暴露 turn 能力；新的路由、
+  执行、模型或领域逻辑必须进入对应所有者。
+- `QueryPipeline` 是查询准备和路由选择的唯一入口。
+- 同步与流式调用共享同一个 turn producer，不维护两套控制流。
+- API payload、SSE event 和持久化 dict 是边界投影，不是内部控制协议。
+- 新增模块或移动职责时，必须明确其所有权、允许依赖、调用接口、被替代实现和边界测试。
+
+---
+
+## 2. 反屎山三铁律
 
 ### 铁律一 — 砍旧实现，不留兼容层
-- 重构/替换一个实现时，**删掉旧的**。禁止保留「旧函数 + 新函数并存」「`_v2` / `_new` / `_old` 后缀长期共存」。
-- 禁止为「怕破坏调用方」而留 **兼容 shim / 转发包装**，除非同一 PR 内注明了明确的、有截止点的迁移计划(哪个 PR 删、谁负责)。没有截止点的兼容层 = 屎山种子，一律不批。
-- 参照物：Phase 2 拆 `rag/tools.py` 时是**直接删除**、不留 shim(见 roadmap 2026-07-16「tools clean split」)。这是本仓库认可的做法，照做。
-- 删除前若发现目标与描述不符(不是你写的、行为和注释矛盾)，**先停下说明**，不要盲删或盲改。
+
+- 当前任务明确替换某个实现，且同一变更已迁移全部仓库内调用方时，删除被替换实现。
+- 禁止长期保留「旧函数 + 新函数并存」、`_v2` / `_new` / `_old` 或无截止点兼容 shim。
+- 有期限迁移层必须在同一 PR 写明删除它的后续 PR、负责人和截止条件。
+- 不要仅因为发现旧代码就扩大任务范围。若删除对象与任务描述明显不符，暂停并说明差异。
 
 ### 铁律二 — 禁止补丁墙(patch wall)
-- 「出问题就加一个 if 特判」重复三次以上 = 补丁墙，禁止继续堆。要么归纳成一条规则/数据，要么修根因。
-- 禁止用 **prompt 劝阻** 替代 **结构约束**。例：不让 agent 调某工具，就别把工具绑给它(结构)，不要在 prompt 里写「请不要调用 X」(劝阻)。见 phase1 契约 3。
-- 控制流用 **类型化状态 + 数据表** 表达，不要用「顺序敏感的 if/elif 级联」和「往 `metadata` dict 里塞控制信号」。见 phase1 契约 2/4。
-- 死代码零容忍：算出来没人消费的字段、走不到的分支，**当场删**，不要留着「以后可能用」。
+
+- 同类问题出现多个特判时，归纳成规则、数据或明确抽象并修根因，不继续堆 `if`。
+- 禁止用 prompt 劝阻代替结构约束；不允许调用的工具不得绑定给该执行路径。
+- 控制流使用类型化状态、有限事件和数据表，不把控制信号塞入 `metadata`。
+- 删除无人消费的字段和不可达分支，不保留“以后可能用”的死代码。
 
 ### 铁律三 — 契约优先，边界清晰
-- 每个模块/函数要能回答三问：**它做什么、怎么用、依赖什么**。答不上来说明边界没划好，先划边界再写。
-- 跨模块通信走**类型化的显式接口**(dataclass / Protocol / enum)，不靠裸 dict 传约定字段。
-- 文件过大(经验阈值 >600 行)是「做太多」的信号，拆分而非继续追加。Agent 入口为 `agent/service.py`；模型运行、路由执行和 turn 编排已有独立所有者，不得重新堆回入口。
+
+- 每个模块和公共函数必须能回答：它做什么、怎么用、依赖什么。
+- 跨模块通信使用 dataclass、Protocol、enum 或其他类型化显式接口，不靠裸 dict 约定字段。
+- 文件超过约 600 行是职责过多的检查信号；优先拆到既有所有者，不创造无实际职责的层。
+- 不把模型运行、路由执行、turn 编排或领域逻辑重新堆回 `agent/service.py`。
 
 ---
 
-## 2. 统一代码风格
+## 3. 统一代码风格
 
-### Python(权威 = ruff，不靠背文档)
-- 风格由 `pyproject.toml` 的 `[tool.ruff]` 强制。提交前本地必须通过：
+### Python(权威 = ruff)
+
+- 风格由 `pyproject.toml` 的 `[tool.ruff]` 强制；散文约定与 ruff 冲突时以 ruff 为准。
+- 局部 Python 改动和提交前适用的检查命令见“验证门槛”：
   ```bash
   ruff check src tests scripts benchmarks
   ruff format --check src tests scripts benchmarks
   ```
-  修复用 `ruff check --fix` 和 `ruff format`。**CI 门槛以 ruff 为准，本节散文与 ruff 冲突时以 ruff 为准。**
-- 沿用本仓库既有约定(它们已是主流，不要另起炉灶)：
-  - 新模块首行 `from __future__ import annotations`(现有 49/87 文件已用)。
-  - 公共函数/方法**带完整类型注解**(参数 + `->` 返回)。
-  - 模块/类/公共函数写 `"""docstring"""`，说明用途，不是复述签名。
-  - import 三段式(标准库 / 第三方 / 本地 `ds_course_agent.*`)，由 ruff isort 规则维护。
-  - 缩进 4 空格(见 `.editorconfig`)。
-- **注释与 docstring 语言**：跟随所在文件既有语言(本仓库中英混用皆有)。同一文件内不要中英乱跳。解释「为什么」，不解释「是什么」。
+- 新模块首行使用 `from __future__ import annotations`。
+- 公共函数和方法带完整参数与返回类型注解；模块、类和公共函数写用途 docstring。
+- import 保持标准库 / 第三方 / 本地三段式，缩进 4 空格。
+- 注释和 docstring 跟随所在文件既有语言，解释“为什么”，不复述代码。
 
 ### 前端(web/)
-- 保持 Vue 3 Composition API + Element Plus + Pinia，**不引入 React / 不换状态库**(roadmap 硬边界)。
-- 沿用现有 `web/` 的 ESLint/Prettier(若存在)与 `.editorconfig`(2 空格)。改动后 `cd web && npm run build` 必须通过。
-- 部署区域限制：**前端禁止依赖 google.com 资产**(favicon/CDN/字体)，用站内资源 + emoji 兜底。
+
+- 保持 Vue 3 Composition API + Element Plus + Pinia，不引入 React 或替换状态库。
+- 沿用 `web/` 的 ESLint、Prettier 和 `.editorconfig`，缩进 2 空格。
+- 前端不得依赖 `google.com` 资产；使用站内资源和本地兜底。
 
 ### 通用
-- 遵守 `.editorconfig`(UTF-8、LF、末尾换行、去行尾空白)。Windows 脚本(`*.bat/*.cmd/*.ps1`)用 CRLF。
-- 命名跟随周边代码的既有习惯(match the surrounding code)，不引入个人风格。
+
+- 遵守 `.editorconfig`：UTF-8、LF、末尾换行、去除行尾空白；Windows 脚本使用 CRLF。
+- 命名跟随周边代码，不引入个人命名体系。
 
 ---
 
-## 3. 验证门槛(改完必须做，否则视为未完成)
+## 4. 验证门槛
 
-- 全量测试：`python -m pytest -q` 全绿(允许既有 skip/warning，不允许新增 fail)。
-- 触碰路由/工具/pipeline 时，额外跑：
+按改动风险选择验证，不运行与改动无关的昂贵检查：
+
+- 文档、注释：检查格式、引用和 `git diff --check`，不要求 pytest。
+- 局部 Python 改动：运行直接相关测试，并执行：
+  ```bash
+  ruff check src tests scripts benchmarks
+  ruff format --check src tests scripts benchmarks
+  ```
+- 跨模块、共享契约或高影响改动：运行 `python -m pytest -q`。
+- 路由、工具或 pipeline 改动额外运行：
   ```bash
   PYTHONPATH=src python -m pytest tests/test_query_pipeline.py tests/test_route_harness.py -q
-  PYTHONPATH=src python benchmarks/route_harness.py   # 断言 unexpected_rag_count == 0
+  PYTHONPATH=src python benchmarks/route_harness.py
   ```
-- 触碰前端：`cd web && npm run build` 通过。
-- **契约类改动必须补不变量测试**(见 phase1 spec T1–T7)。「补丁会长回来」的唯一解药是钉死它的测试，缺测试的契约改动不批。
-- 报告结果要诚实：测试挂了就说挂了并贴输出；跳过的步骤要讲明。**禁止把「没验证」说成「已通过」。**
+  `unexpected_rag_count` 必须为 `0`。
+- 前端代码：运行 `cd web && npm run build`。
+- 新增或修改架构契约时，必须添加或更新对应的静态边界/不变量测试。
+- 准备提交或 PR 时，运行该变更适用的完整验证集合。
+
+Agent 可以直接运行安全的本地测试，修复当前改动造成的失败并重新验证。报告必须区分通过、
+失败和未运行；不得把未验证描述为已通过。
 
 ---
 
-## 4. 变更纪律
+## 5. 变更纪律与暂停边界
 
-- 分支：功能/重构走 `phaseN/<task-id>` 或 `feat|fix|refactor/<topic>`，不直接在 `main` 上改。
-- 提交：Conventional Commits(`feat:` / `fix:` / `refactor:` / `chore:` / `docs:`)。一个提交只做一件事。
-- 一个 PR/任务只解决一个问题。发现顺手能改的无关问题，**记下来另开**，不要夹带(夹带 = 审查失效 = 屎山入口)。
-- 只在被要求时提交/推送。对外或不可逆操作(删文件、改部署、推远端)先确认。
-- 秘密只进 `.env`(已 gitignore)，`.env.example` 只放占位符，任何密钥不得进代码或提交历史。
-- 审查脚本先静态检查，禁止把批量 import 当成只读验证；import 会执行模块顶层代码。清库/重建等运维脚本必须有 `__main__` 保护和显式确认，默认不修改数据，优先归档而非永久删除。事故记录见 `docs/kb_incident_2026-09-08.md`。
+- 功能和重构使用 `phaseN/<task-id>` 或 `feat|fix|refactor/<topic>`，不直接在 `main` 修改。
+- 提交使用 Conventional Commits；一个提交和一个任务只解决一个问题。
+- 只在用户要求时提交或推送；只提交当前任务实际修改的文件。
+- 不覆盖、回退或整理其他人及其他 agent 的工作区改动。
+- 密钥只进入 `.env`；`.env.example` 只放占位符。
+- 审查脚本先做静态检查，不用批量 import 冒充只读验证。运维脚本必须有 `__main__` 保护和
+  显式确认，默认不修改数据，优先归档而非永久删除。
+
+优先通过读取代码、检查调用方和运行安全的本地验证自行消除不确定性。只有以下情况必须暂停：
+
+- 即将执行生产、远程或不可逆操作。
+- 删除对象与任务描述明显不符。
+- 存在无法从仓库判断的产品或架构取舍。
+- 继续操作需要用户提供凭据、授权或外部状态变化。
 
 ---
 
-## 5. Agent 自检清单(动手前逐条过)
+## 6. 完成标准
 
-在写下第一行代码前，确认：
+除非用户明确只要求分析、方案或审查，否则任务完成意味着：
 
-1. [ ] 我读了本文件 + 与本次改动相关的 `docs/` 权威文档，没有违反其边界。
-2. [ ] 我的改动是**修根因**，不是加第 N 个特判。
-3. [ ] 我替换的旧实现会被**删除**，不留无截止点的兼容层。
-4. [ ] 控制信号走类型化字段，不塞 `metadata`；不用 prompt 劝阻替代结构约束。
-5. [ ] 我知道改完要跑哪些测试/构建，且契约改动配了不变量测试。
-6. [ ] 改动聚焦单一问题，无夹带的无关重构。
+1. 完成实现，而不是只给修改建议。
+2. 运行与风险范围匹配的验证。
+3. 检查结果并修复当前改动造成的问题。
+4. 重新验证修复结果。
+5. 报告修改内容、验证结果和仍存在的限制。
 
-任一条打不了勾，先停下对齐，不要动手。
+不要在第一版实现后自动停下等待 review；只有命中上一节暂停条件时才交还用户决策。
+
+---
+
+## 7. Agent 自检
+
+动手前确认：
+
+1. [ ] 当前方案没有违反适用的架构契约和职责边界。
+2. [ ] 改动处理根因，不是在累积同类特判或建立第二套实现。
+3. [ ] 已确定与改动风险匹配的验证方式，且任务范围保持单一。
