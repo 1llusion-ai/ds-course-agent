@@ -16,27 +16,26 @@ defineProps({
 .panel-toggle-icon {
   position: relative;
   display: block;
-  width: 15px;
-  height: 13px;
-  border: 1.5px solid currentColor;
+  width: 16px;
+  height: 14px;
+  border: 1px solid currentColor;
   border-radius: 3px;
 }
 
 .panel-toggle-icon::after {
   position: absolute;
-  top: 1px;
-  bottom: 1px;
-  width: 1.5px;
+  top: 2px;
+  bottom: 2px;
+  width: 1px;
   content: '';
   background: currentColor;
-  border-radius: 1px;
 }
 
 .panel-toggle-icon--start::after {
-  left: 3px;
+  left: 4px;
 }
 
 .panel-toggle-icon--end::after {
-  right: 3px;
+  right: 4px;
 }
 </style>

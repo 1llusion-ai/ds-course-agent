@@ -7,7 +7,7 @@
       role="img"
       aria-label="拖动旋转、滚轮缩放的三维知识图谱，也可用左侧列表选择知识点"
     />
-    <div v-if="failure" class="constellation__failure" role="status">三维视图暂时无法加载，仍可通过左侧知识点列表浏览。</div>
+    <div v-if="failure" class="constellation__failure" role="status">三维视图暂时无法加载，仍可通过知识目录浏览。</div>
     <div v-else class="constellation__controls" aria-label="三维视图控制">
       <button type="button" :aria-pressed="rotating" :aria-label="rotating ? '暂停旋转' : '自动旋转'" :title="rotating ? '暂停旋转' : '自动旋转'" @click="toggleRotation">
         <el-icon><VideoPause v-if="rotating" /><VideoPlay v-else /></el-icon>
@@ -45,7 +45,7 @@ let objects
 let sceneData
 let hoveredId = ''
 let firstLayout = true
-let readyTimeout
+let rendererCanvas
 const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
 const reducedMotion = ref(motionPreference.matches)
 const cameraDuration = () => reducedMotion.value ? 0 : 650
@@ -63,7 +63,9 @@ function rgba(color, opacity) {
 }
 
 function activeIds() {
-  if (props.selectedId) return neighborsOf(props.graph, props.selectedId, props.enabledRelations)
+  if (props.selectedId) {
+    return neighborsOf(props.graph, props.selectedId, props.enabledRelations)
+  }
   return new Set(sceneData.nodes.filter(node => !props.chapter || node.chapter === props.chapter).map(node => node.id))
 }
 
@@ -199,16 +201,30 @@ function motionPreferenceChanged(event) {
 }
 
 function teardown() {
-  if (readyTimeout) window.clearTimeout(readyTimeout)
-  readyTimeout = undefined
   observer?.disconnect()
   observer = undefined
+  rendererCanvas?.removeEventListener('webglcontextlost', handleContextLost)
+  rendererCanvas = undefined
   document.removeEventListener('visibilitychange', visibilityChanged)
   motionPreference.removeEventListener('change', motionPreferenceChanged)
   graph3d?._destructor()
   graph3d = undefined
   objects?.dispose()
   objects = undefined
+}
+
+function handleContextLost(event) {
+  event.preventDefault()
+  teardown()
+  failure.value = true
+  sceneReady.value = false
+  console.warn('Knowledge map renderer unavailable: WebGL context lost')
+}
+
+function revealScene() {
+  if (sceneReady.value || failure.value || !graph3d) return
+  sceneReady.value = true
+  emit('ready')
 }
 
 watch(() => [props.selectedId, props.chapter], focusSelection)
@@ -235,10 +251,7 @@ onMounted(async () => {
         if (firstLayout) {
           firstLayout = false
           focusSelection(false)
-          window.requestAnimationFrame(() => {
-            sceneReady.value = true
-            emit('ready')
-          })
+          window.requestAnimationFrame(revealScene)
         }
       })
     graph3d.d3Force('charge').strength(-28)
@@ -249,6 +262,10 @@ onMounted(async () => {
     graph3d.graphData(sceneData)
     graph3d.cameraPosition({ x: 330, y: 130, z: 700 })
     updateAppearance()
+    rendererCanvas = graph3d.renderer().domElement
+    rendererCanvas.addEventListener('webglcontextlost', handleContextLost, { once: true })
+    // Keep the canvas hidden until the first fit-to-view has completed. This
+    // prevents the default camera from flashing before the graph is framed.
     observer = new ResizeObserver(() => {
       graph3d.width(container.value.clientWidth).height(container.value.clientHeight)
     })
@@ -256,12 +273,6 @@ onMounted(async () => {
     document.addEventListener('visibilitychange', visibilityChanged)
     motionPreference.addEventListener('change', motionPreferenceChanged)
     visibilityChanged()
-    readyTimeout = window.setTimeout(() => {
-      if (firstLayout) {
-        firstLayout = false
-        failure.value = true
-      }
-    }, 8000)
   } catch (error) {
     teardown()
     failure.value = true
@@ -276,7 +287,7 @@ onBeforeUnmount(teardown)
 .constellation { position: relative; width: 100%; height: 100%; min-height: 420px; }
 .constellation__canvas { position: absolute; inset: 0; visibility: hidden; }
 .constellation__canvas--ready { visibility: visible; }
-.constellation__controls { position: absolute; top: 14px; right: 14px; display: flex; align-items: center; gap: 2px; padding: 4px; border: 1px solid #e7e5e4; border-radius: 7px; background: rgba(255,255,255,.9); box-shadow: 0 4px 14px rgba(28,25,23,.06); }
+.constellation__controls { position: absolute; top: 14px; left: 14px; display: flex; align-items: center; gap: 2px; padding: 4px; border: 1px solid #e7e5e4; border-radius: 7px; background: rgba(255,255,255,.9); box-shadow: 0 4px 14px rgba(28,25,23,.06); }
 .constellation__controls button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; color: #57534e; border: 0; background: transparent; border-radius: 5px; cursor: pointer; }
 .constellation__controls button:hover, .constellation__controls button[aria-pressed="true"] { color: #1c1917; background: #f5f5f4; }
 .constellation__controls > span { width: 1px; height: 18px; margin: 0 2px; background: #e7e5e4; }
@@ -286,5 +297,5 @@ onBeforeUnmount(teardown)
 :global(html.theme-dark) .constellation__controls button:hover,
 :global(html.theme-dark) .constellation__controls button[aria-pressed="true"] { color: var(--dark-text); background: var(--dark-hover); }
 :global(html.theme-dark) .constellation__controls > span { background: var(--dark-border); }
-@media (max-width: 720px) { .constellation { min-height: 430px; } .constellation__controls { top: 10px; right: 10px; } }
+@media (max-width: 720px) { .constellation { min-height: 430px; } .constellation__controls { top: 10px; left: 10px; } }
 </style>

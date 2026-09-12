@@ -9,135 +9,130 @@
       v-else-if="graph"
       class="map-workspace"
     >
-      <ResizableSidePanel
-        id="knowledge-map-index"
-        v-model:open="indexOpen"
-        class="map-index"
-        side="start"
-        label="知识点导航"
-        resize-label="调整知识点目录宽度"
-        storage-key="ds-course-agent.knowledgeMapIndexWidth"
-        :default-width="232"
-        :min-width="190"
-        :max-width="360"
-      >
-        <div class="map-index__content">
-          <div class="map-index__header">
-            <label class="map-search">
-              <el-icon><Search /></el-icon>
-              <input v-model="search" aria-label="搜索知识点" placeholder="搜索 KC 或别名" />
-              <button v-if="search" type="button" aria-label="清空搜索" title="清空搜索" @click="search = ''">
-                <el-icon><Close /></el-icon>
-              </button>
-            </label>
-            <button
-              type="button"
-              class="map-index-toggle"
-              aria-label="收起知识点导航"
-              title="收起知识点导航"
-              @click="collapseIndex"
-            >
-              <PanelToggleIcon side="start" />
-            </button>
+      <section class="map-stage" aria-label="知识图谱浏览区">
+        <div class="map-stage__toolbar">
+          <div class="map-stage__title">
+            <h1>知识地图</h1>
           </div>
-
-          <div class="map-index__scroll">
-            <button type="button" class="map-overview" :class="{ active: !chapter }" @click="selectChapter('')">
-              <el-icon><Connection /></el-icon>
-              <span>全部章节</span>
-            </button>
-            <div
-              v-for="item in graph.chapters"
-              :key="item.chapter"
-              class="map-chapter-group"
-            >
-              <button
-                type="button"
-                class="map-chapter"
-                :class="{ active: chapter === item.chapter }"
-                :aria-expanded="chapter === item.chapter"
-                @click="selectChapter(item.chapter)"
-              >
-                <i :style="{ background: chapterColor(item.chapter) }" />
-                <span>{{ item.title }}</span>
-                <el-icon class="map-chapter__chevron"><ArrowRight /></el-icon>
-              </button>
-              <div v-if="chapter === item.chapter && !search.trim()" class="map-chapter-kcs">
+          <div class="map-stage__toolbar-actions">
+            <div class="map-search-control">
+              <label class="map-search">
+                <el-icon><Search /></el-icon>
+                <input v-model="search" aria-label="搜索知识点" placeholder="搜索知识点" />
+                <button v-if="search" type="button" aria-label="清空搜索" title="清空搜索" @click="search = ''">
+                  <el-icon><Close /></el-icon>
+                </button>
+              </label>
+              <div v-if="search.trim()" class="map-search-results" aria-label="知识点搜索结果">
+                <p v-if="!listedNodes.length" class="map-empty">没有找到匹配的知识点。</p>
                 <button
-                  v-for="node in chapterNodes(item.chapter)"
+                  v-for="node in listedNodes"
                   :key="node.canonical_id"
                   type="button"
-                  class="map-concept"
-                  :class="{ active: selectedId === node.canonical_id }"
+                  class="map-search-result"
                   @click="selectNode(node.canonical_id)"
                 >
                   <span>{{ node.display_name }}</span>
+                  <small>{{ node.chapter }}</small>
                 </button>
               </div>
             </div>
 
-            <div v-if="search.trim()" class="map-index__heading map-index__heading--concepts">
-              <span>搜索结果</span>
-            </div>
-            <p v-if="search.trim() && !listedNodes.length" class="map-empty">没有找到匹配的知识点。</p>
             <button
-              v-for="node in search.trim() ? listedNodes : []"
-              :key="node.canonical_id"
               type="button"
-              class="map-concept"
-              :class="{ active: selectedId === node.canonical_id }"
-              @click="selectNode(node.canonical_id)"
-            >
-              <span>{{ node.display_name }}</span>
-              <small v-if="search.trim()">{{ node.chapter }}</small>
-            </button>
-          </div>
-        </div>
-      </ResizableSidePanel>
-
-      <section class="map-stage" aria-label="知识图谱浏览区">
-        <div class="map-stage__toolbar">
-          <div>
-            <h2>{{ chapter ? chapterTitle : '全部知识关系' }}</h2>
-          </div>
-          <div class="map-stage__toolbar-actions">
-            <button
-              v-if="!indexOpen"
-              type="button"
-              class="map-inspector-toggle"
-              aria-controls="knowledge-map-index"
+              class="map-toolbar-button"
+              :class="{ active: indexOpen }"
+              aria-controls="knowledge-map-directory"
               :aria-expanded="indexOpen"
-              aria-label="展开知识点导航"
-              title="展开知识点导航"
-              @click="openIndex"
+              aria-label="打开知识目录"
+              title="知识目录"
+              @click="indexOpen = !indexOpen"
             >
-              <PanelToggleIcon side="start" />
+              <el-icon><Menu /></el-icon>
+              <span>目录</span>
             </button>
-            <button
-              v-if="!inspectorOpen"
-              type="button"
-              class="map-inspector-toggle"
-              aria-controls="knowledge-map-inspector"
-              :aria-expanded="inspectorOpen"
-              aria-label="展开知识点详情面板"
-              title="展开详情面板"
-              @click="openInspector"
-            >
-              <PanelToggleIcon side="end" />
-            </button>
-          </div>
-        </div>
 
-        <div class="map-filterbar">
-          <div class="map-relation-filters" aria-label="关系筛选">
-            <label v-for="(meta, key) in relationTypes" :key="key" :class="{ active: enabledRelations.includes(key) }">
-              <input v-model="enabledRelations" type="checkbox" :value="key" />
-              <i :style="{ background: meta.color }" />
-              {{ meta.label }}
-            </label>
-          </div>
-          <div class="map-view-options">
-            <label><span>学习状态</span><el-switch v-model="showPersonalState" size="small" /></label>
+            <el-dropdown
+              trigger="click"
+              placement="bottom-end"
+              popper-class="map-status-menu"
+              @command="setPersonalState"
+            >
+              <button
+                type="button"
+                class="map-status-trigger"
+                aria-haspopup="menu"
+                aria-label="选择学生状态显示方式"
+                title="学生状态"
+              >
+                <span>{{ statusModeLabel }}</span>
+                <el-icon><ArrowDown /></el-icon>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="all" class="map-status-item">
+                    <span class="map-status-item__copy">
+                      <strong>全部知识点</strong>
+                      <small>展示完整的知识地图</small>
+                    </span>
+                    <el-icon v-if="!showPersonalState" class="map-status-item__check"><Check /></el-icon>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="highlight" class="map-status-item">
+                    <span class="map-status-item__copy">
+                      <strong>已学知识点</strong>
+                      <small>保留全部节点，并高亮已有学习记录的 KC</small>
+                    </span>
+                    <el-icon v-if="showPersonalState" class="map-status-item__check"><Check /></el-icon>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+
+            <div
+              v-if="indexOpen"
+              id="knowledge-map-directory"
+              class="map-directory-popover"
+              aria-label="知识目录"
+            >
+              <div class="map-directory__header">
+                <strong>知识目录</strong>
+                <button type="button" aria-label="关闭知识目录" title="关闭知识目录" @click="collapseIndex">
+                  <el-icon><Close /></el-icon>
+                </button>
+              </div>
+              <div class="map-directory__scroll">
+                <button type="button" class="map-overview" :class="{ active: !chapter }" @click="selectChapter('')">
+                  <el-icon><Connection /></el-icon>
+                  <span>全部章节</span>
+                </button>
+                <div v-for="item in graph.chapters" :key="item.chapter" class="map-chapter-group">
+                  <button
+                    type="button"
+                    class="map-chapter"
+                    :class="{ active: chapter === item.chapter }"
+                    :aria-expanded="chapter === item.chapter"
+                    @click="selectChapter(item.chapter)"
+                  >
+                    <i :style="{ background: chapterColor(item.chapter) }" />
+                    <span>{{ item.title }}</span>
+                    <el-icon class="map-chapter__chevron"><ArrowRight /></el-icon>
+                  </button>
+                  <div v-if="chapter === item.chapter" class="map-chapter-kcs">
+                    <button
+                      v-for="node in chapterNodes(item.chapter)"
+                      :key="node.canonical_id"
+                      type="button"
+                      class="map-concept"
+                      :class="{ active: selectedId === node.canonical_id }"
+                      @click="selectNode(node.canonical_id)"
+                    >
+                      <span>{{ node.display_name }}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -151,9 +146,18 @@
             :show-personal-state="showPersonalState"
             @select="selectNode"
           />
-        </div>
-        <div v-if="showPersonalState" class="map-state-legend">
-          <span v-for="(meta, key) in learningStates" :key="key"><i :style="{ background: meta.color }" />{{ meta.label }}</span>
+          <div class="map-canvas-toolbar">
+            <div class="map-relation-filters" aria-label="关系筛选">
+              <label v-for="(meta, key) in relationTypes" :key="key" :class="{ active: enabledRelations.includes(key) }">
+                <input v-model="enabledRelations" type="checkbox" :value="key" />
+                <i :style="{ background: meta.color }" />
+                {{ meta.label }}
+              </label>
+            </div>
+          </div>
+          <div v-if="showPersonalState" class="map-state-legend">
+            <span v-for="(meta, key) in learningStates" :key="key"><i :style="{ background: meta.color }" />{{ meta.label }}</span>
+          </div>
         </div>
       </section>
 
@@ -179,7 +183,7 @@
               :aria-expanded="inspectorOpen"
               aria-label="收起知识点详情面板"
               title="收起详情面板"
-              @click="collapseInspector"
+              @click.stop="collapseInspector"
             >
               <PanelToggleIcon side="end" />
             </button>
@@ -205,8 +209,14 @@
             </section>
 
             <div class="map-actions">
-              <el-button type="primary" @click="ask(false)">讨论这个概念</el-button>
-              <el-button plain @click="ask(true)">做一道理解题</el-button>
+              <button type="button" class="map-action-button map-action-button--primary" @click="ask(false)">
+                <span>讨论这个概念</span>
+                <el-icon><ArrowRight /></el-icon>
+              </button>
+              <button type="button" class="map-action-button" @click="ask(true)">
+                <span>做一道理解题</span>
+                <el-icon><ArrowRight /></el-icon>
+              </button>
             </div>
 
             <details v-if="selectedNode.learning_points.length" class="map-references">
@@ -224,7 +234,7 @@
           <div v-else class="map-inspector__empty">
             <el-icon><Connection /></el-icon>
             <h2>选择一个 KC</h2>
-            <p>从左侧目录或知识图谱中选择概念，查看它的关系与学习内容。</p>
+            <p>从知识目录或知识图谱中选择概念，查看它的关系与学习内容。</p>
           </div>
         </div>
       </ResizableSidePanel>
@@ -233,13 +243,13 @@
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowRight, Close, Connection, Search } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowRight, Check, Close, Connection, Menu, Search } from '@element-plus/icons-vue'
 import { knowledgeMapApi } from '../api/knowledgeMap'
 import PanelToggleIcon from '../components/PanelToggleIcon.vue'
 import ResizableSidePanel from '../components/ResizableSidePanel.vue'
-import { chapterColor, learningStateMeta, learningStates, neighborsOf, questionForNode, relationTypes } from '../utils/knowledgeMap'
+import { chapterColor, learningStateMeta, learningStates, questionForNode, relationTypes } from '../utils/knowledgeMap'
 
 const KnowledgeMapCanvas = defineAsyncComponent(() => import('../components/KnowledgeMapCanvas.vue'))
 
@@ -252,14 +262,14 @@ const notice = ref('')
 const search = ref('')
 const chapter = ref('')
 const selectedId = ref('')
-const indexOpen = ref(true)
+const indexOpen = ref(false)
 const inspectorOpen = ref(false)
 const showPersonalState = ref(false)
 const enabledRelations = ref(Object.keys(relationTypes))
 const byId = computed(() => new Map((graph.value?.nodes || []).map(node => [node.canonical_id, node])))
 const concepts = computed(() => graph.value?.nodes?.filter(node => node.node_type === 'kc') || [])
-const chapterTitle = computed(() => graph.value?.chapters?.find(item => item.chapter === chapter.value)?.title)
 const selectedNode = computed(() => byId.value.get(selectedId.value))
+const statusModeLabel = computed(() => showPersonalState.value ? '已学知识点' : '全部知识点')
 const listedNodes = computed(() => {
   const needle = search.value.trim().toLowerCase().replace(/\s+/g, '')
   if (!needle && !chapter.value) return []
@@ -299,12 +309,12 @@ function collapseInspector() {
   inspectorOpen.value = false
 }
 
-function openIndex() {
-  indexOpen.value = true
-}
-
 function openInspector() {
   inspectorOpen.value = true
+}
+
+function setPersonalState(value) {
+  showPersonalState.value = value === 'highlight'
 }
 
 function chapterNodes(value) {
@@ -317,8 +327,16 @@ function selectNode(id) {
   if (node.node_type === 'chapter') { selectChapter(node.chapter); return }
   if (chapter.value && chapter.value !== node.chapter) chapter.value = node.chapter
   selectedId.value = id
+  search.value = ''
   openInspector()
   notice.value = ''
+}
+
+function handleDocumentKeydown(event) {
+  if (event.key === 'Escape') {
+    collapseIndex()
+    collapseInspector()
+  }
 }
 
 async function load() {
@@ -333,7 +351,13 @@ async function load() {
 
 function ask(practice) { router.push({ path: '/chat', query: { question: questionForNode(selectedNode.value, practice) } }) }
 watch(() => route.query.concept, value => { if (graph.value && typeof value === 'string') selectNode(value) })
-onMounted(load)
+onMounted(() => {
+  document.addEventListener('keydown', handleDocumentKeydown)
+  load()
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleDocumentKeydown)
+})
 </script>
 
 <style scoped src="../styles/knowledge-map.css"></style>
