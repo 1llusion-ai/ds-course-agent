@@ -97,7 +97,6 @@
         <span class="utility-entry__icon"><el-icon><DocumentChecked /></el-icon></span>
         <span v-if="!props.collapsed" class="utility-entry__body">
           <span class="utility-entry__title">我的测验</span>
-          <span class="utility-entry__meta">完成 Agent 安排的练习</span>
         </span>
       </button>
       <button
@@ -111,7 +110,6 @@
         <span class="utility-entry__icon"><el-icon><Connection /></el-icon></span>
         <span v-if="!props.collapsed" class="utility-entry__body">
           <span class="utility-entry__title">知识地图</span>
-          <span class="utility-entry__meta">探索知识关系与学习目标</span>
         </span>
       </button>
       <button
@@ -132,7 +130,6 @@
         </span>
         <span v-if="!props.collapsed" class="utility-entry__body">
           <span class="utility-entry__title">学习画像</span>
-          <span class="utility-entry__meta">{{ profileSummaryText }}</span>
         </span>
       </button>
     </nav>
@@ -404,24 +401,6 @@ const groupedSessions = computed(() => {
 })
 
 const showSessionEmpty = computed(() => hasSearchQuery.value && groupedSessions.value.length === 0)
-
-const profileSummaryText = computed(() => {
-  const summary = profileStore.summary
-  if (!summary) {
-    return profileStore.loading ? '同步中...' : '查看学习状态'
-  }
-
-  const weakCount = Array.isArray(summary.weak_spots) ? summary.weak_spots.length : 0
-  const pendingCount = Array.isArray(summary.pending_weak_spots) ? summary.pending_weak_spots.length : 0
-  const recentCount = Array.isArray(summary.recent_concepts) ? summary.recent_concepts.length : 0
-  const totalWeak = weakCount + pendingCount
-
-  if (totalWeak || recentCount) {
-    return `薄弱点 ${totalWeak} · 近期关注 ${recentCount}`
-  }
-
-  return '暂无明显薄弱点'
-})
 
 function selectSession(id) {
   sessionStore.setCurrentSession(id)
@@ -773,8 +752,8 @@ onBeforeUnmount(() => {
 .sidebar-top {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 6px 10px 12px;
+  gap: 0;
+  padding: 6px 10px 0;
 }
 
 .chat-sidebar--collapsed .sidebar-top {
@@ -785,16 +764,16 @@ onBeforeUnmount(() => {
 .new-chat-button {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   width: 100%;
-  min-height: 44px;
-  gap: 7px;
-  padding: 0 14px;
-  color: #2563eb;
-  background: rgba(239, 246, 255, 0.92);
-  border: 1px solid rgba(147, 197, 253, 0.58);
-  border-radius: 999px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 8px 22px rgba(37, 99, 235, 0.08);
+  min-height: 42px;
+  gap: 9px;
+  padding: 7px 9px;
+  color: #44403c;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  box-shadow: none;
   cursor: pointer;
   font: inherit;
   transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, transform 0.16s ease;
@@ -809,18 +788,15 @@ onBeforeUnmount(() => {
 }
 
 .new-chat-button:hover {
-  color: #1d4ed8;
-  background: #e8f1ff;
-  border-color: rgba(96, 165, 250, 0.72);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 10px 26px rgba(37, 99, 235, 0.12);
-  transform: translateY(-1px);
+  color: #1c1917;
+  background: rgba(28, 25, 23, 0.05);
+  border-color: transparent;
 }
 
 .new-chat-button--active {
-  color: #1d4ed8;
-  background: #e8f1ff;
-  border-color: rgba(96, 165, 250, 0.72);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 10px 26px rgba(37, 99, 235, 0.12);
+  color: #292524;
+  background: rgba(28, 25, 23, 0.06);
+  border-color: transparent;
 }
 
 .new-chat-button:active {
@@ -831,8 +807,8 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   color: currentColor;
   background: transparent;
   border-radius: 999px;
@@ -846,8 +822,8 @@ onBeforeUnmount(() => {
 
 .new-chat-button__text {
   flex: 0 1 auto;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   line-height: 1;
   text-align: center;
 }
@@ -1275,7 +1251,7 @@ onBeforeUnmount(() => {
   min-height: 42px;
   gap: 9px;
   padding: 7px 9px;
-  margin-top: 4px;
+  margin-top: 2px;
   color: #44403c;
   text-align: left;
   background: transparent;
@@ -1301,14 +1277,14 @@ onBeforeUnmount(() => {
 }
 
 .utility-entry--active {
-  color: #1d4ed8;
-  background: rgba(37, 99, 235, 0.09);
-  border-color: rgba(147, 197, 253, 0.28);
+  color: #292524;
+  background: rgba(28, 25, 23, 0.06);
+  border-color: transparent;
 }
 
 .utility-entry--active .utility-entry__icon {
-  color: #2563eb;
-  background: rgba(147, 197, 253, 0.24);
+  color: #44403c;
+  background: transparent;
 }
 
 .utility-entry--muted {
@@ -1320,11 +1296,11 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   color: #78716c;
-  background: rgba(28, 25, 23, 0.05);
-  border-radius: 9px;
+  background: transparent;
+  border-radius: 0;
 }
 
 .chat-sidebar--collapsed .utility-entry__icon {
@@ -1334,7 +1310,7 @@ onBeforeUnmount(() => {
 
 .utility-entry__icon--profile {
   color: #57534e;
-  background: rgba(28, 25, 23, 0.05);
+  background: transparent;
 }
 
 .profile-icon {
@@ -1351,8 +1327,8 @@ onBeforeUnmount(() => {
 
 .utility-entry__title {
   color: #292524;
-  font-size: 13px;
-  font-weight: 750;
+  font-size: 15px;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -1375,7 +1351,7 @@ onBeforeUnmount(() => {
 
 :global(html.theme-dark) .utility-entry--active .utility-entry__icon {
   color: var(--dark-text) !important;
-  background: rgba(255, 255, 255, 0.10) !important;
+  background: transparent !important;
 }
 
 .utility-entry__meta {
