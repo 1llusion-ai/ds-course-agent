@@ -51,7 +51,7 @@
             <p>{{ item.question_count }} 题 · {{ formatAssessmentTime(item.assigned_at) }}</p>
             <p v-if="item.session_id">{{ sessionTitle(item.session_id) }}</p>
           </div>
-          <el-button type="primary" @click="open(item)">
+          <el-button class="assessment-action-button" @click="open(item)">
             {{ item.status === 'submitted' ? '查看结果' : item.status === 'in_progress' ? '继续作答' : '开始作答' }}
             <el-icon><ArrowRight /></el-icon>
           </el-button>

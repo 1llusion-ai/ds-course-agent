@@ -109,11 +109,11 @@ function toggleSidebar() {
   }
 }
 
-function handleNewChat() {
+async function handleNewChat() {
   sessionStore.setCurrentSession(null)
   chatStore.setActiveSession(null)
   chatStore.clearMessages()
-  router.push('/chat')
+  await router.replace('/chat')
 }
 
 function applyThemePreference(value) {

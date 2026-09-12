@@ -189,6 +189,7 @@ class AliasSpec:
     concept_id: str
     policy: AliasPolicy
     token_pattern: re.Pattern[str] | None = None
+    is_display_name: bool = False
 
 
 def _trace_concept_map(stage: str, **data) -> None:
@@ -255,6 +256,7 @@ class KnowledgeGraph:
                     concept_id=cid,
                     policy=policy,
                     token_pattern=token_pattern,
+                    is_display_name=alias == concept["display_name"],
                 )
                 concept_ids = self.alias_to_concept.get(normalized_alias, ())
                 if cid not in concept_ids:
@@ -431,6 +433,7 @@ def _knowledge_graph_content_identity(graph: Any) -> str | None:
                         spec.policy.match_mode.value,
                         spec.policy.match_strength.value,
                         token_pattern,
+                        spec.is_display_name,
                     ]
                 )
 
@@ -559,11 +562,18 @@ class KnowledgeMapper:
     def _score_alias_match(self, alias_spec: AliasSpec, normalized: str) -> float:
         """按别名策略评分，contextual/supporting 别名不独立产生命中。"""
         alias = alias_spec.normalized_text
-        if not alias or not normalized or not alias_spec.policy.independently_emits_match:
+        if not alias or not normalized:
             return 0.0
 
         if alias == normalized:
+            if alias_spec.is_display_name:
+                return 1.0
+            if not alias_spec.policy.independently_emits_match:
+                return 0.0
             return 1.0
+
+        if not alias_spec.policy.independently_emits_match:
+            return 0.0
 
         if alias_spec.policy.match_mode is AliasMatchMode.TOKEN:
             if alias_spec.token_pattern is None or alias_spec.token_pattern.search(normalized) is None:

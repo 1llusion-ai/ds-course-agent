@@ -74,13 +74,15 @@
   .assessment-list-filters { justify-content: flex-start; }
 }
 .assessment-list-content { max-width: 980px; margin: 0 auto; padding: 0 28px 60px; }
-.assessment-list { border-top: 1px solid var(--assessment-border); }
-.assessment-list-item { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; align-items: center; gap: 18px; min-height: 92px; padding: 18px 0; border-bottom: 1px solid var(--assessment-border); }
+.assessment-list { border-top: 0; }
+.assessment-list-item { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; align-items: center; gap: 18px; min-height: 92px; padding: 18px 0; }
 .assessment-list-item__status { width: fit-content; padding: 4px 8px; color: #8a5a00; background: #fff7db; border: 1px solid #f4df9e; border-radius: 5px; font-size: 12px; font-weight: 700; }
 .assessment-list-item__status[data-status="in_progress"] { color: #075985; background: #eaf7ff; border-color: #b8deef; }
 .assessment-list-item__status[data-status="submitted"] { color: #166534; background: #ecfdf3; border-color: #bbefca; }
 .assessment-list-item__body h3 { margin: 0; font-size: 16px; }
 .assessment-list-item__body p { margin: 6px 0 0; color: var(--assessment-muted); font-size: 12px; }
+.assessment-action-button { min-height: 40px; padding: 0 17px; color: #fff !important; background: #111827 !important; border: 0 !important; border-radius: 999px !important; font-weight: 700; }
+.assessment-action-button:hover { color: #fff !important; background: #000 !important; }
 
 .assessment-empty { display: grid; place-items: center; min-height: 360px; padding: 40px 20px; color: var(--assessment-muted); text-align: center; }
 .assessment-empty > .el-icon { margin-bottom: 14px; font-size: 32px; }

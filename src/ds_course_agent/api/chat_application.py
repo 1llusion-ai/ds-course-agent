@@ -26,6 +26,9 @@ from ds_course_agent.api.stream_jobs import ActiveStreamJob, stream_job_registry
 
 logger = logging.getLogger(__name__)
 
+STREAM_CONCURRENCY_LIMIT = 2
+_stream_concurrency = asyncio.Semaphore(STREAM_CONCURRENCY_LIMIT)
+
 
 async def send_message(data: ChatRequest, student_id: str) -> ChatResponse:
     """Execute and persist one non-streaming chat turn."""
@@ -124,36 +127,48 @@ async def _stream_message_events(
     operation_lock_acquired = True
 
     try:
-        is_first_message = chat_sessions.message_count(session_id) == 0
-        user_message = ChatMessage(role="user", content=data.message)
-        chat_sessions.append_message_locked(session_id, user_message, save=False)
-        chat_sessions.schedule_title_generation(
-            session_id,
-            data.message,
-            is_first_message=is_first_message,
-        )
-
-        def event_source():
-            stream_kwargs: dict[str, Any] = {
-                "message": data.message,
-                "session_id": session_id,
-                "student_id": student_id,
+        yield {
+            "type": "progress",
+            "phase": "queued",
+            "message": "当前请求排队中，前面的请求完成后将自动开始。",
+        }
+        async with _stream_concurrency:
+            yield {
+                "type": "progress",
+                "phase": "generation",
+                "message": "正在生成...",
             }
-            if data.web_search:
-                stream_kwargs["web_search"] = True
-            return stream_chat_with_history(**stream_kwargs)
 
-        job = chat_streaming.launch_stream_worker(
-            session_id=session_id,
-            student_id=student_id,
-            operation_lock=operation_lock,
-            event_source=event_source,
-            message_timestamp=datetime.now(),
-            web_search=bool(data.web_search),
-        )
-        operation_lock_acquired = False
-        async for event in iter_stream_job_events(job, include_snapshot=False):
-            yield event
+            is_first_message = chat_sessions.message_count(session_id) == 0
+            user_message = ChatMessage(role="user", content=data.message)
+            chat_sessions.append_message_locked(session_id, user_message, save=False)
+            chat_sessions.schedule_title_generation(
+                session_id,
+                data.message,
+                is_first_message=is_first_message,
+            )
+
+            def event_source():
+                stream_kwargs: dict[str, Any] = {
+                    "message": data.message,
+                    "session_id": session_id,
+                    "student_id": student_id,
+                }
+                if data.web_search:
+                    stream_kwargs["web_search"] = True
+                return stream_chat_with_history(**stream_kwargs)
+
+            job = chat_streaming.launch_stream_worker(
+                session_id=session_id,
+                student_id=student_id,
+                operation_lock=operation_lock,
+                event_source=event_source,
+                message_timestamp=datetime.now(),
+                web_search=bool(data.web_search),
+            )
+            operation_lock_acquired = False
+            async for event in iter_stream_job_events(job, include_snapshot=False):
+                yield event
     except (asyncio.CancelledError, GeneratorExit):
         raise
     finally:
@@ -182,31 +197,43 @@ async def _continue_message_events(
     operation_lock_acquired = True
 
     try:
-        target_item = chat_sessions.find_stopped_assistant_turn(session_id, data.message_timestamp)
-        base_message = chat_sessions.message_from_dict(target_item)
+        yield {
+            "type": "progress",
+            "phase": "queued",
+            "message": "当前请求排队中，前面的请求完成后将自动开始。",
+        }
+        async with _stream_concurrency:
+            yield {
+                "type": "progress",
+                "phase": "generation",
+                "message": "正在继续生成...",
+            }
 
-        def event_source():
-            return stream_continue_with_history(
-                partial_content=base_message.content,
+            target_item = chat_sessions.find_stopped_assistant_turn(session_id, data.message_timestamp)
+            base_message = chat_sessions.message_from_dict(target_item)
+
+            def event_source():
+                return stream_continue_with_history(
+                    partial_content=base_message.content,
+                    session_id=session_id,
+                    student_id=student_id,
+                )
+
+            job = chat_streaming.launch_stream_worker(
                 session_id=session_id,
                 student_id=student_id,
+                operation_lock=operation_lock,
+                event_source=event_source,
+                message_timestamp=base_message.timestamp,
+                web_search=base_message.web_search_requested,
+                initial_content=base_message.content,
+                initial_progress_events=base_message.progress_events,
+                replace_message_item=target_item,
+                base_message=base_message,
             )
-
-        job = chat_streaming.launch_stream_worker(
-            session_id=session_id,
-            student_id=student_id,
-            operation_lock=operation_lock,
-            event_source=event_source,
-            message_timestamp=base_message.timestamp,
-            web_search=base_message.web_search_requested,
-            initial_content=base_message.content,
-            initial_progress_events=base_message.progress_events,
-            replace_message_item=target_item,
-            base_message=base_message,
-        )
-        operation_lock_acquired = False
-        async for event in iter_stream_job_events(job, include_snapshot=False):
-            yield event
+            operation_lock_acquired = False
+            async for event in iter_stream_job_events(job, include_snapshot=False):
+                yield event
     except (asyncio.CancelledError, GeneratorExit):
         raise
     finally:

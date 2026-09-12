@@ -5,9 +5,9 @@
         type="button"
         class="brand-icon-button"
         :class="{ 'brand-icon-button--logo': !props.collapsed }"
-        :aria-label="props.collapsed ? '展开边栏' : '教学 Agent'"
-        :title="props.collapsed ? '展开边栏' : '教学 Agent'"
-        @click="handleBrandClick"
+        :aria-label="props.collapsed ? '展开边栏' : '开启新对话'"
+        :title="props.collapsed ? '展开边栏' : '开启新对话'"
+        @click.stop="handleBrandClick"
       >
         <img
           :src="props.collapsed ? '/icon/thought_mark.png' : '/icon/thought_logo.png'"
@@ -497,7 +497,11 @@ function handleGlobalPointerDown(event) {
 function handleBrandClick() {
   if (props.collapsed) {
     emit('toggle-collapse')
+    return
   }
+  closeSessionSearch()
+  cancelSessionRename()
+  emit('new-chat')
 }
 
 function handleSessionClick(id, event) {

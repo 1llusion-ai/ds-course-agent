@@ -226,6 +226,23 @@ def test_every_display_name_maps_to_its_canonical_concept_without_embedding(monk
         assert concept_id in {match.concept_id for match in matches}, concept["display_name"]
 
 
+def test_generic_display_name_is_only_exact_match_for_contextual_concept(monkeypatch):
+    def unexpected_embedding(*args, **kwargs):
+        pytest.fail("An exact display-name query must not require online embeddings")
+
+    monkeypatch.setattr(KnowledgeMapper, "_embed_text", unexpected_embedding)
+    mapper = KnowledgeMapper(KnowledgeGraph())
+
+    exact = mapper.map_question("数据科学", top_k=10)
+    assert exact[0].concept_id == "data_science_definition"
+    assert exact[0].method == "exact_alias"
+
+    contextual = mapper.map_question("数据科学的网络爬虫案例", top_k=10)
+    contextual_ids = {match.concept_id for match in contextual}
+    assert "data_science_definition" not in contextual_ids
+    assert "web_crawler" in contextual_ids
+
+
 def test_specific_concept_suppresses_only_the_overlapping_generic_match(monkeypatch):
     monkeypatch.setattr("ds_course_agent.shared.config.CONCEPT_MAP_EMBEDDING_MODE", "disabled")
     mapper = KnowledgeMapper(KnowledgeGraph())
