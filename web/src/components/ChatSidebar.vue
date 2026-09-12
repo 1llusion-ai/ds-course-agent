@@ -1,11 +1,5 @@
 <template>
-  <aside
-    class="chat-sidebar"
-    :class="{
-      'chat-sidebar--collapsed': props.collapsed,
-      'chat-sidebar--mobile': props.mobile
-    }"
-  >
+  <aside class="chat-sidebar" :class="{ 'chat-sidebar--collapsed': props.collapsed }">
     <div class="sidebar-brand-row">
       <button
         type="button"
@@ -37,19 +31,6 @@
         </button>
 
         <button
-          v-if="props.mobile"
-          type="button"
-          class="sidebar-collapse-button"
-          data-mobile-drawer-focus
-          aria-label="关闭课程导航"
-          title="关闭课程导航"
-          @click="handleMobileClose"
-        >
-          <el-icon><Close /></el-icon>
-        </button>
-
-        <button
-          v-else
           type="button"
           class="sidebar-collapse-button"
           aria-label="折叠边栏"
@@ -111,7 +92,7 @@
         :class="{ 'utility-entry--active': isAssessmentActive }"
         :aria-current="isAssessmentActive ? 'page' : undefined"
         title="我的测验"
-        @click="navigateTo('/assessments')"
+        @click="router.push('/assessments')"
       >
         <span class="utility-entry__icon"><el-icon><DocumentChecked /></el-icon></span>
         <span v-if="!props.collapsed" class="utility-entry__body">
@@ -125,7 +106,7 @@
         :class="{ 'utility-entry--active': isKnowledgeMapActive }"
         :aria-current="isKnowledgeMapActive ? 'page' : undefined"
         title="知识地图"
-        @click="navigateTo('/knowledge-map')"
+        @click="router.push('/knowledge-map')"
       >
         <span class="utility-entry__icon"><el-icon><Connection /></el-icon></span>
         <span v-if="!props.collapsed" class="utility-entry__body">
@@ -141,7 +122,14 @@
         title="学习画像"
         @click="handleProfileOpen"
       >
-        <span class="utility-entry__icon"><el-icon><User /></el-icon></span>
+        <span class="utility-entry__icon utility-entry__icon--profile">
+          <svg class="profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <rect x="4" y="4.5" width="16" height="15" rx="3.2" stroke-width="1.8" />
+            <circle cx="10" cy="10" r="2.1" stroke-width="1.8" />
+            <path stroke-linecap="round" stroke-width="1.8" d="M7.2 16.1c.7-1.4 1.7-2.1 2.8-2.1s2.1.7 2.8 2.1" />
+            <path stroke-linecap="round" stroke-width="1.8" d="M15.3 9h1.8M15.3 12h1.8M15.3 15h1.8" />
+          </svg>
+        </span>
         <span v-if="!props.collapsed" class="utility-entry__body">
           <span class="utility-entry__title">学习画像</span>
           <span class="utility-entry__meta">{{ profileSummaryText }}</span>
@@ -275,47 +263,20 @@
     </el-scrollbar>
 
     <div class="sidebar-footer">
-      <el-dropdown
-        trigger="click"
-        placement="top-start"
-        popper-class="account-menu"
-        @command="handleAccountCommand"
+      <button
+        type="button"
+        class="utility-entry utility-entry--muted"
+        title="设置"
+        @click="handleSettingsClick"
       >
-        <button
-          type="button"
-          class="utility-entry utility-entry--account"
-          :title="accountDisplayName"
-          @click.stop
-        >
-          <span class="account-avatar" aria-hidden="true">{{ accountInitial }}</span>
-          <span v-if="!props.collapsed" class="utility-entry__body">
-            <span class="utility-entry__title">{{ accountDisplayName }}</span>
-            <span class="utility-entry__meta">账户与外观</span>
-          </span>
-          <el-icon v-if="!props.collapsed" class="account-menu-trigger"><MoreFilled /></el-icon>
-        </button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <li class="account-menu__identity" role="presentation">
-              <strong>{{ accountDisplayName }}</strong>
-              <span v-if="accountSecondaryText">{{ accountSecondaryText }}</span>
-            </li>
-            <li class="account-menu__label" role="presentation">外观</li>
-            <el-dropdown-item command="theme:system" :class="{ 'is-active': uiStore.theme === 'system' }">
-              <el-icon><Monitor /></el-icon>跟随系统
-            </el-dropdown-item>
-            <el-dropdown-item command="theme:light" :class="{ 'is-active': uiStore.theme === 'light' }">
-              <el-icon><Sunny /></el-icon>浅色
-            </el-dropdown-item>
-            <el-dropdown-item command="theme:dark" :class="{ 'is-active': uiStore.theme === 'dark' }">
-              <el-icon><Moon /></el-icon>深色
-            </el-dropdown-item>
-            <el-dropdown-item command="logout" divided class="account-menu__logout">
-              <el-icon><SwitchButton /></el-icon>退出登录
-            </el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
+        <span class="utility-entry__icon">
+          <el-icon><Setting /></el-icon>
+        </span>
+        <span v-if="!props.collapsed" class="utility-entry__body">
+          <span class="utility-entry__title">设置</span>
+          <span class="utility-entry__meta">后续开放</span>
+        </span>
+      </button>
     </div>
   </aside>
 </template>
@@ -324,48 +285,26 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  Close,
-  Connection,
-  DocumentChecked,
-  EditPen,
-  Monitor,
-  Moon,
-  MoreFilled,
-  Search,
-  Sunny,
-  SwitchButton,
-  User
-} from '@element-plus/icons-vue'
 
 import PanelToggleIcon from './PanelToggleIcon.vue'
-import { workspaceDangerConfirmOptions } from '../utils/feedback'
-import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
-import { useUiStore } from '../stores/ui'
 
 const props = defineProps({
   collapsed: {
     type: Boolean,
     default: false
-  },
-  mobile: {
-    type: Boolean,
-    default: false
   }
 })
 
-const emit = defineEmits(['toggle-collapse', 'new-chat', 'mobile-close'])
+const emit = defineEmits(['toggle-collapse', 'new-chat'])
 
 const route = useRoute()
 const router = useRouter()
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
 const profileStore = useProfileStore()
-const authStore = useAuthStore()
-const uiStore = useUiStore()
 const searchQuery = ref('')
 const searchOpen = ref(false)
 const searchInputRef = ref(null)
@@ -384,15 +323,22 @@ const activeSessionId = computed(() => (
 const isProfileActive = computed(() => route.name === 'Profile')
 const isKnowledgeMapActive = computed(() => route.name === 'KnowledgeMap')
 const isAssessmentActive = computed(() => String(route.name || '').startsWith('Assessment'))
-const accountDisplayName = computed(() => (
-  authStore.user?.display_name || authStore.user?.name || authStore.user?.username || authStore.user?.student_id || '课程账户'
-))
-const accountSecondaryText = computed(() => (
-  authStore.user?.student_id || authStore.user?.email || ''
-))
-const accountInitial = computed(() => String(accountDisplayName.value).trim().slice(0, 1).toUpperCase() || '课')
 
 const hasSearchQuery = computed(() => Boolean(normalizeSearchText(searchQuery.value)))
+
+const sessionDialogClasses = {
+  overlay: 'session-dialog-overlay',
+  deleteDialog: 'session-dialog session-dialog--delete',
+  cancelButton: 'session-dialog__cancel',
+  dangerConfirmButton: 'session-dialog__confirm session-dialog__confirm--danger'
+}
+
+const sessionDialogBaseOptions = {
+  modalClass: sessionDialogClasses.overlay,
+  cancelButtonClass: sessionDialogClasses.cancelButton,
+  closeOnClickModal: true,
+  distinguishCancelAndClose: true
+}
 
 const filteredSessions = computed(() => {
   const query = normalizeSearchText(searchQuery.value)
@@ -473,41 +419,14 @@ const profileSummaryText = computed(() => {
 function selectSession(id) {
   sessionStore.setCurrentSession(id)
   router.push(`/chat/${id}`)
-  closeMobileNavigation()
 }
 
 function handleProfileOpen() {
-  navigateTo('/profile')
+  router.push('/profile')
 }
 
-function navigateTo(path) {
-  router.push(path)
-  closeMobileNavigation()
-}
-
-function closeMobileNavigation() {
-  if (props.mobile) emit('mobile-close')
-}
-
-function handleMobileClose() {
-  emit('mobile-close')
-}
-
-async function handleAccountCommand(command) {
-  if (command.startsWith('theme:')) {
-    uiStore.setTheme(command.slice('theme:'.length))
-    return
-  }
-
-  if (command !== 'logout') return
-  try {
-    await authStore.logout()
-    closeMobileNavigation()
-    await router.replace('/login')
-  } catch (error) {
-    console.error('退出登录失败:', error)
-    ElMessage.error('退出登录失败，请稍后重试。')
-  }
+function handleSettingsClick() {
+  ElMessage.info('设置页后续开放')
 }
 
 function handleSidebarToggle() {
@@ -649,9 +568,11 @@ async function handleDelete(id) {
       '删除这个对话？',
       {
         type: 'warning',
-        ...workspaceDangerConfirmOptions,
+        ...sessionDialogBaseOptions,
+        customClass: sessionDialogClasses.deleteDialog,
         confirmButtonText: '删除',
-        cancelButtonText: '取消'
+        cancelButtonText: '取消',
+        confirmButtonClass: sessionDialogClasses.dangerConfirmButton
       }
     )
     await sessionStore.deleteSession(id)
@@ -747,9 +668,9 @@ onBeforeUnmount(() => {
   width: 18rem;
   height: 100%;
   overflow: hidden;
-  color: var(--text);
-  background: var(--sidebar-bg);
-  border-right: 0;
+  color: #292524;
+  background: transparent;
+  border-right: 1px solid rgba(214, 211, 209, 0.34);
   transition: width 0.18s ease;
 }
 
@@ -786,10 +707,10 @@ onBeforeUnmount(() => {
   width: 42px;
   height: 42px;
   padding: 0;
-  color: var(--text-muted);
+  color: #57534e;
   background: transparent;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   cursor: pointer;
   transition: background 0.16s ease, color 0.16s ease;
 }
@@ -804,8 +725,8 @@ onBeforeUnmount(() => {
 .sidebar-search-button:hover,
 .sidebar-search-button--active,
 .sidebar-collapse-button:hover {
-  color: var(--text);
-  background: var(--surface-hover);
+  color: #292524;
+  background: rgba(28, 25, 23, 0.06);
 }
 
 .brand-icon-button:active,
@@ -858,11 +779,11 @@ onBeforeUnmount(() => {
   min-height: 44px;
   gap: 7px;
   padding: 0 14px;
-  color: var(--text);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: none;
+  color: #2563eb;
+  background: rgba(239, 246, 255, 0.92);
+  border: 1px solid rgba(147, 197, 253, 0.58);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 8px 22px rgba(37, 99, 235, 0.08);
   cursor: pointer;
   font: inherit;
   transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, transform 0.16s ease;
@@ -877,18 +798,18 @@ onBeforeUnmount(() => {
 }
 
 .new-chat-button:hover {
-  color: var(--text);
-  background: var(--surface-hover);
-  border-color: var(--border-strong);
-  box-shadow: none;
-  transform: none;
+  color: #1d4ed8;
+  background: #e8f1ff;
+  border-color: rgba(96, 165, 250, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 10px 26px rgba(37, 99, 235, 0.12);
+  transform: translateY(-1px);
 }
 
 .new-chat-button--active {
-  color: var(--text);
-  background: var(--surface-hover);
-  border-color: var(--border-strong);
-  box-shadow: none;
+  color: #1d4ed8;
+  background: #e8f1ff;
+  border-color: rgba(96, 165, 250, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 10px 26px rgba(37, 99, 235, 0.12);
 }
 
 .new-chat-button:active {
@@ -935,27 +856,27 @@ onBeforeUnmount(() => {
   gap: 8px;
   min-height: 38px;
   padding: 0 11px;
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: rgba(28, 25, 23, 0.04);
+  border: 1px solid transparent;
+  border-radius: 11px;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
 .session-search:focus-within {
-  background: var(--surface);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus-ring);
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(168, 162, 158, 0.32);
+  box-shadow: none;
 }
 
 .session-search__icon {
   flex-shrink: 0;
-  color: var(--text-faint);
+  color: #a8a29e;
 }
 
 .session-search__input {
   width: 100%;
   min-width: 0;
-  color: var(--text);
+  color: #292524;
   background: transparent;
   border: 0;
   outline: none;
@@ -964,7 +885,7 @@ onBeforeUnmount(() => {
 }
 
 .session-search__input::placeholder {
-  color: var(--text-faint);
+  color: #a8a29e;
 }
 
 .session-search__close {
@@ -975,7 +896,7 @@ onBeforeUnmount(() => {
   width: 22px;
   height: 22px;
   padding: 0;
-  color: var(--text-faint);
+  color: #a8a29e;
   background: transparent;
   border: 0;
   border-radius: 999px;
@@ -986,8 +907,8 @@ onBeforeUnmount(() => {
 }
 
 .session-search__close:hover {
-  color: var(--text);
-  background: var(--surface-hover);
+  color: #44403c;
+  background: rgba(28, 25, 23, 0.06);
 }
 
 .session-scroll {
@@ -1007,7 +928,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   padding: 7px 6px 5px;
-  color: var(--text-faint);
+  color: #a8a29e;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -1030,23 +951,23 @@ onBeforeUnmount(() => {
 }
 
 .session-wrapper:hover {
-  background: var(--surface-hover);
+  background: rgba(28, 25, 23, 0.05);
 }
 
 .session-wrapper--active {
-  background: var(--surface-hover);
+  background: rgba(28, 25, 23, 0.075);
   border-color: transparent;
   box-shadow: none;
 }
 
 .session-wrapper--pinned:not(.session-wrapper--active) {
-  background: var(--surface-muted);
+  background: rgba(28, 25, 23, 0.035);
   border-color: transparent;
 }
 
 .session-wrapper--editing {
-  background: var(--surface);
-  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.62);
+  border-color: rgba(147, 197, 253, 0.50);
 }
 
 .session-leading {
@@ -1096,7 +1017,7 @@ onBeforeUnmount(() => {
 .session-title {
   min-width: 0;
   overflow: hidden;
-  color: var(--text);
+  color: #3f3f3f;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
@@ -1109,19 +1030,19 @@ onBeforeUnmount(() => {
   min-width: 0;
   height: 28px;
   padding: 0 8px;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
+  color: #292524;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(147, 197, 253, 0.72);
+  border-radius: 8px;
   outline: none;
-  box-shadow: 0 0 0 3px var(--focus-ring);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.10);
   font: inherit;
   font-size: 13px;
   font-weight: 650;
 }
 
 .session-wrapper--active .session-title {
-  color: var(--text);
+  color: #1f1f1f;
   font-weight: 750;
 }
 
@@ -1168,7 +1089,7 @@ onBeforeUnmount(() => {
   width: 28px;
   height: 28px;
   padding: 0;
-  color: var(--text-muted);
+  color: #78716c;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 9px;
@@ -1185,8 +1106,8 @@ onBeforeUnmount(() => {
 
 .session-menu-btn:hover,
 .session-menu-btn:focus {
-  color: var(--text);
-  background: var(--surface-hover);
+  color: #292524;
+  background: rgba(28, 25, 23, 0.07);
   border-color: transparent;
 }
 
@@ -1198,11 +1119,9 @@ onBeforeUnmount(() => {
 :global(.session-action-menu) {
   min-width: 150px;
   padding: 6px;
-  color: var(--text);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
+  border-radius: 14px;
+  border: 1px solid rgba(214, 211, 209, 0.88);
+  box-shadow: 0 18px 48px rgba(28, 25, 23, 0.14);
 }
 
 :global(.session-action-menu .el-dropdown-menu) {
@@ -1218,8 +1137,8 @@ onBeforeUnmount(() => {
   gap: 9px;
   min-height: 34px;
   padding: 8px 10px;
-  color: var(--text);
-  border-radius: 5px;
+  color: #44403c;
+  border-radius: 10px;
   font-size: 13px;
   font-weight: 650;
   line-height: 1.2;
@@ -1227,13 +1146,13 @@ onBeforeUnmount(() => {
 
 :global(.session-action-menu .el-dropdown-menu__item:not(.is-disabled):focus),
 :global(.session-action-menu .el-dropdown-menu__item:not(.is-disabled):hover) {
-  color: var(--text);
-  background: var(--surface-hover);
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.08);
 }
 
 :global(.session-action-menu .el-dropdown-menu__item--divided) {
   margin-top: 5px;
-  border-top-color: var(--border);
+  border-top-color: rgba(231, 229, 228, 0.92);
 }
 
 :global(.session-action-menu .menu-item-icon) {
@@ -1251,19 +1170,19 @@ onBeforeUnmount(() => {
 }
 
 :global(.session-action-menu .menu-item-danger) {
-  color: var(--danger);
+  color: #dc2626;
 }
 
 :global(.session-action-menu .menu-item-danger:not(.is-disabled):focus),
 :global(.session-action-menu .menu-item-danger:not(.is-disabled):hover) {
-  color: var(--danger);
-  background: var(--danger-subtle);
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .session-spinner {
   width: 10px;
   height: 10px;
-  border: 2px solid var(--border);
+  border: 2px solid rgba(79, 70, 229, 0.18);
   border-top-color: currentColor;
   border-radius: 9999px;
   animation: session-spin 0.8s linear infinite;
@@ -1277,11 +1196,11 @@ onBeforeUnmount(() => {
   min-height: 160px;
   margin: 10px 4px;
   padding: 24px 16px;
-  color: var(--text-faint);
+  color: #a8a29e;
   text-align: center;
   background: transparent;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-md);
+  border: 1px dashed rgba(214, 211, 209, 0.72);
+  border-radius: 14px;
 }
 
 .session-empty__icon {
@@ -1291,14 +1210,14 @@ onBeforeUnmount(() => {
   width: 34px;
   height: 34px;
   margin-bottom: 10px;
-  color: var(--text-muted);
-  background: var(--surface-muted);
-  border-radius: var(--radius-sm);
+  color: #78716c;
+  background: rgba(245, 245, 244, 0.95);
+  border-radius: 12px;
 }
 
 .session-empty p {
   margin: 0 0 4px;
-  color: var(--text);
+  color: #57534e;
   font-weight: 700;
 }
 
@@ -1309,7 +1228,7 @@ onBeforeUnmount(() => {
 .sidebar-primary-nav {
   flex-shrink: 0;
   padding: 0 10px 10px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(231, 229, 228, 0.38);
 }
 
 .chat-sidebar--collapsed .sidebar-primary-nav {
@@ -1323,7 +1242,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   padding: 10px 12px 14px;
   background: transparent;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid rgba(231, 229, 228, 0.28);
 }
 
 .chat-sidebar--collapsed .sidebar-footer {
@@ -1334,6 +1253,10 @@ onBeforeUnmount(() => {
   padding: 8px 0 12px;
 }
 
+:global(html.theme-dark) .sidebar-primary-nav {
+  border-bottom-color: var(--dark-border-soft);
+}
+
 .utility-entry {
   display: flex;
   align-items: center;
@@ -1342,11 +1265,11 @@ onBeforeUnmount(() => {
   gap: 9px;
   padding: 7px 9px;
   margin-top: 4px;
-  color: var(--text);
+  color: #44403c;
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: 11px;
   cursor: pointer;
   font: inherit;
   transition: background 0.16s ease, color 0.16s ease;
@@ -1363,18 +1286,22 @@ onBeforeUnmount(() => {
 }
 
 .utility-entry:hover {
-  background: var(--surface-hover);
+  background: rgba(28, 25, 23, 0.05);
 }
 
 .utility-entry--active {
-  color: var(--text);
-  background: var(--surface-hover);
-  border-color: var(--border);
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.09);
+  border-color: rgba(147, 197, 253, 0.28);
 }
 
 .utility-entry--active .utility-entry__icon {
-  color: var(--text);
-  background: var(--surface);
+  color: #2563eb;
+  background: rgba(147, 197, 253, 0.24);
+}
+
+.utility-entry--muted {
+  color: #78716c;
 }
 
 .utility-entry__icon {
@@ -1384,14 +1311,24 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   width: 28px;
   height: 28px;
-  color: var(--text-muted);
-  background: var(--surface-muted);
-  border-radius: var(--radius-sm);
+  color: #78716c;
+  background: rgba(28, 25, 23, 0.05);
+  border-radius: 9px;
 }
 
 .chat-sidebar--collapsed .utility-entry__icon {
   width: 28px;
   height: 28px;
+}
+
+.utility-entry__icon--profile {
+  color: #57534e;
+  background: rgba(28, 25, 23, 0.05);
+}
+
+.profile-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .utility-entry__body {
@@ -1402,111 +1339,41 @@ onBeforeUnmount(() => {
 }
 
 .utility-entry__title {
-  color: var(--text);
+  color: #292524;
   font-size: 13px;
   font-weight: 750;
   line-height: 1.2;
 }
 
+.utility-entry--muted .utility-entry__title {
+  color: #57534e;
+}
+
+:global(html.theme-dark) .new-chat-button--active {
+  color: var(--dark-text) !important;
+  background: var(--dark-hover) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: none !important;
+}
+
+:global(html.theme-dark) .utility-entry--active {
+  color: var(--dark-text) !important;
+  background: var(--dark-hover) !important;
+  border-color: var(--dark-border) !important;
+}
+
+:global(html.theme-dark) .utility-entry--active .utility-entry__icon {
+  color: var(--dark-text) !important;
+  background: rgba(255, 255, 255, 0.10) !important;
+}
+
 .utility-entry__meta {
   overflow: hidden;
-  color: var(--text-muted);
+  color: #a8a29e;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
   line-height: 1.2;
-}
-
-.utility-entry--account {
-  align-items: center;
-  margin: 0;
-}
-
-.account-avatar {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  place-items: center;
-  color: var(--accent-contrast);
-  background: var(--accent);
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.account-menu-trigger {
-  margin-left: auto;
-  color: var(--text-faint);
-}
-
-:global(.account-menu) {
-  min-width: 208px;
-  padding: 5px;
-  color: var(--text);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-}
-
-:global(.account-menu .el-dropdown-menu) {
-  padding: 0;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-}
-
-:global(.account-menu .el-dropdown-menu__item) {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 0 9px;
-  color: var(--text);
-  font-size: 13px;
-}
-
-:global(.account-menu .el-dropdown-menu__item.is-active) {
-  color: var(--text);
-  background: var(--surface-hover);
-}
-
-:global(.account-menu .account-menu__logout) {
-  color: var(--danger);
-}
-
-:global(.account-menu__identity),
-:global(.account-menu__label) {
-  display: grid;
-  padding-inline: 9px;
-}
-
-:global(.account-menu__identity) {
-  gap: 2px;
-  padding-block: 7px 10px;
-}
-
-:global(.account-menu__identity strong) {
-  overflow: hidden;
-  color: var(--text);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-:global(.account-menu__identity span),
-:global(.account-menu__label) {
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-:global(.account-menu__label) {
-  padding-block: 6px 4px;
-}
-
-.chat-sidebar--mobile {
-  width: 100%;
 }
 
 

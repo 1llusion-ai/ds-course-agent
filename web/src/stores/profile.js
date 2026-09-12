@@ -8,42 +8,33 @@ export const useProfileStore = defineStore('profile', () => {
   const conceptDetail = ref(null)
   const loading = ref(false)
   const conceptLoading = ref(false)
-  let summaryVersion = 0
-  let detailVersion = 0
-  let conceptVersion = 0
 
   async function fetchSummary() {
-    const version = ++summaryVersion
     loading.value = true
     try {
-      const value = await profileApi.getSummary()
-      if (version === summaryVersion) summary.value = value
+      summary.value = await profileApi.getSummary()
     } finally {
-      if (version === summaryVersion) loading.value = false
+      loading.value = false
     }
   }
 
   async function fetchDetail() {
-    const version = ++detailVersion
     loading.value = true
     try {
-      const value = await profileApi.getDetail()
-      if (version === detailVersion) detail.value = value
+      detail.value = await profileApi.getDetail()
     } finally {
-      if (version === detailVersion) loading.value = false
+      loading.value = false
     }
   }
 
   async function fetchConceptDetail(conceptId) {
     if (!conceptId) return null
-    const version = ++conceptVersion
     conceptLoading.value = true
     try {
-      const value = await profileApi.getConcept(conceptId)
-      if (version === conceptVersion) conceptDetail.value = value
+      conceptDetail.value = await profileApi.getConcept(conceptId)
       return conceptDetail.value
     } finally {
-      if (version === conceptVersion) conceptLoading.value = false
+      conceptLoading.value = false
     }
   }
 
@@ -56,17 +47,6 @@ export const useProfileStore = defineStore('profile', () => {
     return profileApi.resolveWeakSpot(conceptId)
   }
 
-  function resetForUser() {
-    summaryVersion += 1
-    detailVersion += 1
-    conceptVersion += 1
-    summary.value = null
-    detail.value = null
-    conceptDetail.value = null
-    loading.value = false
-    conceptLoading.value = false
-  }
-
   return {
     summary,
     detail,
@@ -77,7 +57,6 @@ export const useProfileStore = defineStore('profile', () => {
     fetchDetail,
     fetchConceptDetail,
     clearConceptDetail,
-    resolveWeakSpot,
-    resetForUser
+    resolveWeakSpot
   }
 })

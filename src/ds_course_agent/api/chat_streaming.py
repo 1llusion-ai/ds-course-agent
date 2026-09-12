@@ -10,7 +10,6 @@ from datetime import datetime
 from typing import Any
 
 from ds_course_agent.api import chat_sessions
-from ds_course_agent.api.admission import ChatLease
 from ds_course_agent.api.schemas.chat import ChatMessage
 from ds_course_agent.api.stream_jobs import ActiveStreamJob, stream_job_registry
 
@@ -218,7 +217,6 @@ def launch_stream_worker(
     event_source: StreamEventSource,
     message_timestamp: datetime,
     web_search: bool,
-    admission_lease: ChatLease | None = None,
     initial_content: str = "",
     initial_progress_events: list[dict[str, Any]] | None = None,
     replace_message_item: dict[str, Any] | None = None,
@@ -478,7 +476,7 @@ def launch_stream_worker(
                 _publish_final(
                     {},
                     generation_status="error",
-                    generation_error="回答暂时无法生成，请稍后重试。",
+                    generation_error=f"流式响应失败: {str(exc)}",
                 )
             except Exception:
                 logger.error("流式失败状态保存失败", exc_info=True)
@@ -491,19 +489,13 @@ def launch_stream_worker(
             except Exception:
                 logger.exception("Failed to close upstream chat stream")
             finally:
-                if admission_lease is not None:
-                    admission_lease.release()
                 operation_lock.release()
 
-    try:
-        threading.Thread(
-            target=worker,
-            name=f"chat-sse-{session_id[:16]}",
-            daemon=True,
-        ).start()
-    except BaseException:
-        stream_job_registry.discard(session_id, job)
-        raise
+    threading.Thread(
+        target=worker,
+        name=f"chat-sse-{session_id[:16]}",
+        daemon=True,
+    ).start()
     return job
 
 

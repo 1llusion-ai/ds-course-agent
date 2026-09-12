@@ -33,7 +33,6 @@ def main(argv: list[str] | None = None) -> None:
         host=args.host,
         port=args.port,
         reload=args.reload,
-        workers=1,
         app_dir=str(PROJECT_ROOT / "src"),
     )
 

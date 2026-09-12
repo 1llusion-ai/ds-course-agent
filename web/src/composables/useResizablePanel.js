@@ -1,7 +1,5 @@
 import { onBeforeUnmount, ref } from 'vue'
 
-import { readLocalStorage, writeLocalStorage } from '../utils/storage'
-
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
 }
@@ -15,13 +13,13 @@ export function useResizablePanel({ storageKey, defaultWidth, minWidth, maxWidth
 
   function readStoredWidth() {
     if (typeof window === 'undefined') return defaultWidth
-    const stored = Number.parseFloat(readLocalStorage(storageKey))
+    const stored = Number.parseFloat(window.localStorage.getItem(storageKey))
     return Number.isFinite(stored) ? clamp(stored, minWidth, maxWidth) : defaultWidth
   }
 
   function persistWidth() {
     if (typeof window !== 'undefined') {
-      writeLocalStorage(storageKey, String(Math.round(width.value)))
+      window.localStorage.setItem(storageKey, String(Math.round(width.value)))
     }
   }
 

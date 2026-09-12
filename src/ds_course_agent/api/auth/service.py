@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -15,7 +14,7 @@ import ds_course_agent.shared.config as config
 logger = logging.getLogger(__name__)
 
 _ALGORITHM = "HS256"
-_DEV_SECRET = secrets.token_urlsafe(48)
+_DEV_SECRET = "dev-insecure-auth-secret-change-me"
 _warned_empty_secret = False
 
 
@@ -23,30 +22,13 @@ class AuthTokenError(ValueError):
     """Raised when a session token cannot be decoded or validated."""
 
 
-def validate_auth_configuration() -> None:
-    """Refuse production startup with a missing or known development signing key."""
-
-    if config.APP_ENV != "production":
-        return
-    secret = str(config.AUTH_SECRET_KEY or "").strip()
-    if len(secret.encode("utf-8")) < 32 or secret == "dev-insecure-auth-secret-change-me":
-        raise ValueError("Production requires AUTH_SECRET_KEY with at least 32 bytes of random secret material")
-
-
-def cookie_secure() -> bool:
-    """Require HTTPS cookies in production even if a legacy setting says false."""
-
-    return config.APP_ENV == "production" or bool(config.AUTH_COOKIE_SECURE)
-
-
 def _secret_key() -> str:
     global _warned_empty_secret
-    validate_auth_configuration()
     secret = str(getattr(config, "AUTH_SECRET_KEY", "") or "")
     if secret:
         return secret
     if not _warned_empty_secret:
-        logger.warning("AUTH_SECRET_KEY is empty; development sessions will expire when this process restarts")
+        logger.warning("AUTH_SECRET_KEY is empty; using an insecure development fallback")
         _warned_empty_secret = True
     return _DEV_SECRET
 

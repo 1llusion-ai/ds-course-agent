@@ -2,16 +2,16 @@
   <main class="login-page">
     <section class="login-panel">
       <div class="login-copy">
-        <p class="login-kicker">数据科学导论</p>
+        <p class="login-kicker">DATA SCIENCE COURSE AGENT</p>
         <h1>欢迎回来</h1>
-        <p>登录后继续课程对话、会话历史和学习画像。</p>
+        <p>登录后继续你的课程对话、会话历史和学习画像。认证状态由服务端 HttpOnly Cookie 管理，前端不会保存 token。</p>
       </div>
 
       <el-card class="login-card" shadow="never">
         <template #header>
           <div class="login-card__header">
             <span>账号登录</span>
-            <small>课程工作区</small>
+            <small>Phase 0C Auth</small>
           </div>
         </template>
 
@@ -98,7 +98,10 @@ async function handleLogin() {
   display: grid;
   place-items: center;
   padding: 32px;
-  background: var(--app-bg);
+  background:
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.18), transparent 28%),
+    radial-gradient(circle at 80% 12%, rgba(79, 70, 229, 0.16), transparent 30%),
+    linear-gradient(140deg, #fafaf9 0%, #f8fafc 48%, #eef2ff 100%);
 }
 
 .login-panel {
@@ -138,9 +141,10 @@ async function handleLogin() {
 
 .login-card {
   border: 1px solid rgba(120, 113, 108, 0.18);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-md);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(18px);
 }
 
 .login-card__header {
@@ -165,15 +169,9 @@ async function handleLogin() {
 .login-submit {
   width: 100%;
   margin-top: 4px;
-  border-radius: var(--radius-md);
+  border-radius: 12px;
   font-weight: 750;
 }
-
-:global(html.theme-dark) .login-page { background: var(--app-bg); }
-:global(html.theme-dark) .login-copy,
-:global(html.theme-dark) .login-card__header { color: var(--text); }
-:global(html.theme-dark) .login-copy p:last-child,
-:global(html.theme-dark) .login-card__header small { color: var(--text-muted); }
 
 @media (max-width: 820px) {
   .login-panel {

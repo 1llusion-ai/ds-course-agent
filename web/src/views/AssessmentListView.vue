@@ -70,9 +70,6 @@ import { useAssessmentStore } from '../stores/assessment'
 import { useSessionStore } from '../stores/session'
 import { assessmentStatusText, formatAssessmentTime } from '../utils/assessment'
 
-const POLL_INTERVAL_MS = 10_000
-const PENDING_PREPARATION_STATUSES = new Set(['pending', 'queued', 'generating'])
-
 const router = useRouter()
 const store = useAssessmentStore()
 const sessionStore = useSessionStore()
@@ -80,49 +77,27 @@ const sessionFilter = ref(sessionStore.currentSessionId || '')
 const activeTab = ref('active')
 const error = ref('')
 const retrying = ref('')
-let pollTimer = null
+let pollTimer
 let disposed = false
 const visibleAssessments = computed(() => store.assessments.filter(item => !sessionFilter.value || item.session_id === sessionFilter.value))
 const visiblePreparations = computed(() => activeTab.value === 'active'
   ? store.preparations.filter(job => job.status !== 'ready' && (!sessionFilter.value || job.session_id === sessionFilter.value))
   : [])
-const hasPendingPreparation = computed(() => store.preparations.some(job => PENDING_PREPARATION_STATUSES.has(job.status)))
 const tabs = [{ label: '待完成', value: 'active' }, { label: '已完成', value: 'completed' }]
 
 function sessionTitle(sessionId) {
   return sessionStore.sessions.find(session => session.id === sessionId)?.title || '课程对话'
 }
 
-function clearPolling() {
-  if (pollTimer !== null) {
-    window.clearTimeout(pollTimer)
-    pollTimer = null
-  }
-}
-
-function shouldPoll() {
-  return !disposed
-    && activeTab.value === 'active'
-    && hasPendingPreparation.value
-    && typeof document !== 'undefined'
-    && !document.hidden
-}
-
-function schedulePolling() {
-  clearPolling()
-  if (!shouldPoll()) return
-  pollTimer = window.setTimeout(() => load(true), POLL_INTERVAL_MS)
-}
-
 async function load(silent = false) {
-  clearPolling()
-  if (!silent) error.value = ''
+  clearTimeout(pollTimer)
+  error.value = ''
   try {
     await store.fetchOverview(activeTab.value === 'active' ? ['ready', 'in_progress'] : ['submitted'], silent)
   } catch (requestError) {
     error.value = requestError.response?.data?.detail || '请稍后重试。'
   } finally {
-    schedulePolling()
+    if (!disposed) pollTimer = setTimeout(() => load(true), 5000)
   }
 }
 
@@ -142,24 +117,9 @@ function open(item) {
   router.push(item.status === 'submitted' ? `/assessments/${item.id}/result` : `/assessments/${item.id}`)
 }
 
-function handleVisibilityChange() {
-  if (document.hidden) {
-    clearPolling()
-  } else if (shouldPoll()) {
-    load(true)
-  }
-}
-
 watch(activeTab, () => load())
-onMounted(() => {
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-  load()
-})
-onUnmounted(() => {
-  disposed = true
-  clearPolling()
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-})
+onMounted(() => load())
+onUnmounted(() => { disposed = true; clearTimeout(pollTimer) })
 </script>
 
 <style src="../styles/assessment.css"></style>
