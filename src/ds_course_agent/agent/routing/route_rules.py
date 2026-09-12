@@ -40,6 +40,7 @@ def build_route_rules(router: Any) -> tuple[RouteRule, ...]:
     rules = [
         RouteRule(1, "boundary_response", _match_boundary_response, _build_boundary_response),
         _bind(router, 10, "current_datetime", _match_current_datetime, _build_datetime_decision),
+        RouteRule(15, "assessment_assignment", _match_assessment_assignment, _build_assessment_assignment),
         _bind(router, 20, "course_schedule", _match_course_schedule, _build_schedule_decision),
         RouteRule(30, "web_research", _match_web_research, _build_web_research),
         RouteRule(40, "code_review", _match_code_review, _build_code_review),
@@ -143,6 +144,24 @@ def _build_datetime_decision(router: Any, context: QueryContext) -> RouteDecisio
 
 def _match_course_schedule(router: Any, context: QueryContext) -> bool:
     return is_schedule_request(router._normalize(context.normalized_query))
+
+
+def _match_assessment_assignment(context: QueryContext) -> bool:
+    return "assessment_assignment" in context.detected_intents
+
+
+def _build_assessment_assignment(context: QueryContext) -> RouteDecision:
+    del context
+    return RouteDecision(
+        family=RouteFamily.LEARNING,
+        intent=RouteIntent.ASSESSMENT_ASSIGNMENT,
+        execution_mode=ExecutionMode.DETERMINISTIC_TOOL,
+        confidence=0.96,
+        reasons=["检测到明确做题请求"],
+        retrieval_policy=RetrievalPolicy.DISABLED,
+        executor_key="assign_assessment_tool",
+        enrichment=EnrichmentPlan(map_concepts=True, load_learner_state=True),
+    )
 
 
 def _build_schedule_decision(router: Any, context: QueryContext) -> RouteDecision:

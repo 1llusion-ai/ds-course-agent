@@ -42,6 +42,7 @@ class RouteIntent(str, Enum):
     LEARNING_PATH = "learning_path"
     MISCONCEPTION_REPAIR = "misconception_repair"
     PERSONALIZED_EXPLANATION = "personalized_explanation"
+    ASSESSMENT_ASSIGNMENT = "assessment_assignment"
     OPEN_LEARNING = "open_learning"
     NOT_LEARNING = "not_learning"
     NEEDS_CLARIFICATION = "needs_clarification"

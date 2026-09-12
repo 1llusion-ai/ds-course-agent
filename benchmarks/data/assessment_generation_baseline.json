@@ -1,0 +1,471 @@
+{
+  "started_at": "2026-09-10T02:18:47.583117+08:00",
+  "seed": 4027065355,
+  "population": 136,
+  "difficulty": "basic",
+  "execution": "sequential service calls, no warmup, 2 questions per concept",
+  "batches": [
+    {
+      "id": "loc_iloc",
+      "topic": "loc与iloc",
+      "chapter": "第4章",
+      "attempts": [
+        {
+          "status": "ok",
+          "seconds": 21.067,
+          "generation_and_validation_seconds": 18.023
+        }
+      ],
+      "quiz": {
+        "title": "loc与iloc",
+        "questions": [
+          {
+            "stem": "在Pandas中，关于loc和iloc属性的区别，以下说法正确的是？",
+            "options": [
+              {
+                "id": "A",
+                "text": "loc和iloc都表示索引序号"
+              },
+              {
+                "id": "B",
+                "text": "loc和iloc都表示行标签"
+              },
+              {
+                "id": "C",
+                "text": "loc表示行标签，iloc表示索引序号"
+              },
+              {
+                "id": "D",
+                "text": "loc表示索引序号，iloc表示行标签"
+              }
+            ],
+            "correct_option_id": "C",
+            "explanation": "loc是基于标签选择数据，参数1表示行标签；而iloc是基于索引序号选择数据，参数1表示第二行（索引从0开始）。",
+            "difficulty": "basic",
+            "source_ids": [
+              "S1"
+            ]
+          },
+          {
+            "stem": "代码squid.iloc[5:7,:]的作用是什么？",
+            "options": [
+              {
+                "id": "A",
+                "text": "选择行标签为5-7的所有列数据"
+              },
+              {
+                "id": "B",
+                "text": "选择第6-7行的所有列数据"
+              },
+              {
+                "id": "C",
+                "text": "选择第5-7列的所有行数据"
+              },
+              {
+                "id": "D",
+                "text": "选择行标签为6-7的所有列数据"
+              }
+            ],
+            "correct_option_id": "B",
+            "explanation": "iloc通过索引序号选择数据，忽略行标签。squid.iloc[5:7,:]表示选择第6-7行（索引从0开始）的所有列数据。",
+            "difficulty": "basic",
+            "source_ids": [
+              "S2"
+            ]
+          }
+        ],
+        "sources": [
+          {
+            "id": "S1",
+            "text": "4.基于标签选择数据基于标签选择数据使用 loc 属性，如选择 user_name 列的第 2 行数据，代码如下：squid.loc[1,'user_name'] 输出结果如下：'Best uncle on planet earth' squid.loc[1,'user_name'] 的第一个参数为 1，这里的 1 表示数据表的行标签，如果 1 出现在 iloc 属性中，则表示索引序号。loc 属性常常与 iloc 属性混淆。在使用 iloc 属性时，忽略了数据表的标签，也就是字段名和行名，直接将数据表当成一个矩阵，通过元素所在的行和列进行选择。通常情况下，在选择列数据时，每列都带有字段名，因此使用 loc 属性。5.条件筛选在 Pandas 库中，可以使用条件语句对数据进行筛选，类似于 SQL 中 SELECT A FROM B WHERE CONDITION 语句的功能，但使用 Pandas 库的条件语句要方便得多。例如，需要筛选用户位置在法国的用户信息，首先需要设置筛选条件，判断用户是否在法国，代码如下：squid[\"user_location\"]==\"France\"输出结果如下：0 False 1 False 2 False 3 False 4 True.....29995 False 29996 False 29997 False 29998 False 29999 False Name:user_location,Length:30000,dtype:bool 可以看到，输出结果是一系列布尔值，当布尔值为 True 时，表示当前行满足筛选条件，当布尔值为 False 时，表示当前行不满足筛选条件。然后根据输出结果，使用 loc() 方法筛选出布尔值为 True 的数据，代码如下：squid.loc[squid[\"user_location\"]==\"France\"]\n4.基于标签选择数据基于标签选择数据使用 loc 属性，如选择 user_name 列的第 2 行数据，代码如下：squid.loc[1,'user_name']\n输出结果如下：'Best uncle on planet earth'\nsquid.loc[1,'user_name'] 的第一个参数为 1，这里的 1 表示数据表的行标签，如果 1 出现在 iloc 属性中，则表示索引序号。loc 属性常常与 iloc 属性混淆。在使用 iloc 属性时，忽略了数据表的标签，也就是字段名和行名，直接将数据表当成一个矩阵，通过元素所在的行和列进行选择。通常情况下，在选择列数据时，每列都带有字段名，因此使用 loc 属性。5.条件筛选在 Pandas 库中，可以使用条件语句对数据进行筛选，类似于 SQL 中 SELECT A FROM B WHERE CONDITION 语句的功能，但使用 Pandas 库的条件语句要方便得多。例如，需要筛选用户位置在法国的用户信息，首先需要设置筛选条件，判断用户是否在法国，代码如下：squid[\"user_location\"]==\"France\"输出结果如下：0 False 1 False 2 False 3 False 4 True.....29995 False 29996 False 29997 False 29998 False 29999 False Name:user_location,Length:30000,dtype:bool\n可以看到，输出结果是一系列布尔值，当布尔值为 True 时，表示当前行满足筛选条件，",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 57
+          },
+          {
+            "id": "S2",
+            "text": "Logo of the book series 使用 pd.concat() 函数，代码如下：df1=squid.iloc[0:2,:] df2=squid.iloc[5:7,:] pd.concat([df1,df2]) 数据拼接的输出结果如图 4-7 所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verifieddate 0the_ûnder-ratèdniggâhNaN@ManUtd die hard❤️❤️❤️\\\\n\\\\n\\\\nYOLO\\\\n\\\\n\\\\n'aib...2019-09-0619:24:57+00:0058110358922False2021-10-0612:05:38+00:00 1Best uncleon planetearthNaNNaN2013-05-0819:35:26+00:007417308432False2021-10-0612:05:22+00:00 5PeymanUnitedKingdomOfficial @KardiaChain$KAIAmbassador\\\\nMarketi...2018-01-2712:07:31+00:005463186265False2021-10-0612:04:54+00:00 6Aeriaaaa♡NaNFujoshi / Thai BL-obsessed/Alwaysdistracted...2021-06-0114:08:10+00:0014110518False2021-10-0612:04:45+00:00 图 4-7 数据拼接的输出结果第一列的标签是 0、1、5、6，分别对应源数据的第 1 行、第 2 行、第 6 行、第 7 行数据。也就是说，组合之后的结果会保留原来的编号，不会重新编号。如果设置参数 ignore_index 为 True，则拼接后的结果会重新编号，代码如下：df1=squid.iloc[0:2,:] df2=squid.iloc[5:7,:] pd.concat([df1,df2],ignore_index=True) 输出结果如图 4-8 所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verified 0the_ûnder-ratèdniggâhNaN@ManUtd die hard❤️❤️❤️\\\\n\\\\n\\\\nYOLO\\\\n\\\\n\\\\n'aib...2019-09-0619:24:57+00:0058110358922False1 1Best uncleon planetearthNaNNaN2013-05-0819:35:26+00:007417308432False1 2PeymanUnitedKingdomOfficial @KardiaChain$KAIAmbassador\\\\nMarketi...2018-01-2712:07:31+00:005463186265False1 3Aeriaaaa♡NaNFujoshi / Thai BL-obsessed/Alwaysdistracted...2021-06-0114:08:10+00:0014110518False1 图 4-",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 66
+          },
+          {
+            "id": "S3",
+            "text": "8110358922False1 1Best uncleon planetearthNaNNaN2013-05-0819:35:26+00:007417308432False1 2PeymanUnitedKingdomOfficial @KardiaChain$KAIAmbassador\\\\nMarketi...2018-01-2712:07:31+00:005463186265False1 3Aeriaaaa♡NaNFujoshi / Thai BL-obsessed/Alwaysdistracted...2021-06-0114:08:10+00:0014110518False1 图 4-\n\n8 数据拼接后重新编号的输出结果\nLogo of the book series\n使用 pd.concat() 函数，代码如下：df1=squid.iloc[0:2,:] df2=squid.iloc[5:7,:] pd.concat([df1,df2])\n数据拼接的输出结果如图 4-7 所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verifieddate 0the_ûnder-ratèdniggâhNaN@ManUtd die hard❤️❤️❤️\\\\n\\\\n\\\\nYOLO\\\\n\\\\n\\\\n'aib...2019-09-0619:24:57+00:0058110358922False2021-10-0612:05:38+00:00 1Best uncleon planetearthNaNNaN2013-05-0819:35:26+00:007417308432False2021-10-0612:05:22+00:00 5PeymanUnitedKingdomOfficial @KardiaChain$KAIAmbassador\\\\nMarketi...2018-01-2712:07:31+00:005463186265False2021-10-0612:04:54+00:00 6Aeriaaaa♡NaNFujoshi / Thai BL-obsessed/Alwaysdistracted...2021-06-0114:08:10+00:0014110518False2021-10-0612:04:45+00:00\n图 4-7 数据拼接的输出结果第一列的标签是 0、1、5、6，分别对应源数据的第 1 行、第 2 行、第 6 行、第 7 行数据。也就是说，组合之后的结果会保留原来的编号，不会重新编号。如果设置参数 ignore_index 为 True，则拼接后的结果会重新编号，代码如下：df1=squid.iloc[0:2,:] df2=squid.iloc[5:7,:] pd.concat([df1,df2],ignore_index=True)\n输出结果如图 4-8 所示。user_nameuser_locationuser_descriptionuser_createduser_followersuser_friendsuser_favouritesuser_verified 0the_ûnder-ratèdniggâhNaN@ManUtd die hard❤️❤️❤️\\\\n\\\\n\\\\nYOLO\\\\n\\\\n\\\\n'aib...2019-09-0619:24:57+00:0058110358922False1 1Best uncleon planetearthNaNNaN2013-05-0819:35:26+00:007417308432False1 2PeymanUnitedKingdomOfficial @KardiaChain$KAIAmbassador\\\\nMarketi...2018-01-2712:07:31+00:005463186265False1 3Aeriaaaa♡NaNFujoshi / Thai BL-obsessed/Alwaysdistracted...2021-06-0114:08:10+00:0014110518False1\n图 4-",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 66
+          }
+        ]
+      }
+    },
+    {
+      "id": "groupby_aggregation",
+      "topic": "分组聚合",
+      "chapter": "第4章",
+      "attempts": [
+        {
+          "status": "ok",
+          "seconds": 23.457,
+          "generation_and_validation_seconds": 18.454
+        }
+      ],
+      "quiz": {
+        "title": "分组聚合基础题目",
+        "questions": [
+          {
+            "stem": "在Python中，groupby()方法的主要功能是什么？",
+            "options": [
+              {
+                "id": "A",
+                "text": "对数据进行排序"
+              },
+              {
+                "id": "B",
+                "text": "对某一字段进行聚合统计"
+              },
+              {
+                "id": "C",
+                "text": "对数据进行过滤"
+              },
+              {
+                "id": "D",
+                "text": "对数据进行可视化"
+              }
+            ],
+            "correct_option_id": "B",
+            "explanation": "根据教材内容，groupby()方法的功能与SQL中的聚合操作一致，用于对某一字段进行聚合统计。在给出的代码示例中，squid.groupby('source').source.count()表示根据source字段进行分组，并统计每组的数量。",
+            "difficulty": "basic",
+            "source_ids": [
+              "S1",
+              "S2"
+            ]
+          },
+          {
+            "stem": "在使用apply()方法时，如果需要每次取一行数据进行处理，参数axis应该设置为多少？",
+            "options": [
+              {
+                "id": "A",
+                "text": "0"
+              },
+              {
+                "id": "B",
+                "text": "2"
+              },
+              {
+                "id": "C",
+                "text": "-1"
+              },
+              {
+                "id": "D",
+                "text": "1"
+              }
+            ],
+            "correct_option_id": "D",
+            "explanation": "根据教材内容，squid.apply(check_verify,axis=1)中参数axis的取值是0或者1，0代表按照每列进行计算，1代表按照每行进行计算。在给出的示例中，需要每次取一行数据来判断指定字段的值，因此参数axis需要设置为1。",
+            "difficulty": "basic",
+            "source_ids": [
+              "S1",
+              "S2"
+            ]
+          }
+        ],
+        "sources": [
+          {
+            "id": "S1",
+            "text": "如果带上括号就是将函数的返回结果作为输入，发送给 apply() 方法。此外，squid.apply(check_verify,axis=1) 中参数 axis 的取值是 0 或者 1，0 代表按照每列进行计算，1 代表按照每行进行计算，此处是每次取一行数据，然后判断指定字段是 True 还是 False，因此参数 axis 需要设置为 1。4.1.4 组合与排序\n1.组合\n4.1.3 节中，使用 value_counts() 方法获得了对单列数据的频次统计，还可以使用 groupby() 方法实现上述功能，代码如下：squid.groupby(\"source\").source.count()\n\n输出结果如下：15 Minute Fun 2 AT Auto Tweet 1 Agorapulse app 6 Apphi 1 Bearguin 2.....sankoffoncor 1 tshell- bash 1 tweetpancake 1 twitterproject122 1 www.keengamer.com 1 Name:source,Length:133,dtype:int64\ngroupby() 方法的功能与 SQL 中的聚合操作一致，都是对某一字段进行聚合统计，在上述代码中，根据 source 对用户进行分组，然后获取每组用户的 source 字段的数据，再使用 count() 方法统计其出现的次数。也可以使用其他的聚合方法，如统计每种设备上粉丝数最多的用户的粉丝数，可以使用 max() 方法，代码如下：",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 62
+          },
+          {
+            "id": "S2",
+            "text": "Logo of the book seriesDecorative arrow输出结果如下：0 28987 1 1013 Name:verified,dtype:int64分析上述代码，首先定义了 check_verify() 函数，该函数接收一条数据作为输入，当该条数据中 user_verified 字段为 False 时，返回 0，否则返回 1。然后，squid.apply() 方法调用了这个函数，并将结果赋值给新的列 squid[\"verified\"]。调用时 check_verify 不能带括号，如果带上括号就是将函数的返回结果作为输入，发送给 apply() 方法。此外，squid.apply(check_verify,axis=1) 中参数 axis 的取值是 0 或者 1，0 代表按照每列进行计算，1 代表按照每行进行计算，此处是每次取一行数据，然后判断指定字段是 True 还是 False，因此参数 axis 需要设置为 1。4.1.4 组合与排序1.组合4.1.3 节中，使用 value_counts() 方法获得了对单列数据的频次统计，还可以使用 groupby() 方法实现上述功能，代码如下：squid.groupby(\"source\").source.count(）输出结果如下：15 Minute Fun 2 AT Auto Tweet 1 Agorapulse app 6 Apphi 1 Bearguin 2.....sankoffoncor 1 tshell- bash 1 tweetpancake 1 twitterproject122 1 www.keengamer.com 1 Name:source,Length:133,dtype:int64groupby() 方法的功能与 SQL 中的聚合操作一致，都是对某一字段进行聚合统计，在上述代码中，根据 source 对用户进行分组，然后获取每组用户的 source 字段的数据，再使用 count() 方法统计其出现的次数。也可以使用其他的聚合方法，如统计每种设备上粉丝数最多的用户的粉丝数，可以使用 max() 方法，代码如下：Logo of the book series\nDecorative arrow\n输出结果如下：0 28987 1 1013 Name:verified,dtype:int64\n分析上述代码，首先定义了 check_verify() 函数，该函数接收一条数据作为输入，当该条数据中 user_verified 字段为 False 时，返回 0，否则返回 1。然后，squid.apply() 方法调用了这个函数，并将结果赋值给新的列 squid[\"verified\"]。调用时 check_verify 不能带括号，如果带上括号就是将函数的返回结果作为输入，发送给 apply() 方法。此外，squid.apply(check_verify,axis=1) 中参数 axis 的取值是 0 或者 1，0 代表按照每列进行计算，1 代表按照每行进行计算，此处是每次取一行数据，然后判断指定字段是 True 还是 False，因此参数 axis 需要设置为 1。4.1.4 组合与排序\n1.组合\n4.1.3 节中，使用 value_counts() 方法获得了对单列数据的频次统计，还可以使用 groupby() 方法实现上述功能，代码如下：squid.groupby(\"source\").source.count()",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 62
+          },
+          {
+            "id": "S3",
+            "text": "showing the'Latitude' field in the left pane.A right-click context menu is open over the'Latitude' field,displaying options for'添加新工作表' (Add new worksheet),'字段' (Field),'度量' (Measure),'创建' (Create),'转换' (Convert),'转换为度量' (Convert to measure),'更改字段类型' (Change field type),'默认属性' (Default properties),\n\n'地理角色' (Geographic role),'分组' (Group),'文本' (Text),'使用' (Use),and'概述' (Overview).The'地理角色' (Geographic role) option is highlighted,and a sub-menu is visible showing'无' (None),'经纬' (Latitude/Longitude),'地区代码 （美国）' (Area code (US)),'CBSA/MSA （美国）' (CBSA/MSA (US)),'城市' (City),'国会地区 （美国）' (Congressional district (US)),'国家/地区' (Country/region),'邮编' (Zip code),and'纬度' (Latitude).The background shows the same Tableau interface as Figure 5-34,with the'工作表 1' (Worksheet 1) workspace visible.图 5-35 将数据设置成地理角色的类型",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 95
+          }
+        ]
+      }
+    },
+    {
+      "id": "dikw_pyramid",
+      "topic": "DIKW金字塔",
+      "chapter": "第2章",
+      "attempts": [
+        {
+          "status": "ok",
+          "seconds": 13.432,
+          "generation_and_validation_seconds": 13.43
+        }
+      ],
+      "quiz": {
+        "title": "DIKW金字塔",
+        "questions": [
+          {
+            "stem": "DIKW金字塔模型从底层到顶层的正确顺序是？",
+            "options": [
+              {
+                "id": "A",
+                "text": "数据、智慧、信息、知识"
+              },
+              {
+                "id": "B",
+                "text": "数据、信息、知识、智慧"
+              },
+              {
+                "id": "C",
+                "text": "信息、数据、知识、智慧"
+              },
+              {
+                "id": "D",
+                "text": "智慧、知识、信息、数据"
+              }
+            ],
+            "correct_option_id": "B",
+            "explanation": "根据教材证据S1和S2，DIKW金字塔模型从底层到顶层依次是数据（Data）、信息（Information）、知识（Knowledge）和智慧（Wisdom）。",
+            "difficulty": "basic",
+            "source_ids": [
+              "S1",
+              "S2"
+            ]
+          },
+          {
+            "stem": "在DIKW金字塔模型中，智慧（Wisdom）主要对应的是以下哪种能力？",
+            "options": [
+              {
+                "id": "A",
+                "text": "记录现实世界"
+              },
+              {
+                "id": "B",
+                "text": "抽象和整理数据"
+              },
+              {
+                "id": "C",
+                "text": "发现共性规律"
+              },
+              {
+                "id": "D",
+                "text": "预测未来"
+              }
+            ],
+            "correct_option_id": "D",
+            "explanation": "根据教材证据S1，智慧是能创造性地做一些预测的能力，这就是人工智能。因此，智慧对应的是预测未来的能力。",
+            "difficulty": "basic",
+            "source_ids": [
+              "S1"
+            ]
+          }
+        ],
+        "sources": [
+          {
+            "id": "S1",
+            "text": "数据的科学。Diagram illustrating the types of data.A large circle contains several smaller circles labeled：数值 (Numerical)，文字 (Text)，图形 (Graphics)，语音 (Voice)，图像 (Images)，视频 (Video)，动画 (Animation)，富媒体 (Rich Media),and an ellipsis (...).An arrow points from the text'数据 ≠ 数值' (Data ≠ Numerical) to the circle,\n\nindicating that data is not just numerical.To the right of the circle is a QR code with the caption'常见的数据类型' (Common data types).图 2-1 数据的类型\nDIKW 金字塔模型揭示了数据（data)、信息（information)、知识（knowledge)、智慧（wisdom）之间的区别与联系，如图 2-2 所示。数据是现实世界的记录，它记录了人和事物；信息是进行了一部分抽象和整理的数据；知识是进行了更高层次的抽象和整理的数据，知识可能是人们发现的某个共性规律；智慧是能创造性地做一些预测的能力，这就是人工智能。从数据到智慧不但是人们认识程度的提升过程，而且是从认识部分到理解整体、从描述过去（或现在）到预测未来的过程。",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 15
+          },
+          {
+            "id": "S2",
+            "text": "Logo of the book seriesThe diagram illustrates the DIKW Pyramid Model,a hierarchy of knowledge levels.It consists of four stacked layers:Data (bottom,blue),Information (yellow),Knowledge (grey),and Wisdom (top,orange).To the left of the pyramid,a vertical axis indicates time,with'过去' (Past) at the bottom and'未来' (Future) at the top.Dashed lines connect the layers to their respective descriptions on the right:Data is'现实世界的记录' (Record of the real world);Information is'抽象和整理多条数据共同反映的现实世界中的现象' (Abstracting and organizing multiple data points to reflect phenomena in the real world);Knowledge is'从（多条）信息中发现的共性规律、模式、模型、理论、方法等' (Common patterns,modes,models,theories,and methods discovered from multiple pieces of information);and Wisdom is'运用知识，并结合经验创造性地预测、解释、发现等' (Applying knowledge and combining experience to creatively predict,explain,and discover).Arrows point from the descriptions back to the corresponding layers.DIKW Pyramid Model diagram showing the hierarchy from Data to Wisdom over time.图 2-2 DIKW 金字塔模型2.1.2 数据的分类对数据进行分类有两种方法：第一种方法是根据数据的表现形式分类，如文本、数值、图像等；第二种方法是根据数据存储的结构化程度分类，通常将数据分为结构化数据、非结构化数据和半结构化数据 3 种，三者的区别与联系如表 2-1 所示。表 2-1 结构化数据、非结构化数据和半结构化数据的区别与联系类型含义本质举例结构化数据可以直接用传统的关系型数据库存储和管理的数据先有结构，后有数据关系型数据库中的数据非结构化数据无法用关系型数据库存储和管理的数据没有（或难以发现）统一结构的数据语音、图像文件等半结构化数据经过一定的转换处理后，可以用传统的关系型数据库存储和管理的数据先有数据，后有结构（或较容易发现其结构）HTML、XML 文件等在数据科学中，数据的结构化程度对数据处理方法的选择具有重要影响。例如，结构化数据的管理可以采用传统的关系型数据库技术，而非结构化数据的管理往往采用 NoSQL、NewSQL 或关系云技术。2.1.3 数据的特征数据科学已经发展到大数据时代。大数据具有海量（volume）、类型多样性（variety）、",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 16
+          },
+          {
+            "id": "S3",
+            "text": ".Arrows point from the descriptions back to the corresponding layers.DIKW Pyramid Model diagram showing the hierarchy from Data to Wisdom over time.图 2-2 DIKW 金字塔模型\n2.1.2 数据的分类对数据进行分类有两种方法：第一种方法是根据数据的表现形式分类，如文本、数值、图像等；第二种方法是根据数据存储的结构化程度分类，通常将数据分为结构化数据、非结构化数据和半结构化数据 3 种，三者的区别与联系如表 2-1 所示。表 2-1 结构化数据、\n\n非结构化数据和半结构化数据的区别与联系类型含义本质举例结构化数据可以直接用传统的关系型数据库存储和管理的数据先有结构，后有数据关系型数据库中的数据非结构化数据无法用关系型数据库存储和管理的数据没有（或难以发现）统一结构的数据语音、图像文件等半结构化数据经过一定的转换处理后，可以用传统的关系型数据库存储和管理的数据先有数据，后有结构（或较容易发现其结构）HTML、XML 文件等在数据科学中，数据的结构化程度对数据处理方法的选择具有重要影响。例如，结构化数据的管理可以采用传统的关系型数据库技术，而非结构化数据的管理往往采用 NoSQL、NewSQL 或关系云技术。2.1.3 数据的特征数据科学已经发展到大数据时代。大数据具有海量（volume）、类型多样性（variety）、价值（value）密度低、产生与传播速度（velocity）快的特征，称为 4V 特征，如图 2-3 所示。第一个 V 即海量，数据体量巨大，从太字节（TB）级跃升至拍字节（PB）级、艾字节（EB）级，数据的容量和复杂性导致使用传统工具和技术已无法处理。可以通过几个例子了解这几个数据单位。例如，可以买到存储量为 128 GB、256 GB 的手机，这里用到 GB（吉字节）；一台计算机的一块固态硬盘或者机械硬盘的容量单位大概到 TB 级；一个电信机房，它的数据量大概在 PB 这个级别。QR code linking to the 4V characteristics introduction\n数据 4V 特征简介",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 16
+          }
+        ]
+      }
+    },
+    {
+      "id": "cross_validation",
+      "topic": "交叉验证",
+      "chapter": "第6章",
+      "attempts": [
+        {
+          "status": "ok",
+          "seconds": 17.91,
+          "generation_and_validation_seconds": 17.907
+        }
+      ],
+      "quiz": {
+        "title": "交叉验证",
+        "questions": [
+          {
+            "stem": "在训练过程中打印训练集和验证集的准确率和损失函数值的主要目的是什么？",
+            "options": [
+              {
+                "id": "A",
+                "text": "为了减少训练时间"
+              },
+              {
+                "id": "B",
+                "text": "观察模型在训练过程中准确率等指标的动态变化"
+              },
+              {
+                "id": "C",
+                "text": "直接优化模型参数"
+              },
+              {
+                "id": "D",
+                "text": "替代交叉验证过程"
+              }
+            ],
+            "correct_option_id": "B",
+            "explanation": "根据教材证据[S1]和[S2]，在训练过程中打印训练集和验证集的准确率和损失函数值的主要目的是让用户观察模型在训练过程中准确率等指标的动态变化，从而判断模型的收敛性。",
+            "difficulty": "basic",
+            "source_ids": [
+              "S1",
+              "S2"
+            ]
+          },
+          {
+            "stem": "网络在训练集上经过初步训练后，再利用训练集和验证集共同训练的主要好处是什么？",
+            "options": [
+              {
+                "id": "A",
+                "text": "减少计算资源消耗"
+              },
+              {
+                "id": "B",
+                "text": "加快模型收敛速度"
+              },
+              {
+                "id": "C",
+                "text": "避免过拟合"
+              },
+              {
+                "id": "D",
+                "text": "训练数据增多，模型效果更好"
+              }
+            ],
+            "correct_option_id": "D",
+            "explanation": "根据教材证据[S1]和[S2]，网络在训练集上经过初步训练得到训练参数之后，再利用训练集和验证集共同训练的主要好处是训练数据增多，模型的训练效果更好。",
+            "difficulty": "basic",
+            "source_ids": [
+              "S1",
+              "S2"
+            ]
+          }
+        ],
+        "sources": [
+          {
+            "id": "S1",
+            "text": "再利用训练集和验证集共同训练，这样做的好处是训练数据增多，模型的训练效果更好。Logo of the book series\nDecorative arrow\ntrain_acc=0.0 train_loss=0.0 val_acc=0.0 val_loss=0.0 model.train() # 使模型处于训练模式 for i,data in enumerate(train_loader):optimizer.zero_grad() # 将模型的梯度归零 train_pred=model(data[0].cuda()) # 利用 model() 函数得到预测的概率分布 batch_loss=\n\nloss(train_pred,data[1].cuda()) # 计算损失 batch_loss.backward() # 反向传播计算梯度 optimizer.step() # 用模型更新参数值 train_acc+=np.sum(np.argmax(train_pred.cpu().data.numpy(),axis=1)== data[1].numpy()) train_loss+=batch_loss.item() model.eval() # 处理验证集 with torch.no_grad():for i,data in enumerate(val_loader):val_pred=model(data[0].cuda()) batch_loss=loss(val_pred,data[1].cuda()) val_acc+=np.sum(np.argmax(val_pred.cpu().data.numpy(),axis=1)= =data[1].numpy()) val_loss+=batch_loss.item() # 将结果打印出来 print('[% 03d/% 03d]% 2.2f sec(s) Train Acc:% 3.6f Loss:% 3.6f| Val Acc:% 3.6f loss:% 3.6f'% \\ (epoch+1,num_epoch,time.time()- epoch_start_time,\\ train_acc/train_set.__len__(),train_loss/train_set.__len__(),=\\ val_acc/val_set.__len__(),val_loss/val_set.__len__()))\n在上述代码中，针对分类任务，损失函数使用交叉熵损失函数 CrossEntropyLoss()；训练过程中使用 Adam 优化器，学习率设为 0.001，训练轮数设为 30；同时，在训练过程中打印出所用时间、训练集和验证集的准确率和损失函数值，以使用户观察网络模型在训练过程中准确率等指标的动态变化，从而看出模型在整个过程中的收敛性如何。网络在训练集上经过初步训练得到训练参数之后，再利用训练集和验证集共同训练，这样做的好处是训练数据增多，模型的训练效果更好。",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 196
+          },
+          {
+            "id": "S2",
+            "text": "Logo of the book seriesDecorative arrowtrain_acc=0.0 train_loss=0.0 val_acc=0.0 val_loss=0.0 model.train() # 使模型处于训练模式 for i,data in enumerate(train_loader):optimizer.zero_grad() # 将模型的梯度归零 train_pred=model(data[0].cuda()) # 利用 model() 函数得到预测的概率分布 batch_loss=loss(train_pred,data[1].cuda()) # 计算损失 batch_loss.backward() # 反向传播计算梯度 optimizer.step() # 用模型更新参数值 train_acc+=np.sum(np.argmax(train_pred.cpu().data.numpy(),axis=1)== data[1].numpy()) train_loss+=batch_loss.item() model.eval() # 处理验证集 with torch.no_grad():for i,data in enumerate(val_loader):val_pred=model(data[0].cuda()) batch_loss=loss(val_pred,data[1].cuda()) val_acc+=np.sum(np.argmax(val_pred.cpu().data.numpy(),axis=1)= =data[1].numpy()) val_loss+=batch_loss.item() # 将结果打印出来 print('[% 03d/% 03d]% 2.2f sec(s) Train Acc:% 3.6f Loss:% 3.6f| Val Acc:% 3.6f loss:% 3.6f'% \\ (epoch+1,num_epoch,time.time()- epoch_start_time,\\ train_acc/train_set.__len__(),train_loss/train_set.__len__(),=\\ val_acc/val_set.__len__(),val_loss/val_set.__len__())）在上述代码中，针对分类任务，损失函数使用交叉熵损失函数 CrossEntropyLoss()；训练过程中使用 Adam 优化器，学习率设为 0.001，训练轮数设为 30；同时，在训练过程中打印出所用时间、训练集和验证集的准确率和损失函数值，以使用户观察网络模型在训练过程中准确率等指标的动态变化，从而看出模型在整个过程中的收敛性如何。网络在训练集上经过初步训练得到训练参数之后，再利用训练集和验证集共同训练，这样做的好处是训练数据增多，模型的训练效果更好。Logo of the book series\nDecorative arrow\ntrain_acc=0.0 train_loss=0.0 val_acc=0.0 val_loss=0.0 model.train() # 使模型处于训练模式 for i,data in enumerate(train_loader):optimizer.zero_grad() # 将模型的梯度归零 train_pred=model(data[0].cuda()) # 利用 model() 函数得到预测的概率分布 batch_loss=",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 196
+          },
+          {
+            "id": "S3",
+            "text": "Logo of the book seriesDecorative arrow(9）设置损失函数和优化器，代码如下：# define loss device=torch.device(\"cuda\"if torch.cuda.is_available() else\"cpu\") # 若检测到 GPU 环境则使用 GPU，否则使用 CPU net=LeNet().to(device) # 实例化网络，有 GPU 则将网络放入 GPU 加速 loss_fuc=nn.CrossEntropyLoss() # 多类分类问题，选择交叉熵损失函数 optimizer=torch.optim.SGD(net.parameters(),lr=0.001,momentum=0.9) # 选择 SGD 算法，学习率取 0.001(10）训练模型，代码如下：# 开始训练 EPOCH=8 # 迭代次数 loss_list=[] for epoch in range(EPOCH):sum_loss=0 # 数据读取 for i,data in enumerate(train_loader):inputs,labels=data inputs,labels=inputs.to(device),labels.to(device) # 有 GPU 则将数据放入 GPU 加速 # 梯度清零 optimizer.zero_grad() # 传递损失+更新参数 output=net(inputs) loss=loss_fuc(output,labels) loss.backward() optimizer.step() # 每训练 100 个 batch 打印一次平均损失 sum_loss+=loss.item() if i%100==99:print('[Epoch:% d,batch:% d] train loss:%.03f'%(epoch+1,i+1,sum_loss/100)) loss_list.append(sum_loss/100) sum_loss=0.0 correct=0 total=0 for data in test_loader:test_inputs,labels=data test_inputs,labels=test_inputs.to(device),labels.to(device) outputs_test=net(test_inputs) _,predicted=torch.max(outputs_test.data,1) # 输出得分最高的类\nLogo of the book series\nDecorative arrow\n(9）设置损失函数和优化器，代码如下：# define loss device=torch.device(\"cuda\"if torch.cuda.is_available() else\"cpu\") # 若检测到 GPU 环境则使用 GPU，否则使用 CPU net=LeNet().to(device) # 实例化网络，有 GPU 则将网络放入 GPU 加速 loss_fuc=nn.CrossEntropyLoss() # 多类分类问题，选择交叉熵损失函数 optimizer=torch.optim.SGD(net.parameters(),lr=0.001,momentum=0.9) # 选择 SGD 算法，学习率取 0.001\n(10）训练模型，代码如下：# 开始训练 EPOCH=8 # 迭代次数 loss_list=[]",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 182
+          }
+        ]
+      }
+    },
+    {
+      "id": "large_language_model",
+      "topic": "大语言模型",
+      "chapter": "第9章",
+      "attempts": [
+        {
+          "status": "ok",
+          "seconds": 18.338,
+          "generation_and_validation_seconds": 18.265
+        }
+      ],
+      "quiz": {
+        "title": "大语言模型",
+        "questions": [
+          {
+            "stem": "以下哪项最准确地描述了大语言模型（LLM）？",
+            "options": [
+              {
+                "id": "A",
+                "text": "仅使用有标签数据进行监督学习的模型"
+              },
+              {
+                "id": "B",
+                "text": "参数数量庞大、使用大规模语料库进行自监督学习的模型"
+              },
+              {
+                "id": "C",
+                "text": "仅用于文本分类的小规模模型"
+              },
+              {
+                "id": "D",
+                "text": "专门用于图像处理的深度学习模型"
+              }
+            ],
+            "correct_option_id": "B",
+            "explanation": "根据教材S2片段，大语言模型（LLM）是指参数数量庞大、在预训练过程中使用大规模语料库进行自监督学习的自然语言处理模型。",
+            "difficulty": "basic",
+            "source_ids": [
+              "S2"
+            ]
+          },
+          {
+            "stem": "大语言模型的主要应用领域包括以下哪项？",
+            "options": [
+              {
+                "id": "A",
+                "text": "仅用于语音识别"
+              },
+              {
+                "id": "B",
+                "text": "仅用于图像生成"
+              },
+              {
+                "id": "C",
+                "text": "用于文本生成与分类"
+              },
+              {
+                "id": "D",
+                "text": "仅用于金融分析"
+              }
+            ],
+            "correct_option_id": "C",
+            "explanation": "根据教材S3片段，大语言模型可以用于生成各种类型的文本，包括自动摘要、机器翻译、对话系统、写作助手和创意文本生成等。",
+            "difficulty": "basic",
+            "source_ids": [
+              "S3"
+            ]
+          }
+        ],
+        "sources": [
+          {
+            "id": "S1",
+            "text": "8.4.2 数据准备 191 9.3.3 基于大语言模型的金融服务助手 208 8.4.3 网络搭建 194 习题 209 8.4.4 模型训练与测试 195 8.4.5 优化改进 198 习题 198 第9章大语言模型及其应用 199 第10章数据科学竞 211 9.1 自然语言处理 199 10.1 竞赛平台 211 9.1.1 自然语言处理方法 199 10.1.1 kaggle 211 9.1.2 文本挖掘模型 200 10.1.2 DrivenData 212 9.1.3 智能问答 201 10.1.3 阿里云天池 213 9.2 大语言模型的概念、实例与提示工程 202 10.1.4 DataCastle 213 9.2.1 大语言模型的概念 202 10.1.5 DataFountain 214 9.2.2 大语言模型的实例 203 10.1.6 ChinaVis 215 9.2.3 提示工程 204 10.1.7 和鲸社区 215 9.3 大语言模型的应用 206 10.2 参赛流程 216 9.3.1 基于大语言模型的辅助写作助手 206 10.3 赛题解析 217 9.3.2 基于大语言模型的文献辅助阅读工具 207 10.3.1 算法分析报告 217 10.3.2 答辩报告 222 习题 231 附录 DT 数据科学平台 233 参考文献 239\n8.4.2 数据准备 191 9.3.3 基于大语言模型的金融服务助手 208 8.4.3 网络搭建 194 习题 209 8.4.4 模型训练与测试 195 8.4.5 优化改进 198 习题 198 第9章大语言模型及其应用 199 第10章数据科学竞 211 9.1 自然语言处理 199 10.1 竞赛平台 211 9.1.1 自然语言处理方法 199 10.1.1 kaggle 211 9.1.2 文本挖掘模型 200 10.1.2 DrivenData 212 9.1.3 智能问答 201 10.1.3 阿里云天池 213 9.2 大语言模型的概念、实例与提示工程 202 10.1.4 DataCastle 213 9.2.1 大语言模型的概念 202 10.1.5 DataFountain 214 9.2.2 大语言模型的实例 203 10.1.6 ChinaVis 215 9.2.3 提示工程 204 10.1.7 和鲸社区 215 9.3 大语言模型的应用 206 10.2 参赛流程 216 9.3.1 基于大语言模型的辅助写作助手 206 10.3 赛题解析 217 9.3.2 基于大语言模型的文献辅助阅读工具 207 10.3.1 算法分析报告 217 10.3.2 答辩报告 222 习题 231 附录 DT 数据科学平台 233 参考文献 239",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": null
+          },
+          {
+            "id": "S2",
+            "text": "大语言模型的基本原理主要是通过大规模的预训练和自监督学习，提高模型的语言理解和生成能力。在预训练过程中，模型会根据大量的无标签文本数据进行训练，通过学习大量的语料库中的语言模式，提高其对语言的理解能力。而自监督学习则是通过大规模的\nLogo of the book series\nDecorative arrow\n智能问答系统和传统信息检索系统的主要区别如下。(1）输入：传统信息检索系统的输入是查询关键词；智能问答系统的输入是自然日常语言的问句。(2）输出：传统信息检索系统的输出是关键词相关文档，需要用户自己查找有用信息；智能问答系统的输出是直接返回针对用户提问的答案。9.2 大语言模型的概念、\n\n实例与提示工程\n9.2.1 大语言模型的概念大语言模型（large language model,LLM）是指参数数量庞大、在预训练过程中使用大规模语料库进行自监督学习的自然语言处理模型，如 GPT-3 和 T5 等模型。这些模型已经在语言理解、文本生成、对话系统等多个任务中取得了重大突破，具有巨大的发展前景。这些模型的应用场景多种多样。例如，它们可以作为聊天机器人，响应用户的问题、提供信息或进行对话。同时，它们也可以应用于文本生成，如自动写作、自动摘要、自动翻译等领域。此外，大语言模型还可以应用于语音识别、情感分析、智能客服、舆情分析、法律文本分析等领域，帮助人们更好地理解 and 处理自然语言。图 9-3 是近年火热的 ChatGPT 大语言模型的使用示意图。Icon of a speech bubble\n请简要介绍GPT3的设计亮点\nGPT-3 logo\nGPT-3 (Generative Pre-trained Transformer 3) 是OpenAI开发的一款大型自然语言处理模型，它在深度学习和NLP领域具有多个设计亮点：1.Transformer架构：GPT-3基于Transformer架构，这是一种自注意力机制的神经网络结构，能够更好地处理长距离依赖关系，使其在理解和生成文本方面具有优势。2.巨大的规模：GPT-3是目前为止最大的语言模型之一，拥有数百亿个参数。这个规模巨大的模型具有强大的表示能力，能够处理各种自然语言处理任务。3.零样本学习：GPT-3能够进行零样本学习，即在没有先前训练的情况下执行任务。这意味着它可以根据简单的提示执行各种任务，而无需专门的任务特定训练。4.多语言支持：GPT-3支持多种语言，因为它在大规模的预训练过程中涵盖了多语言文本，从而能够处理不同语言的文本数据。5.通用性：GPT-3是通用性的语言模型，可以用于多种任务，包括文本生成、文本分类、机器翻译、文本摘要、问题回答等。这使其成为一个通用的自然语言处理工具。6.创造性文本生成：GPT-3能够生成高度创造性和连贯的文本，包括文章、散文、诗歌等，这使其在文本创作和生成领域备受欢迎。尽管GPT-3在自然语言处理领域取得了显著的成就，但它也面临一些挑战，如可解释性、数据隐私和伦理问题。然而，它仍然代表了大规模预训练模型的前沿，为各种NLP应用提供了新的机会。图 9-3 ChatGPT 大语言模型的使用示意图大语言模型的基本原理主要是通过大规模的预训练和自监督学习，提高模型的语言理解和生成能力。在预训练过程中，模型会根据大量的无标签文本数据进行训练，通过学习大量的语料库中的语言模式，提高其对语言的理解能力。而自监督学习则是通过大规模的",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 202
+          },
+          {
+            "id": "S3",
+            "text": "Logo of the book series9.3 大语言模型的应用大语言模型目前已经广泛应用到人们的生产生活中，目前涌现出的智能化大语言模型的应用主要包括以下几类。(1) 文本生成与分类。大语言模型可以用于生成各种类型的文本，包括自动摘要、机器翻译、对话系统、写作助手和创意文本生成等。同时，它也可以用于将文本分为不同的类别或标签，如情感分析、垃圾邮件检测、主题分类和情感识别等。(2) 信息检索和搜索引擎。大语言模型可以理解用户的查询意图，提供更准确的搜索结果。它可以帮助搜索引擎进行相关性排序、语义匹配和搜索推荐。(3) 语音识别和语音合成。在语音识别任务中，大语言模型可以将语音转化为文本。同时，它也可以与语音合成技术结合，将文本转化为自然流畅的语音。(4) 对话系统。大语言模型用于对话系统中的自然语言理解和生成。它可以帮助系统理解用户的意图，并生成连贯的回复，实现智能对话。(5) 智能文本分析。大语言模型可以分析和理解文本中的语义、情感与主题。它可以应用于舆情分析、社交媒体挖掘、信息提取和知识图谱构建等领域。(6) 计算机视觉。计算机视觉领域基于大语言模型的研究主要体现在扩散生成模型方法，这种方法基于大量文本提示词与图像的训练技术能够实现一种生成式模型，它通过模拟数据的扩散过程来生成新的样本。这种模型最近在提高图像的分辨率、图像和音频生成方面显示出了巨大的潜力。(7) 金融领域。大语言模型能够处理和分析大规模文本数据，辅助进行宏观经济分析、市场趋势预测等。在投资场景中，大语言模型可用于投资决策、风险评估、市场分析等，例如分析央行对货币政策的态度。这些大语言模型的应用通常需要大量的数据进行训练，以获取足够的模型表现。同时，它们也通常需要高级别的硬件支持，以实现模型的快速训练和推理。本节将介绍基于大语言模型的辅助写作助手 Notion AI 与文本阅读理解工具 ChatDOC。9.3.1 基于大语言模型的辅助写作助手Notion AI 是 Notion 应用程序中内置的 AI 功能，主要使用机器学习技术来帮助用户更高效地组织和管理内容。具体来说，Notion AI 可以自动识别和分类文本、图像、文件等内容，以使用户更轻松地查找和使用它们。它还可以自动补全用户输入，提供相关建议和预测，以及将用户的语音转换为文本，从而帮助用户更快地完成他们的工作。另外，Notion AI 还有一些预设指令，如提供选题、写作博客、大纲和演讲稿等帮助。使用 Notion AI 需要先注册 Notion 账号，可以通过该应用程序的网站进行注册，注册流程与其他网站类似。完成注册后，用户可以通过应用程序或网站使用 Notion AI 提供的功能。图 9-7 是使用 Notion AI 进行自动写作的方法。Notion AI 通过 NLP 技术来自动补全用户\nLogo of the book series\n9.3 大语言模型的应用大语言模型目前已经广泛应用到人们的生产生活中，目前涌现出的智能化大语言模型的应用主要包括以下几类。(1) 文本生成与分类。大语言模型可以用于生成各种类型的文本，包括自动摘要、机器翻译、对话系统、写作助手和创意文本生成等。同时，它也可以用于将文本分为不同的类别或标签，如情感分析、垃圾邮件检测、主题分类和情感识别等。(2) 信息检索和搜索引擎。大语言模型可以理解用户的查询意图，提供更准确的搜索结果。它可以帮助搜索引擎进行相关性排序、语义匹配和搜索推荐。(3) 语音识别和语音合成。在语音识别任务中，大语言模型可以将语音转化为文本。同时，",
+            "source": "数据科学导论（案例版）洪文兴-0823.pdf",
+            "page": 206
+          }
+        ]
+      }
+    }
+  ],
+  "model": "Pro/deepseek-ai/DeepSeek-V3",
+  "total_run_seconds": 94.207
+}

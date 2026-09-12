@@ -343,6 +343,37 @@ def clear_rag_retrieval_cache() -> None:
         _RETRIEVAL_CACHE.clear()
 
 
+def _build_evidence_page_index(payload: dict) -> dict[tuple[str, int], Document]:
+    """Build one hash-validated source-page index from the loaded collection."""
+    pages: dict[tuple[str, int], Document] = {}
+    ids = payload.get("ids") or []
+    documents = payload.get("documents") or []
+    metadatas = payload.get("metadatas") or []
+    if not (len(ids) == len(documents) == len(metadatas)):
+        raise ValueError("collection payload has inconsistent document columns")
+    for chunk_id, text, raw_metadata in zip(ids, documents, metadatas, strict=True):
+        metadata = dict(raw_metadata or {})
+        metadata.setdefault("chunk_id", str(chunk_id))
+        provenance = ChunkProvenance.from_document(Document(page_content=str(text or ""), metadata=metadata))
+        key = provenance.interval.key
+        page_metadata = {
+            "metadata_schema_version": "retrieval-source-page/1.0",
+            "collection_revision": metadata.get("collection_revision"),
+            "source": metadata.get("source"),
+            "source_id": provenance.interval.source_id,
+            "source_page": provenance.interval.source_page,
+            "book_page": provenance.interval.book_page,
+            "source_page_sha256": provenance.source_page_sha256,
+        }
+        existing = pages.get(key)
+        if existing is not None:
+            if existing.page_content != provenance.source_page_text or existing.metadata != page_metadata:
+                raise ValueError(f"conflicting source-page provenance for {key}")
+            continue
+        pages[key] = Document(page_content=provenance.source_page_text, metadata=page_metadata)
+    return pages
+
+
 class RAGService:
     """Course-term or raw-vector retrieval with one token-bounded assembly path."""
 
@@ -355,7 +386,9 @@ class RAGService:
         if self.vector_store_service.collection.count() != self.index_manifest.document_count:
             self.vector_store_service.close()
             raise RuntimeError("production retrieval collection count does not match its manifest")
-        self.course_term_index = CourseTermIndex.from_collection_payload(self.vector_store_service.get_all_documents())
+        collection_payload = self.vector_store_service.get_all_documents()
+        self.course_term_index = CourseTermIndex.from_collection_payload(collection_payload)
+        self._evidence_pages = _build_evidence_page_index(collection_payload)
         self.prompt_template = build_rag_prompt_template()
         self.chat_model = get_rag_text_model()
         self._token_counter = load_token_counter(PROJECT_ROOT / "var" / "cache" / "tiktoken")
@@ -363,6 +396,28 @@ class RAGService:
     def close(self) -> None:
         """Release the owned Chroma client."""
         self.vector_store_service.close()
+
+    def read_evidence_window(self, document: Document) -> tuple[Document, ...]:
+        """Return a bounded, read-only page window around retrieved evidence."""
+        metadata = dict(document.metadata or {})
+        if metadata.get("metadata_schema_version") != "retrieval-provenance/1.0":
+            return ()
+        try:
+            source_id = str(metadata["source_id"])
+            source_page = int(metadata["source_page"])
+        except (KeyError, TypeError, ValueError):
+            return ()
+        expected_revision = getattr(self.index_manifest, "collection_revision", None)
+        if metadata.get("collection_revision") != expected_revision:
+            return ()
+        current = self._evidence_pages.get((source_id, source_page))
+        if current is None or current.metadata.get("source_page_sha256") != metadata.get("source_page_sha256"):
+            return ()
+        return tuple(
+            Document(page_content=page.page_content, metadata=dict(page.metadata))
+            for page_number in range(source_page - 1, source_page + 2)
+            if (page := self._evidence_pages.get((source_id, page_number))) is not None
+        )
 
     def _get_token_counter(self):
         counter = getattr(self, "_token_counter", None)

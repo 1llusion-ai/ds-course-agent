@@ -18,6 +18,13 @@ PACKAGE = Path(__file__).resolve().parents[1] / "src" / "ds_course_agent"
         ("teaching.learner_state", "teaching.memory_core", "teaching.learning_events", "teaching.skill_system"),
         ("retrieval.service", "retrieval.hybrid_retriever", "retrieval.reranker"),
         ("research.pipeline", "research.policy", "research.fetch", "research.models"),
+        (
+            "assessment.models",
+            "assessment.generator",
+            "assessment.verifier",
+            "assessment.critic",
+            "assessment.service",
+        ),
     ],
 )
 def test_domains_load_without_agent_service_or_api(modules) -> None:
@@ -60,7 +67,7 @@ def test_migrated_paths_have_no_legacy_modules() -> None:
 def test_domain_modules_do_not_import_api() -> None:
     """HTTP adapters may depend on domains, not the other way around."""
 
-    for layer in ("teaching", "retrieval", "research"):
+    for layer in ("teaching", "retrieval", "research", "assessment"):
         for path in (PACKAGE / layer).rglob("*.py"):
             for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
                 names = []

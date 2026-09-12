@@ -1,5 +1,5 @@
 """API router package."""
 
-from . import chat, profile, sessions
+from . import assessments, chat, profile, sessions
 
-__all__ = ["chat", "profile", "sessions"]
+__all__ = ["assessments", "chat", "profile", "sessions"]

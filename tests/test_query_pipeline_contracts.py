@@ -131,6 +131,14 @@ def test_route_decision_enforces_structural_tool_gating():
             "course_schedule_tool",
         ),
         (
+            "开始做题",
+            RouteFamily.LEARNING,
+            RouteIntent.ASSESSMENT_ASSIGNMENT,
+            ExecutionMode.DETERMINISTIC_TOOL,
+            RetrievalPolicy.DISABLED,
+            "assign_assessment_tool",
+        ),
+        (
             "请运行这段代码并告诉我输出：print(1 + 1)",
             RouteFamily.LEARNING,
             RouteIntent.CODE_EXECUTION,
@@ -181,9 +189,10 @@ def test_rule_table_is_priority_ordered_and_semantic_fallback_is_not_a_rule():
     rules = router.rules
 
     assert [rule.priority for rule in rules] == sorted(rule.priority for rule in rules)
-    assert [rule.name for rule in rules[:4]] == [
+    assert [rule.name for rule in rules[:5]] == [
         "boundary_response",
         "current_datetime",
+        "assessment_assignment",
         "course_schedule",
         "web_research",
     ]

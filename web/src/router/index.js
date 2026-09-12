@@ -16,7 +16,10 @@ const routes = [
       { path: 'chat', name: 'Chat', component: ChatView },
       { path: 'chat/:sessionId', name: 'ChatWithSession', component: ChatView },
       { path: 'profile', name: 'Profile', component: ProfileView },
-      { path: 'knowledge-map', name: 'KnowledgeMap', component: () => import('../views/KnowledgeMapView.vue') }
+      { path: 'knowledge-map', name: 'KnowledgeMap', component: () => import('../views/KnowledgeMapView.vue') },
+      { path: 'assessments', name: 'Assessments', component: () => import('../views/AssessmentListView.vue') },
+      { path: 'assessments/:assessmentId', name: 'AssessmentTake', component: () => import('../views/AssessmentTakeView.vue') },
+      { path: 'assessments/:assessmentId/result', name: 'AssessmentResult', component: () => import('../views/AssessmentResultView.vue') }
     ]
   }
 ]

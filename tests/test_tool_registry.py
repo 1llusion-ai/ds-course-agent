@@ -20,6 +20,7 @@ EXPECTED_REGISTRY_NAMES = [
     "course_schedule_tool",
     "current_datetime_tool",
     "python_exec_tool",
+    "assign_assessment_tool",
     "web_search_tool",
     "web_fetch_tool",
     "record_misconception_event",
@@ -62,6 +63,14 @@ def test_default_registry_marks_safe_read_only_tools_parallelizable():
     assert python_spec.side_effect is True
     assert python_spec.can_run_in_parallel is False
     assert python_spec.cost_class == "sandbox"
+
+    assessment_spec = registry.get("assign_assessment_tool")
+    assert assessment_spec.read_only is False
+    assert assessment_spec.side_effect is True
+    assert assessment_spec.concurrency_safe is False
+    assert assessment_spec.exclusive is True
+    assert assessment_spec.expose_to_agent is False
+    assert assessment_spec.can_run_in_parallel is False
 
     event_spec = registry.get("record_misconception_event")
     assert event_spec.side_effect is True
