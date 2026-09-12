@@ -55,6 +55,14 @@ version. Package ownership and migration status remain authoritative in
   have one owner each. API code only adapts HTTP/SSE and session use cases.
 - A retry or degraded response must resume inside the selected execution
   boundary; it must not restart the complete route or repeat lifecycle hooks.
+- Successful learning turns may schedule session practice after persisting the
+  answer and before the terminal event. This hook is shared by sync and stream,
+  uses explicit student/session identity, and never waits for question generation.
+  Failed/degraded turns do not schedule new practice. Preparation failures cannot
+  turn an already delivered teaching answer into a failed turn.
+- Ordinary grounded concept answers load the learner snapshot through their
+  declared enrichment plan. Practice guidance is passed to answer generation
+  explicitly; it must not be appended to the retrieval query or bound as a tool.
 
 ## Required Invariants (T1-T7)
 

@@ -1,6 +1,6 @@
 {
   "course_name": "数据科学导论",
-  "version": "1.6",
+  "version": "1.7",
   "alias_policies": {
     "分类": {
       "match_mode": "contextual",
@@ -2190,16 +2190,30 @@
         "过配",
         "泛化能力差",
         "过拟合问题",
-        "过拟合和欠拟合",
         "训练集上记住数据",
         "模型在训练集上记住数据",
         "在没见过数据上表现好"
       ],
       "related_concepts": [
-        "cross_validation"
+        "cross_validation",
+        "underfitting"
       ],
       "chapter": "第8章",
       "section": "8.4.5"
+    },
+    {
+      "canonical_id": "underfitting",
+      "display_name": "欠拟合",
+      "aliases": [
+        "欠拟合",
+        "underfitting",
+        "欠拟合问题"
+      ],
+      "related_concepts": [
+        "overfitting"
+      ],
+      "chapter": "第6章",
+      "section": "6.2.1"
     },
     {
       "canonical_id": "regularization",

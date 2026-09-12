@@ -5,9 +5,11 @@
 import hashlib
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Literal
+
+from ds_course_agent.teaching.practice import PracticeObservation
 
 
 class EventType(str, Enum):
@@ -18,6 +20,7 @@ class EventType(str, Enum):
     FOLLOW_UP = "follow_up"
     MASTERY_SIGNAL = "mastery_signal"
     MISCONCEPTION = "misconception"
+    QUESTION_ANSWERED = "question_answered"
 
 
 @dataclass
@@ -62,7 +65,22 @@ class BaseEvent:
             return MasterySignalEvent(payload=payload, **base_kwargs)
         if event_type == EventType.MISCONCEPTION:
             return MisconceptionEvent(payload=payload, **base_kwargs)
+        if event_type == EventType.QUESTION_ANSWERED:
+            return QuestionAnsweredEvent(observation=PracticeObservation(**payload), **base_kwargs)
         return BaseEvent(**base_kwargs)
+
+
+@dataclass(kw_only=True)
+class QuestionAnsweredEvent(BaseEvent):
+    """服务端评分得到的作答事实，和对话中的自述理解分开记录。"""
+
+    observation: PracticeObservation
+    event_type: Literal[EventType.QUESTION_ANSWERED] = EventType.QUESTION_ANSWERED
+
+    def to_dict(self) -> dict[str, Any]:
+        """将类型化作答证据投影为事件存储格式。"""
+
+        return {**super().to_dict(), "payload": asdict(self.observation)}
 
 
 @dataclass

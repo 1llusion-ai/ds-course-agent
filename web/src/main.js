@@ -1,23 +1,30 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+import 'element-plus/es/components/alert/style/css.mjs'
+import 'element-plus/es/components/button/style/css.mjs'
+import 'element-plus/es/components/card/style/css.mjs'
+import 'element-plus/es/components/dropdown/style/css.mjs'
+import 'element-plus/es/components/form/style/css.mjs'
+import 'element-plus/es/components/icon/style/css.mjs'
+import 'element-plus/es/components/input/style/css.mjs'
+import 'element-plus/es/components/progress/style/css.mjs'
+import 'element-plus/es/components/scrollbar/style/css.mjs'
+import 'element-plus/es/components/segmented/style/css.mjs'
+import 'element-plus/es/components/select/style/css.mjs'
+import 'element-plus/es/components/skeleton/style/css.mjs'
+import 'element-plus/es/components/switch/style/css.mjs'
 
 import App from './App.vue'
 import router from './router'
 import { useAuthStore } from './stores/auth'
+import { installElementPlus } from './element-plus'
 
 const app = createApp(App)
 const pinia = createPinia()
 
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component)
-}
-
 app.use(pinia)
 app.use(router)
-app.use(ElementPlus)
+installElementPlus(app)
 
 const authStore = useAuthStore(pinia)
 if (typeof window !== 'undefined') {

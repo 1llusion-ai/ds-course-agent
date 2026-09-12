@@ -210,6 +210,7 @@ def _build_short_term_lookup(context: QueryContext) -> RouteDecision:
         reasons=[f"明确短术语问句: {query.term}"],
         retrieval_policy=RetrievalPolicy.REQUIRED,
         executor_key="course_rag",
+        enrichment=EnrichmentPlan(map_concepts=True, load_learner_state=True, record_learning_event=True),
     )
 
 
@@ -345,7 +346,9 @@ def _build_grounded_learning(router: Any, context: QueryContext) -> RouteDecisio
         reasons=["课程相关知识问答"],
         retrieval_policy=RetrievalPolicy.REQUIRED,
         executor_key="course_rag",
-        enrichment=EnrichmentPlan(map_concepts=True, rewrite_query=True, record_learning_event=True),
+        enrichment=EnrichmentPlan(
+            map_concepts=True, load_learner_state=True, rewrite_query=True, record_learning_event=True
+        ),
     )
 
 

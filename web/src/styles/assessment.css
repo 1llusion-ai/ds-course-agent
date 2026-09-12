@@ -46,6 +46,15 @@
 }
 .assessment-list-toolbar h1 { margin: 3px 0 0; font-size: 25px; }
 .assessment-list-toolbar p { margin: 7px 0 0; color: var(--assessment-muted); }
+.assessment-list-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.assessment-list-filters .el-select { width: 190px; max-width: 100%; }
+.assessment-followup { display: flex; flex-wrap: wrap; gap: 12px; max-width: 900px; margin: 20px auto; padding: 0 28px; }
+.assessment-list-item__status[data-status="failed"] { color: #b42318; background: #fef3f2; border-color: #fecdca; }
+.assessment-list-item__body { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .assessment-list-toolbar { align-items: stretch; flex-direction: column; gap: 18px; }
+  .assessment-list-filters { justify-content: space-between; }
+}
 .assessment-list-content { max-width: 980px; margin: 0 auto; padding: 0 28px 60px; }
 .assessment-list { border-top: 1px solid var(--assessment-border); }
 .assessment-list-item { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; align-items: center; gap: 18px; min-height: 92px; padding: 18px 0; border-bottom: 1px solid var(--assessment-border); }

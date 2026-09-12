@@ -12,6 +12,7 @@ from langchain_core.documents import Document
 from ds_course_agent.shared.term_queries import parse_short_term_query
 
 _CORPUS_ACRONYM = re.compile(r"(?<![A-Za-z0-9])([A-Z][A-Z0-9]{2,7})(?![A-Za-z0-9])")
+_CJK_TERM = re.compile(r"[\u3400-\u9fff]{2,}")
 COURSE_TERM_POLICY_VERSION = "bounded_course_term_v3"
 
 
@@ -113,6 +114,21 @@ class CourseTermIndex:
             ),
             documents=self._documents_containing(corrected),
         )
+
+    def keyword_documents(self, question: str, limit: int = 10) -> tuple[Document, ...]:
+        """Return deterministic lexical matches when the embedding service is unavailable."""
+
+        query_terms = {term for term in _CJK_TERM.findall(str(question)) if len(term) >= 2}
+        if not query_terms:
+            return ()
+        scored: list[tuple[int, int, Document]] = []
+        for index, document in enumerate(self._documents):
+            text = f"{document.page_content} {document.metadata.get('source_page_text', '')}"
+            score = sum(text.count(term) for term in query_terms)
+            if score:
+                scored.append((score, -index, _clone_document(document)))
+        scored.sort(reverse=True, key=lambda item: (item[0], item[1]))
+        return tuple(document for _, _, document in scored[: max(1, limit)])
 
     @staticmethod
     def _index_corpus_terms(documents: tuple[Document, ...]) -> dict[str, tuple[int, ...]]:

@@ -16,6 +16,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 from ds_course_agent.shared.paths import PROJECT_ROOT
+from ds_course_agent.teaching.practice import PracticeLevel
 from ds_course_agent.teaching.profile_models import StudentProfile
 
 
@@ -223,7 +224,11 @@ def overlay_learning_state(graph: KnowledgeMap, profile: StudentProfile) -> Know
     Chapter or related-concept evidence never propagates to another KC.
     Personal projections do not mutate the cached graph or the profile.
     """
-    states: dict[str, LearningState] = {}
+    states: dict[str, LearningState] = {
+        item.concept_id: LearningState.NEEDS_REVIEW
+        for item in profile.practice.values()
+        if item.level is PracticeLevel.NEEDS_PRACTICE
+    }
     buckets = (
         (profile.weak_spot_candidates, LearningState.NEEDS_REVIEW),
         (profile.pending_weak_spots, LearningState.WATCHING),
@@ -233,6 +238,8 @@ def overlay_learning_state(graph: KnowledgeMap, profile: StudentProfile) -> Know
     for records, state in buckets:
         for record in records:
             states.setdefault(record.concept_id, state)
+    for item in profile.practice.values():
+        states.setdefault(item.concept_id, LearningState.RECENT)
     return graph.model_copy(
         update={
             "nodes": tuple(

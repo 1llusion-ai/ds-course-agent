@@ -14,6 +14,11 @@
         <el-progress type="circle" :percentage="result.score_percent" :width="82" :stroke-width="7" :show-text="false" />
       </section>
 
+      <div class="assessment-followup">
+        <el-button type="primary" @click="continueLearning"><el-icon><ChatDotRound /></el-icon>继续学习</el-button>
+        <el-button plain @click="router.push('/profile')"><el-icon><User /></el-icon>学习画像</el-button>
+      </div>
+
       <section class="assessment-review">
         <article v-for="(question, index) in result.questions" :key="question.id" class="assessment-review-item" :class="question.is_correct ? 'is-correct' : 'is-wrong'">
           <header><span>第 {{ index + 1 }} 题</span><strong>{{ question.is_correct ? '回答正确' : '回答错误' }}</strong></header>
@@ -32,8 +37,9 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ChatDotRound, User } from '@element-plus/icons-vue'
 
 import AssessmentSource from '../components/AssessmentSource.vue'
 import { useAssessmentStore } from '../stores/assessment'
@@ -44,11 +50,28 @@ const router = useRouter()
 const store = useAssessmentStore()
 const result = computed(() => store.result)
 const error = ref('')
+let loadVersion = 0
 
-onMounted(async () => {
+function continueLearning() {
+  const wrong = result.value.questions.filter(question => !question.is_correct)
+  const question = wrong.length
+    ? `我刚完成《${result.value.title}》，请结合我的作答，帮我理解这道错题涉及的知识点：${wrong[0].stem}`
+    : `我刚完成《${result.value.title}》，请结合我的作答，进一步讲解相关知识的应用。`
+  router.push({ path: result.value.session_id ? `/chat/${result.value.session_id}` : '/chat', query: { question } })
+}
+
+async function loadResult() {
+  const version = ++loadVersion
+  error.value = ''
+  store.result = null
   try { await store.fetchResult(route.params.assessmentId) }
-  catch (requestError) { error.value = requestError.response?.data?.detail || '请稍后重试。' }
-})
+  catch (requestError) {
+    if (version === loadVersion) error.value = requestError.response?.data?.detail || '请稍后重试。'
+  }
+}
+
+onMounted(loadResult)
+watch(() => route.params.assessmentId, loadResult)
 </script>
 
 <style src="../styles/assessment.css"></style>

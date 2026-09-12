@@ -110,7 +110,7 @@ def audit_corpus_records(
     semantic_records = 0
     revisions: set[str] = set()
     chunk_ids: set[str] = set()
-    page_snapshots: dict[tuple[str, int], tuple[str, str, int]] = {}
+    page_snapshots: dict[tuple[str, int], tuple[str, str, int, str, str]] = {}
 
     if expected_document_count is not None and len(records) != expected_document_count:
         issues.append(
@@ -214,7 +214,7 @@ def audit_corpus_records(
             issues.append(CorpusAuditIssue("content_hash_mismatch", source, source_page, chunk_id, content_digest))
 
         page_key = (source_id, source_page)
-        snapshot = (page_digest, page_text, book_page)
+        snapshot = (page_digest, page_text, book_page, source, revision)
         previous = page_snapshots.setdefault(page_key, snapshot)
         if previous != snapshot:
             issues.append(

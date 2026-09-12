@@ -19,6 +19,7 @@ from ds_course_agent.agent.hooks.base import HookManager
 from ds_course_agent.agent.hooks.clarification import ClarificationDetectorHook
 from ds_course_agent.agent.hooks.learning_event import LearningEventHook
 from ds_course_agent.agent.hooks.retrieval_guard import RetrievalGuardHook
+from ds_course_agent.agent.learning_loop import get_session_learning_loop
 from ds_course_agent.agent.model_fallback import basic_rag_fallback
 from ds_course_agent.agent.prompt import get_system_prompt
 from ds_course_agent.agent.routing import ExecutionMode, RouteExecutionResult, RouteState
@@ -39,6 +40,7 @@ from ds_course_agent.shared.llm import get_chat_model
 from ds_course_agent.teaching.knowledge_mapper import map_question_to_concepts
 from ds_course_agent.teaching.learner_state import LearnerStateProvider, RuleBasedLearnerStateProvider
 from ds_course_agent.teaching.memory_core import get_memory_core, record_event
+from ds_course_agent.teaching.practice_guidance import build_practice_guidance
 from ds_course_agent.teaching.skill_system import get_skill_loader
 from ds_course_agent.tools.registry import get_rag_tool_registry
 
@@ -62,6 +64,7 @@ class AgentService:
         self.hooks = HookManager([RetrievalGuardHook(), self.learning_event_hook])
         self.route_handlers = default_route_handlers()
         self.learner_state_provider = learner_state_provider or RuleBasedLearnerStateProvider(get_memory_core)
+        self.learning_loop = get_session_learning_loop()
 
         # Load skill executors after the core registry is initialized.
         self.skill_loader = get_skill_loader()
@@ -422,6 +425,10 @@ class AgentService:
         )
 
         question = self._route_execution_query(route_state.context, route_state.decision)
+        guidance = build_practice_guidance(
+            route_state.learner_state, [item.concept_id for item in route_state.matched_concepts]
+        )
+        answer_options = {"answer_guidance": guidance} if guidance else {}
 
         trace_step("agent.branch", branch="grounded_rag_stream")
         trace_step("tool.invoke", tool="course_rag_tool", question=question)
@@ -463,14 +470,18 @@ class AgentService:
             yielded = False
             try:
                 with trace_span("tool.course_rag.answer_stream"):
-                    for chunk in service.stream_answer_with_context(answer_question, result.formatted_context):
+                    for chunk in service.stream_answer_with_context(
+                        answer_question, result.formatted_context, **answer_options
+                    ):
                         if chunk:
                             yielded = True
                             yield chunk
 
                 if not yielded:
                     with trace_span("tool.course_rag.answer"):
-                        answer_result = service.answer_with_context(answer_question, result.formatted_context)
+                        answer_result = service.answer_with_context(
+                            answer_question, result.formatted_context, **answer_options
+                        )
                     yield from iter_text_chunks(answer_result.answer)
             except Exception as answer_exc:
                 trace_answer_degraded(answer_exc, mode="stream")
@@ -496,7 +507,47 @@ class AgentService:
             trace_step("tool.result", tool="course_rag_tool", status="ok")
         except Exception as exc:
             trace_error("tool.invoke", exc, tool="course_rag_tool")
-            yield f"检索过程中发生错误：{exc}。请稍后重试。"
+            yield build_retrieval_end_event(
+                stream_id=route_state.stream_id or "",
+                sources=(),
+                retrieval_attempted=True,
+                used_retrieval=False,
+                message="课程资料服务暂时不可用",
+                tool="course_rag_tool",
+                degraded=True,
+            )
+            fallback_prompt = (
+                "课程教材检索暂时不可用。请基于一般数据科学知识回答下面的问题，"
+                "不要声称内容来自本课程教材，也不要编造教材页码或引用。"
+                "回答开头先说明这是通用解释；如果存在不同教材定义，简要指出可能差异。\n\n"
+                f"用户问题：{question}"
+            )
+            direct_chat = getattr(self, "direct_chat", None)
+            fallback_text = ""
+            streamed_fallback = False
+            try:
+                if callable(direct_chat):
+                    direct_result = direct_chat(fallback_prompt, stream=True)
+                    if isinstance(direct_result, str):
+                        fallback_text = direct_result
+                    else:
+                        streamed_fallback = True
+                        yield "教材检索暂时不可用，下面先给出通用解释（未使用本课程教材）：\n\n"
+                        yield from direct_result
+                if not fallback_text:
+                    fallback_text = (
+                        "教材检索暂时不可用，我暂时不能可靠确认本课程对这个问题的具体表述。"
+                        "你可以先提供相关教材段落，我会基于原文解释；检索恢复后也可以继续追问。"
+                    )
+            except Exception as fallback_exc:
+                trace_error("agent.degraded_direct_fallback", fallback_exc)
+                fallback_text = (
+                    "教材检索暂时不可用，我暂时不能可靠确认本课程对这个问题的具体表述。"
+                    "你可以先提供相关教材段落，我会基于原文解释；检索恢复后也可以继续追问。"
+                )
+            if fallback_text and not streamed_fallback:
+                yield "教材检索暂时不可用，下面先给出通用解释（未使用本课程教材）：\n\n"
+                yield fallback_text
 
     def chat_with_history(
         self,

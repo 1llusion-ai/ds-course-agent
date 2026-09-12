@@ -167,6 +167,37 @@ def test_assessment_evidence_window_uses_loaded_pages_without_vector_calls() -> 
     service.vector_store_service.query.assert_not_called()
 
 
+def test_evidence_page_index_skips_malformed_chunk_without_failing_collection() -> None:
+    from ds_course_agent.retrieval.service import _build_evidence_page_index
+
+    valid_text = "完整教材页内容。"
+    digest = hashlib.sha256(valid_text.encode()).hexdigest()
+    valid_metadata = {
+        "metadata_schema_version": "retrieval-provenance/1.0",
+        "collection_revision": "a" * 64,
+        "source": "book.pdf",
+        "source_id": "book",
+        "source_page": 1,
+        "book_page": 1,
+        "source_char_start": 0,
+        "source_char_end": len(valid_text),
+        "content_sha256": digest,
+        "source_page_sha256": digest,
+        "source_page_text": valid_text,
+    }
+    pages, issues = _build_evidence_page_index(
+        {
+            "ids": ["valid", "broken"],
+            "documents": [valid_text, "bad"],
+            "metadatas": [valid_metadata, {"metadata_schema_version": "retrieval-provenance/1.0"}],
+        },
+        return_issues=True,
+    )
+
+    assert ("book", 1) in pages
+    assert issues and issues[0].startswith("broken:")
+
+
 def test_ingest_publishes_revision_for_failed_batch(tmp_path):
     from ds_course_agent.kb.store import CourseKnowledgeBase
 

@@ -24,7 +24,8 @@ class StubAssignments:
     def __init__(self) -> None:
         self.calls = []
 
-    def assign(self, student_id, request):
+    def assign(self, student_id, request, *, session_id=None, assignment_id=None):
+        assert session_id == "session-1"
         self.calls.append((student_id, request))
         return AssessmentSummary.model_validate(
             {
@@ -90,7 +91,7 @@ def test_handler_assigns_using_planner_without_student_generation_controls() -> 
 
 def test_handler_returns_assessment_error_without_rag_fallback() -> None:
     class FailingAssignments:
-        def assign(self, student_id, request):
+        def assign(self, student_id, request, *, session_id=None, assignment_id=None):
             raise RuntimeError("generation unavailable")
 
     tool = AssessmentAssignmentTool(FailingAssignments)

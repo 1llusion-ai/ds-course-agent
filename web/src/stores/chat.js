@@ -25,6 +25,7 @@ export const useChatStore = defineStore('chat', () => {
   const messagesBySession = ref({})
   const pendingCountsBySession = ref({})
   const activeRequestsBySession = new Map()
+  const historyRequestVersions = new Map()
   const reconnectTimersBySession = new Map()
 
   const loading = computed(() => {
@@ -402,7 +403,10 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function fetchHistory(sessionId) {
+    const requestVersion = (historyRequestVersions.get(sessionId) || 0) + 1
+    historyRequestVersions.set(sessionId, requestVersion)
     const response = await chatApi.getHistory(sessionId)
+    if (historyRequestVersions.get(sessionId) !== requestVersion) return response
     const history = Array.isArray(response.messages)
       ? response.messages.map(normalizeHistoryMessage)
       : []

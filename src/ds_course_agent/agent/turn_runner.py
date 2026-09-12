@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Iterable, Iterator
 from typing import Any, Protocol
@@ -32,6 +33,20 @@ from ds_course_agent.agent.route_executor import (
 from ds_course_agent.agent.routing import ExecutionMode, RouteExecutionResult, RouteState
 from ds_course_agent.runtime.model_stream import iter_text_chunks
 from ds_course_agent.tools._shared import _track_retrieval, begin_retrieval_trace, end_retrieval_trace
+
+logger = logging.getLogger(__name__)
+
+
+def _schedule_session_practice(agent: TurnAgent, state: RouteState, result: RouteExecutionResult) -> None:
+    loop = getattr(agent, "learning_loop", None)
+    if loop is None or result.degraded or not state.decision.enrichment.record_learning_event:
+        return
+    if state.decision.execution_mode is ExecutionMode.GROUNDED_GENERATION and not result.used_retrieval:
+        return
+    try:
+        loop.schedule(state.student_id, state.session_id)
+    except Exception:
+        logger.exception("Failed to schedule practice after session %s", state.session_id)
 
 
 class TurnAgent(RouteAgent, Protocol):
@@ -98,6 +113,7 @@ def iter_turn_events(
         if result.content:
             yield MessageDeltaEvent(stream_id=stream_id, delta=result.content)
         route_state.history.add_messages([AIMessage(content=result.content)])
+        _schedule_session_practice(agent, route_state, result)
         yield TurnEndEvent(stream_id=stream_id, result=result)
         return
 
@@ -179,6 +195,7 @@ def iter_turn_events(
         )
 
     route_state.history.add_messages([AIMessage(content=result.content)])
+    _schedule_session_practice(agent, route_state, result)
     yield TurnEndEvent(stream_id=stream_id, result=result)
 
 

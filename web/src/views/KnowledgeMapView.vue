@@ -267,8 +267,8 @@ const {
   side: 'end'
 })
 const byId = computed(() => new Map((graph.value?.nodes || []).map(node => [node.canonical_id, node])))
-const concepts = computed(() => graph.value?.nodes.filter(node => node.node_type === 'kc') || [])
-const chapterTitle = computed(() => graph.value.chapters.find(item => item.chapter === chapter.value)?.title)
+const concepts = computed(() => graph.value?.nodes?.filter(node => node.node_type === 'kc') || [])
+const chapterTitle = computed(() => graph.value?.chapters?.find(item => item.chapter === chapter.value)?.title)
 const selectedNode = computed(() => byId.value.get(selectedId.value))
 const listedNodes = computed(() => {
   const needle = search.value.trim().toLowerCase().replace(/\s+/g, '')
@@ -279,7 +279,7 @@ const listedNodes = computed(() => {
 })
 const relatedConcepts = computed(() => {
   const neighbors = new Map()
-  for (const edge of graph.value.edges) {
+  for (const edge of graph.value?.edges || []) {
     if (edge.relation_type === 'part_of' || !enabledRelations.value.includes(edge.relation_type)) continue
     if (![edge.source, edge.target].includes(selectedId.value)) continue
     const node = byId.value.get(edge.source === selectedId.value ? edge.target : edge.source)

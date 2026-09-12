@@ -4,6 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 
 import ds_course_agent.shared.config as config
@@ -12,6 +13,7 @@ from ds_course_agent.shared.logging_config import setup_logging
 # 在应用启动时初始化日志（必须在导入其他业务模块之前）
 setup_logging(level=config.LOG_LEVEL)
 
+from ds_course_agent.agent.learning_loop import shutdown_session_learning_loop
 from ds_course_agent.assessment.repository import AssessmentRepository
 
 from .auth import models as auth_models
@@ -26,8 +28,11 @@ async def lifespan(app: FastAPI):
     logger.info("RAG Tutor Backend Service starting...")
     auth_models.init_db()
     AssessmentRepository().init_db()
-    yield
-    logger.info("RAG Tutor Backend Service stopped")
+    try:
+        yield
+    finally:
+        await run_in_threadpool(shutdown_session_learning_loop)
+        logger.info("RAG Tutor Backend Service stopped")
 
 
 app = FastAPI(

@@ -42,7 +42,8 @@ router.beforeEach(async (to) => {
 
   if (isPublicRoute) {
     if (to.path === '/login' && authStore.isAuthenticated) {
-      return typeof to.query.redirect === 'string' ? to.query.redirect : '/chat'
+      const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : ''
+      return redirect.startsWith('/login') ? '/chat' : (redirect || '/chat')
     }
     return true
   }

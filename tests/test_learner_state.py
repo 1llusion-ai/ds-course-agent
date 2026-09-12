@@ -191,6 +191,9 @@ def test_provider_reads_one_turn_snapshot_from_memory() -> None:
     profile = _profile()
 
     class FakeMemory:
+        def aggregate_profile(self, student_id: str) -> None:
+            assert student_id == "student_001"
+
         def get_profile(self, student_id: str) -> StudentProfile:
             assert student_id == "student_001"
             return profile

@@ -45,6 +45,7 @@ let objects
 let sceneData
 let hoveredId = ''
 let firstLayout = true
+let readyTimeout
 const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
 const reducedMotion = ref(motionPreference.matches)
 const cameraDuration = () => reducedMotion.value ? 0 : 650
@@ -190,6 +191,8 @@ function motionPreferenceChanged(event) {
 }
 
 function teardown() {
+  if (readyTimeout) window.clearTimeout(readyTimeout)
+  readyTimeout = undefined
   observer?.disconnect()
   observer = undefined
   document.removeEventListener('visibilitychange', visibilityChanged)
@@ -243,6 +246,12 @@ onMounted(async () => {
     document.addEventListener('visibilitychange', visibilityChanged)
     motionPreference.addEventListener('change', motionPreferenceChanged)
     visibilityChanged()
+    readyTimeout = window.setTimeout(() => {
+      if (firstLayout) {
+        firstLayout = false
+        failure.value = true
+      }
+    }, 8000)
   } catch (error) {
     teardown()
     failure.value = true

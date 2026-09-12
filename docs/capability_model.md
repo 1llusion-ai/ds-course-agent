@@ -59,12 +59,18 @@ These should not be promoted to tools or skills unless their role changes.
 | `src/ds_course_agent/teaching/knowledge_mapper.py` | concept matching and related-concept lookup |
 | `src/ds_course_agent/teaching/knowledge_map.py` | validated course-map projection and exact-concept learner-state overlay; exposed through an authenticated HTTP read |
 | `src/ds_course_agent/teaching/assessment_assignment.py` | learner-state-aware KC, difficulty, and question-count policy behind the assignment tool |
+| `src/ds_course_agent/agent/learning_loop.py` | schedules session practice after completed turns and invokes the existing assignment tool in a bounded worker |
+| `src/ds_course_agent/teaching/assessment_evidence.py` | translates scored assessments into idempotent typed learning events; never infers mastery from mentions |
 | `src/ds_course_agent/assessment/` | evidence selection, generation, verification, persistence, lifecycle, and scoring behind the assignment tool and HTTP API |
 | `skills/learning-path/scripts/planner.py` | internal route ranking and step ordering |
 | `skills/personalized-explanation/scripts/strategy.py` | internal relevance filtering and scaffold strategy |
 | retrieval fusion / rerank logic | internal ranking implementation rather than a user-facing capability |
 
 ## Why Not Make Everything a Skill?
+
+The session practice and feedback contract is described in
+[`session_learning_loop.md`](session_learning_loop.md). Background execution does
+not create another conversational agent or another QueryPipeline entry.
 
 Because that usually makes the system noisier, not better.
 

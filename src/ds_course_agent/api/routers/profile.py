@@ -298,6 +298,7 @@ async def get_profile_summary(student_id: str = Depends(get_current_student_id))
 
     return ProfileSummary(
         student_id=student_id,
+        practice=sorted(profile.practice.values(), key=lambda item: item.last_answered_at, reverse=True),
         recent_concepts=recent_concepts,
         pending_weak_spots=pending_weak_spots,
         weak_spots=weak_spots,
@@ -326,6 +327,7 @@ async def get_profile_detail(student_id: str = Depends(get_current_student_id)):
 
     return ProfileDetail(
         student_id=student_id,
+        practice=sorted(profile.practice.values(), key=lambda item: item.last_answered_at, reverse=True),
         recent_concepts=recent_concepts,
         pending_weak_spots=pending_weak_spots,
         weak_spots=weak_spots,

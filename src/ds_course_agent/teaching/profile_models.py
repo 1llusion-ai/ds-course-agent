@@ -10,6 +10,8 @@
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from ds_course_agent.teaching.practice import ConceptPractice
+
 
 @dataclass
 class ConceptFocus:
@@ -68,6 +70,7 @@ class StudentProfile:
     pending_weak_spots: list[WeakSpotCandidate] = field(default_factory=list)
     weak_spot_candidates: list[WeakSpotCandidate] = field(default_factory=list)
     resolved_weak_spots: list[WeakSpotCandidate] = field(default_factory=list)
+    practice: dict[str, ConceptPractice] = field(default_factory=dict)
     stats: dict[str, Any] = field(
         default_factory=lambda: {
             "total_questions": 0,
@@ -102,12 +105,16 @@ class StudentProfile:
             "pending_weak_spots": [spot.to_dict() for spot in self.pending_weak_spots],
             "weak_spot_candidates": [spot.to_dict() for spot in self.weak_spot_candidates],
             "resolved_weak_spots": [spot.to_dict() for spot in self.resolved_weak_spots],
+            "practice": {concept_id: item.to_dict() for concept_id, item in self.practice.items()},
             "stats": self.stats,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "StudentProfile":
         profile = cls(student_id=data["student_id"])
+        profile.practice = {
+            concept_id: ConceptPractice.from_dict(item) for concept_id, item in data.get("practice", {}).items()
+        }
 
         for cid, cdata in data.get("recent_concepts", {}).items():
             cdata_copy = cdata.copy()

@@ -4,12 +4,13 @@
       class="app-shell__sidebar"
       :class="{
         'app-shell__sidebar--collapsed': sidebarCollapsed,
+        'app-shell__sidebar--narrow': narrowViewport,
         'app-shell__sidebar--resizing': sidebarResizing
       }"
       :style="{ width: `${sidebarWidth}px` }"
     >
       <ChatSidebar
-        :collapsed="sidebarCollapsed"
+        :collapsed="sidebarCollapsed || narrowViewport"
         style="width: 100%"
         @toggle-collapse="toggleSidebar"
         @new-chat="handleNewChat"
@@ -34,7 +35,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, provide, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -55,6 +56,7 @@ const router = useRouter()
 const chatStore = useChatStore()
 const sessionStore = useSessionStore()
 const sidebarCollapsed = ref(readSidebarCollapsedPreference())
+const narrowViewport = ref(false)
 const {
   width: sidebarWidth,
   isResizing: sidebarResizing,
@@ -71,6 +73,7 @@ const {
 const theme = ref(readThemePreference())
 const sessionBootstrapPending = ref(!sessionStore.loaded)
 const isDarkTheme = computed(() => theme.value === 'dark')
+const updateViewport = () => { narrowViewport.value = window.innerWidth <= 760 }
 
 provide(APP_SHELL_CONTEXT_KEY, {
   isDarkTheme,
@@ -123,6 +126,8 @@ function toggleTheme() {
 }
 
 onMounted(async () => {
+  updateViewport()
+  window.addEventListener('resize', updateViewport)
   if (sessionStore.loaded) {
     sessionBootstrapPending.value = false
     return
@@ -137,6 +142,8 @@ onMounted(async () => {
     sessionBootstrapPending.value = false
   }
 })
+
+onBeforeUnmount(() => window.removeEventListener('resize', updateViewport))
 </script>
 
 <style scoped>
@@ -168,6 +175,10 @@ onMounted(async () => {
 }
 
 .app-shell__sidebar--collapsed {
+  width: 4rem !important;
+}
+
+.app-shell__sidebar--narrow {
   width: 4rem !important;
 }
 

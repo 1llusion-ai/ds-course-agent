@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ds_course_agent.agent.routing import RouteState
 from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
+from ds_course_agent.teaching.practice_guidance import build_practice_guidance
 
 
 def format_learner_state_for_prompt(learner_state: LearnerStateSnapshot | None) -> str:
@@ -55,6 +56,11 @@ def build_turn_system_context(route_state: RouteState) -> str:
     """Build the per-turn system context used by model-backed routes."""
 
     sections: list[str] = []
+    practice_guidance = build_practice_guidance(
+        route_state.learner_state, [item.concept_id for item in route_state.matched_concepts]
+    )
+    if practice_guidance:
+        sections.append(practice_guidance)
     learner_state_summary = format_learner_state_for_prompt(route_state.learner_state)
     if learner_state_summary:
         sections.append(learner_state_summary)

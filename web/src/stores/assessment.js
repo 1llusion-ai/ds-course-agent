@@ -9,6 +9,27 @@ export const useAssessmentStore = defineStore('assessment', () => {
   const result = ref(null)
   const loading = ref(false)
   const submitting = ref(false)
+  const preparations = ref([])
+  let overviewVersion = 0
+  let submitPromise = null
+  let assessmentVersion = 0
+  let resultVersion = 0
+
+  async function fetchOverview(statuses, silent = false) {
+    const version = ++overviewVersion
+    if (!silent) loading.value = true
+    try {
+      const [items, jobs] = await Promise.all([
+        assessmentsApi.list(statuses), assessmentsApi.preparations()
+      ])
+      if (version === overviewVersion) {
+        assessments.value = items
+        preparations.value = jobs
+      }
+    } finally {
+      if (version === overviewVersion) loading.value = false
+    }
+  }
 
   async function fetchAssessments(statuses) {
     loading.value = true
@@ -21,9 +42,11 @@ export const useAssessmentStore = defineStore('assessment', () => {
   }
 
   async function openAssessment(assessmentId) {
+    const version = ++assessmentVersion
     loading.value = true
     try {
-      current.value = await assessmentsApi.open(assessmentId)
+      const value = await assessmentsApi.open(assessmentId)
+      if (version === assessmentVersion) current.value = value
       return current.value
     } finally {
       loading.value = false
@@ -31,20 +54,20 @@ export const useAssessmentStore = defineStore('assessment', () => {
   }
 
   async function submitAssessment(assessmentId, answers) {
-    if (submitting.value) return result.value
+    if (submitPromise) return submitPromise
     submitting.value = true
-    try {
-      result.value = await assessmentsApi.submit(assessmentId, answers)
-      return result.value
-    } finally {
-      submitting.value = false
-    }
+    submitPromise = assessmentsApi.submit(assessmentId, answers)
+      .then(value => { result.value = value; return value })
+      .finally(() => { submitting.value = false; submitPromise = null })
+    return submitPromise
   }
 
   async function fetchResult(assessmentId) {
+    const version = ++resultVersion
     loading.value = true
     try {
-      result.value = await assessmentsApi.result(assessmentId)
+      const value = await assessmentsApi.result(assessmentId)
+      if (version === resultVersion) result.value = value
       return result.value
     } finally {
       loading.value = false
@@ -53,11 +76,13 @@ export const useAssessmentStore = defineStore('assessment', () => {
 
   return {
     assessments,
+    preparations,
     current,
     result,
     loading,
     submitting,
     fetchAssessments,
+    fetchOverview,
     openAssessment,
     submitAssessment,
     fetchResult

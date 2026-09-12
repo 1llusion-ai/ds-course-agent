@@ -108,6 +108,8 @@ class TestQueryPreprocessor:
             "练习题是什么意思？",
             "请解释教材练习题中的交叉验证",
             "这道练习题为什么选A？",
+            "下周开始测验吗",
+            "我想做练习册第3题",
         ],
     )
     def test_assessment_intent_requires_an_explicit_assignment_action(self, query):
@@ -450,6 +452,9 @@ def _make_pipeline_service(monkeypatch, semantic: _SemanticRouterStub):
             del messages
 
     class FakeMemory:
+        def aggregate_profile(self, student_id):
+            pass
+
         def get_profile(self, student_id):
             return StudentProfile(student_id=student_id)
 
@@ -769,6 +774,69 @@ def test_grounded_rag_stream_distinguishes_attempt_from_evidence_use(monkeypatch
     assert retrieval_event.sources == ()
     assert retrieval_event.message == "未找到可用课程来源"
     assert "未找到" in "".join(str(event) for event in events[1:])
+
+
+def test_grounded_retrieval_failure_emits_degraded_result(monkeypatch):
+    from ds_course_agent.agent.events import RetrievalEndEvent
+    from ds_course_agent.agent.routing import RouteState
+    from ds_course_agent.agent.service import AgentService
+
+    service = object.__new__(AgentService)
+    state = RouteState(
+        student_id="student-1",
+        session_id="failed-session",
+        history=None,
+        chat_history=[],
+        context=_context("如何判断过拟合？"),
+        decision=RouteDecision(
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.CONCEPT_QA,
+            execution_mode=ExecutionMode.GROUNDED_GENERATION,
+            confidence=0.8,
+            retrieval_policy=RetrievalPolicy.REQUIRED,
+        ),
+    )
+
+    class UnavailableRetriever:
+        def retrieve(self, *_args, **_kwargs):
+            raise TimeoutError("embedding service unavailable")
+
+    monkeypatch.setattr("ds_course_agent.tools.course_rag.get_rag_service", lambda: UnavailableRetriever())
+    events = list(service._iter_grounded_rag_response(state))
+    assert isinstance(events[0], RetrievalEndEvent)
+    assert events[0].degraded is True
+    assert events[0].used_retrieval is False
+
+
+def test_grounded_retrieval_failure_uses_explicit_general_knowledge_fallback(monkeypatch):
+    from ds_course_agent.agent.routing import RouteState
+    from ds_course_agent.agent.service import AgentService
+
+    service = object.__new__(AgentService)
+    service.direct_chat = lambda *_args, **_kwargs: iter(["通用解释：数据科学流程通常先明确问题和目标。"])
+    state = RouteState(
+        student_id="student-1",
+        session_id="failed-session",
+        history=None,
+        chat_history=[],
+        context=_context("数据科学流程的第一个环节是什么？"),
+        decision=RouteDecision(
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.CONCEPT_QA,
+            execution_mode=ExecutionMode.GROUNDED_GENERATION,
+            confidence=0.8,
+            retrieval_policy=RetrievalPolicy.REQUIRED,
+        ),
+    )
+
+    class UnavailableRetriever:
+        def retrieve(self, *_args, **_kwargs):
+            raise TimeoutError("embedding service unavailable")
+
+    monkeypatch.setattr("ds_course_agent.tools.course_rag.get_rag_service", lambda: UnavailableRetriever())
+    content = "".join(str(event) for event in service._iter_grounded_rag_response(state))
+    assert "通用解释" in content
+    assert "未使用本课程教材" in content
 
 
 def test_grounded_rag_stream_discloses_term_correction_and_uses_resolved_query(monkeypatch):

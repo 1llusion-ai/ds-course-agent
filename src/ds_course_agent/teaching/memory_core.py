@@ -10,10 +10,18 @@ Memory Core 核心模块。
 import json
 import logging
 from collections import Counter, defaultdict
+from dataclasses import replace
 from pathlib import Path
+from threading import RLock
 
 import ds_course_agent.shared.config as config
-from ds_course_agent.teaching.learning_events import BaseEvent, EventType, build_mastery_signal_event
+from ds_course_agent.teaching.learning_events import (
+    BaseEvent,
+    EventType,
+    QuestionAnsweredEvent,
+    build_mastery_signal_event,
+)
+from ds_course_agent.teaching.practice import summarize_practice
 from ds_course_agent.teaching.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
 
 logger = logging.getLogger(__name__)
@@ -30,18 +38,36 @@ class MemoryCore:
         self.events_dir.mkdir(parents=True, exist_ok=True)
         self.profiles_dir.mkdir(parents=True, exist_ok=True)
         self._profile_cache: dict[str, StudentProfile] = {}
+        self._event_lock = RLock()
 
     # ========== 事件记录 ==========
 
     def record_event(self, event: BaseEvent) -> None:
-        student_id = event.student_id
-        file_path = self.events_dir / f"{student_id}_events.jsonl"
+        self.record_events((event,))
 
-        with open(file_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(event.to_dict(), ensure_ascii=False) + "\n")
+    def record_events(self, events: tuple[BaseEvent, ...]) -> None:
+        """按事件 ID 幂等追加一批事实，使评分重试不会重复计入画像。"""
 
-        if student_id in self._profile_cache:
-            self._profile_cache[student_id].stats["total_questions"] += 1
+        if not events:
+            return
+        student_id = events[0].student_id
+        if any(event.student_id != student_id for event in events):
+            raise ValueError("an event batch must belong to one student")
+        with self._event_lock:
+            existing = {event.event_id: event.to_dict() for event in self.load_events(student_id)}
+            pending = []
+            for event in events:
+                payload = event.to_dict()
+                if event.event_id in existing:
+                    if existing[event.event_id] != payload:
+                        raise ValueError(f"event identity conflict: {event.event_id}")
+                    continue
+                pending.append(payload)
+                existing[event.event_id] = payload
+            file_path = self.events_dir / f"{student_id}_events.jsonl"
+            with open(file_path, "a", encoding="utf-8") as output:
+                output.writelines(json.dumps(payload, ensure_ascii=False) + "\n" for payload in pending)
+            self._profile_cache.pop(student_id, None)
 
     def load_events(
         self,
@@ -94,6 +120,12 @@ class MemoryCore:
     # ========== 聚合 ==========
 
     def aggregate_profile(self, student_id: str) -> None:
+        """在事件写入锁内重建画像，避免后台评分和会话聚合互相覆盖。"""
+
+        with self._event_lock:
+            self._aggregate_profile(student_id)
+
+    def _aggregate_profile(self, student_id: str) -> None:
         profile = self.get_profile(student_id)
         events = self.load_events(student_id)
 
@@ -120,6 +152,16 @@ class MemoryCore:
         self._update_recent_concepts(profile, unique_events)
         self._update_progress(profile, unique_events)
         self._detect_weak_spots(profile, unique_events)
+        practice_events = defaultdict(list)
+        for event in unique_events:
+            if isinstance(event, QuestionAnsweredEvent):
+                practice_events[event.observation.concept_id].append((event.timestamp, event.observation))
+        profile.practice = {concept_id: summarize_practice(items) for concept_id, items in practice_events.items()}
+        for concept_id, practice in profile.practice.items():
+            if concept_id in profile.recent_concepts:
+                profile.practice[concept_id] = replace(
+                    practice, display_name=profile.recent_concepts[concept_id].display_name
+                )
 
         profile.stats["total_questions"] = len(unique_events)
         profile.stats["total_concepts"] = len(profile.recent_concepts)
