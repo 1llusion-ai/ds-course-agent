@@ -87,7 +87,6 @@ import { useResizablePanel } from '../composables/useResizablePanel'
 import { useChatStore } from '../stores/chat'
 import { useSessionStore } from '../stores/session'
 import { readLocalStorage, writeLocalStorage } from '../utils/storage'
-import { scheduleKnowledgeMapPrefetch } from '../utils/prefetch'
 
 const APP_SHELL_CONTEXT_KEY = 'ds-course-agent.app-shell'
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'ds-course-agent.sidebarCollapsed'
@@ -118,7 +117,6 @@ const {
   side: 'start'
 })
 const sessionBootstrapPending = ref(!sessionStore.loaded)
-let cancelKnowledgeMapPrefetch = () => {}
 
 provide(APP_SHELL_CONTEXT_KEY, { sessionBootstrapPending, openMobileDrawer })
 
@@ -208,7 +206,6 @@ watch(narrowViewport, narrow => {
 })
 
 onMounted(async () => {
-  cancelKnowledgeMapPrefetch = scheduleKnowledgeMapPrefetch()
   updateViewport()
   window.addEventListener('resize', updateViewport)
   if (sessionStore.loaded) {
@@ -226,10 +223,7 @@ onMounted(async () => {
   }
 })
 
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', updateViewport)
-  cancelKnowledgeMapPrefetch()
-})
+onBeforeUnmount(() => window.removeEventListener('resize', updateViewport))
 </script>
 
 <style scoped>
