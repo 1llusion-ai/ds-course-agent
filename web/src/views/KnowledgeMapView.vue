@@ -216,15 +216,16 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Close, Connection, Search } from '@element-plus/icons-vue'
 import { knowledgeMapApi } from '../api/knowledgeMap'
-import KnowledgeMapCanvas from '../components/KnowledgeMapCanvas.vue'
 import PanelResizeHandle from '../components/PanelResizeHandle.vue'
 import PanelToggleIcon from '../components/PanelToggleIcon.vue'
 import { useResizablePanel } from '../composables/useResizablePanel'
 import { chapterColor, learningStateMeta, learningStates, neighborsOf, questionForNode, relationTypes } from '../utils/knowledgeMap'
+
+const KnowledgeMapCanvas = defineAsyncComponent(() => import('../components/KnowledgeMapCanvas.vue'))
 
 const INDEX_MIN_WIDTH = 190
 const INDEX_MAX_WIDTH = 360
