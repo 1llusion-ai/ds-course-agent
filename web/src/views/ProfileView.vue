@@ -1,225 +1,262 @@
 <template>
   <main class="profile-page">
     <header class="profile-header">
-      <div class="profile-header__copy">
-        <p class="profile-eyebrow">学习画像</p>
-        <h1>学习档案与诊断建议</h1>
-        <p class="profile-header__subtitle">
-          基于你的近期提问、课程进度和薄弱点信号，整理一份可行动的学习画像。
-        </p>
+      <div>
+        <p class="profile-kicker">学习空间</p>
+        <h1>学生画像</h1>
+        <p>把近期学习信号整理成可观察、可行动的诊断视图。</p>
       </div>
-
-      <div class="profile-header__actions">
-        <el-button plain @click="router.push('/knowledge-map')">知识地图</el-button>
-        <el-button text @click="goBack">
-          <el-icon class="mr-1"><ArrowLeft /></el-icon>
-          返回对话
-        </el-button>
-        <el-button plain :loading="profileStore.loading" @click="refreshProfile">刷新画像</el-button>
-      </div>
+      <button
+        type="button"
+        class="icon-button"
+        :disabled="profileStore.loading"
+        aria-label="刷新学生画像"
+        title="刷新画像"
+        @click="refreshProfile"
+      >
+        <el-icon :class="{ 'is-spinning': profileStore.loading }"><Refresh /></el-icon>
+      </button>
     </header>
 
-    <el-skeleton v-if="profileStore.loading && !detail" :rows="8" animated />
+    <div v-if="profileStore.loading && !detail" class="profile-loading" aria-live="polite">
+      <span class="profile-loading__pulse" />
+      正在整理学习信号…
+    </div>
+
+    <div v-else-if="loadError && !detail" class="profile-error" role="alert">
+      <el-icon><Warning /></el-icon>
+      <div>
+        <strong>学生画像暂时无法加载</strong>
+        <p>{{ loadError }}</p>
+      </div>
+      <el-button plain @click="loadProfile()">重新加载</el-button>
+    </div>
 
     <template v-else-if="detail">
-      <section class="profile-summary panel">
-        <div class="profile-summary__main">
-          <p class="section-kicker">Profile Summary</p>
-          <h2>{{ profileHeadline }}</h2>
+      <section class="profile-overview" aria-labelledby="profile-summary-title">
+        <div class="profile-overview__copy">
+          <span class="status-label">当前诊断</span>
+          <h2 id="profile-summary-title">{{ profileHeadline }}</h2>
           <p>{{ profileNarrative }}</p>
-
-          <div class="summary-facts">
-            <div class="summary-fact">
-              <span>当前关注</span>
-              <strong>{{ focusConceptText }}</strong>
-            </div>
-            <div class="summary-fact">
-              <span>学习状态</span>
-              <strong>{{ learningStateText }}</strong>
-            </div>
-            <div class="summary-fact">
-              <span>主要风险</span>
-              <strong>{{ riskText }}</strong>
-            </div>
+          <div class="overview-context">
+            <span><el-icon><Aim /></el-icon>当前关注：{{ focusConceptText }}</span>
+            <span><el-icon><Reading /></el-icon>{{ currentChapterText }}</span>
           </div>
         </div>
 
-        <div class="profile-summary__stats" aria-label="画像统计">
-          <div class="summary-stat">
-            <span>近期知识点</span>
-            <strong>{{ recentConcepts.length }}</strong>
+        <dl class="profile-metrics" aria-label="画像统计">
+          <div>
+            <dt>探索概念</dt>
+            <dd>{{ recentConcepts.length }}</dd>
           </div>
-          <div class="summary-stat">
-            <span>活跃薄弱点</span>
-            <strong>{{ activeWeakSpots.length }}</strong>
+          <div class="metric--warning">
+            <dt>需要巩固</dt>
+            <dd>{{ activeWeakSpots.length }}</dd>
           </div>
-          <div class="summary-stat">
-            <span>待观察</span>
-            <strong>{{ pendingWeakSpots.length }}</strong>
+          <div class="metric--watching">
+            <dt>待观察</dt>
+            <dd>{{ pendingWeakSpots.length }}</dd>
           </div>
-          <div class="summary-stat">
-            <span>已克服</span>
-            <strong>{{ detail.stats.total_resolved_weak_spots }}</strong>
+          <div class="metric--resolved">
+            <dt>已克服</dt>
+            <dd>{{ detail.stats.total_resolved_weak_spots }}</dd>
           </div>
-        </div>
+        </dl>
       </section>
 
-      <section class="profile-layout">
-        <div class="profile-main-column">
-          <article class="panel">
-            <div class="panel__header">
+      <div class="profile-workspace">
+        <div class="profile-primary">
+          <section class="profile-section">
+            <div class="section-heading">
               <div>
-                <p class="section-kicker">Recent Focus</p>
-                <h2>近期关注</h2>
+                <span class="section-label">Learning signals</span>
+                <h2>学习信号分布</h2>
               </div>
-              <span class="panel__hint">最近在对话里反复出现的概念</span>
+              <p>点击知识点可直接发起针对性讨论</p>
             </div>
 
-            <div v-if="recentConcepts.length" class="concept-list">
-              <div
-                v-for="concept in recentConcepts.slice(0, 6)"
-                :key="concept.concept_id"
-                class="concept-row"
-              >
-                <div class="concept-row__body">
-                  <strong>{{ concept.display_name }}</strong>
-                  <div class="row-meta">
-                    <span>{{ concept.chapter || '未分类章节' }}</span>
-                    <span v-if="concept.last_question_type">{{ concept.last_question_type }}</span>
-                  </div>
+            <div class="signal-board">
+              <article class="signal-lane signal-lane--recent">
+                <header>
+                  <span class="signal-dot" />
+                  <strong>近期关注</strong>
+                  <small>{{ recentConcepts.length }}</small>
+                </header>
+                <div v-if="recentConcepts.length" class="signal-list">
+                  <button
+                    v-for="concept in recentConcepts.slice(0, 6)"
+                    :key="concept.concept_id"
+                    type="button"
+                    @click="askAboutConcept(concept.display_name, '梳理')"
+                  >
+                    <span>{{ concept.display_name }}</span>
+                    <small>{{ concept.mention_count }} 次提及</small>
+                  </button>
                 </div>
-                <span class="count-chip">x{{ concept.mention_count }}</span>
-              </div>
-            </div>
-            <div v-else class="empty-note">还没有形成稳定的近期关注点。</div>
-          </article>
+                <p v-else class="empty-copy">继续提问后会形成关注分布。</p>
+              </article>
 
-          <article class="panel">
-            <div class="panel__header">
+              <article class="signal-lane signal-lane--watching">
+                <header>
+                  <span class="signal-dot" />
+                  <strong>待观察</strong>
+                  <small>{{ pendingWeakSpots.length }}</small>
+                </header>
+                <div v-if="pendingWeakSpots.length" class="signal-list">
+                  <button
+                    v-for="spot in pendingWeakSpots.slice(0, 5)"
+                    :key="spot.concept_id"
+                    type="button"
+                    @click="askAboutConcept(spot.display_name, '检查理解')"
+                  >
+                    <span>{{ spot.display_name }}</span>
+                    <small>{{ spot.clarification_count }} 次讲解</small>
+                  </button>
+                </div>
+                <p v-else class="empty-copy">暂无需要继续观察的信号。</p>
+              </article>
+
+              <article class="signal-lane signal-lane--review">
+                <header>
+                  <span class="signal-dot" />
+                  <strong>重点巩固</strong>
+                  <small>{{ activeWeakSpots.length }}</small>
+                </header>
+                <div v-if="activeWeakSpots.length" class="signal-list">
+                  <button
+                    v-for="spot in activeWeakSpots.slice(0, 5)"
+                    :key="spot.concept_id"
+                    type="button"
+                    @click="askAboutConcept(spot.display_name, '复习')"
+                  >
+                    <span>{{ spot.display_name }}</span>
+                    <small>证据置信度 {{ formatPercent(spot.confidence) }}</small>
+                  </button>
+                </div>
+                <p v-else class="empty-copy">目前没有稳定的薄弱点。</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="profile-section">
+            <div class="section-heading">
               <div>
-                <p class="section-kicker">Diagnosis</p>
-                <h2>薄弱点诊断</h2>
+                <span class="section-label">Diagnosis</span>
+                <h2>薄弱点优先级</h2>
               </div>
-              <span class="panel__hint">可手动将已经掌握的知识点移出活跃列表</span>
+              <p>置信度表示薄弱信号的稳定程度，不代表掌握度</p>
             </div>
 
-            <div v-if="activeWeakSpots.length" class="weakspot-list">
-              <div
-                v-for="spot in activeWeakSpots"
-                :key="spot.concept_id"
-                class="weakspot-row weakspot-row--active"
-              >
-                <div class="weakspot-row__body">
-                  <div class="weakspot-row__title">
+            <div v-if="activeWeakSpots.length" class="risk-list">
+              <article v-for="spot in activeWeakSpots" :key="spot.concept_id" class="risk-row">
+                <div class="risk-row__heading">
+                  <div>
                     <strong>{{ spot.display_name }}</strong>
-                    <span class="confidence-chip">{{ Math.round(spot.confidence * 100) }}%</span>
+                    <span>{{ spot.evidence_count }} 条证据 · {{ spot.clarification_count }} 次讲解</span>
                   </div>
-                  <div class="row-meta">
-                    <span>讲解次数 {{ spot.clarification_count }}</span>
-                    <span>{{ formatTime(spot.last_triggered_at) }}</span>
+                  <b>{{ formatPercent(spot.confidence) }}</b>
+                </div>
+                <div class="risk-track" aria-hidden="true">
+                  <span :style="{ width: formatPercent(spot.confidence) }" />
+                </div>
+                <footer>
+                  <span>最近触发 {{ formatTime(spot.last_triggered_at) }}</span>
+                  <div>
+                    <button type="button" @click="askAboutConcept(spot.display_name, '出一道理解题检查')">出题检查</button>
+                    <button
+                      type="button"
+                      :disabled="resolvingConceptId === spot.concept_id"
+                      @click="handleResolveWeakSpot(spot)"
+                    >
+                      {{ resolvingConceptId === spot.concept_id ? '处理中…' : '标记已掌握' }}
+                    </button>
                   </div>
-                </div>
-                <button
-                  type="button"
-                  class="text-action"
-                  :disabled="resolvingConceptId === spot.concept_id"
-                  @click="handleResolveWeakSpot(spot)"
-                >
-                  {{ resolvingConceptId === spot.concept_id ? '处理中…' : '已掌握' }}
-                </button>
-              </div>
+                </footer>
+              </article>
             </div>
-            <div v-else class="empty-note">暂无活跃薄弱点。</div>
-
-            <div v-if="pendingWeakSpots.length" class="subsection">
-              <h3>待观察信号</h3>
-              <div class="compact-list">
-                <div
-                  v-for="spot in pendingWeakSpots.slice(0, 4)"
-                  :key="spot.concept_id"
-                  class="compact-row"
-                >
-                  <span>{{ spot.display_name }}</span>
-                  <small>出现讲解 {{ spot.clarification_count }} 次</small>
-                </div>
-              </div>
+            <div v-else class="empty-state">
+              <el-icon><CircleCheck /></el-icon>
+              <strong>目前没有稳定薄弱点</strong>
+              <span>继续围绕近期关注概念做练习即可。</span>
             </div>
-          </article>
+          </section>
         </div>
 
-        <aside class="profile-side-column">
-          <article class="panel panel--advice">
-            <div class="panel__header">
+        <aside class="profile-secondary">
+          <section class="profile-section">
+            <div class="section-heading section-heading--compact">
               <div>
-                <p class="section-kicker">Next Step</p>
-                <h2>下一步建议</h2>
+                <span class="section-label">Attention</span>
+                <h2>章节关注分布</h2>
               </div>
             </div>
+            <div v-if="chapterStats.length" class="chapter-chart">
+              <div v-for="item in chapterStats.slice(0, 7)" :key="item.chapter" class="chapter-chart__row">
+                <div><span>{{ item.chapter }}</span><strong>{{ item.count }}</strong></div>
+                <div class="chapter-chart__track"><span :style="{ width: `${item.width}%` }" /></div>
+              </div>
+            </div>
+            <p v-else class="empty-copy">暂无章节互动记录。</p>
+          </section>
 
-            <ol class="advice-list">
-              <li v-for="item in nextStepSuggestions" :key="item">{{ item }}</li>
-            </ol>
-          </article>
-
-          <article class="panel">
-            <div class="panel__header">
+          <section class="profile-section">
+            <div class="section-heading section-heading--compact">
               <div>
-                <p class="section-kicker">Trace</p>
-                <h2>学习轨迹</h2>
+                <span class="section-label">Last 7 active days</span>
+                <h2>学习活动</h2>
               </div>
+              <strong class="activity-total">{{ activityTotal }}</strong>
             </div>
-
-            <div v-if="chapterStats.length" class="chapter-bars">
+            <div v-if="activityItems.length" class="activity-chart" aria-label="最近七个活跃日的学习互动次数">
               <div
-                v-for="item in chapterStats.slice(0, 6)"
-                :key="item.chapter"
-                class="chapter-bar"
-              >
-                <div class="chapter-bar__meta">
-                  <span>{{ item.chapter }}</span>
-                  <strong>{{ item.count }}</strong>
-                </div>
-                <div class="chapter-bar__track">
-                  <div class="chapter-bar__fill" :style="{ width: `${item.width}%` }" />
-                </div>
-              </div>
-            </div>
-            <div v-else class="empty-note">暂无章节轨迹。</div>
-
-            <div v-if="activityItems.length" class="activity-strip">
-              <div
-                v-for="item in activityItems.slice(-7)"
+                v-for="item in activityItems"
                 :key="item.day"
-                class="activity-strip__item"
+                class="activity-chart__day"
+                :title="`${item.day}：${item.count} 次互动`"
               >
-                <span>{{ item.day }}</span>
-                <strong>{{ item.count }}</strong>
+                <span :style="{ opacity: activityOpacity(item.count) }">{{ item.count }}</span>
+                <small>{{ item.day }}</small>
               </div>
             </div>
-          </article>
+            <p v-else class="empty-copy">暂无近期活动记录。</p>
+          </section>
 
-          <article class="panel">
-            <div class="panel__header">
+          <section class="profile-section next-actions">
+            <div class="section-heading section-heading--compact">
               <div>
-                <p class="section-kicker">Resolved</p>
+                <span class="section-label">Next actions</span>
+                <h2>下一步</h2>
+              </div>
+            </div>
+            <button
+              v-for="(item, index) in nextStepSuggestions"
+              :key="item"
+              type="button"
+              @click="askSuggestion(item)"
+            >
+              <span>{{ index + 1 }}</span>
+              <strong>{{ item }}</strong>
+              <el-icon><ArrowRight /></el-icon>
+            </button>
+          </section>
+
+          <section v-if="resolvedWeakSpots.length" class="profile-section">
+            <div class="section-heading section-heading--compact">
+              <div>
+                <span class="section-label">Resolved</span>
                 <h2>已克服记录</h2>
               </div>
             </div>
-
-            <div v-if="resolvedWeakSpots.length" class="compact-list">
-              <div
-                v-for="spot in resolvedWeakSpots.slice(0, 5)"
-                :key="`${spot.concept_id}-${spot.resolved_at || spot.last_triggered_at}`"
-                class="compact-row"
-              >
+            <div class="resolved-list">
+              <div v-for="spot in resolvedWeakSpots.slice(0, 5)" :key="spot.concept_id">
+                <el-icon><CircleCheck /></el-icon>
                 <span>{{ spot.display_name }}</span>
                 <small>{{ formatTime(spot.resolved_at) }}</small>
               </div>
             </div>
-            <div v-else class="empty-note">还没有记录到已克服的薄弱点。</div>
-          </article>
+          </section>
         </aside>
-      </section>
+      </div>
     </template>
   </main>
 </template>
@@ -228,12 +265,14 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Aim, ArrowRight, CircleCheck, Reading, Refresh, Warning } from '@element-plus/icons-vue'
 
 import { useProfileStore } from '../stores/profile'
 
 const router = useRouter()
 const profileStore = useProfileStore()
 const resolvingConceptId = ref(null)
+const loadError = ref('')
 
 const detail = computed(() => profileStore.detail)
 const recentConcepts = computed(() => detail.value?.recent_concepts || [])
@@ -243,104 +282,84 @@ const resolvedWeakSpots = computed(() => detail.value?.resolved_weak_spots || []
 
 const focusConceptText = computed(() => {
   const names = recentConcepts.value.slice(0, 3).map(concept => concept.display_name).filter(Boolean)
-  return names.length ? names.join(' / ') : '尚未稳定识别'
+  return names.length ? names.join('、') : '尚未稳定识别'
+})
+
+const currentChapterText = computed(() => {
+  const chapter = detail.value?.progress?.current_chapter
+  return chapter ? `主要集中在 ${chapter}` : '尚未形成稳定章节关注'
 })
 
 const profileHeadline = computed(() => {
-  const chapter = detail.value?.progress?.current_chapter
-  if (chapter) return `当前主要围绕「${chapter}」学习。`
-  return '正在根据你的对话形成学习画像。'
+  if (activeWeakSpots.value.length) return `${activeWeakSpots.value.length} 个知识点需要优先巩固`
+  if (pendingWeakSpots.value.length) return '学习状态稳定，部分知识点仍需观察'
+  return '当前学习状态稳定'
 })
 
 const profileNarrative = computed(() => {
   if (activeWeakSpots.value.length) {
-    return '系统已经捕捉到一些需要巩固的知识点，建议先做小范围复习，再通过例题确认是否真正掌握。'
+    return '先处理高置信度薄弱点，再通过小题验证理解，能比重复阅读更快确认是否真正掌握。'
   }
   if (pendingWeakSpots.value.length) {
-    return '目前有一些待观察信号，可以继续通过追问和练习确认它们是否会发展成稳定薄弱点。'
+    return '目前没有稳定薄弱点，可以通过一次追问或练习判断待观察信号是否只是暂时卡顿。'
   }
-  return '目前没有明显薄弱点，可以继续围绕近期关注概念做拓展练习，保持学习节奏。'
-})
-
-const learningStateText = computed(() => {
-  if (activeWeakSpots.value.length) return `${activeWeakSpots.value.length} 个知识点需要巩固`
-  if (pendingWeakSpots.value.length) return `${pendingWeakSpots.value.length} 个知识点正在观察`
-  return '状态稳定，继续积累对话信号'
-})
-
-const riskText = computed(() => {
-  const active = activeWeakSpots.value.length
-  const pending = pendingWeakSpots.value.length
-  if (active && pending) return `${active} 个活跃薄弱点，${pending} 个待观察信号`
-  if (active) return `${active} 个活跃薄弱点`
-  if (pending) return `${pending} 个待观察信号`
-  return '暂无明显风险'
+  return '继续围绕近期关注概念做拓展练习，系统会根据新的学习信号更新诊断。'
 })
 
 const nextStepSuggestions = computed(() => {
   const suggestions = []
-
-  activeWeakSpots.value.slice(0, 2).forEach(spot => {
-    suggestions.push(`优先复习「${spot.display_name}」，用一道例题确认理解。`)
-  })
-
-  if (pendingWeakSpots.value.length) {
-    suggestions.push(`继续追问「${pendingWeakSpots.value[0].display_name}」，判断是否只是暂时卡顿。`)
-  }
-
-  if (recentConcepts.value.length) {
-    suggestions.push(`围绕「${recentConcepts.value[0].display_name}」整理一页概念笔记。`)
-  }
-
-  const chapter = detail.value?.progress?.current_chapter
-  if (chapter) {
-    suggestions.push(`回顾「${chapter}」的核心定义、公式和案例。`)
-  }
-
-  if (!suggestions.length) {
-    suggestions.push('先完成 3～5 个课程概念提问，让系统形成更稳定的画像。')
-    suggestions.push('每次学习后用一句话总结“我现在还不确定什么”。')
-  }
-
+  activeWeakSpots.value.slice(0, 2).forEach(spot => suggestions.push(`复习「${spot.display_name}」并完成一道理解题`))
+  if (pendingWeakSpots.value.length) suggestions.push(`检查「${pendingWeakSpots.value[0].display_name}」是否已经理解`)
+  if (recentConcepts.value.length) suggestions.push(`梳理「${recentConcepts.value[0].display_name}」的概念关系`)
+  if (!suggestions.length) suggestions.push('从一个课程概念开始新的学习对话', '完成一道课程知识自测题')
   return [...new Set(suggestions)].slice(0, 4)
 })
 
 const chapterStats = computed(() => {
-  const stats = detail.value?.chapter_stats || {}
-  const entries = Object.entries(stats)
+  const entries = Object.entries(detail.value?.chapter_stats || {})
   const maxValue = Math.max(...entries.map(([, count]) => count), 1)
-
   return entries
-    .sort((a, b) => b[1] - a[1])
-    .map(([chapter, count]) => ({
-      chapter,
-      count,
-      width: Math.max(18, Math.round((count / maxValue) * 100))
-    }))
+    .sort((left, right) => right[1] - left[1])
+    .map(([chapter, count]) => ({ chapter, count, width: Math.max(8, Math.round((count / maxValue) * 100)) }))
 })
 
-const activityItems = computed(() => {
-  const stats = detail.value?.daily_activity || {}
-  return Object.entries(stats).map(([day, count]) => ({ day, count }))
-})
+const activityItems = computed(() => Object.entries(detail.value?.daily_activity || {}).map(([day, count]) => ({ day, count })))
+const activityTotal = computed(() => activityItems.value.reduce((total, item) => total + item.count, 0))
+const maxActivity = computed(() => Math.max(...activityItems.value.map(item => item.count), 1))
+
+function formatPercent(value) {
+  return `${Math.round(Number(value || 0) * 100)}%`
+}
+
+function activityOpacity(count) {
+  return 0.25 + (count / maxActivity.value) * 0.75
+}
 
 function formatTime(value) {
   if (!value) return '刚形成'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '刚形成'
-  return date.toLocaleString([], {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return date.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function askAboutConcept(concept, action) {
+  router.push({ path: '/chat', query: { question: `请帮我${action}“${concept}”，结合我的学习情况进行讲解。` } })
+}
+
+function askSuggestion(suggestion) {
+  router.push({ path: '/chat', query: { question: `请带我完成这个学习任务：${suggestion}` } })
 }
 
 async function loadProfile(showToast = false) {
-  await profileStore.fetchDetail()
-  await profileStore.fetchSummary()
-  if (showToast) {
-    ElMessage.success('画像已刷新')
+  loadError.value = ''
+  try {
+    await profileStore.fetchDetail()
+    await profileStore.fetchSummary()
+    if (showToast) ElMessage.success('画像已刷新')
+  } catch (error) {
+    console.error('加载学生画像失败:', error)
+    loadError.value = '请检查网络连接后重试。'
+    if (showToast) ElMessage.error('刷新画像失败')
   }
 }
 
@@ -349,17 +368,15 @@ async function refreshProfile() {
 }
 
 async function handleResolveWeakSpot(spot) {
-  if (!spot?.concept_id || resolvingConceptId.value) {
-    return
-  }
+  if (!spot?.concept_id || resolvingConceptId.value) return
 
   try {
     await ElMessageBox.confirm(
-      `确认把“${spot.display_name}”从活跃薄弱点中移除吗？它会保留到已克服历史里。`,
-      '手动移除薄弱点',
+      `确认把“${spot.display_name}”标记为已掌握吗？它仍会保留在已克服记录中。`,
+      '更新学习状态',
       { type: 'warning' }
     )
-  } catch (error) {
+  } catch {
     return
   }
 
@@ -367,555 +384,20 @@ async function handleResolveWeakSpot(spot) {
   try {
     await profileStore.resolveWeakSpot(spot.concept_id)
     await loadProfile()
-    ElMessage.success('已移出活跃薄弱点')
+    ElMessage.success('已更新学习状态')
   } catch (error) {
-    const status = error?.response?.status
-    if (status === 404) {
+    if (error?.response?.status === 404) {
       await loadProfile()
-      ElMessage.warning('这个薄弱点状态已经变化，我已为你刷新画像')
-      return
+      ElMessage.warning('该知识点状态已经变化，画像已刷新')
+    } else {
+      ElMessage.error('更新失败，请稍后再试')
     }
-    ElMessage.error('移除薄弱点失败，请稍后再试')
   } finally {
     resolvingConceptId.value = null
   }
 }
 
-function goBack() {
-  if (window.history.length > 1) {
-    router.back()
-    return
-  }
-  router.push('/chat')
-}
-
-onMounted(async () => {
-  await loadProfile()
-})
+onMounted(loadProfile)
 </script>
 
-<style scoped>
-.profile-page {
-  min-height: 100vh;
-  padding: 30px;
-  color: #1c1917;
-  background:
-    radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 26%),
-    radial-gradient(circle at 82% 12%, rgba(79, 70, 229, 0.10), transparent 30%),
-    radial-gradient(circle at right center, rgba(20, 184, 166, 0.08), transparent 30%),
-    linear-gradient(140deg, #fafaf9 0%, #f8fafc 46%, #eef2ff 100%);
-  overflow-y: auto;
-}
-
-.profile-header,
-.profile-summary,
-.profile-layout {
-  width: min(100%, 1120px);
-  margin-inline: auto;
-}
-
-.profile-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
-  margin-bottom: 18px;
-}
-
-.profile-header__copy {
-  max-width: 680px;
-}
-
-.profile-eyebrow,
-.section-kicker {
-  margin: 0 0 7px;
-  color: #78716c;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.profile-header h1 {
-  margin: 0;
-  color: #1c1917;
-  font-size: clamp(28px, 4vw, 44px);
-  font-weight: 760;
-  line-height: 1.12;
-  letter-spacing: -0.04em;
-}
-
-.profile-header__subtitle {
-  max-width: 620px;
-  margin: 12px 0 0;
-  color: #57534e;
-  line-height: 1.7;
-}
-
-.profile-header__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.panel {
-  color: #1c1917;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(214, 211, 209, 0.62);
-  border-radius: 22px;
-  box-shadow: none;
-  backdrop-filter: blur(14px);
-}
-
-.profile-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 18px;
-  padding: 22px;
-  margin-bottom: 18px;
-}
-
-.profile-summary__main h2 {
-  margin: 0;
-  font-size: 23px;
-  line-height: 1.3;
-  letter-spacing: -0.02em;
-}
-
-.profile-summary__main p:not(.section-kicker) {
-  max-width: 720px;
-  margin: 10px 0 0;
-  color: #57534e;
-  line-height: 1.72;
-}
-
-.summary-facts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.summary-fact {
-  min-width: 0;
-  padding: 12px;
-  background: rgba(248, 250, 252, 0.68);
-  border: 1px solid rgba(226, 232, 240, 0.72);
-  border-radius: 16px;
-}
-
-.summary-fact span,
-.summary-stat span,
-.panel__hint,
-.row-meta,
-.compact-row small,
-.activity-strip__item span {
-  color: #78716c;
-  font-size: 12px;
-}
-
-.summary-fact strong {
-  display: block;
-  margin-top: 5px;
-  overflow: hidden;
-  color: #292524;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-}
-
-.profile-summary__stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.summary-stat {
-  padding: 14px;
-  background: rgba(250, 250, 249, 0.72);
-  border: 1px solid rgba(231, 229, 228, 0.72);
-  border-radius: 18px;
-}
-
-.summary-stat strong {
-  display: block;
-  margin-top: 7px;
-  color: #1c1917;
-  font-size: 26px;
-  line-height: 1;
-}
-
-.profile-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.8fr);
-  gap: 18px;
-}
-
-.profile-main-column,
-.profile-side-column {
-  display: grid;
-  gap: 18px;
-  align-content: start;
-}
-
-.profile-layout .panel {
-  padding: 18px;
-}
-
-.panel__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 14px;
-}
-
-.panel__header h2 {
-  margin: 0;
-  font-size: 18px;
-  letter-spacing: -0.02em;
-}
-
-.panel__hint {
-  max-width: 240px;
-  text-align: right;
-  line-height: 1.45;
-}
-
-.concept-list,
-.weakspot-list,
-.compact-list,
-.chapter-bars {
-  display: grid;
-  gap: 9px;
-}
-
-.concept-row,
-.weakspot-row,
-.compact-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 11px 12px;
-  background: rgba(250, 250, 249, 0.72);
-  border: 1px solid rgba(231, 229, 228, 0.72);
-  border-radius: 15px;
-}
-
-.concept-row__body,
-.weakspot-row__body {
-  min-width: 0;
-}
-
-.concept-row strong,
-.weakspot-row strong,
-.compact-row span {
-  color: #292524;
-  font-weight: 720;
-}
-
-.weakspot-row__title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.row-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
-  margin-top: 5px;
-}
-
-.count-chip,
-.confidence-chip {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 24px;
-  padding: 0 9px;
-  color: #57534e;
-  background: rgba(28, 25, 23, 0.05);
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 760;
-}
-
-.weakspot-row--active {
-  border-color: rgba(180, 83, 9, 0.18);
-  background: rgba(255, 251, 235, 0.58);
-}
-
-.text-action {
-  flex-shrink: 0;
-  min-height: 30px;
-  padding: 0 11px;
-  color: #57534e;
-  background: transparent;
-  border: 1px solid rgba(214, 211, 209, 0.78);
-  border-radius: 999px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 760;
-  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
-}
-
-.text-action:hover:not(:disabled) {
-  color: #292524;
-  background: rgba(28, 25, 23, 0.05);
-}
-
-.text-action:disabled {
-  cursor: default;
-  opacity: 0.58;
-}
-
-.subsection {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(231, 229, 228, 0.72);
-}
-
-.subsection h3 {
-  margin: 0 0 10px;
-  color: #57534e;
-  font-size: 13px;
-}
-
-.panel--advice {
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.advice-list {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: advice;
-}
-
-.advice-list li {
-  position: relative;
-  padding: 10px 12px 10px 38px;
-  color: #292524;
-  background: rgba(248, 250, 252, 0.72);
-  border: 1px solid rgba(226, 232, 240, 0.72);
-  border-radius: 15px;
-  line-height: 1.55;
-  counter-increment: advice;
-}
-
-.advice-list li::before {
-  content: counter(advice);
-  position: absolute;
-  left: 11px;
-  top: 11px;
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  color: #57534e;
-  background: rgba(28, 25, 23, 0.06);
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.chapter-bar__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-  color: #44403c;
-  font-size: 13px;
-}
-
-.chapter-bar__meta span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chapter-bar__track {
-  height: 7px;
-  overflow: hidden;
-  background: rgba(231, 229, 228, 0.84);
-  border-radius: 999px;
-}
-
-.chapter-bar__fill {
-  height: 100%;
-  background: #78716c;
-  border-radius: inherit;
-}
-
-.activity-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.activity-strip__item {
-  padding: 9px;
-  background: rgba(250, 250, 249, 0.72);
-  border: 1px solid rgba(231, 229, 228, 0.72);
-  border-radius: 13px;
-}
-
-.activity-strip__item strong {
-  display: block;
-  margin-top: 4px;
-  font-size: 16px;
-}
-
-.empty-note {
-  padding: 18px;
-  color: #78716c;
-  text-align: center;
-  background: rgba(250, 250, 249, 0.58);
-  border: 1px dashed rgba(214, 211, 209, 0.78);
-  border-radius: 16px;
-}
-
-:global(html.theme-dark) .profile-page {
-  color: var(--dark-text);
-  background: var(--dark-bg);
-}
-
-:global(html.theme-dark) .profile-header h1,
-:global(html.theme-dark) .profile-summary__main h2,
-:global(html.theme-dark) .summary-stat strong,
-:global(html.theme-dark) .summary-fact strong,
-:global(html.theme-dark) .panel__header h2,
-:global(html.theme-dark) .concept-row strong,
-:global(html.theme-dark) .weakspot-row strong,
-:global(html.theme-dark) .compact-row span,
-:global(html.theme-dark) .advice-list li,
-:global(html.theme-dark) .chapter-bar__meta {
-  color: var(--dark-text);
-}
-
-:global(html.theme-dark) .profile-header__subtitle,
-:global(html.theme-dark) .profile-summary__main p:not(.section-kicker),
-:global(html.theme-dark) .profile-eyebrow,
-:global(html.theme-dark) .section-kicker,
-:global(html.theme-dark) .summary-fact span,
-:global(html.theme-dark) .summary-stat span,
-:global(html.theme-dark) .panel__hint,
-:global(html.theme-dark) .row-meta,
-:global(html.theme-dark) .compact-row small,
-:global(html.theme-dark) .activity-strip__item span,
-:global(html.theme-dark) .empty-note {
-  color: var(--dark-text-muted);
-}
-
-:global(html.theme-dark) .panel,
-:global(html.theme-dark) .profile-summary {
-  background: var(--dark-panel);
-  border-color: var(--dark-border);
-  backdrop-filter: none;
-}
-
-:global(html.theme-dark) .summary-fact,
-:global(html.theme-dark) .summary-stat,
-:global(html.theme-dark) .concept-row,
-:global(html.theme-dark) .weakspot-row,
-:global(html.theme-dark) .compact-row,
-:global(html.theme-dark) .advice-list li,
-:global(html.theme-dark) .activity-strip__item {
-  background: var(--dark-panel-soft);
-  border-color: var(--dark-border);
-}
-
-:global(html.theme-dark) .weakspot-row--active {
-  background: rgba(245, 158, 11, 0.10);
-  border-color: rgba(245, 158, 11, 0.22);
-}
-
-:global(html.theme-dark) .count-chip,
-:global(html.theme-dark) .confidence-chip,
-:global(html.theme-dark) .advice-list li::before {
-  color: var(--dark-text-muted);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-:global(html.theme-dark) .text-action {
-  color: var(--dark-text-muted);
-  border-color: var(--dark-border);
-}
-
-:global(html.theme-dark) .text-action:hover:not(:disabled) {
-  color: var(--dark-text);
-  background: var(--dark-hover);
-}
-
-:global(html.theme-dark) .subsection {
-  border-top-color: var(--dark-border-soft);
-}
-
-:global(html.theme-dark) .chapter-bar__track {
-  background: var(--dark-bg-subtle);
-}
-
-:global(html.theme-dark) .chapter-bar__fill {
-  background: var(--dark-text-faint);
-}
-
-:global(html.theme-dark) .empty-note {
-  background: transparent;
-  border-color: var(--dark-border);
-}
-
-@media (max-width: 980px) {
-  .profile-summary,
-  .profile-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .summary-facts {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 720px) {
-  .profile-page {
-    padding: 18px;
-  }
-
-  .profile-header {
-    flex-direction: column;
-  }
-
-  .profile-header__actions {
-    width: 100%;
-  }
-
-  .profile-summary,
-  .profile-layout .panel {
-    padding: 16px;
-  }
-
-  .profile-summary__stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .panel__header,
-  .concept-row,
-  .weakspot-row {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .panel__hint {
-    max-width: none;
-    text-align: left;
-  }
-}
-</style>
+<style scoped src="../styles/profile.css"></style>

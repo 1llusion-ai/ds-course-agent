@@ -1,7 +1,5 @@
 <template>
-  <div class="chat-layout">
-    <ChatSidebar :collapsed="sidebarCollapsed" @toggle-collapse="toggleSidebar" @new-chat="handleNewChat" />
-
+  <div class="chat-view">
     <div class="chat-main">
       <header class="chat-header">
         <div class="thread-header-left">
@@ -167,18 +165,18 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import ChatInput from '../components/ChatInput.vue'
 import ChatMessage from '../components/ChatMessage.vue'
-import ChatSidebar from '../components/ChatSidebar.vue'
 import { useChatStore } from '../stores/chat'
 import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
 import { domainFromUrl, faviconUrl, isExternalUrl } from '../utils/url'
 
+const appShell = inject('ds-course-agent.app-shell', null)
 const route = useRoute()
 const mapQuestion = computed(() => typeof route.query.question === 'string' ? route.query.question.slice(0, 2000) : '')
 const router = useRouter()
@@ -190,8 +188,6 @@ const stickToBottom = ref(true)
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
 const profileStore = useProfileStore()
-const sidebarCollapsed = ref(readSidebarCollapsedPreference())
-const theme = ref(readThemePreference())
 const webSearchEnabled = ref(readWebSearchPreference())
 const webSearchTurnNotice = ref('')
 const sourcesPanelOpen = ref(false)
@@ -201,15 +197,16 @@ const headerRenameInputRef = ref(null)
 const headerRenaming = ref(false)
 const headerRenameTitle = ref('')
 const headerRenameSaving = ref(false)
-const sessionBootstrapPending = ref(!sessionStore.loaded)
+const sessionBootstrapPending = appShell?.sessionBootstrapPending || ref(!sessionStore.loaded)
 const sessionLoading = ref(false)
+const isDarkTheme = appShell?.isDarkTheme || computed(() => false)
+const toggleTheme = appShell?.toggleTheme || (() => {})
 let sessionLoadToken = 0
 let scrollFrameId = null
 let messagesResizeObserver = null
 
 const headerTitle = computed(() => sessionStore.currentSession?.title || '新对话')
 const canRenameCurrentSession = computed(() => Boolean(sessionStore.currentSessionId && sessionStore.currentSession))
-const isDarkTheme = computed(() => theme.value === 'dark')
 const showSessionLoading = computed(() => sessionBootstrapPending.value || sessionLoading.value)
 const sessionLoadingText = computed(() => (
   sessionBootstrapPending.value ? '正在恢复会话，请稍候…' : '正在加载会话…'
@@ -449,16 +446,6 @@ function readWebSearchPreference() {
   return window.localStorage.getItem('ds-course-agent.webSearchEnabled') === 'true'
 }
 
-function readSidebarCollapsedPreference() {
-  if (typeof window === 'undefined') return false
-  return window.localStorage.getItem('ds-course-agent.sidebarCollapsed') === 'true'
-}
-
-function readThemePreference() {
-  if (typeof window === 'undefined') return 'light'
-  return window.localStorage.getItem('ds-course-agent.theme') === 'dark' ? 'dark' : 'light'
-}
-
 function clearWebSearchTurnNotice() {
   webSearchTurnNotice.value = ''
 }
@@ -511,27 +498,8 @@ function scheduleSessionTitleRefresh(sessionId) {
   }, 700)
 }
 
-function applyThemePreference(value) {
-  if (typeof document === 'undefined') return
-  document.documentElement.classList.toggle('theme-dark', value === 'dark')
-  document.body?.classList.toggle('theme-dark', value === 'dark')
-  document.getElementById('app')?.classList.toggle('theme-dark', value === 'dark')
-  document.documentElement.style.colorScheme = value === 'dark' ? 'dark' : 'light'
-}
-
-function toggleTheme() {
-  theme.value = isDarkTheme.value ? 'light' : 'dark'
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem('ds-course-agent.theme', theme.value)
-  }
-}
-
 function toggleWebSearch(nextValue) {
   setWebSearchEnabled(nextValue)
-}
-
-function handleNewChat() {
-  setWebSearchEnabled(false)
 }
 
 async function handleCancelGeneration() {
@@ -540,16 +508,6 @@ async function handleCancelGeneration() {
   } catch (error) {
     console.error('停止生成失败:', error)
     ElMessage.error('停止生成失败，请稍后重试。')
-  }
-}
-
-function toggleSidebar() {
-  sidebarCollapsed.value = !sidebarCollapsed.value
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(
-      'ds-course-agent.sidebarCollapsed',
-      sidebarCollapsed.value ? 'true' : 'false'
-    )
   }
 }
 
@@ -665,8 +623,6 @@ function syncMessagesResizeObserver() {
   messagesResizeObserver.observe(target)
 }
 
-watch(theme, applyThemePreference, { immediate: true })
-
 watch(
   () => chatStore.messages.length,
   async () => {
@@ -678,17 +634,6 @@ watch(
   },
   { immediate: true, flush: 'post' }
 )
-
-onMounted(async () => {
-  try {
-    await sessionStore.fetchSessions()
-  } catch (error) {
-    console.error('加载会话列表失败:', error)
-    ElMessage.error('加载会话列表失败，请稍后重试。')
-  } finally {
-    sessionBootstrapPending.value = false
-  }
-})
 
 onBeforeUnmount(() => {
   if (scrollFrameId !== null && typeof window !== 'undefined') {
@@ -704,18 +649,16 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.chat-layout {
+.chat-view {
   --chat-thread-width: 820px;
 
+  position: relative;
   display: flex;
   width: 100%;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
-  background:
-    radial-gradient(circle at top left, rgba(245, 158, 11, 0.16), transparent 26%),
-    radial-gradient(circle at 82% 12%, rgba(79, 70, 229, 0.14), transparent 30%),
-    radial-gradient(circle at right center, rgba(20, 184, 166, 0.10), transparent 30%),
-    linear-gradient(140deg, #fafaf9 0%, #f8fafc 46%, #eef2ff 100%);
+  background: transparent;
 }
 
 .chat-main {
@@ -1010,7 +953,7 @@ onBeforeUnmount(() => {
 .sources-panel {
   width: min(390px, 34vw);
   min-width: 320px;
-  height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -1198,7 +1141,7 @@ onBeforeUnmount(() => {
   }
 
   .sources-panel {
-    position: fixed;
+    position: absolute;
     inset: 0 0 0 auto;
     z-index: 30;
     width: min(92vw, 390px);

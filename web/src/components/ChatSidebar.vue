@@ -48,6 +48,8 @@
       <button
         type="button"
         class="new-chat-button"
+        :class="{ 'new-chat-button--active': isNewChatActive }"
+        :aria-current="isNewChatActive ? 'page' : undefined"
         :title="props.collapsed ? '开启新对话' : undefined"
         @click="handleCreate"
       >
@@ -85,6 +87,44 @@
       </label>
     </div>
 
+    <nav class="sidebar-primary-nav" aria-label="学习空间">
+      <button
+        type="button"
+        class="utility-entry"
+        :class="{ 'utility-entry--active': isKnowledgeMapActive }"
+        :aria-current="isKnowledgeMapActive ? 'page' : undefined"
+        title="知识地图"
+        @click="router.push('/knowledge-map')"
+      >
+        <span class="utility-entry__icon"><el-icon><Connection /></el-icon></span>
+        <span v-if="!props.collapsed" class="utility-entry__body">
+          <span class="utility-entry__title">知识地图</span>
+          <span class="utility-entry__meta">探索知识关系与学习目标</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        class="utility-entry"
+        :class="{ 'utility-entry--active': isProfileActive }"
+        :aria-current="isProfileActive ? 'page' : undefined"
+        title="学习画像"
+        @click="handleProfileOpen"
+      >
+        <span class="utility-entry__icon utility-entry__icon--profile">
+          <svg class="profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <rect x="4" y="4.5" width="16" height="15" rx="3.2" stroke-width="1.8" />
+            <circle cx="10" cy="10" r="2.1" stroke-width="1.8" />
+            <path stroke-linecap="round" stroke-width="1.8" d="M7.2 16.1c.7-1.4 1.7-2.1 2.8-2.1s2.1.7 2.8 2.1" />
+            <path stroke-linecap="round" stroke-width="1.8" d="M15.3 9h1.8M15.3 12h1.8M15.3 15h1.8" />
+          </svg>
+        </span>
+        <span v-if="!props.collapsed" class="utility-entry__body">
+          <span class="utility-entry__title">学习画像</span>
+          <span class="utility-entry__meta">{{ profileSummaryText }}</span>
+        </span>
+      </button>
+    </nav>
+
     <el-scrollbar v-if="!props.collapsed" class="session-scroll">
       <div v-if="showSessionEmpty" class="session-empty">
         <div class="session-empty__icon">
@@ -109,10 +149,11 @@
             :key="session.id"
             class="session-wrapper"
             :class="{
-              'session-wrapper--active': sessionStore.currentSessionId === session.id,
+              'session-wrapper--active': activeSessionId === session.id,
               'session-wrapper--pinned': sessionStore.isPinned(session.id),
               'session-wrapper--editing': editingSessionId === session.id
             }"
+            :aria-current="activeSessionId === session.id ? 'page' : undefined"
             @click="handleSessionClick(session.id, $event)"
           >
             <span class="session-leading">
@@ -210,28 +251,6 @@
     </el-scrollbar>
 
     <div class="sidebar-footer">
-      <button type="button" class="utility-entry" title="知识地图" @click="router.push('/knowledge-map')">
-        <span class="utility-entry__icon"><el-icon><Connection /></el-icon></span>
-        <span v-if="!props.collapsed" class="utility-entry__body">
-          <span class="utility-entry__title">知识地图</span>
-          <span class="utility-entry__meta">探索知识关系与学习目标</span>
-        </span>
-      </button>
-      <button type="button" class="utility-entry" title="学习画像" @click="handleProfileOpen">
-        <span class="utility-entry__icon utility-entry__icon--profile">
-          <svg class="profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-            <rect x="4" y="4.5" width="16" height="15" rx="3.2" stroke-width="1.8" />
-            <circle cx="10" cy="10" r="2.1" stroke-width="1.8" />
-            <path stroke-linecap="round" stroke-width="1.8" d="M7.2 16.1c.7-1.4 1.7-2.1 2.8-2.1s2.1.7 2.8 2.1" />
-            <path stroke-linecap="round" stroke-width="1.8" d="M15.3 9h1.8M15.3 12h1.8M15.3 15h1.8" />
-          </svg>
-        </span>
-        <span v-if="!props.collapsed" class="utility-entry__body">
-          <span class="utility-entry__title">学习画像</span>
-          <span class="utility-entry__meta">{{ profileSummaryText }}</span>
-        </span>
-      </button>
-
       <button
         type="button"
         class="utility-entry utility-entry--muted"
@@ -252,7 +271,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { useChatStore } from '../stores/chat'
@@ -268,6 +287,7 @@ const props = defineProps({
 
 const emit = defineEmits(['toggle-collapse', 'new-chat'])
 
+const route = useRoute()
 const router = useRouter()
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
@@ -281,6 +301,14 @@ const editingSessionId = ref(null)
 const editingTitle = ref('')
 const sessionRenameSaving = ref(false)
 const sessionRenameInputRefs = new Map()
+
+const isChatRoute = computed(() => ['Chat', 'ChatWithSession'].includes(route.name))
+const isNewChatActive = computed(() => isChatRoute.value && !route.params.sessionId)
+const activeSessionId = computed(() => (
+  isChatRoute.value ? route.params.sessionId || null : null
+))
+const isProfileActive = computed(() => route.name === 'Profile')
+const isKnowledgeMapActive = computed(() => route.name === 'KnowledgeMap')
 
 const hasSearchQuery = computed(() => Boolean(normalizeSearchText(searchQuery.value)))
 
@@ -460,10 +488,9 @@ function handleSessionClick(id, event) {
 }
 
 function handleCreate() {
+  closeSessionSearch()
+  cancelSessionRename()
   emit('new-chat')
-  sessionStore.setCurrentSession(null)
-  chatStore.setActiveSession(null)
-  router.push('/chat')
 }
 
 function setSessionRenameInputRef(el, sessionId) {
@@ -536,7 +563,9 @@ async function handleDelete(id) {
     )
     await sessionStore.deleteSession(id)
     ElMessage.success('会话已删除')
-    router.push('/chat')
+    if (route.params.sessionId === id) {
+      router.push('/chat')
+    }
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
       ElMessage.error('删除会话失败，请稍后再试')
@@ -767,6 +796,13 @@ onBeforeUnmount(() => {
   border-color: rgba(96, 165, 250, 0.72);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 10px 26px rgba(37, 99, 235, 0.12);
   transform: translateY(-1px);
+}
+
+.new-chat-button--active {
+  color: #1d4ed8;
+  background: #e8f1ff;
+  border-color: rgba(96, 165, 250, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 10px 26px rgba(37, 99, 235, 0.12);
 }
 
 .new-chat-button:active {
@@ -1182,6 +1218,19 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
+.sidebar-primary-nav {
+  flex-shrink: 0;
+  padding: 0 10px 10px;
+  border-bottom: 1px solid rgba(231, 229, 228, 0.38);
+}
+
+.chat-sidebar--collapsed .sidebar-primary-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 0 10px;
+}
+
 .sidebar-footer {
   flex-shrink: 0;
   padding: 10px 12px 14px;
@@ -1195,6 +1244,10 @@ onBeforeUnmount(() => {
   align-items: center;
   margin-top: auto;
   padding: 8px 0 12px;
+}
+
+:global(html.theme-dark) .sidebar-primary-nav {
+  border-bottom-color: var(--dark-border-soft);
 }
 
 .utility-entry {
@@ -1227,6 +1280,17 @@ onBeforeUnmount(() => {
 
 .utility-entry:hover {
   background: rgba(28, 25, 23, 0.05);
+}
+
+.utility-entry--active {
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.09);
+  border-color: rgba(147, 197, 253, 0.28);
+}
+
+.utility-entry--active .utility-entry__icon {
+  color: #2563eb;
+  background: rgba(147, 197, 253, 0.24);
 }
 
 .utility-entry--muted {
@@ -1276,6 +1340,24 @@ onBeforeUnmount(() => {
 
 .utility-entry--muted .utility-entry__title {
   color: #57534e;
+}
+
+:global(html.theme-dark) .new-chat-button--active {
+  color: var(--dark-text) !important;
+  background: var(--dark-hover) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: none !important;
+}
+
+:global(html.theme-dark) .utility-entry--active {
+  color: var(--dark-text) !important;
+  background: var(--dark-hover) !important;
+  border-color: var(--dark-border) !important;
+}
+
+:global(html.theme-dark) .utility-entry--active .utility-entry__icon {
+  color: var(--dark-text) !important;
+  background: rgba(255, 255, 255, 0.10) !important;
 }
 
 .utility-entry__meta {
