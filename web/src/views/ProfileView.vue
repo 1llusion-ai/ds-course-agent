@@ -6,8 +6,14 @@
       </div>
       <div class="profile-header__actions">
         <el-dropdown trigger="click" @command="handlePeriodChange">
-          <button type="button" class="profile-filter-button" :disabled="profileStore.loading">
-            <el-icon><Calendar /></el-icon>{{ selectedPeriodLabel }}<el-icon><ArrowDown /></el-icon>
+          <button
+            type="button"
+            class="profile-filter-button profile-filter-button--icon"
+            :aria-label="`选择时间范围，当前${selectedPeriodLabel}`"
+            :title="selectedPeriodLabel"
+            :disabled="profileStore.loading"
+          >
+            <el-icon><Calendar /></el-icon>
           </button>
           <template #dropdown>
             <el-dropdown-menu>
@@ -17,10 +23,16 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <button type="button" class="profile-filter-button" :disabled="profileStore.loading" @click="refreshProfile">
-          <el-icon :class="{ 'is-spinning': profileStore.loading }"><Refresh /></el-icon>刷新
+        <button
+          type="button"
+          class="profile-filter-button profile-filter-button--icon"
+          aria-label="刷新学习画像"
+          title="刷新"
+          :disabled="profileStore.loading"
+          @click="refreshProfile"
+        >
+          <el-icon :class="{ 'is-spinning': profileStore.loading }"><Refresh /></el-icon>
         </button>
-        <button type="button" class="profile-filter-button profile-filter-button--icon" aria-label="更多操作" title="更多操作"><el-icon><MoreFilled /></el-icon></button>
       </div>
     </header>
 
@@ -94,7 +106,6 @@
                 <button type="button" class="profile-table__action" @click.stop="askAboutConcept(item.display_name, item.action)">
                   {{ item.actionLabel }} <el-icon><ArrowRight /></el-icon>
                 </button>
-                <el-icon class="profile-table__more"><MoreFilled /></el-icon>
               </div>
               <p v-if="!visibleKnowledgeRows.length" class="empty-copy">没有找到匹配的知识点。</p>
             </div>
@@ -106,10 +117,12 @@
           <section class="profile-sidebar__section" aria-labelledby="chapter-title">
             <div class="sidebar-heading">
               <h2 id="chapter-title">章节关注分布</h2>
-              <button type="button" class="sidebar-link">查看全部 <el-icon><ArrowRight /></el-icon></button>
+              <button v-if="chapterStats.length > 7" type="button" class="sidebar-link" :aria-expanded="showAllChapters" @click="showAllChapters = !showAllChapters">
+                {{ showAllChapters ? '收起' : '展开全部' }} <el-icon><component :is="showAllChapters ? ArrowUp : ArrowDown" /></el-icon>
+              </button>
             </div>
             <div v-if="chapterStats.length" class="chapter-chart">
-              <div v-for="item in chapterStats.slice(0, 7)" :key="item.chapter" class="chapter-chart__row">
+              <div v-for="item in visibleChapterStats" :key="item.chapter" class="chapter-chart__row">
                 <div><span>{{ item.chapter }}</span><strong>{{ item.count }}</strong></div>
                 <div class="chapter-chart__track"><span :style="{ width: `${item.width}%` }" /></div>
               </div>
@@ -120,14 +133,14 @@
           <section class="profile-sidebar__section" aria-labelledby="activity-title">
             <div class="sidebar-heading sidebar-heading--activity">
               <h2 id="activity-title">学习活动</h2>
-              <span class="sidebar-period-label">{{ selectedPeriodLabel }}</span>
+              <span class="sidebar-period-label">{{ activityPeriodRange }}</span>
             </div>
             <div class="activity-total-row"><strong class="activity-total">{{ activityTotal }}</strong><span>次学习活动</span></div>
-            <div v-if="activityItems.length" class="activity-chart" aria-label="最近七个活跃日的学习互动次数">
-              <div v-for="item in activityItems" :key="item.day" class="activity-chart__day" :title="`${item.day}：${item.count} 次互动`">
+            <div v-if="activityItems.length" class="activity-chart" :aria-label="`${activityPeriodRange}的学习互动次数`">
+              <div v-for="(item, index) in activityItems" :key="`${item.startDay}-${item.endDay}`" class="activity-chart__day" :title="activityItemTitle(item)">
                 <span class="activity-chart__value">{{ item.count }}</span>
                 <span class="activity-chart__bar" :style="{ height: `${activityHeight(item.count)}px`, opacity: activityOpacity(item.count) }" aria-hidden="true" />
-                <small>{{ formatActivityDay(item.day) }}</small>
+                <small>{{ activityTickLabel(item, index) }}</small>
               </div>
             </div>
             <p v-else class="empty-copy">暂无近期活动记录。</p>
@@ -136,7 +149,6 @@
           <section class="profile-sidebar__section" aria-labelledby="next-step-title">
             <div class="sidebar-heading">
               <h2 id="next-step-title">下一步</h2>
-              <button type="button" class="sidebar-link">查看全部 <el-icon><ArrowRight /></el-icon></button>
             </div>
             <div class="next-step-list">
               <button v-for="(item, index) in nextStepSuggestions" :key="item" type="button" @click="askSuggestion(item)">
@@ -156,7 +168,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Aim, ArrowDown, ArrowRight, Calendar, MoreFilled, Reading, Refresh, Search, Warning } from '@element-plus/icons-vue'
+import { Aim, ArrowDown, ArrowRight, ArrowUp, Calendar, Reading, Refresh, Search, Warning } from '@element-plus/icons-vue'
 
 import { useProfileStore } from '../stores/profile'
 
@@ -166,6 +178,7 @@ const loadError = ref('')
 const conceptSearch = ref('')
 const activeProfileTab = ref('all')
 const selectedPeriodDays = ref(7)
+const showAllChapters = ref(false)
 const periodOptions = [
   { days: 7, label: '最近 7 天' },
   { days: 30, label: '最近 1 个月' },
@@ -252,16 +265,27 @@ const chapterStats = computed(() => {
     .sort((left, right) => right[1] - left[1])
     .map(([chapter, count]) => ({ chapter, count, width: Math.max(8, Math.round((count / maxValue) * 100)) }))
 })
+const visibleChapterStats = computed(() => showAllChapters.value ? chapterStats.value : chapterStats.value.slice(0, 7))
 
+const activityEntries = computed(() => Object.entries(detail.value?.daily_activity || {}).map(([day, count]) => ({ day, count })))
+const activityPeriodRange = computed(() => {
+  const firstDay = activityEntries.value[0]?.day
+  const lastDay = activityEntries.value[activityEntries.value.length - 1]?.day
+  if (!firstDay || !lastDay) return selectedPeriodLabel.value
+  return `${formatActivityDay(firstDay)} 至 ${formatActivityDay(lastDay)}`
+})
 const activityItems = computed(() => {
-  const entries = Object.entries(detail.value?.daily_activity || {}).map(([day, count]) => ({ day, count }))
-  if (entries.length <= 7) return entries
+  const entries = activityEntries.value
+  if (entries.length <= 7) {
+    return entries.map(item => ({ startDay: item.day, endDay: item.day, count: item.count }))
+  }
 
   const bucketSize = Math.ceil(entries.length / 7)
   return Array.from({ length: Math.ceil(entries.length / bucketSize) }, (_, index) => {
     const bucket = entries.slice(index * bucketSize, (index + 1) * bucketSize)
     return {
-      day: `${formatActivityDay(bucket[0]?.day)}-${formatActivityDay(bucket[bucket.length - 1]?.day).slice(-5)}`,
+      startDay: bucket[0]?.day,
+      endDay: bucket[bucket.length - 1]?.day,
       count: bucket.reduce((total, item) => total + item.count, 0)
     }
   })
@@ -282,6 +306,25 @@ function formatActivityDay(value) {
   return match ? `${match[1]}-${match[2]}` : value
 }
 
+function activityTickLabel(item, index) {
+  if (activityItems.value.length <= 7 && selectedPeriodDays.value === 7) {
+    return formatActivityDay(item.startDay)
+  }
+  const lastIndex = activityItems.value.length - 1
+  const middleIndex = Math.floor(lastIndex / 2)
+  if (index === 0) return formatActivityDay(item.startDay)
+  if (index === middleIndex) return formatActivityDay(item.endDay)
+  if (index === lastIndex) return formatActivityDay(item.endDay)
+  return ''
+}
+
+function activityItemTitle(item) {
+  const startDay = formatActivityDay(item.startDay)
+  const endDay = formatActivityDay(item.endDay)
+  const range = startDay === endDay ? startDay : `${startDay} 至 ${endDay}`
+  return `${range}：${item.count} 次互动`
+}
+
 function askAboutConcept(concept, action) {
   router.push({ path: '/chat', query: { question: `请帮我${action}“${concept}”，结合我的学习情况进行讲解。` } })
 }
@@ -299,7 +342,6 @@ async function loadProfile(showToast = false) {
   loadError.value = ''
   try {
     await profileStore.fetchDetail(selectedPeriodDays.value)
-    await profileStore.fetchSummary()
     if (showToast) ElMessage.success('画像已刷新')
   } catch (error) {
     console.error('加载学习画像失败:', error)
@@ -321,4 +363,4 @@ async function handlePeriodChange(days) {
 onMounted(loadProfile)
 </script>
 
-<style scoped src="../styles/profile.css"></style>
+<style src="../styles/profile.css"></style>

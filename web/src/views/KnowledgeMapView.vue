@@ -11,33 +11,7 @@
     >
       <section class="map-stage" aria-label="知识图谱浏览区">
         <div class="map-stage__toolbar">
-          <div class="map-stage__title">
-            <h1>知识地图</h1>
-          </div>
           <div class="map-stage__toolbar-actions">
-            <div class="map-search-control">
-              <label class="map-search">
-                <el-icon><Search /></el-icon>
-                <input v-model="search" aria-label="搜索知识点" placeholder="搜索知识点" />
-                <button v-if="search" type="button" aria-label="清空搜索" title="清空搜索" @click="search = ''">
-                  <el-icon><Close /></el-icon>
-                </button>
-              </label>
-              <div v-if="search.trim()" class="map-search-results" aria-label="知识点搜索结果">
-                <p v-if="!listedNodes.length" class="map-empty">没有找到匹配的知识点。</p>
-                <button
-                  v-for="node in listedNodes"
-                  :key="node.canonical_id"
-                  type="button"
-                  class="map-search-result"
-                  @click="selectNode(node.canonical_id)"
-                >
-                  <span>{{ node.display_name }}</span>
-                  <small>{{ node.chapter }}</small>
-                </button>
-              </div>
-            </div>
-
             <button
               type="button"
               class="map-toolbar-button"
@@ -49,7 +23,6 @@
               @click="indexOpen = !indexOpen"
             >
               <el-icon><Menu /></el-icon>
-              <span>目录</span>
             </button>
 
             <div class="map-status-tabs" role="group" aria-label="知识点学习状态">
@@ -83,6 +56,26 @@
                 <strong>知识目录</strong>
                 <button type="button" aria-label="关闭知识目录" title="关闭知识目录" @click="collapseIndex">
                   <el-icon><Close /></el-icon>
+                </button>
+              </div>
+              <label class="map-search map-directory__search">
+                <el-icon><Search /></el-icon>
+                <input v-model="search" aria-label="搜索知识点" placeholder="搜索知识点" />
+                <button v-if="search" type="button" aria-label="清空搜索" title="清空搜索" @click="search = ''">
+                  <el-icon><Close /></el-icon>
+                </button>
+              </label>
+              <div v-if="search.trim()" class="map-search-results map-directory__search-results" aria-label="知识点搜索结果">
+                <p v-if="!listedNodes.length" class="map-empty">没有找到匹配的知识点。</p>
+                <button
+                  v-for="node in listedNodes"
+                  :key="node.canonical_id"
+                  type="button"
+                  class="map-search-result"
+                  @click="selectNode(node.canonical_id)"
+                >
+                  <span>{{ node.display_name }}</span>
+                  <small>{{ node.chapter }}</small>
                 </button>
               </div>
               <div class="map-directory__scroll">
@@ -123,6 +116,7 @@
 
         <p v-if="notice" class="map-notice" role="status">{{ notice }}</p>
         <div class="map-canvas-wrap">
+          <h1 class="map-canvas-title">知识地图</h1>
           <KnowledgeMapCanvas
             :graph="graph"
             :chapter="chapter"
@@ -344,5 +338,5 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped src="../styles/knowledge-map.css"></style>
-<style scoped src="../styles/knowledge-map-detail.css"></style>
+<style src="../styles/knowledge-map.css"></style>
+<style src="../styles/knowledge-map-detail.css"></style>

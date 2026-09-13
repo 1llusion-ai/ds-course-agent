@@ -9,20 +9,17 @@
     />
     <div v-if="failure" class="constellation__failure" role="status">三维视图暂时无法加载，仍可通过知识目录浏览。</div>
     <div v-else class="constellation__controls" aria-label="三维视图控制">
-      <button type="button" :aria-pressed="rotating" :aria-label="rotating ? '暂停旋转' : '自动旋转'" :title="rotating ? '暂停旋转' : '自动旋转'" @click="toggleRotation">
+      <button type="button" :aria-pressed="rotating" :aria-label="rotating ? '暂停旋转' : '自动旋转'" :title="rotating ? '暂停旋转' : '自动旋转'" @click.stop="toggleRotation">
         <el-icon><VideoPause v-if="rotating" /><VideoPlay v-else /></el-icon>
       </button>
-      <span />
-      <button type="button" aria-label="放大图谱" title="放大" @click="zoom(0.8)"><el-icon><ZoomIn /></el-icon></button>
-      <button type="button" aria-label="缩小图谱" title="缩小" @click="zoom(1.25)"><el-icon><ZoomOut /></el-icon></button>
-      <button type="button" aria-label="重置视角" title="重置视角" @click="overview"><el-icon><RefreshRight /></el-icon></button>
+      <button type="button" aria-label="重置视角" title="重置视角" @click.stop="overview()"><el-icon><RefreshRight /></el-icon></button>
     </div>
   </section>
 </template>
 
 <script setup>
 import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
-import { RefreshRight, VideoPause, VideoPlay, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
+import { RefreshRight, VideoPause, VideoPlay } from '@element-plus/icons-vue'
 import ForceGraph3D from '3d-force-graph'
 import { chapterColor, learningStateMeta, neighborsOf, relationTypes, sceneGraphData } from '../utils/knowledgeMap'
 import { createNodeObjects } from '../utils/knowledgeScene'
@@ -287,15 +284,14 @@ onBeforeUnmount(teardown)
 .constellation { position: relative; width: 100%; height: 100%; min-height: 420px; }
 .constellation__canvas { position: absolute; inset: 0; visibility: hidden; }
 .constellation__canvas--ready { visibility: visible; }
-.constellation__controls { position: absolute; top: 14px; left: 14px; display: flex; align-items: center; gap: 2px; padding: 4px; border: 1px solid #e7e5e4; border-radius: 7px; background: rgba(255,255,255,.9); box-shadow: 0 4px 14px rgba(28,25,23,.06); }
-.constellation__controls button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; color: #57534e; border: 0; background: transparent; border-radius: 5px; cursor: pointer; }
-.constellation__controls button:hover, .constellation__controls button[aria-pressed="true"] { color: #1c1917; background: #f5f5f4; }
-.constellation__controls > span { width: 1px; height: 18px; margin: 0 2px; background: #e7e5e4; }
+.constellation__controls { position: absolute; z-index: 30; top: -40px; right: 44px; display: flex; align-items: center; gap: 2px; padding: 0; }
+.constellation__controls button { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; color: #57534e; border: 0; background: transparent; border-radius: 7px; cursor: pointer; touch-action: manipulation; }
+.constellation__controls button .el-icon { font-size: 19px; }
+.constellation__controls button:hover, .constellation__controls button[aria-pressed="true"] { color: #1c1917; background: #f5f5f4; box-shadow: none; transform: none; }
 .constellation__failure { position: absolute; top: 40%; left: 15%; right: 15%; padding: 20px; color: #78716c; text-align: center; font-size: 13px; line-height: 1.8; }
-:global(html.theme-dark) .constellation__controls { color: var(--dark-text-muted); background: rgba(42,42,42,.92); border-color: var(--dark-border); box-shadow: none; }
+:global(html.theme-dark) .constellation__controls { color: var(--dark-text-muted); background: transparent; }
 :global(html.theme-dark) .constellation__controls button { color: var(--dark-text-muted); }
 :global(html.theme-dark) .constellation__controls button:hover,
 :global(html.theme-dark) .constellation__controls button[aria-pressed="true"] { color: var(--dark-text); background: var(--dark-hover); }
-:global(html.theme-dark) .constellation__controls > span { background: var(--dark-border); }
-@media (max-width: 720px) { .constellation { min-height: 430px; } .constellation__controls { top: 10px; left: 10px; } }
+@media (max-width: 900px) { .constellation { min-height: 430px; } .constellation__controls { top: 10px; right: 10px; } }
 </style>

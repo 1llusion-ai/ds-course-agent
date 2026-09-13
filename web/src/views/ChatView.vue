@@ -60,12 +60,7 @@
 
           <div v-else-if="chatStore.messages.length === 0" class="empty-state">
             <div class="empty-content">
-              <div class="empty-kicker">DATA SCIENCE COURSE AGENT</div>
               <h1>今天想解决什么数据科学问题？</h1>
-              <p>
-                可以直接提问课程概念、公式推导、案例理解，
-                也可以让我帮你梳理最近卡住的知识点。
-              </p>
               <ChatInput
                 hero
                 :initial-text="mapQuestion"
@@ -919,14 +914,6 @@ onBeforeUnmount(() => {
   padding: 8px 0;
 }
 
-.empty-kicker {
-  margin-bottom: 14px;
-  color: #78716c;
-  font-size: 12px;
-  font-weight: 850;
-  letter-spacing: 0.16em;
-}
-
 .empty-content h1 {
   max-width: 720px;
   margin: 0 auto 14px;
@@ -935,13 +922,6 @@ onBeforeUnmount(() => {
   font-weight: 760;
   line-height: 1.16;
   letter-spacing: -0.04em;
-}
-
-.empty-content p {
-  margin: 0 auto;
-  max-width: 560px;
-  color: #57534e;
-  line-height: 1.7;
 }
 
 .empty-composer {

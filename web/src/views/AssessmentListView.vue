@@ -37,7 +37,7 @@
             <h3>{{ job.display_name }}</h3>
             <p>{{ sessionTitle(job.session_id) }}</p>
           </div>
-          <el-button v-if="job.status === 'failed'" plain :loading="retrying === job.id" @click="retry(job)">
+          <el-button v-if="job.status === 'failed'" class="assessment-retry-button" plain :loading="retrying === job.id" @click="retry(job)">
             <el-icon><Refresh /></el-icon>重新准备
           </el-button>
           <el-icon v-else class="is-loading"><Loading /></el-icon>

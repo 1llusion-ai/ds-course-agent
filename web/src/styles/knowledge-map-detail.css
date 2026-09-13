@@ -235,32 +235,46 @@
   line-height: 1.7;
 }
 
-:global(html.theme-dark) .map-inspector__content > h2,
-:global(html.theme-dark) .map-inspector__empty h2,
-:global(html.theme-dark) .map-detail__summary,
-:global(html.theme-dark) .map-learning-state,
-:global(html.theme-dark) .map-neighbors button,
-:global(html.theme-dark) .map-references {
+html.theme-dark .map-inspector__content > h2,
+html.theme-dark .map-inspector__empty h2,
+html.theme-dark .map-detail__summary,
+html.theme-dark .map-learning-state,
+html.theme-dark .map-neighbors button,
+html.theme-dark .map-references {
   color: var(--dark-text);
 }
 
-:global(html.theme-dark) .map-neighbors button:hover,
-:global(html.theme-dark) .map-action-button,
-:global(html.theme-dark) .map-references > summary {
+html.theme-dark .map-detail__heading,
+html.theme-dark .map-inspector__empty,
+html.theme-dark .map-neighbors small,
+html.theme-dark .map-neighbors .el-icon,
+html.theme-dark .map-references p,
+html.theme-dark .map-references details summary {
+  color: var(--dark-text-muted);
+}
+
+html.theme-dark .map-neighbors button:hover,
+html.theme-dark .map-action-button,
+html.theme-dark .map-references > summary {
   background: var(--dark-panel-soft);
 }
 
-:global(html.theme-dark) .map-action-button--primary {
+html.theme-dark .map-action-button--primary {
   color: #171717;
   background: #f5f5f4;
 }
 
-:global(html.theme-dark) .map-action-button--primary:hover {
+html.theme-dark .map-action-button--primary:hover {
   color: #000000;
   background: #ffffff;
 }
 
-:global(html.theme-dark) .map-references blockquote {
+html.theme-dark .map-neighbors button:hover,
+html.theme-dark .map-action-button:hover {
+  color: var(--dark-text);
+}
+
+html.theme-dark .map-references blockquote {
   color: var(--dark-text-muted);
   background: var(--dark-panel-soft);
   border-left-color: #525252;

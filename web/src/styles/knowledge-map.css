@@ -25,7 +25,7 @@
 
 .map-workspace {
   display: flex;
-  width: min(100%, 1440px);
+  width: 100%;
   height: 100%;
   min-height: 0;
   margin: 0 auto;
@@ -112,22 +112,31 @@
   background: #e7e5e4;
 }
 
-.map-search-control,
 .map-directory-control {
   position: relative;
 }
 
 .map-toolbar-button {
   display: inline-flex;
-  width: auto;
-  min-width: 66px;
-  height: 36px;
-  gap: 7px;
-  padding: 0 11px;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
   border-radius: 7px;
   box-shadow: none;
   transform: none;
-  font-size: 12px;
+  font-size: 18px;
+}
+
+.map-toolbar-button .el-icon {
+  font-size: 19px;
+}
+
+.map-toolbar-button.active {
+  box-shadow: none;
+  transform: none;
 }
 
 .map-toolbar-button--icon {
@@ -201,6 +210,19 @@
   border: 1px solid var(--map-border);
   border-radius: 14px;
   box-shadow: 0 16px 38px rgba(28, 25, 23, 0.14);
+}
+
+.map-directory__search {
+  width: auto;
+  margin: 0 12px 8px;
+}
+
+.map-directory__search-results {
+  position: static;
+  width: auto;
+  max-height: 220px;
+  margin: 0 7px 5px;
+  box-shadow: none;
 }
 
 .map-directory__header {
@@ -321,8 +343,11 @@
   display: grid;
   flex: 1;
   grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  max-width: 1200px;
   min-width: 0;
   min-height: 0;
+  margin: 0 auto;
   background: #ffffff;
 }
 
@@ -330,38 +355,19 @@
   position: relative;
   z-index: 20;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  min-height: 58px;
-  padding: 8px 20px;
+  min-height: 62px;
+  padding: 22px 0 0;
   background: transparent;
-}
-
-.map-stage__title {
-  min-width: 0;
-}
-
-.map-stage__title h1 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 720;
-  line-height: 1.3;
-}
-
-.map-stage__title p {
-  margin: 3px 0 0;
-  overflow: hidden;
-  color: var(--map-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
 }
 
 .map-stage__toolbar-actions {
   display: flex;
   align-items: center;
   gap: 7px;
+  margin-left: auto;
 }
 
 .map-relation-filters,
@@ -418,6 +424,8 @@
 .map-status-tabs {
   position: absolute;
   left: 50%;
+  width: 166px;
+  box-sizing: border-box;
   min-height: 40px;
   padding: 3px;
   background: #f5f5f4;
@@ -427,7 +435,8 @@
 }
 
 .map-status-tab {
-  min-width: 54px;
+  flex: 1;
+  min-width: 0;
   min-height: 34px;
   padding: 0 12px;
   color: #57534e;
@@ -454,8 +463,21 @@
 .map-canvas-wrap {
   position: relative;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   background: #ffffff;
+}
+
+.map-canvas-title {
+  position: absolute;
+  z-index: 6;
+  top: 24px;
+  left: 20px;
+  margin: 0;
+  color: var(--map-text);
+  font-size: 30px;
+  font-weight: 760;
+  line-height: 1.2;
+  pointer-events: none;
 }
 
 .map-canvas-toolbar {
@@ -553,6 +575,7 @@
   }
 
   .map-stage {
+    max-width: none;
     min-height: 590px;
   }
 
@@ -572,23 +595,14 @@
     transform: none;
   }
 
-  .map-search-control {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .map-search {
-    width: 100%;
-  }
-
-  .map-search-results {
-    right: auto;
-    left: 0;
-    width: min(360px, calc(100vw - 96px));
-  }
-
   .map-canvas-wrap {
     min-height: 430px;
+  }
+
+  .map-canvas-title {
+    top: 18px;
+    left: 14px;
+    font-size: 26px;
   }
 
   .map-canvas-toolbar {
@@ -616,7 +630,7 @@
   }
 }
 
-:global(html.theme-dark) .knowledge-map-page {
+html.theme-dark .knowledge-map-page {
   --map-border: var(--dark-border);
   --map-border-strong: #525252;
   --map-surface: var(--dark-panel);
@@ -626,59 +640,77 @@
   background: var(--dark-bg);
 }
 
-:global(html.theme-dark) .map-inspector,
-:global(html.theme-dark) .map-state-legend,
-:global(html.theme-dark) .map-canvas-toolbar,
-:global(html.theme-dark) .map-search-results {
+html.theme-dark .map-inspector,
+html.theme-dark .map-directory-popover,
+html.theme-dark .map-state-legend,
+html.theme-dark .map-canvas-toolbar,
+html.theme-dark .map-search-results {
   color: var(--dark-text);
   background: var(--dark-panel);
   border-color: var(--dark-border);
 }
 
-:global(html.theme-dark) .map-status-tabs {
+html.theme-dark .map-status-tabs {
   background: var(--dark-panel-soft);
 }
 
-:global(html.theme-dark) .map-status-tab {
+html.theme-dark .map-status-tab {
   color: var(--dark-text-muted);
 }
 
-:global(html.theme-dark) .map-status-tab:hover {
+html.theme-dark .map-status-tab:hover {
   color: var(--dark-text);
   background: rgba(255, 255, 255, 0.08);
 }
 
-:global(html.theme-dark) .map-status-tab.active {
+html.theme-dark .map-status-tab.active {
   color: var(--dark-text);
   background: var(--dark-panel);
 }
 
-:global(html.theme-dark) .map-stage,
-:global(html.theme-dark) .map-canvas-wrap {
+html.theme-dark .map-stage,
+html.theme-dark .map-canvas-wrap {
   background-color: var(--dark-bg);
   background-image: none;
 }
 
-:global(html.theme-dark) .map-search,
-:global(html.theme-dark) .map-overview:hover,
-:global(html.theme-dark) .map-chapter:hover,
-:global(html.theme-dark) .map-concept:hover,
-:global(html.theme-dark) .map-overview.active,
-:global(html.theme-dark) .map-chapter.active,
-:global(html.theme-dark) .map-concept.active,
-:global(html.theme-dark) .map-relation-filters label.active {
+html.theme-dark .map-search,
+html.theme-dark .map-toolbar-button:hover,
+html.theme-dark .map-toolbar-button.active,
+html.theme-dark .map-directory__header button:hover,
+html.theme-dark .map-overview:hover,
+html.theme-dark .map-chapter:hover,
+html.theme-dark .map-concept:hover,
+html.theme-dark .map-overview.active,
+html.theme-dark .map-chapter.active,
+html.theme-dark .map-concept.active,
+html.theme-dark .map-relation-filters label.active {
   color: var(--dark-text);
   background: var(--dark-panel-soft);
   border-color: var(--dark-border);
 }
 
-:global(html.theme-dark) .map-search input,
-:global(html.theme-dark) .map-stage__title h1 {
+html.theme-dark .map-search input,
+html.theme-dark .map-canvas-title {
   color: var(--dark-text);
 }
 
-:global(html.theme-dark) .map-overview,
-:global(html.theme-dark) .map-chapter,
-:global(html.theme-dark) .map-concept {
+html.theme-dark .map-overview,
+html.theme-dark .map-chapter,
+html.theme-dark .map-concept {
   color: var(--dark-text-muted);
+}
+
+html.theme-dark .map-toolbar-button,
+html.theme-dark .map-directory__header button,
+html.theme-dark .map-detail__heading button,
+html.theme-dark .map-relation-filters label,
+html.theme-dark .map-state-legend {
+  color: var(--dark-text-muted);
+}
+
+html.theme-dark .map-notice {
+  color: #fcd34d;
+  background: rgba(161, 98, 7, 0.2);
+  border-color: rgba(252, 211, 77, 0.28);
 }

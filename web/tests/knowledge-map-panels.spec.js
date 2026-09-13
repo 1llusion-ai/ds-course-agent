@@ -48,10 +48,14 @@ test('directory overlays the graph while the KC inspector resizes it and remains
   await page.goto('/knowledge-map')
   await expect(page.getByRole('heading', { name: '知识地图' })).toBeVisible()
 
-  await page.getByRole('button', { name: '选择学生状态显示方式' }).click()
-  await expect(page.getByRole('menuitem', { name: /全部知识点/ })).toBeVisible()
-  await page.getByRole('menuitem', { name: /已学知识点/ }).click()
-  await expect(page.getByRole('button', { name: '选择学生状态显示方式' })).toContainText('已学知识点')
+  const rotationButton = page.getByRole('button', { name: '自动旋转' })
+  await rotationButton.click()
+  await expect(page.getByRole('button', { name: '暂停旋转' })).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('button', { name: '重置视角' }).click()
+  await expect(page.getByRole('button', { name: '自动旋转' })).toHaveAttribute('aria-pressed', 'false')
+
+  await page.getByRole('button', { name: '已学' }).click()
+  await expect(page.getByRole('button', { name: '已学' })).toHaveAttribute('aria-pressed', 'true')
 
   const fullWidth = await stageWidth(page)
   await page.getByRole('button', { name: '打开知识目录' }).click()
