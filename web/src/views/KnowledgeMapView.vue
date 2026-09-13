@@ -52,41 +52,26 @@
               <span>目录</span>
             </button>
 
-            <el-dropdown
-              trigger="click"
-              placement="bottom-end"
-              popper-class="map-status-menu"
-              @command="setPersonalState"
-            >
+            <div class="map-status-tabs" role="group" aria-label="知识点学习状态">
               <button
                 type="button"
-                class="map-status-trigger"
-                aria-haspopup="menu"
-                aria-label="选择学生状态显示方式"
-                title="学生状态"
+                class="map-status-tab"
+                :class="{ active: !showPersonalState }"
+                :aria-pressed="!showPersonalState"
+                @click="setPersonalState('all')"
               >
-                <span>{{ statusModeLabel }}</span>
-                <el-icon><ArrowDown /></el-icon>
+                全部
               </button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="all" class="map-status-item">
-                    <span class="map-status-item__copy">
-                      <strong>全部知识点</strong>
-                      <small>展示完整的知识地图</small>
-                    </span>
-                    <el-icon v-if="!showPersonalState" class="map-status-item__check"><Check /></el-icon>
-                  </el-dropdown-item>
-                  <el-dropdown-item command="highlight" class="map-status-item">
-                    <span class="map-status-item__copy">
-                      <strong>已学知识点</strong>
-                      <small>保留全部节点，并高亮已有学习记录的 KC</small>
-                    </span>
-                    <el-icon v-if="showPersonalState" class="map-status-item__check"><Check /></el-icon>
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
+              <button
+                type="button"
+                class="map-status-tab"
+                :class="{ active: showPersonalState }"
+                :aria-pressed="showPersonalState"
+                @click="setPersonalState('highlight')"
+              >
+                已学
+              </button>
+            </div>
 
             <div
               v-if="indexOpen"
@@ -245,7 +230,7 @@
 <script setup>
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowDown, ArrowRight, Check, Close, Connection, Menu, Search } from '@element-plus/icons-vue'
+import { ArrowRight, Close, Connection, Menu, Search } from '@element-plus/icons-vue'
 import { knowledgeMapApi } from '../api/knowledgeMap'
 import PanelToggleIcon from '../components/PanelToggleIcon.vue'
 import ResizableSidePanel from '../components/ResizableSidePanel.vue'
@@ -269,7 +254,6 @@ const enabledRelations = ref(Object.keys(relationTypes))
 const byId = computed(() => new Map((graph.value?.nodes || []).map(node => [node.canonical_id, node])))
 const concepts = computed(() => graph.value?.nodes?.filter(node => node.node_type === 'kc') || [])
 const selectedNode = computed(() => byId.value.get(selectedId.value))
-const statusModeLabel = computed(() => showPersonalState.value ? '已学知识点' : '全部知识点')
 const listedNodes = computed(() => {
   const needle = search.value.trim().toLowerCase().replace(/\s+/g, '')
   if (!needle && !chapter.value) return []

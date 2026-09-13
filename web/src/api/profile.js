@@ -2,7 +2,7 @@ import client from './client'
 
 export const profileApi = {
   getSummary: () => client.get('/profile/summary'),
-  getDetail: () => client.get('/profile/detail'),
+  getDetail: (days = 7) => client.get('/profile/detail', { params: { days } }),
   getConcept: (conceptId) => client.get(`/profile/concepts/${conceptId}`),
   aggregate: () => client.post('/profile/aggregate'),
   resolveWeakSpot: (conceptId) =>

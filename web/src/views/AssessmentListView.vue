@@ -5,7 +5,7 @@
         <el-segmented v-model="activeTab" class="assessment-tabs" :options="tabs" />
       </div>
       <div class="assessment-list-heading-row">
-        <h1>{{ activeTab === 'active' ? '待完成测验' : '完成记录' }}</h1>
+        <h1>我的测验</h1>
         <div class="assessment-list-filters">
           <el-select v-model="sessionFilter" aria-label="筛选会话" placeholder="全部会话">
             <el-option label="全部会话" value="" />

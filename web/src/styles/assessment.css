@@ -9,7 +9,7 @@
   min-height: 0;
   overflow-y: auto;
   color: var(--assessment-text);
-  background: var(--warm-gray);
+  background: #ffffff;
 }
 
 .assessment-page button { font: inherit; }

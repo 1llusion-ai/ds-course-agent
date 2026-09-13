@@ -657,9 +657,9 @@ onBeforeUnmount(() => {
   width: 18rem;
   height: 100%;
   overflow: hidden;
-  color: #292524;
-  background: transparent;
-  border-right: 1px solid rgba(214, 211, 209, 0.34);
+  color: #30334a;
+  background: #f6f6fc;
+  border-right: 1px solid #ebeaf4;
   transition: width 0.18s ease;
 }
 
@@ -714,8 +714,8 @@ onBeforeUnmount(() => {
 .sidebar-search-button:hover,
 .sidebar-search-button--active,
 .sidebar-collapse-button:hover {
-  color: #292524;
-  background: rgba(28, 25, 23, 0.06);
+  color: #2c3e72;
+  background: rgba(91, 105, 177, 0.1);
 }
 
 .brand-icon-button:active,
@@ -787,14 +787,14 @@ onBeforeUnmount(() => {
 }
 
 .new-chat-button:hover {
-  color: #1c1917;
-  background: rgba(28, 25, 23, 0.05);
+  color: #2c3e72;
+  background: rgba(91, 105, 177, 0.08);
   border-color: transparent;
 }
 
 .new-chat-button--active {
-  color: #292524;
-  background: rgba(28, 25, 23, 0.06);
+  color: #2c3e72;
+  background: #e7e6f7;
   border-color: transparent;
 }
 
@@ -1272,17 +1272,17 @@ onBeforeUnmount(() => {
 }
 
 .utility-entry:hover {
-  background: rgba(28, 25, 23, 0.05);
+  background: rgba(91, 105, 177, 0.08);
 }
 
 .utility-entry--active {
-  color: #292524;
-  background: rgba(28, 25, 23, 0.06);
+  color: #2c3e72;
+  background: #e7e6f7;
   border-color: transparent;
 }
 
 .utility-entry--active .utility-entry__icon {
-  color: #44403c;
+  color: #496bb4;
   background: transparent;
 }
 

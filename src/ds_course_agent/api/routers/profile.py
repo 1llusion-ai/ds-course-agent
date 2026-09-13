@@ -3,11 +3,11 @@ import base64
 import json
 import re
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pypdf import PdfReader
 
@@ -82,19 +82,25 @@ def _sorted_recent_concepts(profile):
     )
 
 
-def _build_daily_activity(memory_core, student_id: str) -> dict[str, int]:
+def _build_daily_activity(memory_core, student_id: str, days: int = 7) -> dict[str, int]:
     events = memory_core.load_events(student_id)
     counts = Counter()
+    current_day = datetime.now(timezone.utc).date()
+    first_day = current_day - timedelta(days=days - 1)
 
     for event in events:
         timestamp = getattr(event, "timestamp", None)
         if not timestamp:
             continue
-        day = datetime.fromtimestamp(float(timestamp), tz=timezone.utc).strftime("%m-%d")
-        counts[day] += 1
+        day = datetime.fromtimestamp(float(timestamp), tz=timezone.utc).date()
+        if first_day <= day <= current_day:
+            counts[day.isoformat()] += 1
 
-    recent_days = sorted(counts.items())[-7:]
-    return dict(recent_days)
+    daily_activity = {}
+    for offset in range(days):
+        day = (first_day + timedelta(days=offset)).isoformat()
+        daily_activity[day] = counts.get(day, 0)
+    return daily_activity
 
 
 @lru_cache(maxsize=1)
@@ -308,7 +314,10 @@ async def get_profile_summary(student_id: str = Depends(get_current_student_id))
 
 
 @router.get("/detail", response_model=ProfileDetail)
-async def get_profile_detail(student_id: str = Depends(get_current_student_id)):
+async def get_profile_detail(
+    student_id: str = Depends(get_current_student_id),
+    days: int = Query(default=7, ge=7, le=90),
+):
     memory_core = get_memory()
     memory_core.aggregate_profile(student_id)
     profile = memory_core.get_profile(student_id)
@@ -338,7 +347,7 @@ async def get_profile_detail(student_id: str = Depends(get_current_student_id)):
             concepts_explored=len(profile.recent_concepts),
         ),
         chapter_stats=chapter_counts,
-        daily_activity=_build_daily_activity(memory_core, student_id),
+        daily_activity=_build_daily_activity(memory_core, student_id, days),
         stats=ProfileStats(**profile.stats),
     )
 

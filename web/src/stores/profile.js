@@ -23,11 +23,11 @@ export const useProfileStore = defineStore('profile', () => {
     }
   }
 
-  async function fetchDetail() {
+  async function fetchDetail(days = 7) {
     const version = ++detailVersion
     loading.value = true
     try {
-      const value = await profileApi.getDetail()
+      const value = await profileApi.getDetail(days)
       if (version === detailVersion) detail.value = value
     } finally {
       if (version === detailVersion) loading.value = false
