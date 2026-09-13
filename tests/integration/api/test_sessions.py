@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from fastapi.testclient import TestClient
 
 from ds_course_agent.api.main import app
@@ -100,85 +98,3 @@ def test_list_sessions_filter_by_student():
     data = response.json()
     for session in data["sessions"]:
         assert session["student_id"] == "student_A"
-
-
-def test_restore_legacy_session_file(monkeypatch, tmp_path):
-    from ds_course_agent.api import state as state_module
-
-    legacy_session_id = "11111111-2222-3333-4444-555555555555"
-    legacy_file = tmp_path / legacy_session_id
-    legacy_file.write_text(
-        json.dumps(
-            [
-                {"type": "human", "data": {"content": "旧会话里的第一条问题"}},
-                {"type": "ai", "data": {"content": "旧会话里的回答"}},
-            ],
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-
-    monkeypatch.setattr(state_module, "STATE_FILE", tmp_path / "backend_state.json")
-    monkeypatch.setattr(state_module, "_sessions", {})
-    monkeypatch.setattr(state_module, "_chat_history", {})
-    monkeypatch.setattr(state_module, "_deleted_session_ids", set())
-
-    assert state_module._restore_sessions_from_legacy_files() is True
-    assert legacy_session_id in state_module._chat_history
-    assert legacy_session_id in state_module._sessions
-    assert state_module._sessions[legacy_session_id]["title"] == "旧会话里的第一条问题"
-    assert state_module._sessions[legacy_session_id]["student_id"] == "legacy_import"
-
-
-def test_restore_legacy_session_file_skips_deleted_sessions(monkeypatch, tmp_path):
-    from ds_course_agent.api import state as state_module
-
-    legacy_session_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-    legacy_file = tmp_path / legacy_session_id
-    legacy_file.write_text(
-        json.dumps(
-            [{"type": "human", "data": {"content": "应该被跳过的旧会话"}}],
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-
-    monkeypatch.setattr(state_module, "STATE_FILE", tmp_path / "backend_state.json")
-    monkeypatch.setattr(state_module, "_sessions", {})
-    monkeypatch.setattr(state_module, "_chat_history", {})
-    monkeypatch.setattr(state_module, "_deleted_session_ids", {legacy_session_id})
-
-    assert state_module._restore_sessions_from_legacy_files() is False
-    assert legacy_session_id not in state_module._chat_history
-    assert legacy_session_id not in state_module._sessions
-
-
-def test_purge_session_removes_legacy_file_and_records_tombstone(monkeypatch, tmp_path):
-    from ds_course_agent.api import state as state_module
-
-    session_id = "99999999-8888-7777-6666-555555555555"
-    legacy_file = tmp_path / session_id
-    legacy_file.write_text("[]", encoding="utf-8")
-
-    monkeypatch.setattr(state_module, "STATE_FILE", tmp_path / "backend_state.json")
-    monkeypatch.setattr(
-        state_module,
-        "_sessions",
-        {
-            session_id: {
-                "title": "待清理会话",
-                "student_id": "default_student",
-                "created_at": "2026-04-11T10:00:00",
-                "updated_at": "2026-04-11T10:00:00",
-                "message_count": 2,
-            }
-        },
-    )
-    monkeypatch.setattr(state_module, "_chat_history", {session_id: [{"role": "user", "content": "hello"}]})
-    monkeypatch.setattr(state_module, "_deleted_session_ids", set())
-
-    assert state_module.purge_session(session_id) is True
-    assert session_id not in state_module._sessions
-    assert session_id not in state_module._chat_history
-    assert session_id in state_module._deleted_session_ids
-    assert not legacy_file.exists()

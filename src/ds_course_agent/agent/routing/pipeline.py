@@ -44,8 +44,10 @@ class _LazyEnricher:
         self.skills_ran = False
         self.concepts_ran = False
         self.learner_state_ran = False
+        self.learner_memory_ran = False
         self.rewrite_ran = False
         self.learner_state: Any = None
+        self.personalization_context: Any = None
         self.matched_concepts: list = []
         self.skill_candidate_keys: set = set()
         self.rewrite_result: Any = None
@@ -53,7 +55,13 @@ class _LazyEnricher:
     @property
     def ran(self) -> bool:
         """Whether any enrichment stage has run (kept for observability callers)."""
-        return self.skills_ran or self.concepts_ran or self.learner_state_ran or self.rewrite_ran
+        return (
+            self.skills_ran
+            or self.concepts_ran
+            or self.learner_state_ran
+            or self.learner_memory_ran
+            or self.rewrite_ran
+        )
 
     def ensure_skills(self) -> None:
         """Stage A: cheap keyword skill_select (no embedding). Memoized.
@@ -89,12 +97,29 @@ class _LazyEnricher:
             self.ensure_concepts()
         self.rewrite_result = self._agent._rewrite_learning_query(self._context)
 
+    def ensure_learner_memory(self) -> None:
+        """Build typed student-memory context after concepts and profile are available."""
+        if self.learner_memory_ran:
+            return
+        self.learner_memory_ran = True
+        if not self.concepts_ran:
+            self.ensure_concepts()
+        if not self.learner_state_ran:
+            self.ensure_learner_state()
+        self.personalization_context = self._agent._load_personalization_context(
+            student_id=self._student_id,
+            matched_concepts=self.matched_concepts,
+            learner_state=self.learner_state,
+        )
+
     def apply_plan(self, plan: Any) -> None:
         """Execute a typed enrichment plan in dependency order."""
         if plan.map_concepts:
             self.ensure_concepts()
         if plan.load_learner_state:
             self.ensure_learner_state()
+        if plan.load_learner_memory:
+            self.ensure_learner_memory()
         if plan.rewrite_query:
             self.ensure_rewrite()
 
@@ -121,8 +146,18 @@ class QueryPipeline:
         student_id = student_id or session_id
 
         with trace_span("prepare.history_load"):
-            history = _history.get_history(session_id)
+            history_provider = getattr(agent, "history_provider", _history.get_history)
+            try:
+                history = history_provider(session_id, student_id=student_id)
+            except TypeError:
+                history = history_provider(session_id)
             chat_history = history.messages
+            if (
+                chat_history
+                and isinstance(chat_history[-1], HumanMessage)
+                and str(chat_history[-1].content) == user_input
+            ):
+                chat_history = chat_history[:-1]
         warn_context_budget(
             [SystemMessage(content=getattr(agent, "system_prompt", ""))]
             + list(chat_history)
@@ -192,17 +227,6 @@ class QueryPipeline:
             ", ".join(decision.reasons),
         )
 
-        event_concepts = [item for item in enricher.matched_concepts if bool(getattr(item, "event_eligible", True))]
-        if decision.enrichment.record_learning_event and event_concepts:
-            with trace_span("prepare.record_learning_events"):
-                agent._record_learning_events(
-                    question=user_input,
-                    session_id=session_id,
-                    student_id=student_id,
-                    matched_concepts=event_concepts,
-                    special_case_response=context.special_case_response,
-                )
-
         state = agent._build_route_state(
             context=context,
             decision=decision,
@@ -211,10 +235,12 @@ class QueryPipeline:
             session_id=session_id,
             history=history,
             learner_state=enricher.learner_state,
+            personalization_context=enricher.personalization_context,
             matched_concepts=enricher.matched_concepts,
             skill_candidate_keys=enricher.skill_candidate_keys,
             special_case_response=context.special_case_response,
         )
+        state.pending_learning_event = decision.enrichment.record_learning_event
         agent._get_hooks().before_route(state)
         agent._get_hooks().after_route(state, decision)
         return state

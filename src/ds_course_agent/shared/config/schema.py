@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     ASSESSMENT_TEMPERATURE: float = Field(default=0.2, ge=0.0, le=1.0, allow_inf_nan=False)
     ASSESSMENT_CONTEXT_MAX_CHARS: int = Field(default=6000, ge=256, le=32000)
     ASSESSMENT_DB_PATH: str = "var/assessment.db"
+    APP_DB_PATH: str = "var/app.db"
 
     # Learning semantic router.  An empty model name reuses the active chat
     # model for the selected local/remote backend.
@@ -223,6 +224,7 @@ class Settings(BaseSettings):
         "TOOL_RESULT_ARTIFACT_DIR",
         "AUTH_DB_PATH",
         "ASSESSMENT_DB_PATH",
+        "APP_DB_PATH",
     )
     @classmethod
     def _resolve_project_paths(cls, value: str) -> str:

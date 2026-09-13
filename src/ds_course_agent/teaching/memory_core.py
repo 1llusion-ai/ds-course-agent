@@ -236,6 +236,14 @@ class MemoryCore:
         profile.stats["total_resolved_weak_spots"] = len(profile.resolved_weak_spots)
         return profile
 
+    def replay_profile(self, student_id: str, events: Iterable[BaseEvent]) -> StudentProfile:
+        """Rebuild a profile from typed facts without reading or writing JSON state."""
+
+        if not student_id or not student_id.strip():
+            raise ValueError("student_id is required")
+        prepared = self._prepare_events(event for event in events if event.student_id == student_id)
+        return self._build_profile_from_events(student_id, prepared)
+
     # ========== 聚合规则 ==========
 
     def _event_timestamp(self, event: BaseEvent) -> float:

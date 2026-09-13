@@ -16,11 +16,7 @@ class TestChatAPI:
 
     def setup_method(self):
         """每个测试前清理数据"""
-        # 清理 sessions 和 chat history
-        from ds_course_agent.api.state import _chat_history, _sessions
-
-        _sessions.clear()
-        _chat_history.clear()
+        pass
 
     def test_send_message_success(self):
         """测试正常发送消息"""
@@ -155,8 +151,6 @@ class TestChatCascadeDelete:
 
     def test_delete_session_clears_history(self):
         """测试删除会话时级联清理聊天记录"""
-        from ds_course_agent.api.state import _chat_history
-
         # 创建会话并发送消息
         session_resp = client.post("/api/sessions", json={"title": "临时会话", "student_id": "student001"})
         session_id = session_resp.json()["id"]
@@ -164,14 +158,16 @@ class TestChatCascadeDelete:
         client.post("/api/chat/send", json={"session_id": session_id, "message": "消息", "student_id": "student001"})
 
         # 验证历史存在
-        assert session_id in _chat_history
+        history = client.get(f"/api/chat/history/{session_id}?student_id=student001")
+        assert history.json()["total"] == 2
 
         # 删除会话
         resp = client.delete(f"/api/sessions/{session_id}?student_id=student001")
         assert resp.status_code == 200
 
         # 验证历史也被清理
-        assert session_id not in _chat_history
+        history = client.get(f"/api/chat/history/{session_id}?student_id=student001")
+        assert history.status_code == 404
 
     def test_delete_session_requires_auth(self):
         """测试删除会话需要归属验证"""

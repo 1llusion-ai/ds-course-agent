@@ -29,6 +29,7 @@ from ds_course_agent.agent.routing import (
 )
 from ds_course_agent.agent.service import AgentService
 from ds_course_agent.agent.turn_runner import iter_turn_events
+from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 
 
 class _History:
@@ -104,6 +105,74 @@ def test_sync_turn_emits_typed_lifecycle_and_persists_once(monkeypatch) -> None:
     assert [message.type for message in history.messages] == ["human", "ai"]
 
 
+def test_api_managed_turn_persists_assistant_before_teaching_facts(monkeypatch) -> None:
+    history = _History()
+    state = _state(history)
+    service = AgentService.__new__(AgentService)
+    service._prepare_query_route = lambda user_input, session_id, student_id=None: state
+    persistence_order = []
+
+    def persist_learning(_state, _result):
+        persistence_order.append([message.type for message in history.messages])
+
+    service._persist_successful_learning_turn = persist_learning
+    monkeypatch.setattr(
+        "ds_course_agent.agent.turn_runner.execute_route",
+        lambda agent, route_state, stream=False: _result("同步回答"),
+    )
+
+    list(
+        iter_turn_events(
+            service,
+            "解释 PCA",
+            "session-events",
+            student_id="student-events",
+            stream=False,
+            manage_history=False,
+            persist_completed_assistant=True,
+        )
+    )
+
+    assert [message.type for message in history.messages] == ["ai"]
+    assert persistence_order == [["ai"]]
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_turn_trace_records_first_visible_output_once(monkeypatch, stream) -> None:
+    history = _History()
+    state = _state(history)
+    service = AgentService.__new__(AgentService)
+    service._prepare_query_route = lambda user_input, session_id, student_id=None: state
+    monkeypatch.setattr(
+        "ds_course_agent.agent.turn_runner.execute_route",
+        lambda agent, route_state, stream=False: _result("同步回答"),
+    )
+    monkeypatch.setattr(
+        "ds_course_agent.agent.turn_runner.iter_route_response",
+        lambda agent, route_state: iter([" ", "流", "式"]),
+    )
+
+    token = begin_query_trace({"entrypoint": "turn_first_token_test"})
+    try:
+        list(
+            iter_turn_events(
+                service,
+                "解释 PCA",
+                "session-events",
+                student_id="student-events",
+                stream=stream,
+            )
+        )
+    finally:
+        trace = end_query_trace(token)
+
+    events = [item for item in trace["events"] if item["stage"] == "turn.first_token"]
+    assert len(events) == 1
+    assert events[0]["data"]["stream"] is stream
+    assert events[0]["data"]["execution_mode"] == "direct_model"
+    assert events[0]["data"]["chunk_chars"] > 0
+
+
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("degraded", [False, True])
 def test_session_practice_runs_once_after_successful_persisted_turn(monkeypatch, stream, degraded) -> None:
@@ -159,7 +228,16 @@ def test_sync_and_stream_public_methods_consume_shared_executor(monkeypatch) -> 
     service = AgentService.__new__(AgentService)
     calls: list[bool] = []
 
-    def fake_iter_turn_events(agent, user_input, session_id, *, student_id=None, web_search=False, stream):
+    def fake_iter_turn_events(
+        agent,
+        user_input,
+        session_id,
+        *,
+        student_id=None,
+        web_search=False,
+        stream,
+        **_kwargs,
+    ):
         assert agent is service
         calls.append(stream)
         yield TurnEndEvent(stream_id="stream-events", result=_result("统一回答"))

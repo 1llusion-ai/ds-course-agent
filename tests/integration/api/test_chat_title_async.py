@@ -10,10 +10,7 @@ from ds_course_agent.api.title_generation import DEFAULT_SESSION_TITLE, build_fa
 def test_stream_does_not_block_on_first_title_generation(monkeypatch):
     import ds_course_agent.api.chat_application as chat_application
     import ds_course_agent.api.chat_sessions as chat_sessions
-    from ds_course_agent.api.state import _chat_history, _sessions
 
-    _sessions.clear()
-    _chat_history.clear()
     chat_sessions.reset_title_generation_state()
 
     async def slow_title(_question: str) -> str:
@@ -53,10 +50,7 @@ def test_stream_does_not_block_on_first_title_generation(monkeypatch):
 def test_post_send_does_not_block_on_first_title_generation(monkeypatch):
     import ds_course_agent.api.chat_application as chat_application
     import ds_course_agent.api.chat_sessions as chat_sessions
-    from ds_course_agent.api.state import _chat_history, _sessions
 
-    _sessions.clear()
-    _chat_history.clear()
     chat_sessions.reset_title_generation_state()
 
     async def slow_title(_question: str) -> str:
@@ -92,21 +86,25 @@ def test_post_send_does_not_block_on_first_title_generation(monkeypatch):
 
 
 def test_schedule_title_generation_sets_immediate_fallback(monkeypatch):
-    import ds_course_agent.api.chat_sessions as chat_sessions
-    from ds_course_agent.api.state import _sessions
+    from datetime import datetime, timezone
 
-    _sessions.clear()
+    import ds_course_agent.api.chat_sessions as chat_sessions
+    from ds_course_agent.api.session_repository import SessionRecord
+
     chat_sessions.reset_title_generation_state()
     session_id = "title-immediate"
     question = "菲律宾的现任总统是谁"
-    _sessions[session_id] = {
-        "title": DEFAULT_SESSION_TITLE,
-        "title_source": "default",
-        "student_id": "test",
-        "created_at": "2026-07-17T10:00:00",
-        "updated_at": "2026-07-17T10:00:00",
-        "message_count": 0,
-    }
+    now = datetime.now(timezone.utc)
+    chat_sessions._repository().create_session(
+        SessionRecord(
+            session_id=session_id,
+            title=DEFAULT_SESSION_TITLE,
+            title_source="default",
+            student_id="test",
+            created_at=now,
+            updated_at=now,
+        )
+    )
 
     created_coroutines = []
 
@@ -119,8 +117,10 @@ def test_schedule_title_generation_sets_immediate_fallback(monkeypatch):
 
     chat_sessions.schedule_title_generation(session_id, question, is_first_message=True)
 
-    assert _sessions[session_id]["title"] == build_fallback_session_title(question)
-    assert _sessions[session_id]["title"] != DEFAULT_SESSION_TITLE
-    assert _sessions[session_id]["title_source"] == "heuristic"
-    assert _sessions[session_id]["title_generation_pending"] is True
+    session = chat_sessions._repository().get_session("test", session_id)
+    assert session is not None
+    assert session.title == build_fallback_session_title(question)
+    assert session.title != DEFAULT_SESSION_TITLE
+    assert session.title_source == "heuristic"
+    assert session.title_generation_pending is True
     assert created_coroutines

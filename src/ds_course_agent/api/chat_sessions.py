@@ -5,19 +5,21 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime
+from dataclasses import replace
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 
 from ds_course_agent.api.schemas.chat import ChatMessage
-from ds_course_agent.api.state import DEFAULT_SESSION_TITLE, _chat_history, _sessions, state_lock
-from ds_course_agent.api.state import _save as _save_state
+from ds_course_agent.api.session_repository import MessageRecord, SessionRecord, SQLiteSessionRepository
 from ds_course_agent.api.timestamps import parse_timestamp, timestamps_match
 from ds_course_agent.api.title_generation import (
+    DEFAULT_SESSION_TITLE,
     SESSION_TITLE_MAX_CHARS,
     _clean_generated_title,
     _finalize_title,
@@ -33,6 +35,43 @@ _history_locks: dict[str, threading.RLock] = {}
 _history_locks_guard = threading.Lock()
 _session_operation_locks: dict[str, threading.Lock] = {}
 _session_operation_locks_guard = threading.Lock()
+
+
+def _repository() -> SQLiteSessionRepository:
+    return SQLiteSessionRepository()
+
+
+def _session_data(session_id: str) -> tuple[SessionRecord, dict[str, Any]] | None:
+    record = _repository().find_session(session_id)
+    if record is None:
+        return None
+    return record, {
+        "title": record.title,
+        "title_source": record.title_source,
+        "student_id": record.student_id,
+        "created_at": record.created_at.isoformat(),
+        "updated_at": record.updated_at.isoformat(),
+        "message_count": record.message_count,
+        "title_generation_attempts": record.title_generation_attempts,
+        "title_generation_pending": record.title_generation_pending,
+        "title_repaired_from": record.title_repaired_from,
+        "legacy_session_id": record.legacy_session_id,
+    }
+
+
+def _save_session_data(record: SessionRecord, data: dict[str, Any]) -> None:
+    _repository().save_session(
+        replace(
+            record,
+            title=str(data.get("title") or DEFAULT_SESSION_TITLE),
+            title_source=str(data.get("title_source") or "default"),
+            updated_at=parse_timestamp(data.get("updated_at"), datetime.now(timezone.utc)),
+            title_generation_attempts=int(data.get("title_generation_attempts") or 0),
+            title_generation_pending=bool(data.get("title_generation_pending", False)),
+            title_repaired_from=data.get("title_repaired_from"),
+            legacy_session_id=data.get("legacy_session_id"),
+        )
+    )
 
 
 def reset_title_generation_state() -> None:
@@ -164,9 +203,70 @@ def message_from_dict(data: dict[str, Any]) -> ChatMessage:
     )
 
 
-def _ensure_session_history(session_id: str) -> None:
-    if session_id not in _chat_history:
-        _chat_history[session_id] = []
+def _message_record_from_dict(
+    data: dict[str, Any],
+    *,
+    message_id: str,
+    session_id: str,
+    student_id: str,
+    position: int,
+) -> MessageRecord:
+    return MessageRecord(
+        message_id=message_id,
+        session_id=session_id,
+        student_id=student_id,
+        position=position,
+        role=str(data.get("role") or "assistant"),
+        content=str(data.get("content") or ""),
+        created_at=parse_timestamp(data.get("timestamp"), datetime.now(timezone.utc)),
+        turn_id=data.get("turn_id"),
+        route_family=data.get("family"),
+        route_intent=data.get("intent"),
+        execution_mode=data.get("execution_mode"),
+        generation_status=str(data.get("generation_status") or "completed"),
+        generation_error=data.get("generation_error"),
+        retrieval_attempted=bool(data.get("retrieval_attempted", False)),
+        used_retrieval=bool(data.get("used_retrieval", False)),
+        degraded=bool(data.get("degraded", False)),
+        web_search_requested=bool(data.get("web_search_requested", False)),
+        web_search_used=bool(data.get("web_search_used", False)),
+        web_search_status=str(data.get("web_search_status") or "not_requested"),
+        web_search_reason=data.get("web_search_reason"),
+        sources=data.get("sources"),
+        progress=data.get("progress"),
+        progress_events=data.get("progress_events") or data.get("progressEvents"),
+        metadata=data.get("metadata"),
+        langchain_payload=data.get("langchain_payload"),
+    )
+
+
+def _message_dict_from_record(record: MessageRecord) -> dict[str, Any]:
+    return {
+        "_message_id": record.message_id,
+        "_position": record.position,
+        "_student_id": record.student_id,
+        "role": record.role,
+        "content": record.content,
+        "timestamp": record.created_at.isoformat(),
+        "turn_id": record.turn_id,
+        "sources": record.sources,
+        "family": record.route_family,
+        "intent": record.route_intent,
+        "execution_mode": record.execution_mode,
+        "retrieval_attempted": record.retrieval_attempted,
+        "used_retrieval": record.used_retrieval,
+        "degraded": record.degraded,
+        "progress": record.progress,
+        "progress_events": record.progress_events,
+        "web_search_requested": record.web_search_requested,
+        "web_search_used": record.web_search_used,
+        "web_search_status": record.web_search_status,
+        "web_search_reason": record.web_search_reason,
+        "generation_status": record.generation_status,
+        "generation_error": record.generation_error,
+        "metadata": record.metadata,
+        "langchain_payload": record.langchain_payload,
+    }
 
 
 def _history_lock(session_id: str) -> threading.RLock:
@@ -216,94 +316,96 @@ async def session_operation_guard(session_id: str) -> AsyncIterator[None]:
         lock.release()
 
 
-def append_message_locked(session_id: str, message: ChatMessage, *, save: bool = True) -> dict[str, Any]:
+def append_message_locked(session_id: str, message: ChatMessage) -> dict[str, Any]:
     """Append one message under the per-session history lock."""
 
     with _history_lock(session_id):
-        with state_lock():
-            item = message_to_dict(message)
-            _ensure_session_history(session_id)
-            _chat_history[session_id].append(item)
-            if save:
-                _save_state()
-            return item
+        session = _repository().find_session(session_id)
+        if session is None:
+            raise KeyError(session_id)
+        item = message_to_dict(message)
+        stored = _repository().append_message(
+            _message_record_from_dict(
+                item,
+                message_id=uuid.uuid4().hex,
+                session_id=session_id,
+                student_id=session.student_id,
+                position=-1,
+            )
+        )
+        item["_message_id"] = stored.message_id
+        item["_position"] = stored.position
+        item["_student_id"] = stored.student_id
+        return item
 
 
-def remove_message_by_identity(session_id: str, message_item: dict[str, Any], *, save: bool = True) -> bool:
+def remove_message_by_identity(session_id: str, message_item: dict[str, Any]) -> bool:
     """Remove exactly the message object previously appended for this turn."""
 
     with _history_lock(session_id):
-        with state_lock():
-            history = _chat_history.get(session_id)
-            if not history:
-                return False
-            for index in range(len(history) - 1, -1, -1):
-                if history[index] is message_item:
-                    del history[index]
-                    if save:
-                        _save_state()
-                    return True
+        message_id = str(message_item.get("_message_id") or "")
+        student_id = str(message_item.get("_student_id") or "")
+        if not message_id or not student_id:
             return False
+        return _repository().delete_message(student_id, session_id, message_id)
 
 
 def replace_message_by_identity(
     session_id: str,
     message_item: dict[str, Any],
     message: ChatMessage,
-    *,
-    save: bool = True,
 ) -> bool:
     """Replace exactly one stored message while preserving turn order."""
 
     with _history_lock(session_id):
-        with state_lock():
-            history = _chat_history.get(session_id)
-            if not history:
-                return False
-            for index, item in enumerate(history):
-                if item is message_item:
-                    history[index] = message_to_dict(message)
-                    if save:
-                        _save_state()
-                    return True
+        message_id = str(message_item.get("_message_id") or "")
+        student_id = str(message_item.get("_student_id") or "")
+        position = int(message_item.get("_position", -1))
+        if not message_id or not student_id or position < 0:
             return False
+        return _repository().replace_message(
+            _message_record_from_dict(
+                message_to_dict(message),
+                message_id=message_id,
+                session_id=session_id,
+                student_id=student_id,
+                position=position,
+            )
+        )
+
+
+def replace_latest_generated_assistant(session_id: str, message: ChatMessage) -> bool:
+    """Replace the agent's completed assistant placeholder with the API projection."""
+
+    with _history_lock(session_id):
+        history = list_messages(session_id)
+        if not history:
+            return False
+        target = history[-1]
+        if target.get("role") != "assistant" or target.get("langchain_payload") is None:
+            return False
+        return replace_message_by_identity(session_id, target, message)
 
 
 def find_stopped_assistant_turn(session_id: str, message_timestamp: datetime) -> dict[str, Any]:
     """Return the latest stopped assistant item for continuation."""
 
     with _history_lock(session_id):
-        with state_lock():
-            history = _chat_history.get(session_id, [])
-            if not history:
-                raise HTTPException(status_code=409, detail="没有可继续生成的回答")
-
-            target_index = len(history) - 1
-            target = history[target_index]
-            if (
-                target.get("role") != "assistant"
-                or target.get("generation_status") != "stopped"
-                or not timestamps_match(target.get("timestamp"), message_timestamp)
-            ):
-                raise HTTPException(status_code=409, detail="只能继续当前会话最后一条已停止的回答")
-            return target
-
-
-def update_session_metadata(session_id: str, timestamp: str | None = None, *, save: bool = True) -> None:
-    """Refresh message count and update time for an existing session."""
-
-    with state_lock():
-        if session_id not in _sessions:
-            return
-
-        _sessions[session_id]["message_count"] = len(_chat_history.get(session_id, []))
-        _sessions[session_id]["updated_at"] = timestamp or datetime.now().isoformat()
-        if save:
-            _save_state()
+        history = list_messages(session_id)
+        if not history:
+            raise HTTPException(status_code=409, detail="没有可继续生成的回答")
+        target = history[-1]
+        if (
+            target.get("role") != "assistant"
+            or target.get("generation_status") != "stopped"
+            or not timestamps_match(target.get("timestamp"), message_timestamp)
+        ):
+            raise HTTPException(status_code=409, detail="只能继续当前会话最后一条已停止的回答")
+        return target
 
 
 def _first_user_message(session_id: str, fallback: str = "") -> str:
-    for item in _chat_history.get(session_id, []):
+    for item in list_messages(session_id):
         if item.get("role") == "user" and item.get("content"):
             return str(item.get("content") or "")
     return fallback
@@ -313,9 +415,10 @@ def _should_schedule_title_generation(session_id: str, message: str, *, is_first
     if session_id in _title_generation_pending:
         return False
 
-    session = _sessions.get(session_id)
-    if not session:
+    loaded = _session_data(session_id)
+    if loaded is None:
         return False
+    _record, session = loaded
 
     title = str(session.get("title") or "").strip()
     source = session.get("title_source")
@@ -349,9 +452,10 @@ def _apply_immediate_fallback_title(session_id: str, message: str, *, is_first_m
     replace this title with an LLM-polished one later.
     """
 
-    session = _sessions.get(session_id)
-    if not session:
+    loaded = _session_data(session_id)
+    if loaded is None:
         return
+    record, session = loaded
     if session.get("title_source") == "manual":
         return
 
@@ -368,11 +472,11 @@ def _apply_immediate_fallback_title(session_id: str, message: str, *, is_first_m
     if not fallback or fallback == title:
         return
 
-    with state_lock():
-        session["title"] = fallback
-        session["title_source"] = "heuristic"
-        session["title_generation_pending"] = True
-        _save_state()
+    session["title"] = fallback
+    session["title_source"] = "heuristic"
+    session["title_generation_pending"] = True
+    session["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _save_session_data(record, session)
 
 
 def schedule_title_generation(session_id: str, message: str, *, is_first_message: bool) -> None:
@@ -398,26 +502,26 @@ def schedule_title_generation(session_id: str, message: str, *, is_first_message
                 )
                 else "llm"
             )
-            with state_lock():
-                if session_id in _sessions:
-                    _sessions[session_id]["title"] = generated_title
-                    _sessions[session_id]["title_source"] = source
-                    _sessions[session_id].pop("title_generation_pending", None)
-                    _sessions[session_id]["title_generation_attempts"] = (
-                        int(_sessions[session_id].get("title_generation_attempts") or 0) + 1
-                    )
-                    _save_state()
+            loaded = _session_data(session_id)
+            if loaded is not None:
+                record, session = loaded
+                session["title"] = generated_title
+                session["title_source"] = source
+                session["title_generation_pending"] = False
+                session["title_generation_attempts"] = int(session.get("title_generation_attempts") or 0) + 1
+                session["updated_at"] = datetime.now(timezone.utc).isoformat()
+                _save_session_data(record, session)
         except Exception:
             logger.debug("会话标题生成失败", exc_info=True)
-            with state_lock():
-                if session_id in _sessions:
-                    _sessions[session_id]["title"] = build_fallback_session_title(message)
-                    _sessions[session_id]["title_source"] = "heuristic"
-                    _sessions[session_id].pop("title_generation_pending", None)
-                    _sessions[session_id]["title_generation_attempts"] = (
-                        int(_sessions[session_id].get("title_generation_attempts") or 0) + 1
-                    )
-                    _save_state()
+            loaded = _session_data(session_id)
+            if loaded is not None:
+                record, session = loaded
+                session["title"] = build_fallback_session_title(message)
+                session["title_source"] = "heuristic"
+                session["title_generation_pending"] = False
+                session["title_generation_attempts"] = int(session.get("title_generation_attempts") or 0) + 1
+                session["updated_at"] = datetime.now(timezone.utc).isoformat()
+                _save_session_data(record, session)
         finally:
             _title_generation_pending.discard(session_id)
 
@@ -430,41 +534,36 @@ def schedule_title_generation(session_id: str, message: str, *, is_first_message
         _title_generation_tasks.discard(task)
 
 
-def save_state() -> None:
-    """Persist the current backend session and message state."""
-
-    _save_state()
-
-
 def message_count(session_id: str) -> int:
     """Return the number of persisted messages for a session."""
 
-    return len(_chat_history.get(session_id, []))
+    session = _repository().find_session(session_id)
+    return session.message_count if session else 0
 
 
 def list_messages(session_id: str) -> list[dict[str, Any]]:
     """Return a stable list snapshot of persisted message dictionaries."""
 
     with _history_lock(session_id):
-        return list(_chat_history.get(session_id, []))
+        return [_message_dict_from_record(record) for record in _repository().list_messages_by_session(session_id)]
 
 
 def clear_messages(session_id: str) -> None:
     """Delete all persisted messages for one session."""
 
     with _history_lock(session_id):
-        with state_lock():
-            _chat_history.pop(session_id, None)
-            update_session_metadata(session_id, save=False)
-            _save_state()
+        session = _repository().find_session(session_id)
+        if session is not None:
+            _repository().clear_messages(session.student_id, session_id)
 
 
 def ensure_session_owner(session_id: str, student_id: str) -> None:
     """Raise an HTTP error unless the student owns the session."""
 
-    if session_id not in _sessions:
+    session = _repository().find_session(session_id)
+    if session is None:
         raise HTTPException(status_code=404, detail="会话不存在")
-    if _sessions[session_id].get("student_id") != student_id:
+    if session.student_id != student_id:
         raise HTTPException(status_code=403, detail="无权访问此会话")
 
 
@@ -482,10 +581,9 @@ __all__ = [
     "list_messages",
     "remove_message_by_identity",
     "replace_message_by_identity",
+    "replace_latest_generated_assistant",
     "reset_title_generation_state",
-    "save_state",
     "schedule_title_generation",
     "session_operation_guard",
     "session_operation_lock",
-    "update_session_metadata",
 ]

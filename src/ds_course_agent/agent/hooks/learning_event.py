@@ -103,9 +103,9 @@ class LearningEventHook:
         get_memory_core_fn: Callable[[], Any],
         record_event_fn: Callable[[Any], Any],
         classify_question_type_fn: Callable[[str], str],
-    ) -> None:
+    ) -> int:
         if special_case_response and not self.detector.is_mastery_signal(question):
-            return
+            return 0
 
         learning_concept = self.resolve_learning_concept(
             question,
@@ -115,7 +115,14 @@ class LearningEventHook:
             get_memory_core_fn=get_memory_core_fn,
         )
         if not learning_concept:
-            return
+            return 0
+
+        recorded_count = 0
+
+        def record(event: Any) -> None:
+            nonlocal recorded_count
+            record_event_fn(event)
+            recorded_count += 1
 
         from ds_course_agent.teaching.learning_events import (
             build_clarification_event,
@@ -147,13 +154,13 @@ class LearningEventHook:
                 raw_question=question,
                 enable_hash=False,
             )
-            record_event_fn(concept_event)
+            record(concept_event)
             recorded_ids = {learning_concept["concept_id"]}
             for concept in matched_concepts:
                 if concept.concept_id in recorded_ids or not getattr(concept, "event_eligible", True):
                     continue
                 recorded_ids.add(concept.concept_id)
-                record_event_fn(
+                record(
                     build_concept_mentioned_event(
                         session_id=session_id,
                         student_id=student_id,
@@ -184,7 +191,7 @@ class LearningEventHook:
                 raw_question=question,
                 enable_hash=False,
             )
-            record_event_fn(distinction_event)
+            record(distinction_event)
 
         parent_event_id = (
             distinction_event.event_id
@@ -206,7 +213,7 @@ class LearningEventHook:
                 parent_event_id=parent_event_id,
                 clarification_type=clarification_type,
             )
-            record_event_fn(clarification_event)
+            record(clarification_event)
 
         if is_mastery_signal and parent_event_id:
             mastery_event = build_mastery_signal_event(
@@ -216,7 +223,9 @@ class LearningEventHook:
                 source_event_id=parent_event_id,
                 signal_type="explicit_understanding",
             )
-            record_event_fn(mastery_event)
+            record(mastery_event)
+
+        return recorded_count
 
     def on_session_end(self, session_id: str, **kwargs: Any) -> None:
         student_id = kwargs.get("student_id") or session_id

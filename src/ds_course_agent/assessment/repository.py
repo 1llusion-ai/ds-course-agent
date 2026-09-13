@@ -1,104 +1,92 @@
-"""SQLite persistence for assigned assessments."""
+"""SQLite persistence for normalized assigned assessments."""
 
 from __future__ import annotations
 
-import sqlite3
+import json
 from collections.abc import Sequence
 from pathlib import Path
 
 import ds_course_agent.shared.config as config
-from ds_course_agent.assessment.records import AssessmentRecord, AssessmentStatus
+from ds_course_agent.assessment.database import migrate_assessment_database
+from ds_course_agent.assessment.models import EvidenceSource, GeneratedQuestion, GeneratedQuiz, QuestionOption
+from ds_course_agent.assessment.records import AssessmentRecord, AssessmentStatus, StoredAnswer
+from ds_course_agent.shared.database import connect_sqlite
 
 
 class AssessmentRepository:
-    """Persist complete typed assessment records in one runtime database."""
+    """Persist assessment lifecycle, immutable question snapshots, and answers."""
 
     def __init__(self, path: str | Path | None = None) -> None:
         self._path = Path(path or config.ASSESSMENT_DB_PATH)
 
     def init_db(self) -> None:
-        """Create the assessment table and student/status index."""
-
-        with self._connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS assessments (
-                    id TEXT PRIMARY KEY,
-                    student_id TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    assigned_at TEXT NOT NULL,
-                    opened_at TEXT,
-                    submitted_at TEXT,
-                    version INTEGER NOT NULL,
-                    payload_json TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_assessments_student_status
-                ON assessments(student_id, status, assigned_at DESC)
-                """
-            )
+        migrate_assessment_database(self._path)
 
     def create(self, record: AssessmentRecord) -> None:
-        """Insert a newly assigned assessment."""
-
         self.init_db()
-        with self._connect() as connection:
+        connection = connect_sqlite(self._path)
+        try:
+            connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 """
                 INSERT INTO assessments (
-                    id, student_id, status, assigned_at, opened_at,
-                    submitted_at, version, payload_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    id, student_id, session_id, title, status, assigned_at, opened_at,
+                    submitted_at, target_kc_id, difficulty, question_type, requested_count, version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                self._row_values(record),
+                self._assessment_values(record),
             )
+            self._insert_questions(connection, record)
+            self._insert_answers(connection, record)
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def get(self, assessment_id: str, student_id: str) -> AssessmentRecord | None:
-        """Return one assessment owned by the student."""
-
         self.init_db()
-        with self._connect() as connection:
+        connection = connect_sqlite(self._path)
+        try:
             row = connection.execute(
-                "SELECT payload_json FROM assessments WHERE id = ? AND student_id = ?",
-                (assessment_id, student_id),
+                "SELECT * FROM assessments WHERE id = ? AND student_id = ?", (assessment_id, student_id)
             ).fetchone()
-        return AssessmentRecord.model_validate_json(row["payload_json"]) if row else None
+            return self._record_from_connection(connection, row) if row else None
+        finally:
+            connection.close()
 
     def list_for_student(
         self,
         student_id: str,
         statuses: Sequence[AssessmentStatus],
     ) -> tuple[AssessmentRecord, ...]:
-        """Return assigned assessments in newest-first order."""
-
         if not statuses:
             return ()
         self.init_db()
         placeholders = ", ".join("?" for _ in statuses)
-        query = (
-            "SELECT payload_json FROM assessments "
-            f"WHERE student_id = ? AND status IN ({placeholders}) "
-            "ORDER BY assigned_at DESC"
-        )
-        with self._connect() as connection:
-            rows = connection.execute(query, (student_id, *(status.value for status in statuses))).fetchall()
-        return tuple(AssessmentRecord.model_validate_json(row["payload_json"]) for row in rows)
+        connection = connect_sqlite(self._path)
+        try:
+            rows = connection.execute(
+                f"SELECT * FROM assessments WHERE student_id = ? AND status IN ({placeholders}) "
+                "ORDER BY assigned_at DESC",
+                (student_id, *(status.value for status in statuses)),
+            ).fetchall()
+            return tuple(self._record_from_connection(connection, row) for row in rows)
+        finally:
+            connection.close()
 
     def update(self, record: AssessmentRecord, *, expected_version: int) -> bool:
-        """Atomically replace a record when its persisted version is unchanged."""
-
         if record.version != expected_version + 1:
             raise ValueError("updated record version must increment by one")
         self.init_db()
-        with self._connect() as connection:
+        connection = connect_sqlite(self._path)
+        try:
+            connection.execute("BEGIN IMMEDIATE")
             cursor = connection.execute(
                 """
                 UPDATE assessments
-                SET status = ?, assigned_at = ?, opened_at = ?, submitted_at = ?,
-                    version = ?, payload_json = ?
+                SET status = ?, assigned_at = ?, opened_at = ?, submitted_at = ?, version = ?
                 WHERE id = ? AND student_id = ? AND version = ?
                 """,
                 (
@@ -107,29 +95,150 @@ class AssessmentRepository:
                     record.opened_at.isoformat() if record.opened_at else None,
                     record.submitted_at.isoformat() if record.submitted_at else None,
                     record.version,
-                    record.model_dump_json(),
                     record.id,
                     record.student_id,
                     expected_version,
                 ),
             )
-        return cursor.rowcount == 1
-
-    def _connect(self) -> sqlite3.Connection:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self._path)
-        connection.row_factory = sqlite3.Row
-        return connection
+            if cursor.rowcount:
+                connection.execute("DELETE FROM assessment_answers WHERE assessment_id = ?", (record.id,))
+                self._insert_answers(connection, record)
+            connection.commit()
+            return cursor.rowcount == 1
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     @staticmethod
-    def _row_values(record: AssessmentRecord) -> tuple[object, ...]:
+    def _assessment_values(record: AssessmentRecord) -> tuple[object, ...]:
+        request = record.request
         return (
             record.id,
             record.student_id,
+            record.session_id,
+            record.quiz.title,
             record.status.value,
             record.assigned_at.isoformat(),
             record.opened_at.isoformat() if record.opened_at else None,
             record.submitted_at.isoformat() if record.submitted_at else None,
+            request.target_kc_id,
+            request.difficulty.value,
+            getattr(request, "question_type", "single_choice"),
+            request.count,
             record.version,
-            record.model_dump_json(),
         )
+
+    @staticmethod
+    def _insert_questions(connection, record: AssessmentRecord) -> None:
+        sources = {source.id: source for source in record.quiz.sources}
+        connection.executemany(
+            """
+            INSERT INTO assessment_questions (
+                id, assessment_id, position, stem, options_json, correct_option_id,
+                explanation, difficulty, source_ids_json, sources_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                (
+                    question_id,
+                    record.id,
+                    position,
+                    question.stem,
+                    json.dumps([option.model_dump() for option in question.options], ensure_ascii=False),
+                    question.correct_option_id,
+                    question.explanation,
+                    question.difficulty.value,
+                    json.dumps(question.source_ids),
+                    json.dumps(
+                        [sources[source_id].model_dump() for source_id in question.source_ids if source_id in sources],
+                        ensure_ascii=False,
+                    ),
+                )
+                for position, (question_id, question) in enumerate(
+                    zip(record.question_ids, record.quiz.questions, strict=True)
+                )
+            ),
+        )
+
+    @staticmethod
+    def _insert_answers(connection, record: AssessmentRecord) -> None:
+        if not record.answers or record.submitted_at is None:
+            return
+        connection.executemany(
+            """
+            INSERT INTO assessment_answers (
+                assessment_id, question_id, selected_option_id, is_correct,
+                response_time_ms, answer_change_count, submitted_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                (
+                    record.id,
+                    answer.question_id,
+                    answer.selected_option_id,
+                    int(answer.is_correct),
+                    answer.response_time_ms,
+                    answer.answer_change_count,
+                    record.submitted_at.isoformat(),
+                )
+                for answer in record.answers
+            ),
+        )
+
+    @classmethod
+    def _record_from_connection(cls, connection, row) -> AssessmentRecord:
+        question_rows = connection.execute(
+            "SELECT * FROM assessment_questions WHERE assessment_id = ? ORDER BY position", (row["id"],)
+        ).fetchall()
+        questions = tuple(
+            GeneratedQuestion(
+                stem=item["stem"],
+                options=tuple(QuestionOption.model_validate(value) for value in json.loads(item["options_json"])),
+                correct_option_id=item["correct_option_id"],
+                explanation=item["explanation"],
+                difficulty=item["difficulty"],
+                source_ids=tuple(json.loads(item["source_ids_json"])),
+            )
+            for item in question_rows
+        )
+        source_values = [source for item in question_rows for source in json.loads(item["sources_json"])]
+        sources = tuple({source["id"]: EvidenceSource.model_validate(source) for source in source_values}.values())
+        answers = tuple(
+            StoredAnswer(
+                question_id=item["question_id"],
+                selected_option_id=item["selected_option_id"],
+                is_correct=bool(item["is_correct"]),
+                response_time_ms=item["response_time_ms"],
+                answer_change_count=item["answer_change_count"],
+            )
+            for item in connection.execute(
+                "SELECT * FROM assessment_answers WHERE assessment_id = ? ORDER BY question_id", (row["id"],)
+            ).fetchall()
+        )
+        from ds_course_agent.assessment.models import GenerateQuestionsRequest
+
+        request = GenerateQuestionsRequest(
+            target_kc_id=row["target_kc_id"],
+            difficulty=row["difficulty"],
+            count=row["requested_count"],
+            question_type=row["question_type"],
+        )
+        return AssessmentRecord(
+            id=row["id"],
+            student_id=row["student_id"],
+            session_id=row["session_id"],
+            request=request,
+            quiz=GeneratedQuiz(title=row["title"], questions=questions, sources=sources),
+            question_ids=tuple(item["id"] for item in question_rows),
+            status=AssessmentStatus(row["status"]),
+            assigned_at=row["assigned_at"],
+            opened_at=row["opened_at"],
+            submitted_at=row["submitted_at"],
+            answers=answers,
+            version=row["version"],
+        )
+
+
+__all__ = ["AssessmentRepository"]

@@ -38,6 +38,7 @@ _SETTING_NAMES = [
     "ASSESSMENT_TEMPERATURE",
     "ASSESSMENT_CONTEXT_MAX_CHARS",
     "ASSESSMENT_DB_PATH",
+    "APP_DB_PATH",
     "ROUTER_MODEL_NAME",
     "ROUTER_MAX_TOKENS",
     "ROUTER_TIMEOUT_SECONDS",
@@ -255,6 +256,7 @@ auth_session_ttl_hours = AUTH_SESSION_TTL_HOURS
 auth_cookie_secure = AUTH_COOKIE_SECURE
 auth_db_path = AUTH_DB_PATH
 assessment_db_path = ASSESSMENT_DB_PATH
+app_db_path = APP_DB_PATH
 cors_allow_origins = CORS_ALLOW_ORIGINS
 
 __all__ = [
@@ -365,6 +367,7 @@ __all__ = [
     "auth_cookie_secure",
     "auth_db_path",
     "assessment_db_path",
+    "app_db_path",
     "cors_allow_origins",
     *_SETTING_NAMES,
 ]

@@ -41,6 +41,7 @@ def build_strategy(
     matched_concepts: list[Any],
     learner_state: LearnerStateSnapshot,
     question: str,
+    personalization_context: Any | None = None,
 ) -> TeachingStrategy:
     """Build a focused teaching strategy for the current question."""
     if not matched_concepts:
@@ -70,6 +71,8 @@ def build_strategy(
         for item in weak_spots
         if item.concept_id in target_ids or item.display_name in related_name_set
     ]
+    if personalization_context is not None and personalization_context.interaction_episodes:
+        relevant_weak = _dedupe_keep_order(relevant_weak + ["需要回应此前的具体困惑"])
 
     return TeachingStrategy(
         target_concepts=_dedupe_keep_order(target_ids),

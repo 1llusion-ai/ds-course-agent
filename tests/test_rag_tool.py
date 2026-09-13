@@ -67,12 +67,16 @@ class TestCourseRAGTool:
         )
         mock_get_service.return_value = mock_service
 
+        token = begin_query_trace({"entrypoint": "course_evidence_test"})
         evidence = retrieve_course_evidence("复习逻辑回归")
+        trace = end_query_trace(token)
 
         assert evidence.context == "逻辑回归证据"
         assert evidence.documents == (document,)
         assert evidence.has_results is True
         mock_service.answer_with_context.assert_not_called()
+        result_event = next(event for event in trace["events"] if event["stage"] == "course_evidence.result")
+        assert result_event["data"] == {"source_count": 1, "has_results": True}
 
     @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_tool_returns_error_message_on_exception(self, mock_get_service):

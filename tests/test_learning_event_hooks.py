@@ -31,7 +31,7 @@ def test_learning_event_hook_records_concept_and_clarification():
     recorded = []
     matched = [MatchedConcept("svm", "支持向量机", "第6章", "exact", 0.95)]
 
-    hook.record_learning_events(
+    recorded_count = hook.record_learning_events(
         question="再解释一下 SVM，我还是不懂。",
         session_id="session-1",
         student_id="student-1",
@@ -47,6 +47,7 @@ def test_learning_event_hook_records_concept_and_clarification():
     ]
     assert recorded[0].payload["concept_id"] == "svm"
     assert recorded[1].payload["parent_event_id"] == recorded[0].event_id
+    assert recorded_count == 2
 
 
 def test_learning_event_hook_records_mastery_for_recent_contextual_concept():
@@ -65,7 +66,7 @@ def test_learning_event_hook_records_mastery_for_recent_contextual_concept():
     memory = SimpleNamespace(load_events=lambda _student_id: [concept_event])
     recorded = []
 
-    hook.record_learning_events(
+    recorded_count = hook.record_learning_events(
         question="懂了，谢谢",
         session_id="session-1",
         student_id="student-1",
@@ -79,6 +80,7 @@ def test_learning_event_hook_records_mastery_for_recent_contextual_concept():
     assert recorded[0].event_type == EventType.MASTERY_SIGNAL
     assert recorded[0].payload["concept_id"] == "decision_tree"
     assert recorded[0].payload["source_event_id"] == concept_event.event_id
+    assert recorded_count == 1
 
 
 def test_learning_event_hook_on_session_end_aggregates_profile():

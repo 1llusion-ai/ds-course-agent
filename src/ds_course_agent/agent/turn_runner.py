@@ -32,6 +32,7 @@ from ds_course_agent.agent.route_executor import (
 )
 from ds_course_agent.agent.routing import ExecutionMode, RouteExecutionResult, RouteState
 from ds_course_agent.runtime.model_stream import iter_text_chunks
+from ds_course_agent.shared.query_trace import trace_step
 from ds_course_agent.tools._shared import _track_retrieval, begin_retrieval_trace, end_retrieval_trace
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,8 @@ class TurnAgent(RouteAgent, Protocol):
 
     def _tool_progress_label(self, tool_name: str, default: str) -> str: ...
 
+    def _persist_successful_learning_turn(self, state: RouteState, result: RouteExecutionResult) -> None: ...
+
 
 def iter_turn_events(
     agent: TurnAgent,
@@ -71,6 +74,8 @@ def iter_turn_events(
     student_id: str | None = None,
     web_search: bool = False,
     stream: bool,
+    manage_history: bool = True,
+    persist_completed_assistant: bool = False,
 ) -> Iterator[TurnEvent]:
     """Execute one turn and emit its complete typed lifecycle."""
 
@@ -106,13 +111,24 @@ def iter_turn_events(
         confidence=decision.confidence,
         reasons=tuple(decision.reasons),
     )
-    route_state.history.add_messages([HumanMessage(content=user_input)])
+    if manage_history:
+        route_state.history.add_messages([HumanMessage(content=user_input)])
 
     if not stream:
         result = execute_route(agent, route_state, stream=False)
         if result.content:
+            trace_step(
+                "turn.first_token",
+                stream=False,
+                chunk_chars=len(result.content),
+                execution_mode=decision.execution_mode.value,
+            )
             yield MessageDeltaEvent(stream_id=stream_id, delta=result.content)
-        route_state.history.add_messages([AIMessage(content=result.content)])
+        if manage_history or persist_completed_assistant:
+            route_state.history.add_messages([AIMessage(content=result.content)])
+        persist_turn = getattr(agent, "_persist_successful_learning_turn", None)
+        if callable(persist_turn):
+            persist_turn(route_state, result)
         _schedule_session_practice(agent, route_state, result)
         yield TurnEndEvent(stream_id=stream_id, result=result)
         return
@@ -128,6 +144,20 @@ def iter_turn_events(
     retrieval_end_emitted = False
     route_result: RouteExecutionResult | None = None
     degraded = False
+    first_token_traced = False
+
+    def trace_first_token(text: str) -> None:
+        nonlocal first_token_traced
+        if first_token_traced or not text.strip():
+            return
+        first_token_traced = True
+        trace_step(
+            "turn.first_token",
+            stream=True,
+            chunk_chars=len(text),
+            execution_mode=decision.execution_mode.value,
+        )
+
     retrieval_token = begin_retrieval_trace()
     try:
         for item in iter_route_response(agent, route_state):
@@ -157,6 +187,7 @@ def iter_turn_events(
             if not text:
                 continue
             parts.append(text)
+            trace_first_token(text)
             yield MessageDeltaEvent(stream_id=stream_id, delta=text)
     except Exception as exc:
         yield TurnErrorEvent(
@@ -174,6 +205,7 @@ def iter_turn_events(
         content = route_result.content
         if not "".join(parts).strip():
             for chunk in iter_text_chunks(content):
+                trace_first_token(chunk)
                 yield MessageDeltaEvent(stream_id=stream_id, delta=chunk)
         result = merge_route_result_facts(
             route_result,
@@ -194,7 +226,11 @@ def iter_turn_events(
             degraded=result.degraded,
         )
 
-    route_state.history.add_messages([AIMessage(content=result.content)])
+    if manage_history or persist_completed_assistant:
+        route_state.history.add_messages([AIMessage(content=result.content)])
+    persist_turn = getattr(agent, "_persist_successful_learning_turn", None)
+    if callable(persist_turn):
+        persist_turn(route_state, result)
     _schedule_session_practice(agent, route_state, result)
     yield TurnEndEvent(stream_id=stream_id, result=result)
 

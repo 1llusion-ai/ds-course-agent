@@ -203,22 +203,18 @@ def test_status_filter_is_typed_and_rejects_unknown_values(client: TestClient) -
     assert invalid.status_code == 422
 
 
-def test_real_submission_dependency_updates_profile_without_duplicate_evidence(client, monkeypatch, tmp_path) -> None:
+def test_real_submission_dependency_publishes_sqlite_evidence_without_duplicates(client, monkeypatch, tmp_path) -> None:
     from tests.test_session_learning_loop import FixtureGenerator, mention
 
-    import ds_course_agent.api.routers.profile as profile_module
     import ds_course_agent.shared.config as config
-    import ds_course_agent.teaching.memory_core as memory_module
     from ds_course_agent.assessment.application import AssessmentApplicationService
     from ds_course_agent.assessment.models import GenerateQuestionsRequest
     from ds_course_agent.assessment.repository import AssessmentRepository
+    from ds_course_agent.teaching.interaction_episode_repository import SQLiteInteractionEpisodeRepository
+    from ds_course_agent.teaching.learning_event_repository import SQLiteLearningEventRepository
     from ds_course_agent.teaching.learning_events import EventType
 
-    memory = memory_module.MemoryCore(str(tmp_path / "history"))
-    monkeypatch.setattr(memory_module, "_memory_core", memory)
-    monkeypatch.setattr(profile_module, "get_memory", lambda: memory)
     monkeypatch.setattr(config, "ASSESSMENT_DB_PATH", str(tmp_path / "assessments.db"))
-    mention(memory, "overfitting")
     service = AssessmentApplicationService(AssessmentRepository(), FixtureGenerator())
     summary = service.assign(
         "student", GenerateQuestionsRequest(target_kc_id="overfitting", count=2), session_id="session"
@@ -237,10 +233,14 @@ def test_real_submission_dependency_updates_profile_without_duplicate_evidence(c
     assert response.json()["session_id"] == "session"
     repeat = client.post(f"/api/assessments/{summary.id}/submit", headers=headers, json=payload)
     assert repeat.json() == response.json()
-    profile = client.get("/api/profile/detail", headers=headers).json()
-    assert profile["practice"][0]["concept_id"] == "overfitting"
-    assert profile["practice"][0]["answered_count"] == 2
-    assert profile["practice"][0]["level"] == "needs_practice"
-    assert len(memory.load_events("student", [EventType.QUESTION_ANSWERED])) == 2
+    events = SQLiteLearningEventRepository(config.APP_DB_PATH).list_for_student(
+        "student", event_types=(EventType.QUESTION_ANSWERED,)
+    )
+    episode = SQLiteInteractionEpisodeRepository(config.APP_DB_PATH).get_for_turn(
+        "student", "session", f"assessment:{summary.id}"
+    )
+    assert len(events) == 2
+    assert episode is not None
+    assert episode.outcome.value == "incorrect_assessment"
     other = client.get(f"/api/assessments/{summary.id}/result", headers={"x-test-student-id": "other"})
     assert other.status_code == 404

@@ -10,7 +10,7 @@ from ds_course_agent.agent.routing import (
 
 
 class _FakeService:
-    def chat_with_history(self, user_input: str, session_id: str, student_id: str):
+    def chat_with_history(self, user_input: str, session_id: str, student_id: str, **_kwargs):
         assert user_input == "hello"
         assert session_id == "sess_1"
         assert student_id == "stu_1"
@@ -24,7 +24,7 @@ class _FakeService:
             used_retrieval=True,
         )
 
-    def stream_chat_with_history(self, user_input: str, session_id: str, student_id: str):
+    def stream_chat_with_history(self, user_input: str, session_id: str, student_id: str, **_kwargs):
         assert user_input == "hello"
         assert session_id == "sess_1"
         assert student_id == "stu_1"
@@ -62,7 +62,7 @@ def test_core_bridge_chat_includes_query_trace(monkeypatch):
 
 def test_core_bridge_chat_trace_records_errors(monkeypatch):
     class _BadService:
-        def chat_with_history(self, user_input: str, session_id: str, student_id: str):
+        def chat_with_history(self, user_input: str, session_id: str, student_id: str, **_kwargs):
             raise ValueError("bad service")
 
     monkeypatch.setattr(core_bridge, "get_agent_service", lambda: _BadService())

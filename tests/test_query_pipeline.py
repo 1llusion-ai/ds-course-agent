@@ -261,6 +261,7 @@ class TestFastRouter:
             policy=RetrievalPolicy.REQUIRED,
         )
         assert decision.enrichment.load_learner_state is True
+        assert decision.enrichment.load_learner_memory is True
         assert semantic.calls == []
 
     @pytest.mark.parametrize(
@@ -493,6 +494,39 @@ def _make_pipeline_service(monkeypatch, semantic: _SemanticRouterStub):
 
 
 class TestQueryPipelineEnrichment:
+    def test_personalized_explanation_attaches_empty_typed_memory_context(self, monkeypatch, tmp_path):
+        import ds_course_agent.shared.config as config
+
+        monkeypatch.setattr(config, "APP_DB_PATH", str(tmp_path / "app.db"))
+        semantic = _SemanticRouterStub()
+        service = _make_pipeline_service(monkeypatch, semantic)
+        match = SimpleNamespace(
+            concept_id="overfitting",
+            display_name="过拟合",
+            chapter="模型评估",
+            method="exact_alias",
+            score=0.95,
+            routing_eligible=True,
+            event_eligible=True,
+        )
+        monkeypatch.setattr(service, "_select_skill_candidates", lambda question: {"personalized-explanation"})
+        monkeypatch.setattr(
+            "ds_course_agent.agent.service.map_question_to_concepts",
+            lambda question, top_k=3: [match],
+        )
+
+        state = service._prepare_query_route(
+            "结合我之前的学习情况解释一下过拟合",
+            "session",
+            "student",
+        )
+
+        assert state.decision.intent is RouteIntent.PERSONALIZED_EXPLANATION
+        assert state.decision.enrichment.load_learner_memory is True
+        assert state.personalization_context is not None
+        assert state.personalization_context.target_concept_ids == ("overfitting",)
+        assert state.personalization_context.interaction_episodes == ()
+
     def test_course_service_skips_semantic_router_concepts_and_profile(self, monkeypatch):
         semantic = _SemanticRouterStub()
         service = _make_pipeline_service(monkeypatch, semantic)
@@ -612,7 +646,8 @@ class TestQueryPipelineEnrichment:
         state = service._prepare_query_route("什么是过拟合？", "session", "student")
 
         assert state.decision.execution_mode is ExecutionMode.GROUNDED_GENERATION
-        assert [item.concept_id for item in recorded] == ["overfitting"]
+        assert recorded == []
+        assert state.pending_learning_event is True
 
 
 class TestPostprocessorAndRewrite:

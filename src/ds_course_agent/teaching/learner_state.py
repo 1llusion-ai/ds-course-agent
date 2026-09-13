@@ -170,6 +170,49 @@ class RuleBasedLearnerStateProvider:
         return learner_state_from_profile(memory.get_profile(student_id))
 
 
+class SQLiteProfileLearnerStateProvider:
+    """Read learner state from event-sourced SQLite snapshots.
+
+    The fallback is only used when a student has no durable SQLite facts yet,
+    which keeps first-run and explicit legacy migration inspection usable.
+    """
+
+    def __init__(
+        self,
+        snapshot_repository=None,
+        fallback: LearnerStateProvider | None = None,
+    ) -> None:
+        if snapshot_repository is None:
+            from ds_course_agent.teaching.profile_snapshot_repository import SQLiteProfileSnapshotRepository
+
+            snapshot_repository = SQLiteProfileSnapshotRepository()
+        self._snapshots = snapshot_repository
+        self._fallback = fallback or RuleBasedLearnerStateProvider(memory_factory=get_memory_core)
+
+    def get_state(
+        self,
+        student_id: str,
+        concept_ids: Sequence[str] = (),
+    ) -> LearnerStateSnapshot:
+        del concept_ids
+        if student_id not in self._snapshots.list_student_ids():
+            return self._fallback.get_state(student_id)
+        snapshot = self._snapshots.project(student_id)
+        state = learner_state_from_profile(snapshot.profile)
+        return LearnerStateSnapshot(
+            student_id=state.student_id,
+            recent_concepts=state.recent_concepts,
+            progress=state.progress,
+            pending_weak_spots=state.pending_weak_spots,
+            weak_spot_candidates=state.weak_spot_candidates,
+            resolved_weak_spots=state.resolved_weak_spots,
+            stats=state.stats,
+            provider="sqlite_profile_snapshot",
+            model_version=f"snapshot-v{snapshot.version}",
+            practice=state.practice,
+        )
+
+
 def learner_state_from_profile(profile: StudentProfile) -> LearnerStateSnapshot:
     """Convert a persisted rule profile without inventing mastery estimates."""
 
@@ -233,6 +276,7 @@ __all__ = [
     "LearnerStats",
     "LearnerWeakSpot",
     "RuleBasedLearnerStateProvider",
+    "SQLiteProfileLearnerStateProvider",
     "learner_state_from_profile",
     "rank_active_weak_spots",
     "rank_recent_concepts",

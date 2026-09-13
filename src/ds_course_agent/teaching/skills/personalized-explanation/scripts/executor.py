@@ -14,6 +14,7 @@ if str(project_root) not in sys.path:
 
 from ds_course_agent.runtime.model_stream import extract_model_text, iter_text_chunks
 from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
+from ds_course_agent.teaching.personalization import PersonalizationContext
 from ds_course_agent.tools.course_rag import course_rag_tool, retrieve_course_evidence
 
 
@@ -70,6 +71,7 @@ class PersonalizedExplanationSkill:
         question: str,
         learner_state: LearnerStateSnapshot,
         matched_concepts: Sequence[Any],
+        personalization_context: PersonalizationContext | None = None,
     ) -> str:
         matched_concepts = list(matched_concepts)
 
@@ -79,13 +81,14 @@ class PersonalizedExplanationSkill:
         if not matched_concepts:
             return self._fallback(question)
 
-        strategy = build_strategy(matched_concepts, learner_state, question)
+        strategy = build_strategy(matched_concepts, learner_state, question, personalization_context)
         evidence = retrieve_course_evidence(question)
         prompt = self._build_prompt(
             question=question,
             matched_concepts=matched_concepts,
             strategy=strategy,
             knowledge=evidence.context if evidence.has_results else "",
+            personalization_context=personalization_context,
         )
         from ds_course_agent.shared.query_trace import trace_span
 
@@ -99,6 +102,7 @@ class PersonalizedExplanationSkill:
         question: str,
         learner_state: LearnerStateSnapshot,
         matched_concepts: Sequence[Any],
+        personalization_context: PersonalizationContext | None = None,
     ):
         """Stream a personalized explanation while preserving its teaching context."""
         matched_concepts = list(matched_concepts)
@@ -110,13 +114,14 @@ class PersonalizedExplanationSkill:
             yield from iter_text_chunks(self._fallback(question))
             return
 
-        strategy = build_strategy(matched_concepts, learner_state, question)
+        strategy = build_strategy(matched_concepts, learner_state, question, personalization_context)
         evidence = retrieve_course_evidence(question)
         prompt = self._build_prompt(
             question=question,
             matched_concepts=matched_concepts,
             strategy=strategy,
             knowledge=evidence.context if evidence.has_results else "",
+            personalization_context=personalization_context,
         )
         scaffold = self._build_scaffold(strategy, matched_concepts)
         if scaffold:
@@ -180,6 +185,7 @@ class PersonalizedExplanationSkill:
         matched_concepts: list,
         strategy: TeachingStrategy,
         knowledge: str,
+        personalization_context: PersonalizationContext | None = None,
     ) -> str:
         concept_info = "\n".join(
             f"- {item.display_name}（匹配方式：{item.method}，分数：{item.score:.2f}）" for item in matched_concepts
@@ -187,6 +193,17 @@ class PersonalizedExplanationSkill:
         relevant_known = "、".join(strategy.relevant_known_concepts) or "无"
         relevant_weak = "、".join(strategy.relevant_weak_spots) or "无"
         strategy_desc = strategy_to_string(strategy, matched_concepts)
+        memory_evidence = ""
+        if personalization_context is not None:
+            assessment_lines = [
+                f"- assessment:{item.concept_id}:{'correct' if item.is_correct else 'incorrect'}"
+                for item in personalization_context.assessment_evidence[:2]
+            ]
+            episode_lines = [
+                f"- {episode.outcome.value}: {episode.learner_question[:120]}"
+                for episode in personalization_context.interaction_episodes[:3]
+            ]
+            memory_evidence = "\n".join(assessment_lines + episode_lines) or "无具体历史交互证据"
         has_valid_knowledge = bool(knowledge and knowledge != "无相关资料" and len(knowledge) > 50)
 
         if has_valid_knowledge:
@@ -201,6 +218,8 @@ class PersonalizedExplanationSkill:
 只在强相关时可用的历史信息：
 - 强相关已学知识点：{relevant_known}
 - 强相关薄弱点：{relevant_weak}
+- 具体历史交互证据：
+{memory_evidence}
 
 教学策略：
 {strategy_desc}

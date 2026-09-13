@@ -790,6 +790,17 @@ class KnowledgeMapper:
             if (related := self.graph.get_concept(related_id)) is not None
         ]
 
+    def get_related_concept_ids(self, concept_id: str) -> list[str]:
+        """Return validated canonical IDs directly related to one concept."""
+        concept = self.graph.get_concept(concept_id)
+        if not concept:
+            return []
+        return [
+            related_id
+            for related_id in concept.get("related_concepts", [])
+            if self.graph.get_concept(related_id) is not None
+        ]
+
 
 # 全局单例
 _knowledge_mapper: KnowledgeMapper | None = None

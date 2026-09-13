@@ -37,7 +37,7 @@ async def send_message(data: ChatRequest, student_id: str) -> ChatResponse:
     async with chat_sessions.session_operation_guard(data.session_id):
         is_first_message = chat_sessions.message_count(data.session_id) == 0
         user_msg = ChatMessage(role="user", content=data.message)
-        appended_user_item = chat_sessions.append_message_locked(data.session_id, user_msg, save=False)
+        appended_user_item = chat_sessions.append_message_locked(data.session_id, user_msg)
         chat_sessions.schedule_title_generation(
             data.session_id,
             data.message,
@@ -55,8 +55,7 @@ async def send_message(data: ChatRequest, student_id: str) -> ChatResponse:
             assistant_result = await run_in_threadpool(chat_with_history, **assistant_kwargs)
         except Exception as exc:
             logger.error("Agent处理失败: %s", exc, exc_info=True)
-            chat_sessions.remove_message_by_identity(data.session_id, appended_user_item, save=False)
-            chat_sessions.save_state()
+            chat_sessions.remove_message_by_identity(data.session_id, appended_user_item)
             raise HTTPException(
                 status_code=500,
                 detail={
@@ -96,13 +95,8 @@ async def send_message(data: ChatRequest, student_id: str) -> ChatResponse:
             if assistant_payload
             else None,
         )
-        chat_sessions.append_message_locked(data.session_id, assistant_msg, save=False)
-        chat_sessions.update_session_metadata(
-            data.session_id,
-            assistant_msg.timestamp.isoformat(),
-            save=False,
-        )
-        chat_sessions.save_state()
+        if not chat_sessions.replace_latest_generated_assistant(data.session_id, assistant_msg):
+            chat_sessions.append_message_locked(data.session_id, assistant_msg)
         return ChatResponse(message=assistant_msg, session_id=data.session_id)
 
 
@@ -141,7 +135,7 @@ async def _stream_message_events(
 
             is_first_message = chat_sessions.message_count(session_id) == 0
             user_message = ChatMessage(role="user", content=data.message)
-            chat_sessions.append_message_locked(session_id, user_message, save=False)
+            chat_sessions.append_message_locked(session_id, user_message)
             chat_sessions.schedule_title_generation(
                 session_id,
                 data.message,

@@ -249,7 +249,10 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
                     matched_concepts[0].concept_id,
                     matched_concepts[0].method,
                 )
-            return build_route_result(route_state, invoke_skill(question, learner_state, matched_concepts))
+            skill_args = (question, learner_state, matched_concepts)
+            if intent is RouteIntent.PERSONALIZED_EXPLANATION and route_state.personalization_context is not None:
+                skill_args += (route_state.personalization_context,)
+            return build_route_result(route_state, invoke_skill(*skill_args))
         return build_route_result(route_state, invoke_skill(question, student_id, session_id))
 
     def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str | TurnEvent]:
@@ -273,7 +276,16 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
         matched_concepts = route_state.matched_concepts or []
         trace_step("agent.branch", branch="explanation_skill")
         streamed_parts: list[str] = []
-        for chunk in stream_skill(question, learner_state, matched_concepts):
+        import inspect
+
+        stream_args = (question, learner_state, matched_concepts)
+        parameters = inspect.signature(stream_skill).parameters.values()
+        accepts_context = (
+            any(parameter.kind is parameter.VAR_POSITIONAL for parameter in parameters) or len(parameters) >= 4
+        )
+        if accepts_context:
+            stream_args += (route_state.personalization_context,)
+        for chunk in stream_skill(*stream_args):
             text = str(chunk or "")
             if text:
                 streamed_parts.append(text)

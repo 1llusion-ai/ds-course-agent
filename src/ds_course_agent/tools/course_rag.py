@@ -87,6 +87,7 @@ def retrieve_course_evidence(question: str) -> CourseRagEvidence:
     with trace_span("tool.course_rag.retrieve"):
         result = service.retrieve(question)
     sources = build_sources_from_documents(result.documents)
+    record_course_evidence_trace(source_count=len(sources), has_results=result.has_results)
     _track_retrieval(sources, attempted=True, used=result.has_results)
     return CourseRagEvidence(
         context=result.formatted_context,
@@ -95,6 +96,17 @@ def retrieve_course_evidence(question: str) -> CourseRagEvidence:
         sources=tuple(sources),
         retrieval_query=result.retrieval_query,
         term_resolution=result.term_resolution,
+    )
+
+
+def record_course_evidence_trace(*, source_count: int, has_results: bool) -> None:
+    """Record bounded course-retrieval observability without evidence content."""
+    from ds_course_agent.shared.query_trace import trace_step
+
+    trace_step(
+        "course_evidence.result",
+        source_count=source_count,
+        has_results=has_results,
     )
 
 
@@ -504,6 +516,7 @@ __all__ = [
     "trace_answer_degraded",
     "clear_rag_answer_cache",
     "retrieve_course_evidence",
+    "record_course_evidence_trace",
     "course_rag_tool",
     "_get_absolute_page",
     "_track_retrieval",

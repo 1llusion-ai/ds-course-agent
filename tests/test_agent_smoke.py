@@ -458,7 +458,7 @@ class TestChatWithHistory:
     @patch("ds_course_agent.shared.history.get_history")
     @patch("ds_course_agent.agent.service.map_question_to_concepts", return_value=[])
     @patch("ds_course_agent.agent.service.get_memory_core")
-    def test_chat_with_history_calls_file_store(self, mock_get_memory_core, _mock_map, mock_get_history):
+    def test_chat_with_history_calls_persistent_store(self, mock_get_memory_core, _mock_map, mock_get_history):
         from ds_course_agent.agent.service import AgentService
 
         mock_history = MagicMock()
@@ -484,7 +484,7 @@ class TestChatWithHistory:
         assert result.family.value == "learning"
         assert result.intent.value == "code_example"
         assert result.execution_mode.value == "direct_model"
-        mock_get_history.assert_called_once_with("test_session")
+        mock_get_history.assert_called_once_with("test_session", student_id="test_session")
         assert mock_history.add_messages.call_count == 2
         assert isinstance(mock_history.add_messages.call_args_list[0][0][0][0], HumanMessage)
         assert mock_history.add_messages.call_args_list[0][0][0][0].content == "请用 Python 演示交叉验证"
