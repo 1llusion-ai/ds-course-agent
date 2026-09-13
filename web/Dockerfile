@@ -5,12 +5,12 @@ WORKDIR /app
 
 # 复制package文件并安装依赖
 COPY package*.json ./
-ENV NODE_OPTIONS="--max-old-space-size=512"
+ENV NODE_OPTIONS="--max-old-space-size=768"
 RUN npm ci
 
 # 复制源代码并构建
 COPY . .
-RUN NODE_OPTIONS="--max-old-space-size=512" npm run build
+RUN NODE_OPTIONS="--max-old-space-size=768" npm run build
 
 # 生产阶段
 FROM nginx:alpine
