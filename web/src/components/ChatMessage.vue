@@ -910,59 +910,100 @@ onBeforeUnmount(() => {
 }
 
 .markdown-body :deep(.code-block) {
-  margin: 14px 0;
+  margin: 16px 0 18px;
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 10px;
-  background: #f8fafc;
-  box-shadow: none;
+  border: 1px solid rgba(203, 213, 225, 0.88);
+  border-radius: 8px;
+  background: #fbfcfd;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.045);
 }
 
 .markdown-body :deep(.code-block__header) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 9px 70px 0 13px;
-  border-bottom: 0;
-  background: transparent;
+  min-height: 42px;
+  gap: 12px;
+  padding: 0 10px 0 13px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+  background: #f6f7f9;
 }
 
-.markdown-body :deep(.code-block__footer) {
-  display: flex;
-  justify-content: flex-end;
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  padding: 0;
-  border-top: 0;
-  background: transparent;
+.markdown-body :deep(.code-block__title),
+.markdown-body :deep(.code-block__actions) {
+  display: inline-flex;
+  align-items: center;
+}
+
+.markdown-body :deep(.code-block__title) {
+  min-width: 0;
+  gap: 8px;
+}
+
+.markdown-body :deep(.code-block__mark) {
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
 }
 
 .markdown-body :deep(.code-block__lang) {
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  overflow: hidden;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .markdown-body :deep(.code-copy) {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 24px;
-  padding: 3px 7px;
-  color: #64748b;
-  font-size: 11px;
+  justify-content: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 5px 8px;
+  color: #475569;
+  font-size: 12px;
   font-weight: 650;
   line-height: 1;
   cursor: pointer;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 6px;
   transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+
+.markdown-body :deep(.copy-icon) {
+  position: relative;
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+}
+
+.markdown-body :deep(.copy-icon::before),
+.markdown-body :deep(.copy-icon::after) {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  content: '';
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+}
+
+.markdown-body :deep(.copy-icon::before) {
+  top: 1px;
+  left: 1px;
+}
+
+.markdown-body :deep(.copy-icon::after) {
+  right: 1px;
+  bottom: 1px;
+  background: #f6f7f9;
 }
 
 .markdown-body :deep(.code-copy:hover) {
@@ -985,7 +1026,7 @@ onBeforeUnmount(() => {
 
 .markdown-body :deep(.code-block__pre) {
   margin: 0;
-  padding: 10px 14px 14px;
+  padding: 16px 17px 18px;
   overflow-x: auto;
   color: #0f172a;
   background: transparent;
@@ -1001,7 +1042,8 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 0;
   font-size: 13px;
-  line-height: 1.65;
+  line-height: 1.7;
+  tab-size: 4;
   white-space: pre;
 }
 
@@ -1051,29 +1093,71 @@ onBeforeUnmount(() => {
   border-radius: 0 12px 12px 0;
 }
 
-.markdown-body :deep(table) {
-  display: block;
+.markdown-body :deep(.markdown-table-wrap) {
   width: 100%;
-  margin: 12px 0;
+  margin: 16px 0 18px;
   overflow-x: auto;
-  border-collapse: collapse;
+  background: #ffffff;
+  border: 1px solid rgba(203, 213, 225, 0.88);
+  border-radius: 10px;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.045);
+  scrollbar-width: thin;
+}
+
+.markdown-body :deep(table) {
+  width: 100%;
+  min-width: 560px;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #334155;
   font-size: 13px;
+  line-height: 1.5;
 }
 
 .markdown-body :deep(th),
 .markdown-body :deep(td) {
-  padding: 8px 10px;
-  border: 1px solid rgba(226, 232, 240, 0.95);
+  padding: 11px 14px;
+  text-align: left;
+  vertical-align: middle;
+  border: 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .markdown-body :deep(th) {
   color: #0f172a;
-  background: #f8fafc;
-  font-weight: 800;
+  background: #f6f7f9;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
 }
 
-.markdown-body :deep(tr:nth-child(even) td) {
-  background: rgba(248, 250, 252, 0.58);
+.markdown-body :deep(td) {
+  background: #ffffff;
+  transition: background-color 0.14s ease;
+}
+
+.markdown-body :deep(th[align='center']),
+.markdown-body :deep(td[align='center']) {
+  text-align: center;
+}
+
+.markdown-body :deep(th[align='right']),
+.markdown-body :deep(td[align='right']) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.markdown-body :deep(tbody tr:nth-child(even) td) {
+  background: #fafbfc;
+}
+
+.markdown-body :deep(tbody tr:hover td) {
+  background: #f2f5f8;
+}
+
+.markdown-body :deep(tbody tr:last-child td) {
+  border-bottom: 0;
 }
 
 .markdown-body :deep(hr) {
@@ -1466,9 +1550,8 @@ onBeforeUnmount(() => {
     max-width: calc(100% - 52px);
   }
 
-  .markdown-body :deep(.code-block__header) {
-    align-items: flex-start;
-    flex-direction: column;
+  .markdown-body :deep(.code-block__pre) {
+    padding: 14px 15px 16px;
   }
 }
 </style>

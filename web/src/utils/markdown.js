@@ -12,9 +12,10 @@ const MARKDOWN_ATTRIBUTES = [
   'data-language', 'start', 'colspan', 'rowspan', 'align'
 ]
 const CODE_CLASSES = new Set([
-  'code-block', 'code-block__header', 'code-block__lang', 'code-block__pre',
-  'code-block__footer', 'code-copy', 'copy-icon', 'copy-label', 'token-string',
-  'token-comment', 'token-keyword', 'token-function', 'token-number'
+  'code-block', 'code-block__header', 'code-block__title', 'code-block__mark',
+  'code-block__lang', 'code-block__actions', 'code-block__pre', 'code-copy',
+  'copy-icon', 'copy-label', 'token-string', 'token-comment', 'token-keyword',
+  'token-function', 'token-number', 'markdown-table-wrap'
 ])
 let markdownPurifier
 
@@ -197,14 +198,17 @@ function createRenderer() {
     return [
       `<div class="code-block" data-language="${escapeHtml(label)}">`,
       '<div class="code-block__header">',
+      '<span class="code-block__title">',
+      '<span class="code-block__mark" aria-hidden="true">&lt;/&gt;</span>',
       `<span class="code-block__lang">${escapeHtml(label)}</span>`,
+      '</span>',
+      '<span class="code-block__actions">',
+      '<button type="button" class="code-copy" aria-label="复制代码">',
+      '<span class="copy-icon" aria-hidden="true"></span><span class="copy-label">复制</span>',
+      '</button>',
+      '</span>',
       '</div>',
       `<pre class="code-block__pre language-${className}"><code class="language-${className}">${highlighted}</code></pre>`,
-      '<div class="code-block__footer">',
-      '<button type="button" class="code-copy" aria-label="复制代码">',
-      '<span class="copy-icon" aria-hidden="true">⧉</span><span class="copy-label">复制</span>',
-      '</button>',
-      '</div>',
       '</div>\n'
     ].join('')
   }
@@ -219,6 +223,28 @@ function createRenderer() {
     const safeHref = escapeHtml(href || '')
     const safeTitle = title ? ` title="${escapeHtml(title)}"` : ''
     return `<a href="${safeHref}"${safeTitle} target="_blank" rel="noopener noreferrer">${text}</a>`
+  }
+
+  renderer.table = function table(token) {
+    let header = ''
+    for (const cell of token.header) header += this.tablecell(cell)
+    const head = this.tablerow({ text: header })
+
+    let body = ''
+    for (const row of token.rows) {
+      let cells = ''
+      for (const cell of row) cells += this.tablecell(cell)
+      body += this.tablerow({ text: cells })
+    }
+
+    return [
+      '<div class="markdown-table-wrap">',
+      '<table>',
+      `<thead>${head}</thead>`,
+      body ? `<tbody>${body}</tbody>` : '',
+      '</table>',
+      '</div>\n'
+    ].join('')
   }
 
   return renderer

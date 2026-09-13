@@ -62,6 +62,10 @@ test('course math, syntax-highlighted code, tables and safe citations survive cl
       mathLayout: root.querySelectorAll('.katex [style]').length,
       code: root.querySelector('code')?.textContent,
       copy: root.querySelector('.code-copy')?.getAttribute('type'),
+      codeTitle: root.querySelector('.code-block__lang')?.textContent,
+      codeMark: root.querySelector('.code-block__mark')?.textContent,
+      codeFooter: root.querySelectorAll('.code-block__footer').length,
+      tableWrap: root.querySelectorAll('.markdown-table-wrap').length,
       table: root.querySelectorAll('table tr').length,
       href: root.querySelector('a')?.getAttribute('href'),
       rel: root.querySelector('a')?.getAttribute('rel'),
@@ -73,10 +77,84 @@ test('course math, syntax-highlighted code, tables and safe citations survive cl
   expect(result.mathLayout).toBeGreaterThan(0)
   expect(result.code).toContain('<script>hello</script>')
   expect(result.copy).toBe('button')
+  expect(result.codeTitle).toBe('Python')
+  expect(result.codeMark).toBe('</>')
+  expect(result.codeFooter).toBe(0)
+  expect(result.tableWrap).toBe(1)
   expect(result.table).toBe(2)
   expect(result.href).toBe('https://example.edu/course')
   expect(result.rel).toBe('noopener noreferrer')
   expect(result.scriptCount).toBe(0)
+})
+
+test('chat tables use a readable framed layout and scroll within narrow messages', async ({ page }) => {
+  await page.setViewportSize({ width: 420, height: 800 })
+  const result = await page.evaluate(async () => {
+    const { createApp, h, nextTick } = await import('/@id/vue')
+    const { default: ChatMessage } = await import('/src/components/ChatMessage.vue')
+    const host = document.createElement('div')
+    host.style.width = '360px'
+    document.body.append(host)
+
+    const message = {
+      role: 'assistant',
+      content: [
+        '| 学习指标 | 当前表现 | 建议动作 |',
+        '| --- | ---: | --- |',
+        '| 概念掌握 | 82% | 复习薄弱知识点 |',
+        '| 练习正确率 | 76% | 完成错题回顾 |',
+        '',
+        '```python',
+        'numbers = random.sample(range(1, 101), 5)',
+        'print(numbers)',
+        '```'
+      ].join('\n')
+    }
+    const app = createApp({ render: () => h(ChatMessage, { message }) })
+    app.mount(host)
+    await nextTick()
+
+    const wrap = host.querySelector('.markdown-table-wrap')
+    const header = host.querySelector('th')
+    const rightAlignedCell = host.querySelector('tbody td[align="right"]')
+    const codeBlock = host.querySelector('.code-block')
+    const codeHeader = host.querySelector('.code-block__header')
+    const copyButton = host.querySelector('.code-copy')
+    const wrapStyle = getComputedStyle(wrap)
+    const headerStyle = getComputedStyle(header)
+    const codeBlockStyle = getComputedStyle(codeBlock)
+    const codeHeaderStyle = getComputedStyle(codeHeader)
+    const copyButtonStyle = getComputedStyle(copyButton)
+    const result = {
+      borderRadius: wrapStyle.borderRadius,
+      borderStyle: wrapStyle.borderStyle,
+      headerBackground: headerStyle.backgroundColor,
+      rightAligned: getComputedStyle(rightAlignedCell).textAlign,
+      scrollable: wrap.scrollWidth > wrap.clientWidth,
+      codeRadius: codeBlockStyle.borderRadius,
+      codeHeaderDisplay: codeHeaderStyle.display,
+      codeHeaderDirection: codeHeaderStyle.flexDirection,
+      copyButtonHeight: copyButtonStyle.minHeight,
+      codeFooter: host.querySelectorAll('.code-block__footer').length,
+      pageFitsViewport: document.documentElement.scrollWidth <= document.documentElement.clientWidth
+    }
+
+    app.unmount()
+    host.remove()
+    return result
+  })
+
+  expect(result.borderRadius).toBe('10px')
+  expect(result.borderStyle).toBe('solid')
+  expect(result.headerBackground).not.toBe('rgba(0, 0, 0, 0)')
+  expect(result.rightAligned).toBe('right')
+  expect(result.scrollable).toBe(true)
+  expect(result.codeRadius).toBe('8px')
+  expect(result.codeHeaderDisplay).toBe('flex')
+  expect(result.codeHeaderDirection).toBe('row')
+  expect(result.copyButtonHeight).toBe('30px')
+  expect(result.codeFooter).toBe(0)
+  expect(result.pageFitsViewport).toBe(true)
 })
 
 test('math syntax in HTML attributes cannot inject markup and untrusted KaTeX extensions are disabled', async ({ page }) => {

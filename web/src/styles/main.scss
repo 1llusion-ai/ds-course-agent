@@ -389,8 +389,7 @@ html.theme-dark .course-source-summary,
 html.theme-dark .markdown-body pre:not(.code-block__pre),
 html.theme-dark .markdown-body .katex-display,
 html.theme-dark .markdown-body blockquote,
-html.theme-dark .markdown-body th,
-html.theme-dark .markdown-body tr:nth-child(even) td {
+html.theme-dark .markdown-body th {
   color: var(--dark-text) !important;
   background: var(--dark-bg-subtle) !important;
   border-color: var(--dark-border) !important;
@@ -432,23 +431,19 @@ html.theme-dark .markdown-body code {
 
 html.theme-dark .markdown-body .code-block {
   color: var(--dark-text) !important;
-  background: #2b2b2b !important;
+  background: #292929 !important;
   border-color: #3f3f3f !important;
   box-shadow: none !important;
 }
 
 html.theme-dark .markdown-body .code-block__header {
-  border-bottom-color: transparent !important;
-  background: transparent !important;
+  border-bottom-color: #3f3f3f !important;
+  background: #303030 !important;
 }
 
-html.theme-dark .markdown-body .code-block__footer {
-  border-top-color: transparent !important;
-  background: transparent !important;
-}
-
+html.theme-dark .markdown-body .code-block__mark,
 html.theme-dark .markdown-body .code-block__lang {
-  color: var(--dark-text-faint) !important;
+  color: var(--dark-text-muted) !important;
 }
 
 html.theme-dark .markdown-body .code-copy {
@@ -459,8 +454,16 @@ html.theme-dark .markdown-body .code-copy {
 
 html.theme-dark .markdown-body .code-copy:hover {
   color: var(--dark-text) !important;
-  background: #3a3a3a !important;
+  background: #414141 !important;
   border-color: transparent !important;
+}
+
+html.theme-dark .markdown-body .copy-icon::after {
+  background: #303030 !important;
+}
+
+html.theme-dark .markdown-body .code-copy:hover .copy-icon::after {
+  background: #414141 !important;
 }
 
 html.theme-dark .markdown-body .code-copy--success {
@@ -511,6 +514,34 @@ html.theme-dark .markdown-body .token-number {
 html.theme-dark .markdown-body td,
 html.theme-dark .markdown-body th {
   border-color: var(--dark-border) !important;
+}
+
+html.theme-dark .markdown-body .markdown-table-wrap {
+  background: var(--dark-panel) !important;
+  border-color: var(--dark-border) !important;
+  box-shadow: none !important;
+}
+
+html.theme-dark .markdown-body table {
+  color: var(--dark-text-muted) !important;
+}
+
+html.theme-dark .markdown-body th {
+  color: var(--dark-text) !important;
+  background: var(--dark-panel-soft) !important;
+}
+
+html.theme-dark .markdown-body td {
+  color: var(--dark-text-muted) !important;
+  background: var(--dark-panel) !important;
+}
+
+html.theme-dark .markdown-body tbody tr:nth-child(even) td {
+  background: #2d2d2d !important;
+}
+
+html.theme-dark .markdown-body tbody tr:hover td {
+  background: var(--dark-hover) !important;
 }
 
 html.theme-dark .session-action-menu {
