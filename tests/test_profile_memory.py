@@ -1,4 +1,5 @@
 import tempfile
+from datetime import datetime, timedelta, timezone
 
 from ds_course_agent.teaching.learning_events import (
     build_clarification_event,
@@ -6,6 +7,93 @@ from ds_course_agent.teaching.learning_events import (
     build_mastery_signal_event,
 )
 from ds_course_agent.teaching.memory_core import MemoryCore
+
+
+def test_profile_window_rebuilds_all_profile_signals_from_in_range_events():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        memory = MemoryCore(base_dir=temp_dir)
+        now = datetime(2026, 9, 13, 12, tzinfo=timezone.utc)
+
+        old_event = build_concept_mentioned_event(
+            session_id="sess_window",
+            student_id="student_window",
+            concept_id="old_concept",
+            concept_name="历史概念",
+            chapter="第1章",
+            question_type="概念理解",
+            matched_score=0.9,
+            raw_question="历史概念是什么？",
+        )
+        old_event.timestamp = (now - timedelta(days=7)).timestamp()
+
+        recent_event = build_concept_mentioned_event(
+            session_id="sess_window",
+            student_id="student_window",
+            concept_id="recent_concept",
+            concept_name="近期概念",
+            chapter="第6章",
+            question_type="概念理解",
+            matched_score=0.9,
+            raw_question="近期概念是什么？",
+        )
+        recent_event.timestamp = (now - timedelta(days=6)).timestamp()
+        clarification = build_clarification_event(
+            session_id="sess_window",
+            student_id="student_window",
+            concept_id="recent_concept",
+            parent_event_id=recent_event.event_id,
+            clarification_type="simplify_request",
+        )
+        clarification.timestamp = now.timestamp()
+
+        memory.record_events((old_event, recent_event, clarification))
+        memory.aggregate_profile("student_window")
+        snapshot = memory.get_profile_window("student_window", 7, now=now.timestamp())
+
+        assert set(snapshot.profile.recent_concepts) == {"recent_concept"}
+        assert snapshot.profile.progress.covered_chapters == ["第6章"]
+        assert [spot.concept_id for spot in snapshot.profile.pending_weak_spots] == ["recent_concept"]
+        assert snapshot.profile.stats["total_questions"] == 2
+        assert list(snapshot.daily_activity) == [
+            "2026-09-07",
+            "2026-09-08",
+            "2026-09-09",
+            "2026-09-10",
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+        ]
+        assert snapshot.daily_activity["2026-09-07"] == 1
+        assert snapshot.daily_activity["2026-09-13"] == 1
+        assert set(memory.get_profile("student_window").recent_concepts) == {"old_concept", "recent_concept"}
+
+
+def test_profile_window_uses_the_requested_local_day_boundary():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        memory = MemoryCore(base_dir=temp_dir)
+        now = datetime(2026, 9, 12, 16, 30, tzinfo=timezone.utc)
+        event = build_concept_mentioned_event(
+            session_id="sess_timezone",
+            student_id="student_timezone",
+            concept_id="local_day",
+            concept_name="本地日期",
+            chapter="第1章",
+            question_type="概念理解",
+            matched_score=0.9,
+            raw_question="本地日期是什么？",
+        )
+        event.timestamp = now.timestamp()
+        memory.record_event(event)
+
+        snapshot = memory.get_profile_window(
+            "student_timezone",
+            7,
+            now=now.timestamp(),
+            timezone_offset_minutes=-480,
+        )
+
+        assert list(snapshot.daily_activity)[-1] == "2026-09-13"
+        assert snapshot.daily_activity["2026-09-13"] == 1
 
 
 def test_recent_concepts_keep_last_mentioned_timestamp():

@@ -149,3 +149,13 @@ class StudentProfile:
 
         profile.stats = {**profile.stats, **data.get("stats", {})}
         return profile
+
+
+@dataclass(frozen=True)
+class ProfileWindowSnapshot:
+    """由一个明确时间窗口内的学习事件重建出的只读画像快照。"""
+
+    profile: StudentProfile
+    daily_activity: dict[str, int]
+    start_timestamp: float
+    end_timestamp: float

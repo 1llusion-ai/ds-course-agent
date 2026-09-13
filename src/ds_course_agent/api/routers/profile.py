@@ -2,8 +2,7 @@ import asyncio
 import base64
 import json
 import re
-from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
@@ -80,27 +79,6 @@ def _sorted_recent_concepts(profile):
         ),
         reverse=True,
     )
-
-
-def _build_daily_activity(memory_core, student_id: str, days: int = 7) -> dict[str, int]:
-    events = memory_core.load_events(student_id)
-    counts = Counter()
-    current_day = datetime.now(timezone.utc).date()
-    first_day = current_day - timedelta(days=days - 1)
-
-    for event in events:
-        timestamp = getattr(event, "timestamp", None)
-        if not timestamp:
-            continue
-        day = datetime.fromtimestamp(float(timestamp), tz=timezone.utc).date()
-        if first_day <= day <= current_day:
-            counts[day.isoformat()] += 1
-
-    daily_activity = {}
-    for offset in range(days):
-        day = (first_day + timedelta(days=offset)).isoformat()
-        daily_activity[day] = counts.get(day, 0)
-    return daily_activity
 
 
 @lru_cache(maxsize=1)
@@ -317,10 +295,15 @@ async def get_profile_summary(student_id: str = Depends(get_current_student_id))
 async def get_profile_detail(
     student_id: str = Depends(get_current_student_id),
     days: int = Query(default=7, ge=7, le=90),
+    timezone_offset_minutes: int = Query(default=0, ge=-840, le=840),
 ):
     memory_core = get_memory()
-    memory_core.aggregate_profile(student_id)
-    profile = memory_core.get_profile(student_id)
+    snapshot = memory_core.get_profile_window(
+        student_id,
+        days,
+        timezone_offset_minutes=timezone_offset_minutes,
+    )
+    profile = snapshot.profile
 
     chapter_counts = {}
     for _, focus in profile.recent_concepts.items():
@@ -347,7 +330,7 @@ async def get_profile_detail(
             concepts_explored=len(profile.recent_concepts),
         ),
         chapter_stats=chapter_counts,
-        daily_activity=_build_daily_activity(memory_core, student_id, days),
+        daily_activity=snapshot.daily_activity,
         stats=ProfileStats(**profile.stats),
     )
 

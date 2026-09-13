@@ -1,9 +1,14 @@
 import tempfile
+import time
 
 from fastapi.testclient import TestClient
 
 from ds_course_agent.api.main import app
-from ds_course_agent.teaching.learning_events import build_clarification_event, build_concept_mentioned_event
+from ds_course_agent.teaching.learning_events import (
+    build_clarification_event,
+    build_concept_mentioned_event,
+    build_mastery_signal_event,
+)
 from ds_course_agent.teaching.memory_core import MemoryCore
 from ds_course_agent.teaching.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
 
@@ -86,24 +91,41 @@ class TestProfileAPI:
         assert data["weak_spots"][0]["clarification_count"] == 3
 
     def test_get_detail_sorts_recent_concepts_by_last_mentioned_at(self):
-        profile = StudentProfile(student_id="student002")
-        profile.recent_concepts["decision_tree"] = ConceptFocus(
+        now = time.time()
+        decision_tree = build_concept_mentioned_event(
+            session_id="sess_detail",
+            student_id="student002",
             concept_id="decision_tree",
-            display_name="决策树",
+            concept_name="决策树",
             chapter="第6章",
-            mention_count=5,
-            last_mentioned_at=100.0,
-            last_question_type="概念理解",
+            question_type="概念理解",
+            matched_score=0.9,
+            raw_question="决策树是什么？",
         )
-        profile.recent_concepts["pca"] = ConceptFocus(
+        decision_tree.timestamp = now - 7200
+        pca = build_concept_mentioned_event(
+            session_id="sess_detail",
+            student_id="student002",
             concept_id="pca",
-            display_name="主成分分析",
+            concept_name="主成分分析",
             chapter="第7章",
-            mention_count=2,
-            last_mentioned_at=300.0,
-            last_question_type="数学推导",
+            question_type="数学推导",
+            matched_score=0.9,
+            raw_question="PCA 怎么推导？",
         )
-        self.memory.save_profile(profile)
+        pca.timestamp = now - 3600
+        old_concept = build_concept_mentioned_event(
+            session_id="sess_detail",
+            student_id="student002",
+            concept_id="linear_regression",
+            concept_name="线性回归",
+            chapter="第3章",
+            question_type="概念理解",
+            matched_score=0.9,
+            raw_question="线性回归是什么？",
+        )
+        old_concept.timestamp = now - 10 * 86400
+        self.memory.record_events((decision_tree, pca, old_concept))
 
         resp = client.get("/api/profile/detail", headers={"x-test-student-id": "student002"})
         assert resp.status_code == 200
@@ -111,57 +133,62 @@ class TestProfileAPI:
 
         assert data["recent_concepts"][0]["concept_id"] == "pca"
         assert data["recent_concepts"][1]["concept_id"] == "decision_tree"
+        assert {item["concept_id"] for item in data["recent_concepts"]} == {"pca", "decision_tree"}
+        assert data["chapter_stats"] == {"第6章": 1, "第7章": 1}
         assert "stats" in data
         assert "resolved_weak_spots" in data
 
+        month_resp = client.get("/api/profile/detail?days=30", headers={"x-test-student-id": "student002"})
+        assert month_resp.status_code == 200
+        assert {item["concept_id"] for item in month_resp.json()["recent_concepts"]} == {
+            "pca",
+            "decision_tree",
+            "linear_regression",
+        }
+
     def test_get_detail_includes_active_and_resolved_weak_spots(self):
-        profile = StudentProfile(student_id="student003")
-        profile.weak_spot_candidates.append(
-            WeakSpotCandidate(
-                concept_id="cross_validation",
-                display_name="交叉验证",
-                confidence=0.75,
-                clarification_count=2,
-                first_detected_at=20.0,
-                last_triggered_at=50.0,
-                signals=[{"type": "CLARIFICATION"}, {"type": "CLARIFICATION"}],
+        now = time.time()
+        events = []
+        for index, (concept_id, display_name, chapter, clarification_count) in enumerate(
+            (
+                ("cross_validation", "交叉验证", "第6章", 2),
+                ("distinction::demo", "过拟合 vs 泛化", "第8章", 1),
+                ("gradient_descent", "梯度下降", "第5章", 2),
             )
-        )
-        profile.pending_weak_spots.append(
-            WeakSpotCandidate(
-                concept_id="distinction::demo",
-                display_name="过拟合 vs 泛化",
-                confidence=0.42,
-                clarification_count=1,
-                first_detected_at=15.0,
-                last_triggered_at=40.0,
-                signals=[{"type": "CLARIFICATION"}],
+        ):
+            concept = build_concept_mentioned_event(
+                session_id="sess_weak_spots",
+                student_id="student003",
+                concept_id=concept_id,
+                concept_name=display_name,
+                chapter=chapter,
+                question_type="概念理解",
+                matched_score=0.9,
+                raw_question=f"{display_name}是什么？",
             )
-        )
-        profile.resolved_weak_spots.append(
-            WeakSpotCandidate(
-                concept_id="gradient_descent",
-                display_name="梯度下降",
-                confidence=0.68,
-                clarification_count=2,
-                first_detected_at=10.0,
-                last_triggered_at=30.0,
-                resolved_at=60.0,
-                resolution_note="explicit_understanding",
-                signals=[{"type": "CLARIFICATION"}, {"type": "MASTERY"}],
-            )
-        )
-        profile.stats.update(
-            {
-                "total_questions": 8,
-                "total_concepts": 3,
-                "pending_weak_spots": 1,
-                "active_weak_spots": 1,
-                "resolved_weak_spots": 1,
-                "total_resolved_weak_spots": 1,
-            }
-        )
-        self.memory.save_profile(profile)
+            concept.timestamp = now - 600 + index * 100
+            events.append(concept)
+            for clarification_index in range(clarification_count):
+                clarification = build_clarification_event(
+                    session_id="sess_weak_spots",
+                    student_id="student003",
+                    concept_id=concept_id,
+                    parent_event_id=concept.event_id,
+                    clarification_type="simplify_request",
+                )
+                clarification.timestamp = concept.timestamp + clarification_index + 1
+                events.append(clarification)
+            if concept_id == "gradient_descent":
+                mastery = build_mastery_signal_event(
+                    session_id="sess_weak_spots",
+                    student_id="student003",
+                    concept_id=concept_id,
+                    source_event_id=concept.event_id,
+                    signal_type="explicit_understanding",
+                )
+                mastery.timestamp = concept.timestamp + 10
+                events.append(mastery)
+        self.memory.record_events(tuple(events))
 
         resp = client.get("/api/profile/detail", headers={"x-test-student-id": "student003"})
         assert resp.status_code == 200
@@ -243,6 +270,7 @@ class TestProfileAPI:
         assert "辨析型知识点" in data["textbook_excerpt"]
 
     def test_resolve_weak_spot_moves_active_item_to_resolved_history(self):
+        now = time.time()
         concept_event = build_concept_mentioned_event(
             session_id="sess_profile",
             student_id="student004",
@@ -253,7 +281,7 @@ class TestProfileAPI:
             matched_score=0.92,
             raw_question="交叉验证是什么？",
         )
-        concept_event.timestamp = 100.0
+        concept_event.timestamp = now - 120
         self.memory.record_event(concept_event)
 
         clarification_one = build_clarification_event(
@@ -263,7 +291,7 @@ class TestProfileAPI:
             parent_event_id=concept_event.event_id,
             clarification_type="simplify_request",
         )
-        clarification_one.timestamp = 120.0
+        clarification_one.timestamp = now - 90
         self.memory.record_event(clarification_one)
 
         clarification_two = build_clarification_event(
@@ -273,7 +301,7 @@ class TestProfileAPI:
             parent_event_id=concept_event.event_id,
             clarification_type="example_request",
         )
-        clarification_two.timestamp = 150.0
+        clarification_two.timestamp = now - 60
         self.memory.record_event(clarification_two)
 
         self.memory.aggregate_profile("student004")

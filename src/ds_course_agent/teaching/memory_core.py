@@ -10,9 +10,12 @@ Memory Core 核心模块。
 import json
 import logging
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import replace
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 from threading import RLock
+from time import time as current_timestamp
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.teaching.learning_events import (
@@ -22,7 +25,12 @@ from ds_course_agent.teaching.learning_events import (
     build_mastery_signal_event,
 )
 from ds_course_agent.teaching.practice import summarize_practice
-from ds_course_agent.teaching.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
+from ds_course_agent.teaching.profile_models import (
+    ConceptFocus,
+    ProfileWindowSnapshot,
+    StudentProfile,
+    WeakSpotCandidate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,12 +134,73 @@ class MemoryCore:
             self._aggregate_profile(student_id)
 
     def _aggregate_profile(self, student_id: str) -> None:
-        profile = self.get_profile(student_id)
         events = self.load_events(student_id)
 
         if not events:
             return
 
+        profile = self._build_profile_from_events(student_id, self._prepare_events(events))
+        self.save_profile(profile)
+
+    def get_profile_window(
+        self,
+        student_id: str,
+        days: int,
+        *,
+        now: float | None = None,
+        timezone_offset_minutes: int = 0,
+    ) -> ProfileWindowSnapshot:
+        """按请求方本地自然日重建窗口画像，不覆盖累计画像。"""
+
+        if days < 1:
+            raise ValueError("days must be positive")
+        if not -840 <= timezone_offset_minutes <= 840:
+            raise ValueError("timezone_offset_minutes must be between -840 and 840")
+
+        with self._event_lock:
+            return self._get_profile_window(
+                student_id,
+                days,
+                now=now,
+                timezone_offset_minutes=timezone_offset_minutes,
+            )
+
+    def _get_profile_window(
+        self,
+        student_id: str,
+        days: int,
+        *,
+        now: float | None,
+        timezone_offset_minutes: int,
+    ) -> ProfileWindowSnapshot:
+        """在事件锁内构建时间窗口画像。"""
+
+        end_timestamp = float(current_timestamp() if now is None else now)
+        local_timezone = timezone(-timedelta(minutes=timezone_offset_minutes))
+        current_day = datetime.fromtimestamp(end_timestamp, tz=local_timezone).date()
+        first_day = current_day - timedelta(days=days - 1)
+        start_timestamp = datetime.combine(first_day, time.min, tzinfo=local_timezone).timestamp()
+        events = self._prepare_events(
+            event
+            for event in self.load_events(student_id)
+            if start_timestamp <= self._event_timestamp(event) <= end_timestamp
+        )
+        profile = self._build_profile_from_events(student_id, events)
+
+        counts = Counter(
+            datetime.fromtimestamp(self._event_timestamp(event), tz=local_timezone).date().isoformat()
+            for event in events
+        )
+        activity_days = ((first_day + timedelta(days=offset)).isoformat() for offset in range(days))
+        daily_activity = {day: counts.get(day, 0) for day in activity_days}
+        return ProfileWindowSnapshot(
+            profile=profile,
+            daily_activity=daily_activity,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+        )
+
+    def _prepare_events(self, events: Iterable[BaseEvent]) -> list[BaseEvent]:
         seen_event_ids = set()
         unique_events: list[BaseEvent] = []
         for event in events:
@@ -141,19 +210,15 @@ class MemoryCore:
             unique_events.append(event)
 
         unique_events.sort(key=self._event_timestamp)
+        return unique_events
 
-        profile.recent_concepts = {}
-        profile.progress.current_chapter = None
-        profile.progress.covered_chapters = []
-        profile.pending_weak_spots = []
-        profile.weak_spot_candidates = []
-        profile.resolved_weak_spots = []
-
-        self._update_recent_concepts(profile, unique_events)
-        self._update_progress(profile, unique_events)
-        self._detect_weak_spots(profile, unique_events)
+    def _build_profile_from_events(self, student_id: str, events: list[BaseEvent]) -> StudentProfile:
+        profile = StudentProfile(student_id=student_id)
+        self._update_recent_concepts(profile, events)
+        self._update_progress(profile, events)
+        self._detect_weak_spots(profile, events)
         practice_events = defaultdict(list)
-        for event in unique_events:
+        for event in events:
             if isinstance(event, QuestionAnsweredEvent):
                 practice_events[event.observation.concept_id].append((event.timestamp, event.observation))
         profile.practice = {concept_id: summarize_practice(items) for concept_id, items in practice_events.items()}
@@ -163,14 +228,13 @@ class MemoryCore:
                     practice, display_name=profile.recent_concepts[concept_id].display_name
                 )
 
-        profile.stats["total_questions"] = len(unique_events)
+        profile.stats["total_questions"] = len(events)
         profile.stats["total_concepts"] = len(profile.recent_concepts)
         profile.stats["pending_weak_spots"] = len(profile.pending_weak_spots)
         profile.stats["active_weak_spots"] = len(profile.weak_spot_candidates)
         profile.stats["resolved_weak_spots"] = len(profile.resolved_weak_spots)
         profile.stats["total_resolved_weak_spots"] = len(profile.resolved_weak_spots)
-
-        self.save_profile(profile)
+        return profile
 
     # ========== 聚合规则 ==========
 
