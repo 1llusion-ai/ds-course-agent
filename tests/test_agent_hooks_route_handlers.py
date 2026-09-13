@@ -1079,6 +1079,43 @@ def test_skill_route_handler_dispatches_by_intent(intent, skill_attr):
         assert calls == [("什么是过拟合？", learner_state, [])]
 
 
+def test_personalized_skill_object_uses_stream_method():
+    from ds_course_agent.agent.events import RouteResultEvent
+    from ds_course_agent.agent.handlers import SkillRouteHandler
+
+    learner_state = LearnerStateSnapshot(student_id="student-hooks")
+    state = _route_state(
+        intent=RouteIntent.PERSONALIZED_EXPLANATION,
+        execution_mode=ExecutionMode.TEACHING_SKILL,
+        retrieval_policy=RetrievalPolicy.REQUIRED,
+        learner_state=learner_state,
+    )
+
+    class ExplanationSkill:
+        def execute(self, *_args):
+            raise AssertionError("streaming route must not call execute()")
+
+        def stream(self, question, snapshot, matched_concepts):
+            assert (question, snapshot, matched_concepts) == ("什么是过拟合？", learner_state, [])
+            yield "第一段"
+            yield "第二段"
+
+    agent = type(
+        "FakeAgent",
+        (),
+        {
+            "explanation_skill": ExplanationSkill(),
+            "_get_hooks": staticmethod(lambda: HookManager([])),
+        },
+    )()
+
+    events = list(SkillRouteHandler().stream_execute(agent, state))
+
+    assert events[:2] == ["第一段", "第二段"]
+    assert isinstance(events[-1], RouteResultEvent)
+    assert events[-1].result.content == "第一段第二段"
+
+
 @pytest.mark.parametrize("intent", [RouteIntent.LEARNING_PATH, RouteIntent.PERSONALIZED_EXPLANATION])
 def test_personalized_skill_routes_require_learner_state(intent):
     from ds_course_agent.agent.handlers import SkillRouteHandler

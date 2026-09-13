@@ -68,7 +68,8 @@ class AgentService:
 
         # Load skill executors after the core registry is initialized.
         self.skill_loader = get_skill_loader()
-        self.explanation_skill = self.skill_loader.load_executor("personalized-explanation")
+        explanation_module = self.skill_loader.load_module("personalized-explanation")
+        self.explanation_skill = explanation_module.PersonalizedExplanationSkill()
         self.learning_path_skill = self.skill_loader.load_executor("learning-path")
         self.misconception_skill = self.skill_loader.load_executor("misconception-handling")
         self.code_review_skill = self.skill_loader.load_executor("code-review")

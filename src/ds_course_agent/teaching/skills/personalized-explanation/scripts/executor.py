@@ -14,7 +14,7 @@ if str(project_root) not in sys.path:
 
 from ds_course_agent.runtime.model_stream import extract_model_text, iter_text_chunks
 from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
-from ds_course_agent.tools.course_rag import course_rag_tool
+from ds_course_agent.tools.course_rag import course_rag_tool, retrieve_course_evidence
 
 
 def _load_local_module(filename: str, module_suffix: str):
@@ -80,14 +80,17 @@ class PersonalizedExplanationSkill:
             return self._fallback(question)
 
         strategy = build_strategy(matched_concepts, learner_state, question)
-        knowledge = course_rag_tool.invoke(question)
+        evidence = retrieve_course_evidence(question)
         prompt = self._build_prompt(
             question=question,
             matched_concepts=matched_concepts,
             strategy=strategy,
-            knowledge=knowledge,
+            knowledge=evidence.context if evidence.has_results else "",
         )
-        response = _call_llm(prompt)
+        from ds_course_agent.shared.query_trace import trace_span
+
+        with trace_span("teaching.personalized_explanation.generate"):
+            response = _call_llm(prompt)
         scaffold = self._build_scaffold(strategy, matched_concepts)
         return self._merge_response(response, scaffold)
 
@@ -108,12 +111,12 @@ class PersonalizedExplanationSkill:
             return
 
         strategy = build_strategy(matched_concepts, learner_state, question)
-        knowledge = course_rag_tool.invoke(question)
+        evidence = retrieve_course_evidence(question)
         prompt = self._build_prompt(
             question=question,
             matched_concepts=matched_concepts,
             strategy=strategy,
-            knowledge=knowledge,
+            knowledge=evidence.context if evidence.has_results else "",
         )
         scaffold = self._build_scaffold(strategy, matched_concepts)
         if scaffold:
@@ -125,10 +128,19 @@ class PersonalizedExplanationSkill:
             yield from iter_text_chunks(_call_llm(prompt))
             return
 
-        for chunk in stream_fn(prompt):
-            text = extract_model_text(chunk)
-            if text:
+        from ds_course_agent.shared.query_trace import trace_span, trace_step
+
+        emitted = 0
+        with trace_span("teaching.personalized_explanation.generate_stream"):
+            for chunk in stream_fn(prompt):
+                text = extract_model_text(chunk)
+                if not text:
+                    continue
+                emitted += 1
+                if emitted == 1:
+                    trace_step("teaching.personalized_explanation.first_delta", chars=len(text))
                 yield text
+        trace_step("teaching.personalized_explanation.stream_end", chunk_count=emitted)
 
     def _infer_from_learner_state(self, question: str, learner_state: LearnerStateSnapshot) -> list:
         inferred = []

@@ -10,6 +10,7 @@ import re
 import threading
 import time
 from collections import OrderedDict
+from dataclasses import dataclass
 
 from langchain_core.documents import Document
 from langchain_core.tools import tool
@@ -63,6 +64,38 @@ def _get_chapter_start_pages() -> dict[str, int]:
 _CHAPTER_START_PAGES: dict[str, int] = {}
 _ANSWER_CACHE_LOCK = threading.RLock()
 _ANSWER_CACHE: OrderedDict[str, tuple[float, str]] = OrderedDict()
+
+
+@dataclass(frozen=True)
+class CourseRagEvidence:
+    """Typed course evidence returned without running the answer model."""
+
+    context: str
+    has_results: bool
+    documents: tuple[Document, ...]
+    sources: tuple[dict, ...]
+    retrieval_query: str
+    term_resolution: CourseTermResolution | None
+
+
+def retrieve_course_evidence(question: str) -> CourseRagEvidence:
+    """Retrieve grounded textbook context for response strategies."""
+    from ds_course_agent.shared.query_trace import trace_span
+
+    _track_retrieval([], attempted=True, used=False)
+    service = get_rag_service()
+    with trace_span("tool.course_rag.retrieve"):
+        result = service.retrieve(question)
+    sources = build_sources_from_documents(result.documents)
+    _track_retrieval(sources, attempted=True, used=result.has_results)
+    return CourseRagEvidence(
+        context=result.formatted_context,
+        has_results=result.has_results,
+        documents=tuple(result.documents),
+        sources=tuple(sources),
+        retrieval_query=result.retrieval_query,
+        term_resolution=result.term_resolution,
+    )
 
 
 def _normalize_excerpt_text(text: str, *, max_chars: int = 360) -> str:
@@ -414,23 +447,18 @@ def course_rag_tool(question: str) -> str:
     from ds_course_agent.shared.query_trace import trace_error, trace_span, trace_step
 
     trace_step("tool.invoke", tool="course_rag_tool", question=question)
-    _track_retrieval([], attempted=True, used=False)
     try:
-        service = get_rag_service()
-        with trace_span("tool.course_rag.retrieve"):
-            result = service.retrieve(question)
-        sources = build_sources_from_documents(result.documents)
-        _track_retrieval(sources, attempted=True, used=result.has_results)
+        evidence = retrieve_course_evidence(question)
 
-        if not result.has_results:
+        if not evidence.has_results:
             trace_step("tool.result", tool="course_rag_tool", status="no_results")
-            no_results_message = build_no_results_message(question, result.term_resolution)
+            no_results_message = build_no_results_message(question, evidence.term_resolution)
             _warn_large_tool_result("course_rag_tool", no_results_message, status="no_results")
             return no_results_message
 
-        correction_notice = build_term_correction_notice(result.term_resolution)
-        answer_question = result.retrieval_query
-        cached_answer = _get_cached_answer(answer_question, result.formatted_context)
+        correction_notice = build_term_correction_notice(evidence.term_resolution)
+        answer_question = evidence.retrieval_query
+        cached_answer = _get_cached_answer(answer_question, evidence.context)
         if cached_answer is not None:
             trace_step("tool.result", tool="course_rag_tool", status="cache_hit")
             _warn_large_tool_result("course_rag_tool", cached_answer, status="cache_hit")
@@ -439,19 +467,19 @@ def course_rag_tool(question: str) -> str:
         try:
             with trace_span("tool.course_rag.answer"):
                 answer_result = _answer_with_context_timeout_guard(
-                    service,
+                    get_rag_service(),
                     answer_question,
-                    result.formatted_context,
+                    evidence.context,
                 )
             trace_step("tool.result", tool="course_rag_tool", status="ok")
             _warn_large_tool_result("course_rag_tool", answer_result.answer, status="ok")
-            _store_cached_answer(answer_question, result.formatted_context, answer_result.answer)
+            _store_cached_answer(answer_question, evidence.context, answer_result.answer)
             return f"{correction_notice}{answer_result.answer}"
         except Exception as answer_exc:
             trace_answer_degraded(answer_exc, mode="sync")
             fallback = build_extractive_rag_fallback(
                 answer_question,
-                result.documents,
+                list(evidence.documents),
                 error=answer_exc,
             )
             trace_step("tool.result", tool="course_rag_tool", status="degraded")
@@ -463,6 +491,7 @@ def course_rag_tool(question: str) -> str:
 
 
 __all__ = [
+    "CourseRagEvidence",
     "RetrievalTrace",
     "begin_retrieval_trace",
     "end_retrieval_trace",
@@ -474,6 +503,7 @@ __all__ = [
     "build_term_correction_notice",
     "trace_answer_degraded",
     "clear_rag_answer_cache",
+    "retrieve_course_evidence",
     "course_rag_tool",
     "_get_absolute_page",
     "_track_retrieval",

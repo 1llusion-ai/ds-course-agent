@@ -228,9 +228,17 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
         attr, branch = self._ROUTES[intent]
         skill = getattr(agent, attr)
 
+        def invoke_skill(*args):
+            if callable(skill):
+                return skill(*args)
+            execute_skill = getattr(skill, "execute", None)
+            if not callable(execute_skill):
+                raise TypeError(f"Skill '{attr}' must be callable or expose execute()")
+            return execute_skill(*args)
+
         trace_step("agent.branch", branch=branch)
         if intent == RouteIntent.MISCONCEPTION_REPAIR:
-            return build_route_result(route_state, skill(question, student_id, session_id, "0"))
+            return build_route_result(route_state, invoke_skill(question, student_id, session_id, "0"))
         if intent in {RouteIntent.LEARNING_PATH, RouteIntent.PERSONALIZED_EXPLANATION}:
             learner_state = route_state.learner_state
             if learner_state is None:
@@ -241,8 +249,8 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
                     matched_concepts[0].concept_id,
                     matched_concepts[0].method,
                 )
-            return build_route_result(route_state, skill(question, learner_state, matched_concepts))
-        return build_route_result(route_state, skill(question, student_id, session_id))
+            return build_route_result(route_state, invoke_skill(question, learner_state, matched_concepts))
+        return build_route_result(route_state, invoke_skill(question, student_id, session_id))
 
     def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str | TurnEvent]:
         if route_state.decision.intent is not RouteIntent.PERSONALIZED_EXPLANATION:

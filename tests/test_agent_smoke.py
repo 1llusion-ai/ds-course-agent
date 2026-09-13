@@ -30,6 +30,8 @@ class TestAgentServiceMock:
         mock_get_chat_model.return_value = MagicMock()
         mock_loader = MagicMock()
         mock_loader.load_executor.return_value = MagicMock()
+        explanation_instance = MagicMock()
+        mock_loader.load_module.return_value.PersonalizedExplanationSkill.return_value = explanation_instance
         mock_get_skill_loader.return_value = mock_loader
 
         with patch.object(agent_module.config, "USE_REMOTE_LLM", True):
@@ -40,6 +42,7 @@ class TestAgentServiceMock:
         assert service is not None
         assert service.model_runtime.system_prompt == "test prompt"
         assert service.model_runtime.tool_registry.names == []
+        assert service.explanation_skill is explanation_instance
 
     def test_agent_chat_returns_string(self):
         from ds_course_agent.agent.service import AgentService
