@@ -4,38 +4,51 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from threading import RLock
 
 from ds_course_agent.assessment.application import AssessmentApplicationService, get_assessment_application_service
+from ds_course_agent.assessment.feedback import (
+    AssessmentFailureKind,
+    QuestionRejectionCode,
+    is_assessment_failure_retryable,
+)
+from ds_course_agent.assessment.generator import AssessmentGenerationError
 from ds_course_agent.assessment.preparation import (
     AssessmentPreparation,
     PreparationRepository,
     PreparationStatus,
 )
 from ds_course_agent.teaching.assessment_assignment import AssessmentAssignmentPlanner
-from ds_course_agent.teaching.learner_state import learner_state_from_profile
+from ds_course_agent.teaching.learner_state import LearnerStateProvider, SQLiteProfileLearnerStateProvider
+from ds_course_agent.teaching.learning_event_repository import LearningEventRepository, SQLiteLearningEventRepository
 from ds_course_agent.teaching.learning_events import EventType
-from ds_course_agent.teaching.memory_core import MemoryCore, get_memory_core
 from ds_course_agent.tools.assessment import AssessmentAssignmentInput, AssessmentAssignmentTool
 
 logger = logging.getLogger(__name__)
 
 
 class SessionLearningLoop:
-    """Coordinate one small automatic quiz per discussed KC in each session."""
+    """Coordinate bounded asynchronous practice preparation for each session."""
 
     def __init__(
         self,
         preparations: PreparationRepository | None = None,
         assessments: AssessmentApplicationService | None = None,
-        memory_factory: Callable[[], MemoryCore] = get_memory_core,
+        event_repository: LearningEventRepository | None = None,
+        learner_state_provider: LearnerStateProvider | None = None,
     ) -> None:
         self._preparations = preparations or PreparationRepository()
         self._assessments = assessments or get_assessment_application_service()
         self._assignment_tool = AssessmentAssignmentTool(lambda: self._assessments)
-        self._memory_factory = memory_factory
+        self._event_repository = event_repository or SQLiteLearningEventRepository()
+        if learner_state_provider is None:
+            from ds_course_agent.teaching.profile_snapshot_repository import SQLiteProfileSnapshotRepository
+
+            learner_state_provider = SQLiteProfileLearnerStateProvider(
+                SQLiteProfileSnapshotRepository(getattr(self._event_repository, "_path", None))
+            )
+        self._learner_state_provider = learner_state_provider
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="session-assessment")
         self._futures: dict[str, Future[None]] = {}
         self._lock = RLock()
@@ -43,14 +56,21 @@ class SessionLearningLoop:
     def schedule(self, student_id: str, session_id: str) -> None:
         """Use only this student's session events to schedule canonical course KCs."""
 
-        memory = self._memory_factory()
-        events = memory.load_events(student_id, [EventType.CONCEPT_MENTIONED])
-        if not any(event.session_id == session_id for event in events):
+        events = tuple(
+            record.event
+            for record in self._event_repository.list_all_for_student(student_id)
+            if record.event.event_type is EventType.CONCEPT_MENTIONED
+        )
+        if not events:
             return
-        memory.aggregate_profile(student_id)
-        learner = learner_state_from_profile(memory.get_profile(student_id))
+        learner = self._learner_state_provider.get_state(student_id)
         planner = AssessmentAssignmentPlanner()
-        for plan in planner.plan_session(session_id, events, learner):
+        scheduled_kc_ids = {
+            job.request.target_kc_id
+            for job in self._preparations.list_for_student(student_id)
+            if job.session_id == session_id
+        }
+        for plan in planner.plan_session(session_id, events, learner, scheduled_kc_ids=scheduled_kc_ids):
             job = self._preparations.enqueue(
                 student_id, session_id, plan.display_name, plan.request, plan.source_event_ids
             )
@@ -69,7 +89,14 @@ class SessionLearningLoop:
                     and time.time() - job.updated_at > 900
                     and (active is None or active.done())
                 ):
-                    job = self._preparations.transition(job, PreparationStatus.FAILED) or job
+                    job = (
+                        self._preparations.transition(
+                            job,
+                            PreparationStatus.FAILED,
+                            failure_kind=AssessmentFailureKind.UNKNOWN,
+                        )
+                        or job
+                    )
             if job.status is PreparationStatus.QUEUED:
                 self._submit(job)
             jobs.append(job)
@@ -82,6 +109,8 @@ class SessionLearningLoop:
         with self._lock:
             active = self._futures.get(job.id)
             if active is not None and not active.done():
+                return job
+            if job.status is PreparationStatus.FAILED and not job.retryable:
                 return job
             if job.status is PreparationStatus.FAILED:
                 job = self._preparations.transition(job, PreparationStatus.QUEUED) or job
@@ -113,12 +142,43 @@ class SessionLearningLoop:
                     request=running.request,
                     session_id=running.session_id,
                     assignment_id=running.id,
+                    generation_progress=running.generation_progress,
                 )
             )
             self._preparations.transition(running, PreparationStatus.READY, assessment_id=summary.id)
-        except Exception:
-            logger.exception("session assessment preparation failed: %s", running.id)
-            self._preparations.transition(running, PreparationStatus.FAILED)
+        except Exception as exc:
+            failure_kind = getattr(exc, "failure_kind", AssessmentFailureKind.UNKNOWN)
+            if not isinstance(failure_kind, AssessmentFailureKind):
+                failure_kind = AssessmentFailureKind.UNKNOWN
+            slot_failures = tuple(exc.slot_failures) if isinstance(exc, AssessmentGenerationError) else ()
+            failed_slots = tuple(
+                sorted({failure.slot_index for failure in slot_failures if hasattr(failure, "slot_index")})
+            )
+            failure_codes = tuple(
+                dict.fromkeys(
+                    code
+                    for failure in slot_failures
+                    for code in getattr(failure, "codes", ())
+                    if isinstance(code, QuestionRejectionCode)
+                )
+            )
+            generation_progress = exc.progress if isinstance(exc, AssessmentGenerationError) else None
+            logger.error(
+                "session assessment preparation failed: id=%s kind=%s error_type=%s",
+                running.id,
+                failure_kind.value,
+                type(exc).__name__,
+            )
+            self._preparations.transition(
+                running,
+                PreparationStatus.FAILED,
+                failure_kind=failure_kind,
+                failed_slots=failed_slots,
+                failure_codes=failure_codes,
+                generation_progress=generation_progress,
+                retryable=bool(generation_progress and generation_progress.retryable)
+                or is_assessment_failure_retryable(failure_kind),
+            )
 
     def close(self) -> None:
         """Finish submitted preparation jobs before shutting down the process."""

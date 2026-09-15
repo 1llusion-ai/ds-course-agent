@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import timezone
 
 import ds_course_agent.shared.config as config
@@ -10,7 +9,6 @@ from ds_course_agent.assessment.records import AssessmentRecord, AssessmentStatu
 from ds_course_agent.teaching.interaction_episode_repository import SQLiteInteractionEpisodeRepository
 from ds_course_agent.teaching.learning_event_repository import LearningEventRecord, SQLiteLearningEventRepository
 from ds_course_agent.teaching.learning_events import QuestionAnsweredEvent
-from ds_course_agent.teaching.memory_core import MemoryCore
 from ds_course_agent.teaching.personalization import EpisodeOutcome, InteractionEpisode
 from ds_course_agent.teaching.practice import PracticeObservation
 
@@ -18,18 +16,16 @@ from ds_course_agent.teaching.practice import PracticeObservation
 class AssessmentEvidenceRecorder:
     """Record immutable scored answers and one rebuildable assessment episode.
 
-    ``memory_factory`` remains an explicit test/migration adapter. The runtime
-    default writes only to the teaching-owned SQLite repositories.
+    Assessment evidence has one durable owner: the teaching-owned SQLite
+    repositories.
     """
 
     def __init__(
         self,
-        memory_factory: Callable[[], MemoryCore] | None = None,
         *,
         event_repository: SQLiteLearningEventRepository | None = None,
         episode_repository: SQLiteInteractionEpisodeRepository | None = None,
     ) -> None:
-        self._legacy_memory_factory = memory_factory
         self._event_repository = event_repository or SQLiteLearningEventRepository(config.APP_DB_PATH)
         self._episode_repository = episode_repository or SQLiteInteractionEpisodeRepository(config.APP_DB_PATH)
         from ds_course_agent.teaching.profile_snapshot_repository import SQLiteProfileSnapshotRepository
@@ -39,9 +35,6 @@ class AssessmentEvidenceRecorder:
     def __call__(self, record: AssessmentRecord) -> None:
         if record.status is not AssessmentStatus.SUBMITTED or record.submitted_at is None:
             raise ValueError("only submitted assessments provide answer evidence")
-        if self._legacy_memory_factory is not None:
-            self._record_legacy(record)
-            return
 
         concept_id = record.request.target_kc_id
         answers = {answer.question_id: answer for answer in record.answers}
@@ -101,19 +94,6 @@ class AssessmentEvidenceRecorder:
                 correct_option_text=option_text.get(question.correct_option_id),
             ),
         )
-
-    def _record_legacy(self, record: AssessmentRecord) -> None:
-        memory = self._legacy_memory_factory()
-        events = tuple(
-            self._build_event(record, question_id, question, answer)
-            for question_id, question, answer in (
-                (question_id, question, {item.question_id: item for item in record.answers}[question_id])
-                for question_id, question in zip(record.question_ids, record.quiz.questions, strict=True)
-            )
-        )
-        existing = {event.event_id for event in memory.load_events(record.student_id)}
-        memory.record_events(tuple(event for event in events if event.event_id not in existing))
-        memory.aggregate_profile(record.student_id)
 
 
 __all__ = ["AssessmentEvidenceRecorder"]

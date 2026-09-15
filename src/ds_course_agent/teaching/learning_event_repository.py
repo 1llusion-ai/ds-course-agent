@@ -109,7 +109,7 @@ class SQLiteLearningEventRepository:
             "SELECT id, student_id, session_id, turn_id, event_type, "
             "observed_at, payload_json, schema_version FROM learning_events WHERE "
             + " AND ".join(clauses)
-            + " ORDER BY observed_at DESC, id DESC LIMIT ?"
+            + " ORDER BY observed_at DESC, rowid DESC LIMIT ?"
         )
         connection = connect_sqlite(self._path)
         try:
@@ -132,7 +132,7 @@ class SQLiteLearningEventRepository:
                        observed_at, payload_json, schema_version
                 FROM learning_events
                 WHERE student_id = ? AND session_id = ? AND turn_id = ?
-                ORDER BY observed_at ASC, id ASC
+                ORDER BY observed_at ASC, rowid ASC
                 """,
                 (student_id, session_id, turn_id),
             ).fetchall()
@@ -151,7 +151,7 @@ class SQLiteLearningEventRepository:
                 """SELECT id, student_id, session_id, turn_id, event_type,
                           observed_at, payload_json, schema_version
                    FROM learning_events WHERE student_id = ?
-                   ORDER BY observed_at ASC, id ASC""",
+                   ORDER BY observed_at ASC, rowid ASC""",
                 (student_id,),
             ).fetchall()
         finally:

@@ -8,7 +8,13 @@ from pathlib import Path
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.assessment.database import migrate_assessment_database
-from ds_course_agent.assessment.models import EvidenceSource, GeneratedQuestion, GeneratedQuiz, QuestionOption
+from ds_course_agent.assessment.models import (
+    ComplementaryQuestionRequirement,
+    EvidenceSource,
+    GeneratedQuestion,
+    GeneratedQuiz,
+    QuestionOption,
+)
 from ds_course_agent.assessment.records import AssessmentRecord, AssessmentStatus, StoredAnswer
 from ds_course_agent.shared.database import connect_sqlite
 
@@ -31,8 +37,9 @@ class AssessmentRepository:
                 """
                 INSERT INTO assessments (
                     id, student_id, session_id, title, status, assigned_at, opened_at,
-                    submitted_at, target_kc_id, difficulty, question_type, requested_count, version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    submitted_at, target_kc_id, difficulty, question_type, requested_count,
+                    teaching_requirement_json, version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 self._assessment_values(record),
             )
@@ -127,6 +134,7 @@ class AssessmentRepository:
             request.difficulty.value,
             getattr(request, "question_type", "single_choice"),
             request.count,
+            request.teaching_requirement.model_dump_json() if request.teaching_requirement is not None else None,
             record.version,
         )
 
@@ -219,11 +227,16 @@ class AssessmentRepository:
         )
         from ds_course_agent.assessment.models import GenerateQuestionsRequest
 
+        requirement_json = row["teaching_requirement_json"] if "teaching_requirement_json" in row.keys() else None
+        teaching_requirement = (
+            ComplementaryQuestionRequirement.model_validate_json(requirement_json) if requirement_json else None
+        )
         request = GenerateQuestionsRequest(
             target_kc_id=row["target_kc_id"],
             difficulty=row["difficulty"],
             count=row["requested_count"],
             question_type=row["question_type"],
+            teaching_requirement=teaching_requirement,
         )
         return AssessmentRecord(
             id=row["id"],

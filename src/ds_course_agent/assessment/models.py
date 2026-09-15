@@ -30,6 +30,16 @@ DELIMITER_PAIRS = {
 DELIMITER_CLOSERS = frozenset(DELIMITER_PAIRS.values())
 
 
+def question_slot_id(target_kc_id: str, slot_index: int) -> str:
+    """Return the stable identity for one requested question slot."""
+
+    if not isinstance(target_kc_id, str) or not target_kc_id.strip():
+        raise ValueError("target_kc_id must be nonblank text")
+    if isinstance(slot_index, bool) or not isinstance(slot_index, int) or slot_index < 0:
+        raise ValueError("slot_index must be a non-negative integer")
+    return f"{target_kc_id.strip()}:slot:{slot_index}"
+
+
 def _strip_nonblank_text(value: object, *, field_name: str) -> str:
     """Normalize required text before Pydantic applies its length bounds."""
 
@@ -100,6 +110,56 @@ class FormulaQuality(str, Enum):
     CONFLICTING = "conflicting"
 
 
+class TeachingObjectiveKind(str, Enum):
+    """Complementary item purposes for a two-question KC practice set."""
+
+    CONCEPT_DISTINCTION = "concept_distinction"
+    APPLICATION_TRANSFER = "application_transfer"
+
+
+class QuestionObjective(BaseModel):
+    """One explicit learning objective assigned to a stable question slot."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    slot_id: str = Field(strict=True, min_length=1, max_length=MAX_KC_ID_LENGTH + 16)
+    kind: TeachingObjectiveKind
+    operation: CognitiveOperation
+    objective: str = Field(strict=True, min_length=1, max_length=MAX_EXPLANATION_LENGTH)
+
+    @field_validator("slot_id", "objective", mode="before")
+    @classmethod
+    def _normalize_text(cls, value: object, info) -> str:
+        return _strip_nonblank_text(value, field_name=info.field_name)
+
+
+class ComplementaryQuestionRequirement(BaseModel):
+    """Shared typed teaching requirement for a complementary question pair."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    target_kc_id: str = Field(strict=True, min_length=1, max_length=MAX_KC_ID_LENGTH)
+    objectives: tuple[QuestionObjective, ...] = Field(min_length=2, max_length=2)
+
+    @field_validator("target_kc_id", mode="before")
+    @classmethod
+    def _normalize_target_kc_id(cls, value: object) -> str:
+        return _strip_nonblank_text(value, field_name="target_kc_id")
+
+    @model_validator(mode="after")
+    def _validate_pair(self) -> ComplementaryQuestionRequirement:
+        expected_ids = {question_slot_id(self.target_kc_id, index) for index in range(2)}
+        actual_ids = {objective.slot_id for objective in self.objectives}
+        if len(actual_ids) != len(self.objectives) or actual_ids != expected_ids:
+            raise ValueError("complementary objectives must cover slot 0 and slot 1 exactly once")
+        if {objective.kind for objective in self.objectives} != {
+            TeachingObjectiveKind.CONCEPT_DISTINCTION,
+            TeachingObjectiveKind.APPLICATION_TRANSFER,
+        }:
+            raise ValueError("complementary objectives must include distinction and transfer goals")
+        return self
+
+
 class AssessmentEvidenceSpan(BaseModel):
     """Server-owned complete evidence assembled from contiguous source chunks."""
 
@@ -147,11 +207,21 @@ class GenerateQuestionsRequest(BaseModel):
     count: int = Field(default=5, strict=True, ge=1, le=MAX_QUESTIONS)
     difficulty: Difficulty = Difficulty.BASIC
     question_type: AssessmentQuestionType = AssessmentQuestionType.SINGLE_CHOICE
+    teaching_requirement: ComplementaryQuestionRequirement | None = None
 
     @field_validator("target_kc_id", mode="before")
     @classmethod
     def _normalize_target_kc_id(cls, value: object) -> str:
         return _strip_nonblank_text(value, field_name="target_kc_id")
+
+    @model_validator(mode="after")
+    def _validate_teaching_requirement(self) -> GenerateQuestionsRequest:
+        if self.teaching_requirement is not None:
+            if self.teaching_requirement.target_kc_id != self.target_kc_id:
+                raise ValueError("teaching requirement target must match target_kc_id")
+            if self.count != len(self.teaching_requirement.objectives):
+                raise ValueError("teaching requirement must cover the exact requested question count")
+        return self
 
 
 class QuestionOption(BaseModel):
@@ -335,6 +405,7 @@ class GeneratedQuiz(BaseModel):
 __all__ = [
     "AssessmentEvidenceSpan",
     "AssessmentQuestionType",
+    "ComplementaryQuestionRequirement",
     "Difficulty",
     "EvidenceCompleteness",
     "EvidenceSource",
@@ -342,5 +413,8 @@ __all__ = [
     "GeneratedQuestion",
     "GeneratedQuiz",
     "GenerateQuestionsRequest",
+    "QuestionObjective",
     "QuestionOption",
+    "TeachingObjectiveKind",
+    "question_slot_id",
 ]

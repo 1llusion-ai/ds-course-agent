@@ -748,8 +748,6 @@ class TestAgentShortTermMemory:
         monkeypatch.setattr("ds_course_agent.agent.service.map_question_to_concepts", lambda question, top_k=3: [])
         monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
         monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
-        monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
-
         state = service._prepare_query_route("继续讲", "session-1", "student-1")
 
         assert state.chat_history == compacted

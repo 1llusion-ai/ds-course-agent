@@ -71,6 +71,11 @@ ASSESSMENT_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=4,
+        name="persist_assessment_teaching_requirement",
+        statements=("ALTER TABLE assessments ADD COLUMN teaching_requirement_json TEXT",),
+    ),
 )
 
 
@@ -96,8 +101,9 @@ def _backfill_legacy(connection: sqlite3.Connection) -> int:
             """
             INSERT INTO assessments (
                 id, student_id, session_id, title, status, assigned_at, opened_at,
-                submitted_at, target_kc_id, difficulty, question_type, requested_count, version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                submitted_at, target_kc_id, difficulty, question_type, requested_count,
+                teaching_requirement_json, version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 payload["id"],
@@ -112,6 +118,11 @@ def _backfill_legacy(connection: sqlite3.Connection) -> int:
                 request["difficulty"],
                 request.get("question_type", "single_choice"),
                 request["count"],
+                (
+                    json.dumps(request["teaching_requirement"], ensure_ascii=False, sort_keys=True)
+                    if request.get("teaching_requirement") is not None
+                    else None
+                ),
                 payload["version"],
             ),
         )

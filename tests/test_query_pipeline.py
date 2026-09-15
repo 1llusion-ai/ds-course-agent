@@ -489,7 +489,6 @@ def _make_pipeline_service(monkeypatch, semantic: _SemanticRouterStub):
     monkeypatch.setattr("ds_course_agent.agent.routing.pipeline.warn_context_budget", lambda *args, **kwargs: None)
     monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
     monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
-    monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
     return service
 
 
@@ -589,29 +588,23 @@ class TestQueryPipelineEnrichment:
         query = "帮我推荐今晚吃什么"
         semantic = _SemanticRouterStub({query: _SemanticOutput(RouteIntent.NOT_LEARNING, 0.97)})
         service = _make_pipeline_service(monkeypatch, semantic)
-        calls = {"concepts": 0, "events": 0}
+        calls = {"concepts": 0}
 
         def concept_map(question, top_k=3):
             calls["concepts"] += 1
             return []
 
-        def record_events(**kwargs):
-            calls["events"] += 1
-
         monkeypatch.setattr("ds_course_agent.agent.service.map_question_to_concepts", concept_map)
-        monkeypatch.setattr(service, "_record_learning_events", record_events)
-
         state = service._prepare_query_route(query, "session", "student")
 
         assert state.decision.family is RouteFamily.BOUNDARY
         assert state.decision.intent is RouteIntent.REFUSAL
-        assert calls == {"concepts": 0, "events": 0}
+        assert calls == {"concepts": 0}
         assert len(semantic.calls) == 1
 
     def test_only_event_eligible_concepts_are_recorded(self, monkeypatch):
         semantic = _SemanticRouterStub()
         service = _make_pipeline_service(monkeypatch, semantic)
-        recorded = []
         matches = [
             SimpleNamespace(
                 concept_id="overfitting",
@@ -637,16 +630,9 @@ class TestQueryPipelineEnrichment:
             "ds_course_agent.agent.service.map_question_to_concepts",
             lambda question, top_k=3: matches,
         )
-        monkeypatch.setattr(
-            service,
-            "_record_learning_events",
-            lambda **kwargs: recorded.extend(kwargs["matched_concepts"]),
-        )
-
         state = service._prepare_query_route("什么是过拟合？", "session", "student")
 
         assert state.decision.execution_mode is ExecutionMode.GROUNDED_GENERATION
-        assert recorded == []
         assert state.pending_learning_event is True
 
 

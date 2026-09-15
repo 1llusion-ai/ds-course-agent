@@ -56,7 +56,7 @@ class PassVerifier:
 class PassCritic:
     """Accept adapter-test questions without issuing another provider request."""
 
-    def critique(
+    def critique_batch(
         self,
         request: GenerateQuestionsRequest,
         questions: Sequence[GeneratedQuestion],
@@ -117,6 +117,19 @@ def test_real_structured_adapter_validates_provider_json(failure: str) -> None:
         request_payload = json.loads(request.content)
         requests.append(request_payload)
         tool_name = request_payload["tools"][0]["function"]["name"]
+        if tool_name == "GeneratedQuestion":
+            output_payload = payload["questions"][0]
+        elif tool_name == "QuestionRepairBatch" and failure == "wrong_function":
+            output_payload = {
+                "revisions": [
+                    {
+                        "slot_id": "pca:slot:0",
+                        "question": payload["questions"][0],
+                    }
+                ]
+            }
+        else:
+            output_payload = payload
         return httpx.Response(
             200,
             json={
@@ -139,7 +152,7 @@ def test_real_structured_adapter_validates_provider_json(failure: str) -> None:
                                         "name": "WrongQuiz"
                                         if failure == "wrong_function" and len(requests) == 1
                                         else tool_name,
-                                        "arguments": json.dumps(payload),
+                                        "arguments": json.dumps(output_payload),
                                     },
                                 }
                             ],
@@ -160,7 +173,7 @@ def test_real_structured_adapter_validates_provider_json(failure: str) -> None:
         )
         service = AssessmentService(
             retriever=TextbookRetriever(),
-            generator=AssessmentGenerator(model=model),
+            generator=AssessmentGenerator(model=model, editor_model=model),
             verifier=PassVerifier(),
             critic=PassCritic(),
         )
@@ -174,7 +187,8 @@ def test_real_structured_adapter_validates_provider_json(failure: str) -> None:
             assert quiz.questions[0].source_ids == [quiz.sources[0].id]
             assert quiz.sources[0].text == "PCA reduces feature dimensionality."
 
-    assert len(requests) == (1 if failure == "none" else 2)
+    expected_requests = {"none": 1, "wrong_function": 2, "invalid_answer": 3}
+    assert len(requests) == expected_requests[failure]
     assert requests[0]["tools"][0]["type"] == "function"
     assert requests[0]["tools"][0]["function"]["parameters"]["type"] == "object"
     assert requests[0]["tool_choice"]["type"] == "function"

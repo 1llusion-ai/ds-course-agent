@@ -218,22 +218,40 @@ def test_memory_enrichment_records_bounded_trace_counts() -> None:
 
 
 def test_learning_event_write_records_actual_event_count() -> None:
+    from ds_course_agent.agent.routing import ExecutionMode, RouteExecutionResult, RouteFamily, RouteIntent
+
     service = AgentService.__new__(AgentService)
-    service.learning_event_hook = SimpleNamespace(record_learning_events=lambda **kwargs: 2)
-    service._classify_question_type = lambda question: "概念理解"
+    calls = []
+
+    def persist_turn(**kwargs):
+        calls.append(kwargs)
+        return 2
+
+    service.teaching_memory_writer = SimpleNamespace(persist_turn=persist_turn)
+    state = SimpleNamespace(
+        pending_learning_event=True,
+        matched_concepts=[SimpleNamespace(concept_id="overfitting", event_eligible=True)],
+        context=SimpleNamespace(original_query="解释过拟合"),
+        session_id="session-1",
+        student_id="student-1",
+        stream_id="turn-1",
+        special_case_response=None,
+    )
+    result = RouteExecutionResult(
+        content="回答",
+        family=RouteFamily.LEARNING,
+        intent=RouteIntent.CONCEPT_QA,
+        execution_mode=ExecutionMode.DIRECT_MODEL,
+    )
 
     token = begin_query_trace({"entrypoint": "memory_write_contract"})
     try:
-        count = service._record_learning_events(
-            question="解释过拟合",
-            session_id="session-1",
-            student_id="student-1",
-            matched_concepts=[SimpleNamespace(concept_id="overfitting")],
-        )
+        service._persist_successful_learning_turn(state, result)
     finally:
         trace = end_query_trace(token)
 
-    assert count == 2
+    assert calls[0]["turn_id"] == "turn-1"
+    assert "get_memory_core_fn" not in calls[0]
     result_event = next(item for item in trace["events"] if item["stage"] == "learner_memory.write_result")
-    assert result_event["data"] == {"storage": "learning_events", "recorded_count": 2}
+    assert result_event["data"] == {"storage": "sqlite", "recorded_count": 2}
     assert any(item["stage"] == "memory.learning_event_write" for item in trace["events"])

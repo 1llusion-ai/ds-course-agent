@@ -32,6 +32,7 @@ _SETTING_NAMES = [
     "CHAT_DISABLE_THINKING",
     "CHAT_SYSTEM_SUFFIX",
     "ASSESSMENT_GENERATOR_MODEL_NAME",
+    "ASSESSMENT_EDITOR_MODEL_NAME",
     "ASSESSMENT_VERIFIER_MODEL_NAME",
     "ASSESSMENT_MAX_TOKENS",
     "ASSESSMENT_TIMEOUT_SECONDS",
@@ -175,6 +176,9 @@ chat_timeout_seconds = CHAT_TIMEOUT_SECONDS
 chat_max_retries = CHAT_MAX_RETRIES
 chat_disable_thinking = CHAT_DISABLE_THINKING
 chat_system_suffix = CHAT_SYSTEM_SUFFIX
+assessment_generator_model_name = ASSESSMENT_GENERATOR_MODEL_NAME
+assessment_editor_model_name = ASSESSMENT_EDITOR_MODEL_NAME
+assessment_verifier_model_name = ASSESSMENT_VERIFIER_MODEL_NAME
 router_model_name = ROUTER_MODEL_NAME
 router_max_tokens = ROUTER_MAX_TOKENS
 router_timeout_seconds = ROUTER_TIMEOUT_SECONDS
@@ -288,6 +292,9 @@ __all__ = [
     "chat_max_retries",
     "chat_disable_thinking",
     "chat_system_suffix",
+    "assessment_generator_model_name",
+    "assessment_editor_model_name",
+    "assessment_verifier_model_name",
     "router_model_name",
     "router_max_tokens",
     "router_timeout_seconds",

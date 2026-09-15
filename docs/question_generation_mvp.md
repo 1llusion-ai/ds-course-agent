@@ -45,22 +45,26 @@ authenticated API -> assessment service -> canonical concept and alias query
                                        -> target-bearing, deduplicated evidence
                                        -> structured candidate batch
                                        -> per-question contract validation
-                                       -> Evidence verifier: evidence, unique answer, source/excerpt, topic
-                                       -> Item quality critic: ambiguity, leakage, distractors, pedagogy, difficulty, duplication
-                                       -> accept or reject each candidate
-                                       -> one bounded repair call for missing slots
+                                       -> Evidence verifier ┐
+                                       -> Item quality critic ┘ (parallel, same candidate pool)
+                                       -> accept or reject each slot
+                                       -> one batch editor call for all pending slots
+                                       -> both gates again in parallel
+                                       -> exact-count result or preparation FAILED/pending
 ```
 
 No usable evidence means no generation-model call. Validation checks the
 requested question count, option IDs/text, answer membership, difficulty,
 duplicate stems, and references to the supplied sources. Structurally accepted
-candidates first go to `assessment/verifier.py`, the Evidence verifier. It does
-not receive the author's marked answer or explanation. It independently lists
-every option it considers textbook-supported; every listed option must carry a
-server-assigned excerpt ID. The service derives its source ID from the immutable
-catalog instead of asking the model to copy that relationship. The service creates one immutable
-catalog from the non-empty evidence lines, reuses it across the bounded repair
-round, and validates every selected excerpt after any verifier implementation returns.
+candidates go to `assessment/verifier.py` and `assessment/critic.py` in parallel
+over the same candidate pool. The Evidence verifier does not receive the
+author's marked answer or explanation. It independently lists every option it
+considers textbook-supported; every listed option must carry a server-assigned
+excerpt ID. The service derives its source ID from the immutable catalog instead
+of asking the model to copy that relationship. The service creates one immutable
+catalog from the non-empty evidence lines, reuses it across bounded repair
+rounds, and validates every selected excerpt after any verifier implementation
+returns.
 Unknown IDs, duplicate support entries, malformed output, and incomplete
 coverage fail closed. A supported answer must resolve to a source declared by
 the candidate; the model cannot override an excerpt's source ownership. A candidate
@@ -77,13 +81,16 @@ operation, and learning-objective distinctness. The service derives the apparent
 answer set from the roles and checks cognitive operation against the requested
 difficulty. The service compares the
 apparent answer set with the hidden marked answer only after the critic returns.
-A critic rejection enters the same one-round repair budget; a malformed,
-incomplete, or unavailable response from either module fails the request rather
-than entering repair. After the blind evidence verdict matches the marked answer, the final
-explanation uses that verdict's explicit `answer_explanation` rather than publishing
-the author's unchecked elaboration. The replacement is validated against the
-normal question text contract. Returned source text is drawn from the bounded
-evidence supplied to the Evidence verifier, not invented by a model.
+A critic or verifier rejection remains pending by slot. One batch editor call
+revises all pending slots in a repair round with their typed rejection feedback
+and shared evidence snapshot; the returned slots then pass both gates again in
+parallel. A malformed, incomplete, or unavailable response from either module
+fails the request rather than publishing it. After the blind evidence verdict
+matches the marked answer, the final explanation uses that verdict's explicit
+`answer_explanation` rather than publishing the author's unchecked elaboration.
+The replacement is validated against the normal question text contract.
+Returned source text is drawn from the bounded evidence supplied to the Evidence
+verifier, not invented by a model.
 
 The Evidence verifier prompt renders only catalog excerpts, not a second copy
 of the full source text, and is capped at 48,000 characters before any provider
@@ -110,13 +117,13 @@ the target name or alias in its stem; absence rejects the batch with 502.
 These checks do NOT prove factual correctness, pedagogical quality, calibrated
 difficulty, or that a cited passage entails the answer. Evidence support and
 item quality are separate structured second-model judgments, not deterministic
-measures. A passing serial review means only that both modules produced
+measures. A passing parallel review means only that both modules produced
 contract-valid, non-rejecting results; it is not a fact proof or a substitute
-for teacher review and a Chinese textbook quality evaluation. The service keeps
-accepted questions and requests only the missing count once when model output or
-a candidate contract is invalid, or when a candidate receives a rejecting
-verdict. A second failure rejects the quiz rather than publishing
-partial/unvalidated questions or falling back to a normal chat answer.
+for teacher review and a Chinese textbook quality evaluation. Exact-count
+preparation retains accepted and pending slots, evidence, and typed failure
+reasons for retry. A retry fills only pending slots; if the requested count is
+still incomplete, preparation remains FAILED/pending and no partial `READY`
+assessment is published.
 
 ## Actionable review and repair
 
@@ -142,19 +149,18 @@ still a model judgment, not a calibrated measurement of learner difficulty.
 candidate, all rejection codes, overall and option-level reasons, and separately
 the accepted items to avoid. A rejected stem may be retained while its options
 are corrected; only accepted stems and duplicates within a candidate batch are
-reserved. The same single repair budget and both mandatory review gates apply.
-Structured parser failures enter that repair budget; provider and transport
-failures still receive no implicit retry.
+reserved. Bounded batch editor repair rounds apply the same two mandatory review
+gates to every returned slot. A transient provider failure follows the typed
+retry policy into preparation retry; a permanent provider failure remains failed
+and is not retried automatically.
 
-Item criticism runs in ordered batches of at most two questions because each
-item requires four option-level explanations. Every later batch sees only the
-previously accepted items, including accepted items from earlier batches in the
-same round, so learning-objective diversity still crosses batch boundaries.
-Each critic call also exposes the exact candidate count and index range in its
-JSON Schema; accepted history is explicitly excluded from returned verdicts.
-Batching limits individual reviewer output and call latency; it does not add an
-author repair round or publish a partial quiz. A reviewer failure still aborts
-the request. End-to-end latency remains dependent on quiz size.
+For each candidate pool, the Evidence verifier and Item quality critic each make
+one parallel call over the same candidates. Every repair round uses one batch
+editor call for all pending slots, followed by the same two parallel review calls
+for the revised candidates. Each critic call also exposes the exact candidate
+count and index range in its JSON Schema; accepted history is explicitly
+excluded from returned verdicts. A reviewer failure still aborts the request.
+End-to-end latency remains dependent on quiz size.
 
 `diagnostics.py` emits a correlation ID, stage, round, item count, duration,
 exception class chain, and acceptance rejection codes to the existing logger.
@@ -169,31 +175,30 @@ Settings use the existing `.env` loader and shared model factory:
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `ASSESSMENT_GENERATOR_MODEL_NAME` | empty | Candidate author model; blank reuses the selected chat model |
-| `ASSESSMENT_VERIFIER_MODEL_NAME` | empty | Reviewer model for both serial review modules; blank reuses the selected chat model |
+| `ASSESSMENT_EDITOR_MODEL_NAME` | empty | Batch repair editor model; blank reuses the selected chat model |
+| `ASSESSMENT_VERIFIER_MODEL_NAME` | empty | Independent evidence verifier model; blank reuses the selected chat model |
 | `ASSESSMENT_MAX_TOKENS` | 4096 | Separate output budget |
 | `ASSESSMENT_TIMEOUT_SECONDS` | 60 | Model client timeout |
 | `ASSESSMENT_TEMPERATURE` | 0.2 | Generation temperature |
 | `ASSESSMENT_CONTEXT_MAX_CHARS` | 6000 | Textbook evidence budget |
 
 Local versus remote model selection and credentials follow the existing shared
-configuration. The generator and reviewer have separate model-name factories
-but share the assessment token, timeout, and provider settings. The reviewer
-runs Evidence verification followed by ordered Item quality critic batches of
-at most two items; it is not a second agent or a new provider configuration. The current local repair
-configuration is `generator=Pro/deepseek-ai/DeepSeek-V3` and
-`reviewer=deepseek-ai/DeepSeek-V4-Pro` at temperature 0. The V4 Pro review
-profile matched all seven fixed positive/negative regression cases; this is a
-small authored regression set, not a human-labeled quality benchmark. Qwen3.5-9B repeatedly reached the author
-read timeout on groupby during acceptance; the DeepSeek author completed an
-independent two-question run through both gates. Shared model names do not make
-the two prompts statistically independent; both reviewer inputs still hide the
-author answer key and explanation. The generation call does not bind agent
-tools or stream partial questions. SDK/provider failures are not retried. After
-a valid provider response, the service may make one separate repair call for
-invalid structured output or rejected question slots. Both models must support
-LangChain structured output. The client timeout is not an end-to-end deadline
-for retrieval, generation, Evidence verification, and criticism; do not
-advertise it as one.
+configuration. Generator, editor, and verifier have separate model-name
+factories but share the assessment token, timeout, and provider settings. For
+each candidate pool, the Evidence verifier and Item quality critic make one
+parallel call over the same candidates. A repair round makes one batch editor
+call for all pending slots, then runs both review gates again in parallel for
+the revised candidates. A SiliconFlow profile can therefore use
+`generator=Qwen/Qwen3.5-9B`, `editor=Pro/deepseek-ai/DeepSeek-V3`, and
+`verifier=Qwen/Qwen3.5-9B`; an empty role-specific name falls back to the
+selected remote or local chat model. Shared model names do not make the two
+review prompts statistically independent; both reviewer inputs still hide the
+author answer key and explanation. The generation and editor calls do not bind
+agent tools or stream partial questions. Transient provider failures follow the
+typed preparation retry policy, while permanent configuration or authentication
+failures remain failed. All three models must support LangChain structured
+output. The client timeout is not an end-to-end deadline for retrieval,
+generation, Evidence verification, and criticism; do not advertise it as one.
 
 The historical single-verifier calibration batches took 11.998 s and 13.766 s.
 They do not measure current serial reviewer latency because the current path

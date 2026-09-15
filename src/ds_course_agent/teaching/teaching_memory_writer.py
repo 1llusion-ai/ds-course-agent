@@ -11,7 +11,7 @@ from typing import Any
 from ds_course_agent.teaching.interaction_episode_repository import SQLiteInteractionEpisodeRepository
 from ds_course_agent.teaching.learning_event_repository import (
     LearningEventRecord,
-    SQLiteLearningEventRepository,
+    LearningEventRepository,
 )
 from ds_course_agent.teaching.personalization import EpisodeOutcome, InteractionEpisode
 
@@ -21,7 +21,7 @@ class TeachingMemoryWriter:
 
     def __init__(
         self,
-        event_repository: SQLiteLearningEventRepository,
+        event_repository: LearningEventRepository,
         episode_repository: SQLiteInteractionEpisodeRepository,
         profile_repository=None,
     ) -> None:
@@ -43,7 +43,6 @@ class TeachingMemoryWriter:
         matched_concepts: Sequence[Any],
         special_case_response: str | None,
         learning_event_hook: Any,
-        get_memory_core_fn: Callable[[], Any],
         classify_question_type_fn: Callable[[str], str],
     ) -> int:
         """Write generated facts, then project them into one episode.
@@ -65,7 +64,7 @@ class TeachingMemoryWriter:
                 student_id=student_id,
                 matched_concepts=list(matched_concepts),
                 special_case_response=special_case_response,
-                get_memory_core_fn=get_memory_core_fn,
+                event_repository=self._event_repository,
                 record_event_fn=events.append,
                 classify_question_type_fn=classify_question_type_fn,
             )

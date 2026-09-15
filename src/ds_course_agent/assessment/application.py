@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from threading import RLock
 from uuid import uuid4
 
+from ds_course_agent.assessment.feedback import AssessmentGenerationProgress
 from ds_course_agent.assessment.models import GenerateQuestionsRequest
 from ds_course_agent.assessment.records import (
     AnswerSubmission,
@@ -66,6 +67,7 @@ class AssessmentApplicationService:
         *,
         session_id: str | None = None,
         assignment_id: str | None = None,
+        generation_progress: AssessmentGenerationProgress | None = None,
     ) -> AssessmentSummary:
         """Generate and assign a quiz from agent-selected typed parameters."""
 
@@ -75,7 +77,13 @@ class AssessmentApplicationService:
                 if existing.session_id != session_id or existing.request != request:
                     raise AssessmentStateError("assignment identity conflicts with the persisted request")
                 return self._summary(existing)
-        quiz = (self._generator or get_assessment_service()).generate(request)
+        generator = self._generator or get_assessment_service()
+        if generation_progress is None:
+            quiz = generator.generate(request)
+        else:
+            quiz = generator.generate(request, progress=generation_progress)
+        if len(quiz.questions) != request.count:
+            raise AssessmentStateError("assessment generation must return the exact requested question count")
         now = self._utc_now()
         record = AssessmentRecord(
             id=assignment_id or self._id_factory(),

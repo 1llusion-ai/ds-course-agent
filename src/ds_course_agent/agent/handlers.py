@@ -117,8 +117,8 @@ class AssessmentAssignmentRouteHandler(BufferedRouteHandlerMixin):
             return build_route_result(
                 route_state,
                 build_error_response(
-                    "测验创建失败",
-                    "暂时无法根据课程资料生成测验，请稍后重试。",
+                    "测验暂未准备好",
+                    "本次题目还没有通过教材证据和质量检查。你的学习记录已保存，请稍后再次发起测验请求。",
                     retryable=True,
                 ),
                 degraded=True,

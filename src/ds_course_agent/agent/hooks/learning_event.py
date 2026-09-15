@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from ds_course_agent.agent.hooks.clarification import ClarificationDetectorHook
 
 if TYPE_CHECKING:
+    from ds_course_agent.teaching.learning_event_repository import LearningEventRepository
     from ds_course_agent.teaching.learning_events import BaseEvent
 
 
@@ -28,10 +29,9 @@ class LearningEventHook:
         session_id: str,
         concept_id: str | None = None,
         *,
-        get_memory_core_fn: Callable[[], Any],
+        event_repository: LearningEventRepository,
     ) -> BaseEvent | None:
-        memory = get_memory_core_fn()
-        events = memory.load_events(student_id)
+        events = tuple(record.event for record in event_repository.list_all_for_student(student_id))
         fallback_event = None
         from ds_course_agent.teaching.learning_events import EventType
 
@@ -57,7 +57,7 @@ class LearningEventHook:
         student_id: str,
         session_id: str,
         *,
-        get_memory_core_fn: Callable[[], Any],
+        event_repository: LearningEventRepository,
     ) -> dict[str, Any] | None:
         if matched_concepts:
             primary = matched_concepts[0]
@@ -78,7 +78,7 @@ class LearningEventHook:
         recent_event = self.get_recent_session_concept_event(
             student_id,
             session_id,
-            get_memory_core_fn=get_memory_core_fn,
+            event_repository=event_repository,
         )
         if not recent_event:
             return None
@@ -100,7 +100,7 @@ class LearningEventHook:
         student_id: str,
         matched_concepts: list[Any],
         special_case_response: str | None = None,
-        get_memory_core_fn: Callable[[], Any],
+        event_repository: LearningEventRepository,
         record_event_fn: Callable[[Any], Any],
         classify_question_type_fn: Callable[[str], str],
     ) -> int:
@@ -112,7 +112,7 @@ class LearningEventHook:
             matched_concepts,
             student_id,
             session_id,
-            get_memory_core_fn=get_memory_core_fn,
+            event_repository=event_repository,
         )
         if not learning_concept:
             return 0
@@ -229,10 +229,10 @@ class LearningEventHook:
 
     def on_session_end(self, session_id: str, **kwargs: Any) -> None:
         student_id = kwargs.get("student_id") or session_id
-        get_memory_core_fn = kwargs.get("get_memory_core_fn")
-        if get_memory_core_fn is None:
+        profile_repository = kwargs.get("profile_repository")
+        if profile_repository is None:
             return
-        get_memory_core_fn().aggregate_profile(student_id)
+        profile_repository.project(student_id)
 
     @staticmethod
     def _normalize_query_text(text: str) -> str:

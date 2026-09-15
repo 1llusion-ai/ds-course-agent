@@ -50,7 +50,7 @@ def _record() -> AssessmentRecord:
 def test_assessment_schema_is_idempotent_and_normalized(tmp_path) -> None:
     path = tmp_path / "assessment.db"
 
-    assert [item.version for item in migrate_assessment_database(path)] == [3]
+    assert [item.version for item in migrate_assessment_database(path)] == [3, 4]
     assert migrate_assessment_database(path) == ()
     assert plan_assessment_database(path).pending == ()
 
@@ -61,6 +61,7 @@ def test_assessment_schema_is_idempotent_and_normalized(tmp_path) -> None:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(assessments)")}
     assert {"assessments", "assessment_questions", "assessment_answers"} <= tables
     assert "payload_json" not in columns
+    assert "teaching_requirement_json" in columns
 
 
 def test_legacy_payload_is_backfilled_once(tmp_path) -> None:

@@ -45,7 +45,7 @@ from ds_course_agent.teaching.learner_state import (
     SQLiteProfileLearnerStateProvider,
 )
 from ds_course_agent.teaching.learning_event_repository import SQLiteLearningEventRepository
-from ds_course_agent.teaching.memory_core import get_memory_core, record_event
+from ds_course_agent.teaching.memory_core import get_memory_core
 from ds_course_agent.teaching.personalization import LearnerMemoryRetriever, SQLiteLearnerMemoryRetriever
 from ds_course_agent.teaching.practice_guidance import build_practice_guidance
 from ds_course_agent.teaching.skill_system import get_skill_loader
@@ -184,34 +184,6 @@ class AgentService:
     def _build_distinction_learning_concept(self, question: str, matched_concepts: list):
         return self._get_clarification_detector().build_distinction_learning_concept(question, matched_concepts)
 
-    def _record_learning_events(
-        self,
-        question: str,
-        session_id: str,
-        student_id: str,
-        matched_concepts: list,
-        special_case_response: str | None = None,
-    ) -> int:
-        from ds_course_agent.shared.query_trace import trace_span, trace_step
-
-        with trace_span("memory.learning_event_write"):
-            recorded_count = self._get_learning_event_hook().record_learning_events(
-                question=question,
-                session_id=session_id,
-                student_id=student_id,
-                matched_concepts=matched_concepts,
-                special_case_response=special_case_response,
-                get_memory_core_fn=get_memory_core,
-                record_event_fn=record_event,
-                classify_question_type_fn=self._classify_question_type,
-            )
-        trace_step(
-            "learner_memory.write_result",
-            storage="learning_events",
-            recorded_count=recorded_count,
-        )
-        return recorded_count
-
     def _persist_successful_learning_turn(self, state: RouteState, result: RouteExecutionResult) -> None:
         """Persist teaching facts only after a non-degraded answer is complete."""
         if not state.pending_learning_event or result.degraded or not result.content.strip():
@@ -231,7 +203,6 @@ class AgentService:
                     matched_concepts=event_concepts,
                     special_case_response=state.special_case_response,
                     learning_event_hook=self._get_learning_event_hook(),
-                    get_memory_core_fn=get_memory_core,
                     classify_question_type_fn=self._classify_question_type,
                 )
             from ds_course_agent.shared.query_trace import trace_step

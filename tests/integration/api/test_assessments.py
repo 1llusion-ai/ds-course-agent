@@ -8,6 +8,9 @@ from fastapi.testclient import TestClient
 
 from ds_course_agent.api.main import app
 from ds_course_agent.api.routers.assessments import get_student_assessment_service
+from ds_course_agent.assessment.feedback import AssessmentFailureKind, QuestionRejectionCode
+from ds_course_agent.assessment.models import GenerateQuestionsRequest
+from ds_course_agent.assessment.preparation import AssessmentPreparation, PreparationStatus
 from ds_course_agent.assessment.records import (
     AssessmentResult,
     AssessmentStatus,
@@ -133,6 +136,37 @@ def test_student_lists_assigned_assessments_without_generation_parameters(client
     assert response.json()[0]["question_count"] == 1
     assert service.calls == [("list", "student-1", (AssessmentStatus.READY, AssessmentStatus.IN_PROGRESS))]
     assert client.post("/api/questions/generate", json={"target_kc_id": "svm"}).status_code == 404
+
+
+def test_preparation_projection_preserves_typed_failure_details(client: TestClient, monkeypatch) -> None:
+    import ds_course_agent.api.routers.assessments as assessments_router
+
+    job = AssessmentPreparation(
+        id="preparation-1",
+        student_id="student-1",
+        session_id="session-1",
+        display_name="支持向量机",
+        request=GenerateQuestionsRequest(target_kc_id="svm", count=2),
+        source_event_ids=("event-1",),
+        status=PreparationStatus.FAILED,
+        failure_kind=AssessmentFailureKind.QUESTION_SLOT_FAILURE,
+        failed_slots=(1,),
+        failure_codes=(QuestionRejectionCode.ANSWER_NOT_SUPPORTED,),
+        updated_at=0.0,
+    )
+
+    class StubLearningLoop:
+        def list_preparations(self, student_id: str):
+            assert student_id == "student-1"
+            return (job,)
+
+    monkeypatch.setattr(assessments_router, "get_session_learning_loop", lambda: StubLearningLoop())
+    response = client.get("/api/assessments/preparations", headers={"x-test-student-id": "student-1"})
+
+    assert response.status_code == 200
+    assert response.json()[0]["failure_kind"] == "question_slot_failure"
+    assert response.json()[0]["failed_slots"] == [1]
+    assert response.json()[0]["failure_codes"] == ["answer_not_supported"]
 
 
 def test_active_assessment_projection_never_contains_answers_or_sources(client: TestClient) -> None:

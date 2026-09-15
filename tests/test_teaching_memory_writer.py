@@ -32,7 +32,6 @@ def test_writer_persists_completed_turn_and_is_idempotent(tmp_path) -> None:
         "matched_concepts": [MatchedConcept("pca", "主成分分析", "第7章", "exact", 0.95)],
         "special_case_response": None,
         "learning_event_hook": hook,
-        "get_memory_core_fn": lambda: type("Memory", (), {"load_events": lambda self, _student: []})(),
         "classify_question_type_fn": lambda _question: "概念理解",
     }
 
@@ -56,7 +55,6 @@ def test_writer_keeps_unknown_outcome_for_plain_completed_question(tmp_path) -> 
         matched_concepts=[MatchedConcept("pca", "主成分分析", "第7章", "exact", 0.95)],
         special_case_response=None,
         learning_event_hook=hook,
-        get_memory_core_fn=lambda: type("Memory", (), {"load_events": lambda self, _student: []})(),
         classify_question_type_fn=lambda _question: "概念理解",
     )
     episode = SQLiteInteractionEpisodeRepository(tmp_path / "app.db").list_for_student("student-1")[0]
@@ -73,7 +71,6 @@ def test_writer_links_follow_up_episode_to_recent_same_concept(tmp_path) -> None
         "matched_concepts": [MatchedConcept("pca", "主成分分析", "第7章", "exact", 0.95)],
         "special_case_response": None,
         "learning_event_hook": hook,
-        "get_memory_core_fn": lambda: type("Memory", (), {"load_events": lambda self, _student: []})(),
         "classify_question_type_fn": lambda _question: "概念理解",
     }
     writer.persist_turn(question="什么是 PCA？", turn_id="turn-1", **common)
@@ -115,7 +112,6 @@ def test_writer_links_follow_up_explanation_to_incorrect_assessment(tmp_path) ->
         matched_concepts=[MatchedConcept("pca", "主成分分析", "第7章", "exact", 0.95)],
         special_case_response=None,
         learning_event_hook=LearningEventHook(),
-        get_memory_core_fn=lambda: type("Memory", (), {"load_events": lambda self, _student: []})(),
         classify_question_type_fn=lambda _question: "概念理解",
     )
 
@@ -157,7 +153,6 @@ def test_writer_reuses_facts_when_projection_retry_follows_partial_failure(tmp_p
         "matched_concepts": [MatchedConcept("pca", "主成分分析", "第7章", "exact", 0.95)],
         "special_case_response": None,
         "learning_event_hook": hook,
-        "get_memory_core_fn": lambda: type("Memory", (), {"load_events": lambda self, _student: []})(),
         "classify_question_type_fn": lambda _question: "概念理解",
     }
 

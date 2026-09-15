@@ -18,6 +18,7 @@ from ds_course_agent.shared.config.schema import Settings
     "field",
     [
         "ASSESSMENT_GENERATOR_MODEL_NAME",
+        "ASSESSMENT_EDITOR_MODEL_NAME",
         "ASSESSMENT_VERIFIER_MODEL_NAME",
         "ASSESSMENT_MAX_TOKENS",
         "ASSESSMENT_TIMEOUT_SECONDS",
@@ -55,6 +56,7 @@ def test_assessment_settings_reject_invalid_budgets(field: str, value: float) ->
     ("config_field", "factory_name"),
     [
         ("ASSESSMENT_GENERATOR_MODEL_NAME", "get_assessment_generator_model"),
+        ("ASSESSMENT_EDITOR_MODEL_NAME", "get_assessment_editor_model"),
         ("ASSESSMENT_VERIFIER_MODEL_NAME", "get_assessment_verifier_model"),
     ],
 )
@@ -93,3 +95,18 @@ def test_assessment_factories_use_separate_names_and_shared_budget(
         assert kwargs["num_predict"] == 2048
         assert kwargs["sync_client_kwargs"] == {"timeout": 23}
         assert kwargs["reasoning"] is False
+
+
+def test_assessment_editor_factory_does_not_reuse_verifier_name(monkeypatch) -> None:
+    factory = Mock()
+    monkeypatch.setitem(sys.modules, "langchain_openai", SimpleNamespace(ChatOpenAI=factory))
+    monkeypatch.setattr(config, "USE_REMOTE_LLM", True)
+    monkeypatch.setattr(config, "ASSESSMENT_EDITOR_MODEL_NAME", "editor-model")
+    monkeypatch.setattr(config, "ASSESSMENT_VERIFIER_MODEL_NAME", "verifier-model")
+    monkeypatch.setattr(config, "ASSESSMENT_MAX_TOKENS", 2048)
+    monkeypatch.setattr(config, "ASSESSMENT_TIMEOUT_SECONDS", 23)
+    monkeypatch.setattr(config, "API_KEY", "test-key")
+    monkeypatch.setattr(config, "BASE_URL", "https://example.invalid/v1")
+
+    assert model_factory.get_assessment_editor_model() is factory.return_value
+    assert factory.call_args.kwargs["model"] == "editor-model"
