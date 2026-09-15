@@ -248,16 +248,14 @@ def launch_stream_worker(
             if persisted_final.is_set():
                 return None
             if replace_message_item is None:
-                chat_sessions.append_message_locked(session_id, message, save=False)
+                if not chat_sessions.replace_latest_generated_assistant(session_id, message):
+                    chat_sessions.append_message_locked(session_id, message)
             elif not chat_sessions.replace_message_by_identity(
                 session_id,
                 replace_message_item,
                 message,
-                save=False,
             ):
                 raise RuntimeError("被续写的回答已不存在")
-            chat_sessions.update_session_metadata(session_id, message.timestamp.isoformat(), save=False)
-            chat_sessions.save_state()
             persisted_final.set()
             return message
 

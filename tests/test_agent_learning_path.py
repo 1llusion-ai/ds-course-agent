@@ -7,11 +7,9 @@ from ds_course_agent.teaching.profile_models import ProgressInfo, StudentProfile
 
 @patch("ds_course_agent.shared.history.get_history")
 @patch("ds_course_agent.agent.service.map_question_to_concepts")
-@patch("ds_course_agent.agent.service.record_event")
 @patch("ds_course_agent.agent.service.get_memory_core")
 def test_chat_with_history_routes_to_learning_path_skill(
     mock_get_memory_core,
-    _mock_record_event,
     mock_map_question,
     mock_get_history,
 ):

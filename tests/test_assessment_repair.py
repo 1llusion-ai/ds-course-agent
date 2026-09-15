@@ -7,15 +7,24 @@ import logging
 import pytest
 
 from ds_course_agent.assessment.critic import ItemCritique
-from ds_course_agent.assessment.feedback import QuestionRejectionCode
+from ds_course_agent.assessment.feedback import (
+    OptionFeedback,
+    QuestionRejection,
+    QuestionRejectionCode,
+    QuestionRepairRequest,
+    QuestionRepairSlot,
+)
 from ds_course_agent.assessment.generator import (
     AssessmentGenerationError,
+    AssessmentGenerator,
     AssessmentModelCallError,
 )
 from ds_course_agent.assessment.models import (
     Difficulty,
+    EvidenceSource,
     GeneratedQuestion,
     GenerateQuestionsRequest,
+    question_slot_id,
 )
 from ds_course_agent.assessment.service import AssessmentService
 from tests.test_assessment_core import (
@@ -25,10 +34,116 @@ from tests.test_assessment_core import (
     _Document,
     _question_payload,
     _quiz_payload,
+    _repair_batch_payload,
     _service_with_model,
     _StructuredModel,
     _Verifier,
 )
+
+
+def test_generator_repair_prompt_projects_feedback_without_replaying_author_answer() -> None:
+    rejected = GeneratedQuestion.model_validate(_question_payload(0, Difficulty.BASIC))
+    accepted = GeneratedQuestion.model_validate(_question_payload(1, Difficulty.BASIC))
+    request = GenerateQuestionsRequest(target_kc_id="pca", count=2)
+    repair_request = QuestionRepairRequest(
+        request=request,
+        evidence=(EvidenceSource(id="S1", text=PCA_EVIDENCE),),
+        slots=(
+            QuestionRepairSlot(
+                slot_id=question_slot_id(request.target_kc_id, 3),
+                slot_index=3,
+                rejection=QuestionRejection(
+                    codes=(
+                        QuestionRejectionCode.MULTIPLE_CORRECT_ANSWERS,
+                        QuestionRejectionCode.IMPLAUSIBLE_DISTRACTORS,
+                    ),
+                    question=rejected,
+                    detail="The evidence review found more than one supported option.",
+                    option_feedback=(OptionFeedback("B", "This distractor is not comparable."),),
+                ),
+            ),
+        ),
+        accepted_questions=(accepted,),
+    )
+
+    messages = AssessmentGenerator._build_revision_messages(repair_request)
+    prompt = messages[-1].content
+
+    assert "multiple_correct_answers" in prompt
+    assert "implausible_distractors" in prompt
+    assert "缩小题干条件或重写选项" in prompt
+    assert "同类候选" in prompt
+    assert rejected.stem in prompt
+    assert rejected.options[1].text in prompt
+    assert '"correct_option_id"' not in prompt
+    assert '"explanation"' not in prompt
+    assert "source_ids 只能填写上方证据的编号" in prompt
+    assert "S1" in prompt
+    assert question_slot_id(request.target_kc_id, 3) in prompt
+
+
+def test_runtime_repair_uses_the_large_model_after_small_batch_generation(monkeypatch) -> None:
+    from ds_course_agent.assessment import model_factory
+
+    request = GenerateQuestionsRequest(target_kc_id="pca", count=1)
+    source = EvidenceSource(id="S1", text=PCA_EVIDENCE)
+    question = GeneratedQuestion.model_validate(_question_payload(0, Difficulty.BASIC))
+    repair_request = QuestionRepairRequest(
+        request=request,
+        evidence=(source,),
+        slots=(
+            QuestionRepairSlot(
+                slot_id=question_slot_id(request.target_kc_id, 0),
+                slot_index=0,
+                rejection=QuestionRejection(
+                    codes=(QuestionRejectionCode.IMPLAUSIBLE_DISTRACTORS,),
+                    question=question,
+                ),
+            ),
+        ),
+    )
+    small_model = _StructuredModel(_quiz_payload(1, Difficulty.BASIC))
+    large_model = _StructuredModel(
+        {
+            "revisions": [
+                {
+                    "slot_id": question_slot_id(request.target_kc_id, 0),
+                    "question": question.model_dump(mode="json"),
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(model_factory, "get_assessment_generator_model", lambda: small_model)
+    monkeypatch.setattr(model_factory, "get_assessment_editor_model", lambda: large_model)
+
+    generator = AssessmentGenerator()
+    generator.generate_candidates(request, [source])
+    revised = generator.revise_items(repair_request)
+
+    assert revised.revisions[0].question == question
+    assert small_model.invoke_count == 1
+    assert large_model.invoke_count == 1
+
+
+@pytest.mark.parametrize(
+    ("difficulty", "source_text"),
+    [
+        (Difficulty.ADVANCED, PCA_EVIDENCE),
+        (Difficulty.BASIC, r"增益率定义为 $G_r(D,a)=\frac{G(D | a)}{H_a(D)}$。"),
+    ],
+)
+def test_advanced_or_formula_drafts_can_use_the_large_model(difficulty: Difficulty, source_text: str) -> None:
+    small_model = _StructuredModel(_quiz_payload(1, difficulty))
+    large_model = _StructuredModel(_quiz_payload(1, difficulty))
+    generator = AssessmentGenerator(model=small_model, editor_model=large_model)
+
+    generator.generate_candidates(
+        GenerateQuestionsRequest(target_kc_id="pca", count=1, difficulty=difficulty),
+        [EvidenceSource(id="S1", text=source_text)],
+    )
+
+    assert small_model.invoke_count == 0
+    assert large_model.invoke_count == 1
 
 
 @pytest.mark.parametrize(
@@ -68,14 +183,14 @@ def test_repair_preserves_accepted_items_and_can_fix_options_without_changing_st
     )
     verdict["cognitive_operation"] = "analysis"
     verdict["reason"] = "ITEM_FEEDBACK: test the distinction between rows and features."
+    verdict["question_index"] = 1
     critic = _Critic(
         [
-            [_critique_payload(0, first)],
-            [verdict],
+            [_critique_payload(0, first), verdict],
             [_critique_payload(0, fixed)],
         ]
     )
-    model = _StructuredModel(responses=[initial, repair])
+    model = _StructuredModel(responses=[initial, _repair_batch_payload(repair["questions"][0], 1)])
     service, _ = _service_with_model(model, critic=critic, documents=[_Document(PCA_EVIDENCE)])
 
     quiz = service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=2))
@@ -84,7 +199,7 @@ def test_repair_preserves_accepted_items_and_can_fix_options_without_changing_st
     assert rejected.stem == fixed.stem
     assert model.invoke_count == 2
     prompt = model.message_batches[1][-1].content
-    assert "题目数量：1" in prompt
+    assert question_slot_id("pca", 1) in prompt
     assert "已通过题目" in prompt
     assert first.stem in prompt
     assert rejected.options[1].text in prompt
@@ -168,7 +283,7 @@ def test_published_explanation_does_not_expose_internal_evidence_ids() -> None:
     assert quiz.questions[0].explanation == "根据教材内容，正确选项成立。"
 
 
-def test_repeated_quality_rejection_logs_codes_and_stops_at_one_repair(
+def test_repeated_quality_rejection_logs_codes_and_stops_at_bounded_repair_budget(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     draft = _quiz_payload(1, Difficulty.BASIC)
@@ -182,42 +297,42 @@ def test_repeated_quality_rejection_logs_codes_and_stops_at_one_repair(
 
     with pytest.raises(
         AssessmentGenerationError,
-        match="repair budget exhausted: implausible_distractors",
+        match="implausible_distractors",
     ):
         service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
 
-    assert model.invoke_count == 2
-    assert caplog.text.count("stage=acceptance") == 2
+    assert model.invoke_count == 3
+    assert caplog.text.count("stage=acceptance") == 3
+    assert caplog.text.count("stage=repair") == 2
     assert "rejection_codes=implausible_distractors" in caplog.text
-    assert "error_types=AssessmentGenerationError" in caplog.text
+    assert "error_types=AssessmentSlotFailureError" in caplog.text
     assert "PRIVATE_REVIEW_CONTENT" not in caplog.text
 
 
-def test_critic_reviews_one_item_per_call_and_excludes_rejected_items_from_context() -> None:
+def test_critic_reviews_candidate_batch_once_and_excludes_rejected_items_from_context() -> None:
     draft = _quiz_payload(3, Difficulty.BASIC)
     questions = [GeneratedQuestion.model_validate(item) for item in draft["questions"]]
-    rejected = _critique_payload(0, questions[1])
+    rejected = _critique_payload(1, questions[1])
     rejected["option_critiques"][1].update(assessment="distractor", same_type_and_granularity=False)
     repair = _quiz_payload(1, Difficulty.BASIC)
     repair["questions"][0] = _question_payload(4, Difficulty.BASIC)
     fixed = GeneratedQuestion.model_validate(repair["questions"][0])
     critic = _Critic(
         [
-            [_critique_payload(0, questions[0])],
-            [rejected],
-            [_critique_payload(0, questions[2])],
+            [_critique_payload(0, questions[0]), rejected, _critique_payload(2, questions[2])],
             [_critique_payload(0, fixed)],
         ]
     )
-    model = _StructuredModel(responses=[draft, repair])
+    model = _StructuredModel(responses=[draft, _repair_batch_payload(repair["questions"][0], 1)])
     evidence = PCA_EVIDENCE + "PCA 在降维过程中用较少的新特征表示原始高维特征之间的大部分变异信息。"
     service, _ = _service_with_model(model, critic=critic, documents=[_Document(evidence)])
 
     quiz = service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=3))
 
-    assert quiz.questions == [questions[0], questions[2], fixed]
-    assert [len(batch) for batch, _ in critic.calls] == [1, 1, 1, 1]
-    assert critic.calls[1][1] == [questions[0]]
-    assert critic.calls[2][1] == [questions[0]]
-    assert critic.calls[3][1] == [questions[0], questions[2]]
+    assert quiz.questions == [questions[0], fixed, questions[2]]
+    assert [len(batch) for batch, _ in critic.calls] == [3, 1]
+    assert critic.calls[0][0] == questions
+    assert critic.calls[0][1] == []
+    assert critic.calls[1][0] == [fixed]
+    assert critic.calls[1][1] == [questions[0], questions[2]]
     assert model.invoke_count == 2

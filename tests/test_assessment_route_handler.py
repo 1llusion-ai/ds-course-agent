@@ -131,5 +131,5 @@ def test_handler_returns_assessment_error_without_rag_fallback() -> None:
     result = AssessmentAssignmentRouteHandler().execute(SimpleNamespace(tool_registry=registry), state)
 
     assert result.degraded is True
-    assert "测验创建失败" in result.content
+    assert "测验暂未准备好" in result.content
     assert "基础检索模式" not in result.content

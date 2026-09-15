@@ -54,15 +54,17 @@ class Settings(BaseSettings):
     CHAT_DISABLE_THINKING: bool = True
     CHAT_SYSTEM_SUFFIX: str = "/no_think"
 
-    # Assessment author and verifier may use different models while sharing the
-    # same provider connection and bounded call budget.
+    # Assessment generator, editor, and verifier may use different models while
+    # sharing the same provider connection and bounded call budget.
     ASSESSMENT_GENERATOR_MODEL_NAME: str = ""
+    ASSESSMENT_EDITOR_MODEL_NAME: str = ""
     ASSESSMENT_VERIFIER_MODEL_NAME: str = ""
     ASSESSMENT_MAX_TOKENS: int = Field(default=4096, ge=256, le=32768)
     ASSESSMENT_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0.0, le=300.0, allow_inf_nan=False)
     ASSESSMENT_TEMPERATURE: float = Field(default=0.2, ge=0.0, le=1.0, allow_inf_nan=False)
     ASSESSMENT_CONTEXT_MAX_CHARS: int = Field(default=6000, ge=256, le=32000)
     ASSESSMENT_DB_PATH: str = "var/assessment.db"
+    APP_DB_PATH: str = "var/app.db"
 
     # Learning semantic router.  An empty model name reuses the active chat
     # model for the selected local/remote backend.
@@ -223,6 +225,7 @@ class Settings(BaseSettings):
         "TOOL_RESULT_ARTIFACT_DIR",
         "AUTH_DB_PATH",
         "ASSESSMENT_DB_PATH",
+        "APP_DB_PATH",
     )
     @classmethod
     def _resolve_project_paths(cls, value: str) -> str:

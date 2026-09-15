@@ -253,37 +253,38 @@ def test_ingest_publishes_one_revision_window_for_all_batches(monkeypatch, tmp_p
     ]
 
 
-def test_clear_history_updates_metadata_once(monkeypatch):
+def test_clear_history_updates_metadata_once(monkeypatch, tmp_path):
+    from datetime import datetime, timezone
+
+    import ds_course_agent.shared.config as config
     from ds_course_agent.api import chat_sessions as sessions
+    from ds_course_agent.api.schemas.chat import ChatMessage
+    from ds_course_agent.api.session_repository import SessionRecord
 
-    monkeypatch.setattr(sessions, "_chat_history", {"s": [{"content": "x"}]})
-    monkeypatch.setattr(sessions, "_sessions", {"s": {"message_count": 1}})
-    save = Mock()
-    monkeypatch.setattr(sessions, "_save_state", save)
+    monkeypatch.setattr(config, "APP_DB_PATH", str(tmp_path / "app.db"))
+    now = datetime.now(timezone.utc)
+    sessions._repository().create_session(SessionRecord("s", "u", "title", "manual", now, now))
+    sessions.append_message_locked("s", ChatMessage(role="user", content="x"))
     sessions.clear_messages("s")
-    assert sessions.message_count("s") == sessions._sessions["s"]["message_count"] == 0
-    save.assert_called_once()
+    assert sessions.message_count("s") == 0
 
 
-def test_clear_history_waits_for_active_session_operation(monkeypatch):
+def test_clear_history_waits_for_active_session_operation(monkeypatch, tmp_path):
     """Clearing history cannot invalidate an in-flight continuation target."""
 
+    import ds_course_agent.shared.config as config
     from ds_course_agent.api import chat_application, chat_sessions
     from ds_course_agent.api.schemas.chat import ChatMessage
+    from ds_course_agent.api.session_repository import SessionRecord
 
     session_id = "clear-race-session"
     student_id = "clear-race-student"
-    monkeypatch.setattr(chat_sessions, "_chat_history", {})
-    monkeypatch.setattr(
-        chat_sessions,
-        "_sessions",
-        {session_id: {"id": session_id, "student_id": student_id, "title": "race"}},
-    )
-    monkeypatch.setattr(chat_sessions, "_save_state", Mock())
+    monkeypatch.setattr(config, "APP_DB_PATH", str(tmp_path / "app.db"))
+    now = datetime.now(timezone.utc)
+    chat_sessions._repository().create_session(SessionRecord(session_id, student_id, "race", "manual", now, now))
     chat_sessions.append_message_locked(
         session_id,
         ChatMessage(role="assistant", content="partial"),
-        save=False,
     )
     operation_lock = chat_sessions.session_operation_lock(session_id)
     operation_lock.acquire()
@@ -304,19 +305,18 @@ def test_clear_history_waits_for_active_session_operation(monkeypatch):
             operation_lock.release()
 
 
-def test_stream_worker_terminalizes_when_continuation_target_disappears(monkeypatch):
+def test_stream_worker_terminalizes_when_continuation_target_disappears(monkeypatch, tmp_path):
+    import ds_course_agent.shared.config as config
     from ds_course_agent.api import chat_sessions, chat_streaming
     from ds_course_agent.api.schemas.chat import ChatMessage
+    from ds_course_agent.api.session_repository import SessionRecord
     from ds_course_agent.api.sse import iter_stream_job_events
 
     session_id = "missing-continuation-target"
     student_id = "student"
-    monkeypatch.setattr(chat_sessions, "_chat_history", {session_id: []})
-    monkeypatch.setattr(
-        chat_sessions,
-        "_sessions",
-        {session_id: {"id": session_id, "student_id": student_id}},
-    )
+    monkeypatch.setattr(config, "APP_DB_PATH", str(tmp_path / "app.db"))
+    now = datetime.now(timezone.utc)
+    chat_sessions._repository().create_session(SessionRecord(session_id, student_id, "title", "manual", now, now))
     operation_lock = chat_sessions.session_operation_lock(session_id)
     operation_lock.acquire()
     missing_target = {"role": "assistant", "content": "gone"}
@@ -343,16 +343,24 @@ def test_stream_worker_terminalizes_when_continuation_target_disappears(monkeypa
     assert job.snapshot().terminal is True
 
 
-def test_continuation_accepts_iso_normalization_but_rejects_wrong_turn(monkeypatch):
+def test_continuation_accepts_iso_normalization_but_rejects_wrong_turn(monkeypatch, tmp_path):
     from fastapi import HTTPException
 
+    import ds_course_agent.shared.config as config
     from ds_course_agent.api import chat_sessions as sessions
+    from ds_course_agent.api.schemas.chat import ChatMessage
+    from ds_course_agent.api.session_repository import SessionRecord
 
     local = datetime(2026, 9, 8, 12, 30, 0, 123456)
     normalized = local.astimezone(timezone.utc).replace(microsecond=123000)
-    item = {"role": "assistant", "generation_status": "stopped", "timestamp": local.isoformat()}
-    monkeypatch.setattr(sessions, "_chat_history", {"s": [item]})
-    assert sessions.find_stopped_assistant_turn("s", normalized) is item
+    monkeypatch.setattr(config, "APP_DB_PATH", str(tmp_path / "app.db"))
+    sessions._repository().create_session(SessionRecord("s", "u", "title", "manual", local, local))
+    sessions.append_message_locked(
+        "s",
+        ChatMessage(role="assistant", content="x", timestamp=local, generation_status="stopped"),
+    )
+    item = sessions.find_stopped_assistant_turn("s", normalized)
+    assert item["generation_status"] == "stopped"
     with pytest.raises(HTTPException) as error:
         sessions.find_stopped_assistant_turn("s", normalized + timedelta(seconds=1))
     assert error.value.status_code == 409

@@ -30,6 +30,8 @@ class TestAgentServiceMock:
         mock_get_chat_model.return_value = MagicMock()
         mock_loader = MagicMock()
         mock_loader.load_executor.return_value = MagicMock()
+        explanation_instance = MagicMock()
+        mock_loader.load_module.return_value.PersonalizedExplanationSkill.return_value = explanation_instance
         mock_get_skill_loader.return_value = mock_loader
 
         with patch.object(agent_module.config, "USE_REMOTE_LLM", True):
@@ -40,6 +42,7 @@ class TestAgentServiceMock:
         assert service is not None
         assert service.model_runtime.system_prompt == "test prompt"
         assert service.model_runtime.tool_registry.names == []
+        assert service.explanation_skill is explanation_instance
 
     def test_agent_chat_returns_string(self):
         from ds_course_agent.agent.service import AgentService
@@ -455,7 +458,7 @@ class TestChatWithHistory:
     @patch("ds_course_agent.shared.history.get_history")
     @patch("ds_course_agent.agent.service.map_question_to_concepts", return_value=[])
     @patch("ds_course_agent.agent.service.get_memory_core")
-    def test_chat_with_history_calls_file_store(self, mock_get_memory_core, _mock_map, mock_get_history):
+    def test_chat_with_history_calls_persistent_store(self, mock_get_memory_core, _mock_map, mock_get_history):
         from ds_course_agent.agent.service import AgentService
 
         mock_history = MagicMock()
@@ -481,7 +484,7 @@ class TestChatWithHistory:
         assert result.family.value == "learning"
         assert result.intent.value == "code_example"
         assert result.execution_mode.value == "direct_model"
-        mock_get_history.assert_called_once_with("test_session")
+        mock_get_history.assert_called_once_with("test_session", student_id="test_session")
         assert mock_history.add_messages.call_count == 2
         assert isinstance(mock_history.add_messages.call_args_list[0][0][0][0], HumanMessage)
         assert mock_history.add_messages.call_args_list[0][0][0][0].content == "请用 Python 演示交叉验证"
@@ -745,8 +748,6 @@ class TestAgentShortTermMemory:
         monkeypatch.setattr("ds_course_agent.agent.service.map_question_to_concepts", lambda question, top_k=3: [])
         monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
         monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
-        monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
-
         state = service._prepare_query_route("继续讲", "session-1", "student-1")
 
         assert state.chat_history == compacted

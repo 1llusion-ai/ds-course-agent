@@ -59,4 +59,14 @@ def get_assessment_verifier_model() -> Any:
     return _build_assessment_model(config.ASSESSMENT_VERIFIER_MODEL_NAME, temperature=0.0)
 
 
-__all__ = ["get_assessment_generator_model", "get_assessment_verifier_model"]
+def get_assessment_editor_model() -> Any:
+    """Return the model used only for batch repair of rejected item slots."""
+
+    return _build_assessment_model(config.ASSESSMENT_EDITOR_MODEL_NAME, temperature=0.0)
+
+
+__all__ = [
+    "get_assessment_editor_model",
+    "get_assessment_generator_model",
+    "get_assessment_verifier_model",
+]

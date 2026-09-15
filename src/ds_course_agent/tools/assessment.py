@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
+from ds_course_agent.assessment.feedback import AssessmentGenerationProgress
 from ds_course_agent.assessment.models import GenerateQuestionsRequest
 from ds_course_agent.assessment.records import AssessmentSummary
 
@@ -20,6 +21,7 @@ class AssessmentAssignmentService(Protocol):
         *,
         session_id: str | None = None,
         assignment_id: str | None = None,
+        generation_progress: AssessmentGenerationProgress | None = None,
     ) -> AssessmentSummary:
         """Generate, persist, and assign one assessment."""
 
@@ -32,6 +34,7 @@ class AssessmentAssignmentInput:
     request: GenerateQuestionsRequest
     session_id: str | None = None
     assignment_id: str | None = None
+    generation_progress: AssessmentGenerationProgress | None = None
 
 
 class AssessmentAssignmentTool:
@@ -50,11 +53,20 @@ class AssessmentAssignmentTool:
         student_id = tool_input.student_id.strip()
         if not student_id:
             raise ValueError("student_id must be non-empty")
-        return self._service().assign(
+        service = self._service()
+        if tool_input.generation_progress is None:
+            return service.assign(
+                student_id,
+                tool_input.request,
+                session_id=tool_input.session_id,
+                assignment_id=tool_input.assignment_id,
+            )
+        return service.assign(
             student_id,
             tool_input.request,
             session_id=tool_input.session_id,
             assignment_id=tool_input.assignment_id,
+            generation_progress=tool_input.generation_progress,
         )
 
     def _service(self) -> AssessmentAssignmentService:

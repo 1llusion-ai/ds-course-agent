@@ -85,4 +85,16 @@ def build_turn_system_context(route_state: RouteState) -> str:
     if concept_labels:
         sections.append("# Current Turn Concepts\n" + "、".join(concept_labels))
 
+    memory = getattr(route_state, "personalization_context", None)
+    if memory is not None and (memory.profile_facts or memory.interaction_episodes):
+        lines = ["# Bounded Learner Evidence", "仅使用与当前知识点直接相关的学生证据，不要暴露内部字段名。"]
+        for fact in memory.profile_facts[:3]:
+            lines.append(f"- 画像事实（{fact.category}）：{fact.value}")
+        for evidence in memory.assessment_evidence[:2]:
+            result = "答对" if evidence.is_correct else "答错"
+            lines.append(f"- 测评事实（{evidence.concept_id}）：{result}")
+        for episode in memory.interaction_episodes[:3]:
+            lines.append(f"- 历史交互（{episode.outcome.value}）：{episode.learner_question[:120]}")
+        sections.append("\n".join(lines))
+
     return "\n\n".join(sections)

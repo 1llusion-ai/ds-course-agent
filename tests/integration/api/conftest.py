@@ -12,15 +12,17 @@ def client():
 
 
 @pytest.fixture(autouse=True)
-def isolated_backend_runtime(monkeypatch):
+def isolated_backend_runtime(monkeypatch, tmp_path):
     """Keep backend API tests deterministic and independent from real LLM/RAG."""
+    import fastapi.dependencies.utils as fastapi_dependency_utils
+
     import ds_course_agent.api.chat_application as chat_application
     import ds_course_agent.api.chat_sessions as chat_sessions
+    import ds_course_agent.api.routers.assessments as assessments_router
     import ds_course_agent.api.routers.profile as profile_module
-    from ds_course_agent.api.state import _chat_history, _sessions
+    import ds_course_agent.shared.config as config
 
-    _sessions.clear()
-    _chat_history.clear()
+    monkeypatch.setattr(config, "APP_DB_PATH", str(tmp_path / "app.db"))
     chat_sessions.reset_title_generation_state()
 
     async def same_thread_run_in_threadpool(func, *args, **kwargs):
@@ -58,7 +60,9 @@ def isolated_backend_runtime(monkeypatch):
     monkeypatch.setattr(chat_application, "chat_with_history", fake_chat_with_history)
     monkeypatch.setattr(chat_application, "stream_chat_with_history", fake_stream_chat_with_history)
     monkeypatch.setattr(chat_application, "run_in_threadpool", same_thread_run_in_threadpool)
+    monkeypatch.setattr(assessments_router, "run_in_threadpool", same_thread_run_in_threadpool)
     monkeypatch.setattr(profile_module, "run_in_threadpool", same_thread_run_in_threadpool)
+    monkeypatch.setattr(fastapi_dependency_utils, "run_in_threadpool", same_thread_run_in_threadpool)
 
     async def test_current_student_id(request: Request) -> str:
         if request.headers.get("x-test-student-id"):

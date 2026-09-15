@@ -53,9 +53,9 @@ _memory_core = None
 def get_memory_core() -> "MemoryCore":
     global _memory_core
     if _memory_core is None:
-        from ds_course_agent.teaching.memory_core import get_memory_core as _get_core
+        from ds_course_agent.teaching.profile_snapshot_repository import SQLiteProfileReadService
 
-        _memory_core = _get_core()
+        _memory_core = SQLiteProfileReadService()
     return _memory_core
 
 
@@ -63,8 +63,10 @@ def get_agent_service() -> "AgentService":
     global _agent_service
     if _agent_service is None:
         from ds_course_agent.agent.service import get_agent_service as _get_service
+        from ds_course_agent.api.chat_history import get_history
 
         _agent_service = _get_service()
+        _agent_service.history_provider = get_history
     return _agent_service
 
 
@@ -89,6 +91,8 @@ def chat_with_history(message: str, session_id: str, student_id: str, web_search
                 "user_input": message,
                 "session_id": session_id,
                 "student_id": student_id,
+                "manage_history": False,
+                "persist_completed_assistant": True,
             }
             # Preserve backward-compatible call signatures for tests and older
             # service implementations unless the explicit web-search switch is on.
@@ -158,6 +162,8 @@ def stream_chat_with_history(
                 "user_input": message,
                 "session_id": session_id,
                 "student_id": student_id,
+                "manage_history": False,
+                "persist_completed_assistant": True,
             }
             if web_search:
                 kwargs["web_search"] = True
@@ -224,7 +230,7 @@ def stream_continue_with_history(
 
     from langchain_core.messages import AIMessage
 
-    from ds_course_agent.shared.history import get_history
+    from ds_course_agent.api.chat_history import get_history
     from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
 
     stream_id = uuid.uuid4().hex
@@ -251,7 +257,7 @@ def stream_continue_with_history(
         try:
             with trace_span("core_bridge.get_agent_service"):
                 service = get_agent_service()
-            history = get_history(session_id)
+            history = get_history(session_id, student_id=student_id)
             transient_history = list(history.messages)
             if partial_content:
                 transient_history.append(AIMessage(content=partial_content))
@@ -285,13 +291,6 @@ def stream_continue_with_history(
 
         continuation = "".join(continuation_parts)
         final_content = f"{partial_content}{continuation}"
-        if final_content:
-            try:
-                get_history(session_id).add_messages([AIMessage(content=final_content)])
-            except Exception as exc:
-                logger.error("续写结果写入历史失败: %s", exc, exc_info=True)
-                trace_error("core_bridge.continue_history", exc)
-                stream_error = stream_error or f"续写历史保存失败：{str(exc)[:100]}"
     except GeneratorExit:
         cancelled = True
         raise

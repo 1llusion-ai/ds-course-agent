@@ -10,6 +10,7 @@ from typing import Any
 
 from ds_course_agent.shared.term_queries import ShortTermQuery
 from ds_course_agent.teaching.learner_state import LearnerStateSnapshot, LearnerStateSummary
+from ds_course_agent.teaching.personalization import PersonalizationContext
 
 
 class RouteFamily(str, Enum):
@@ -158,6 +159,7 @@ class EnrichmentPlan:
 
     map_concepts: bool = False
     load_learner_state: bool = False
+    load_learner_memory: bool = False
     rewrite_query: bool = False
     record_learning_event: bool = False
 
@@ -213,6 +215,8 @@ class RouteState:
     special_case_response: str | None = None
     stream_id: str | None = None
     history: Any | None = None
+    personalization_context: PersonalizationContext | None = None
+    pending_learning_event: bool = False
 
 
 @dataclass

@@ -326,6 +326,7 @@ def _build_personalized_explanation(router: Any, context: QueryContext) -> Route
         enrichment=EnrichmentPlan(
             map_concepts=True,
             load_learner_state=True,
+            load_learner_memory=True,
             rewrite_query=True,
             record_learning_event=True,
         ),

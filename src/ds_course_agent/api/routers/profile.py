@@ -31,9 +31,9 @@ DATA_DIR = PROJECT_ROOT / "data"
 
 
 def get_memory():
-    from ..core_bridge import get_memory_core
+    from ds_course_agent.teaching.profile_snapshot_repository import SQLiteProfileReadService
 
-    return get_memory_core()
+    return SQLiteProfileReadService()
 
 
 def _isoformat(ts):

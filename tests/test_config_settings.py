@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from ds_course_agent.shared.config import (
+    APP_DB_PATH,
     AUTH_COOKIE_SECURE,
     AUTH_DB_PATH,
     AUTH_SECRET_KEY,
@@ -32,6 +33,7 @@ from ds_course_agent.shared.config import (
     RAG_RETRIEVAL_CACHE_SIZE,
     RAG_RETRIEVAL_CACHE_TTL_SECONDS,
     RAG_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS,
+    app_db_path,
     auth_cookie_secure,
     auth_db_path,
     auth_secret_key,
@@ -227,3 +229,11 @@ def test_auth_settings_are_exported_and_paths_resolved():
     assert auth_cookie_secure == settings.AUTH_COOKIE_SECURE
     assert auth_db_path == settings.AUTH_DB_PATH
     assert cors_allow_origins == settings.CORS_ALLOW_ORIGINS
+
+
+def test_application_database_path_is_exported_and_resolved():
+    cfg = Settings(APP_DB_PATH="var/custom_app.db")
+
+    assert cfg.APP_DB_PATH == str(PROJECT_ROOT / "var/custom_app.db")
+    assert APP_DB_PATH == settings.APP_DB_PATH
+    assert app_db_path == settings.APP_DB_PATH

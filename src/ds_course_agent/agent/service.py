@@ -6,7 +6,7 @@ Implements a single-agent loop with RAG tools and LangGraph-backed tool use.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import ds_course_agent.shared.config as config
@@ -37,11 +37,19 @@ from ds_course_agent.agent.turn_runner import collect_turn_result, iter_turn_eve
 from ds_course_agent.runtime.model_runtime import ModelRuntime, check_ollama_connection
 from ds_course_agent.runtime.model_stream import iter_text_chunks
 from ds_course_agent.shared.llm import get_chat_model
+from ds_course_agent.teaching.interaction_episode_repository import SQLiteInteractionEpisodeRepository
 from ds_course_agent.teaching.knowledge_mapper import map_question_to_concepts
-from ds_course_agent.teaching.learner_state import LearnerStateProvider, RuleBasedLearnerStateProvider
-from ds_course_agent.teaching.memory_core import get_memory_core, record_event
+from ds_course_agent.teaching.learner_state import (
+    LearnerStateProvider,
+    RuleBasedLearnerStateProvider,
+    SQLiteProfileLearnerStateProvider,
+)
+from ds_course_agent.teaching.learning_event_repository import SQLiteLearningEventRepository
+from ds_course_agent.teaching.memory_core import get_memory_core
+from ds_course_agent.teaching.personalization import LearnerMemoryRetriever, SQLiteLearnerMemoryRetriever
 from ds_course_agent.teaching.practice_guidance import build_practice_guidance
 from ds_course_agent.teaching.skill_system import get_skill_loader
+from ds_course_agent.teaching.teaching_memory_writer import TeachingMemoryWriter
 from ds_course_agent.tools.registry import get_rag_tool_registry
 
 # Skills are discovered from the `skills/` directory and loaded on demand.
@@ -50,7 +58,12 @@ from ds_course_agent.tools.registry import get_rag_tool_registry
 class AgentService:
     """Single-agent teaching assistant service."""
 
-    def __init__(self, learner_state_provider: LearnerStateProvider | None = None) -> None:
+    def __init__(
+        self,
+        learner_state_provider: LearnerStateProvider | None = None,
+        learner_memory_retriever: LearnerMemoryRetriever | None = None,
+        history_provider: Callable[..., Any] | None = None,
+    ) -> None:
         self.tool_registry = get_rag_tool_registry()
         self.system_prompt = get_system_prompt()
         self.model_runtime = ModelRuntime(
@@ -63,12 +76,21 @@ class AgentService:
         self.learning_event_hook = LearningEventHook(self.clarification_detector)
         self.hooks = HookManager([RetrievalGuardHook(), self.learning_event_hook])
         self.route_handlers = default_route_handlers()
-        self.learner_state_provider = learner_state_provider or RuleBasedLearnerStateProvider(get_memory_core)
+        self.learner_state_provider = learner_state_provider or SQLiteProfileLearnerStateProvider(
+            fallback=RuleBasedLearnerStateProvider(get_memory_core),
+        )
+        self.learner_memory_retriever = learner_memory_retriever or SQLiteLearnerMemoryRetriever()
+        self.teaching_memory_writer = TeachingMemoryWriter(
+            SQLiteLearningEventRepository(), SQLiteInteractionEpisodeRepository()
+        )
         self.learning_loop = get_session_learning_loop()
+        if history_provider is not None:
+            self.history_provider = history_provider
 
         # Load skill executors after the core registry is initialized.
         self.skill_loader = get_skill_loader()
-        self.explanation_skill = self.skill_loader.load_executor("personalized-explanation")
+        explanation_module = self.skill_loader.load_module("personalized-explanation")
+        self.explanation_skill = explanation_module.PersonalizedExplanationSkill()
         self.learning_path_skill = self.skill_loader.load_executor("learning-path")
         self.misconception_skill = self.skill_loader.load_executor("misconception-handling")
         self.code_review_skill = self.skill_loader.load_executor("code-review")
@@ -105,9 +127,25 @@ class AgentService:
 
         provider = getattr(self, "learner_state_provider", None)
         if provider is None:
-            provider = RuleBasedLearnerStateProvider(get_memory_core)
+            provider = SQLiteProfileLearnerStateProvider(fallback=RuleBasedLearnerStateProvider(get_memory_core))
             self.learner_state_provider = provider
         return provider
+
+    def _get_learner_memory_retriever(self) -> LearnerMemoryRetriever:
+        """Return the configured student-scoped memory retriever."""
+
+        retriever = getattr(self, "learner_memory_retriever", None)
+        if retriever is None:
+            retriever = SQLiteLearnerMemoryRetriever()
+            self.learner_memory_retriever = retriever
+        return retriever
+
+    def _get_teaching_memory_writer(self) -> TeachingMemoryWriter:
+        writer = getattr(self, "teaching_memory_writer", None)
+        if writer is None:
+            writer = TeachingMemoryWriter(SQLiteLearningEventRepository(), SQLiteInteractionEpisodeRepository())
+            self.teaching_memory_writer = writer
+        return writer
 
     def chat(
         self,
@@ -146,24 +184,34 @@ class AgentService:
     def _build_distinction_learning_concept(self, question: str, matched_concepts: list):
         return self._get_clarification_detector().build_distinction_learning_concept(question, matched_concepts)
 
-    def _record_learning_events(
-        self,
-        question: str,
-        session_id: str,
-        student_id: str,
-        matched_concepts: list,
-        special_case_response: str | None = None,
-    ) -> None:
-        self._get_learning_event_hook().record_learning_events(
-            question=question,
-            session_id=session_id,
-            student_id=student_id,
-            matched_concepts=matched_concepts,
-            special_case_response=special_case_response,
-            get_memory_core_fn=get_memory_core,
-            record_event_fn=record_event,
-            classify_question_type_fn=self._classify_question_type,
-        )
+    def _persist_successful_learning_turn(self, state: RouteState, result: RouteExecutionResult) -> None:
+        """Persist teaching facts only after a non-degraded answer is complete."""
+        if not state.pending_learning_event or result.degraded or not result.content.strip():
+            return
+        event_concepts = [item for item in state.matched_concepts if bool(getattr(item, "event_eligible", True))]
+        if not event_concepts:
+            return
+        from ds_course_agent.shared.query_trace import trace_span
+
+        try:
+            with trace_span("memory.learning_event_write"):
+                recorded_count = self._get_teaching_memory_writer().persist_turn(
+                    question=state.context.original_query,
+                    session_id=state.session_id,
+                    student_id=state.student_id,
+                    turn_id=state.stream_id or state.session_id,
+                    matched_concepts=event_concepts,
+                    special_case_response=state.special_case_response,
+                    learning_event_hook=self._get_learning_event_hook(),
+                    classify_question_type_fn=self._classify_question_type,
+                )
+            from ds_course_agent.shared.query_trace import trace_step
+
+            trace_step("learner_memory.write_result", storage="sqlite", recorded_count=recorded_count)
+        except Exception as exc:
+            from ds_course_agent.shared.query_trace import trace_error
+
+            trace_error("memory.learning_event_write", exc)
 
     def _select_skill_candidates(self, question: str) -> set[str]:
         loader = getattr(self, "skill_loader", None) or get_skill_loader()
@@ -375,6 +423,27 @@ class AgentService:
         context.grounded_tool_query = rewrite_result.enriched_query
         return rewrite_result
 
+    def _load_personalization_context(self, *, student_id: str, matched_concepts, learner_state):
+        """Load typed learner memory without changing prompt or route selection."""
+        from ds_course_agent.shared.query_trace import trace_span, trace_step
+
+        concept_ids = tuple(item.concept_id for item in matched_concepts)
+        with trace_span("prepare.learner_memory_retrieval"):
+            personalization = self._get_learner_memory_retriever().retrieve(
+                student_id,
+                target_concept_ids=concept_ids,
+                learner_state=learner_state,
+            )
+        trace_step(
+            "learner_memory.result",
+            target_concept_count=len(personalization.target_concept_ids),
+            profile_fact_count=len(personalization.profile_facts),
+            assessment_evidence_count=len(personalization.assessment_evidence),
+            interaction_episode_count=len(personalization.interaction_episodes),
+            missing_evidence=personalization.missing_evidence,
+        )
+        return personalization
+
     def _build_route_state(
         self,
         *,
@@ -385,6 +454,7 @@ class AgentService:
         session_id: str,
         history,
         learner_state,
+        personalization_context,
         matched_concepts,
         skill_candidate_keys,
         special_case_response,
@@ -405,6 +475,7 @@ class AgentService:
             session_id=session_id,
             history=history,
             learner_state=learner_state,
+            personalization_context=personalization_context,
             matched_concepts=matched_concepts or [],
             skill_candidate_keys=skill_candidate_keys or set(),
             special_case_response=special_case_response,
@@ -421,6 +492,7 @@ class AgentService:
             build_sources_from_documents,
             build_term_correction_notice,
             get_rag_service,
+            record_course_evidence_trace,
             trace_answer_degraded,
         )
 
@@ -444,6 +516,7 @@ class AgentService:
 
             sources = build_sources_from_documents(result.documents)
             used_retrieval = result.has_results
+            record_course_evidence_trace(source_count=len(sources), has_results=used_retrieval)
             _track_retrieval(
                 sources,
                 attempted=True,
@@ -556,6 +629,8 @@ class AgentService:
         stream: bool = False,
         student_id: str = None,
         web_search: bool = False,
+        manage_history: bool = True,
+        persist_completed_assistant: bool = False,
     ) -> RouteExecutionResult | Iterator[dict[str, Any]]:
         """
         带历史记录的聊天。
@@ -569,11 +644,15 @@ class AgentService:
                     session_id,
                     student_id=student_id,
                     web_search=True,
+                    manage_history=manage_history,
+                    persist_completed_assistant=persist_completed_assistant,
                 )
             return self.stream_chat_with_history(
                 user_input,
                 session_id,
                 student_id=student_id,
+                manage_history=manage_history,
+                persist_completed_assistant=persist_completed_assistant,
             )
 
         return collect_turn_result(
@@ -584,6 +663,8 @@ class AgentService:
                 student_id=student_id,
                 web_search=web_search,
                 stream=False,
+                manage_history=manage_history,
+                persist_completed_assistant=persist_completed_assistant,
             )
         )
 
@@ -593,6 +674,8 @@ class AgentService:
         session_id: str,
         student_id: str = None,
         web_search: bool = False,
+        manage_history: bool = True,
+        persist_completed_assistant: bool = False,
     ) -> Iterator[dict[str, Any]]:
         """Stream the API projection of the shared typed turn executor."""
 
@@ -603,6 +686,8 @@ class AgentService:
             student_id=student_id,
             web_search=web_search,
             stream=True,
+            manage_history=manage_history,
+            persist_completed_assistant=persist_completed_assistant,
         ):
             yield turn_event_payload(event)
 

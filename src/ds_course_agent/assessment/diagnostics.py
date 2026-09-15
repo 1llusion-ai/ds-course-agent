@@ -21,6 +21,7 @@ class AssessmentStage(str, Enum):
     RETRIEVAL = "retrieval"
     EVIDENCE = "evidence"
     GENERATION = "generation"
+    REPAIR = "repair"
     VERIFICATION = "verification"
     CRITIQUE = "critique"
 

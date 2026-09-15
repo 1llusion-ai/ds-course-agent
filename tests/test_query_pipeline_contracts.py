@@ -391,6 +391,7 @@ def test_route_state_carries_decision_and_enrichment_without_metadata_control_si
         retrieval_policy=RetrievalPolicy.REQUIRED,
         enrichment=EnrichmentPlan(
             map_concepts=True,
+            load_learner_memory=True,
             rewrite_query=True,
             record_learning_event=True,
         ),
@@ -399,6 +400,7 @@ def test_route_state_carries_decision_and_enrichment_without_metadata_control_si
     state.context = context
 
     assert state.decision.enrichment.map_concepts is True
+    assert state.decision.enrichment.load_learner_memory is True
     assert state.decision.enrichment.rewrite_query is True
     assert state.decision.enrichment.record_learning_event is True
     assert "required_tools" not in state.decision.metadata

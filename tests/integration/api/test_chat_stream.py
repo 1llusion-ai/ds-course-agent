@@ -24,10 +24,6 @@ def client():
 @pytest.fixture
 def fresh_client(monkeypatch):
     """Client with mocked stream function."""
-    from ds_course_agent.api.state import _chat_history, _sessions
-
-    _sessions.clear()
-    _chat_history.clear()
 
     def fake_stream_chat_with_history(message: str, session_id: str, student_id: str):
         assert message == "hello"
@@ -203,11 +199,6 @@ def test_streaming_response_continues_after_sse_serialization_error():
 
 
 def test_stream_records_blocked_web_search_turn_state(monkeypatch):
-    from ds_course_agent.api.state import _chat_history, _sessions
-
-    _sessions.clear()
-    _chat_history.clear()
-
     def fake_stream_chat_with_history(message: str, session_id: str, student_id: str, web_search: bool = False):
         assert message == "今天厦门的天气怎么样？"
         assert student_id == "test"
@@ -287,11 +278,8 @@ def test_history_exposes_active_stream_snapshot_and_cancel_sets_job_event():
     import threading
     from datetime import datetime
 
-    from ds_course_agent.api.state import _chat_history, _sessions
     from ds_course_agent.api.stream_jobs import stream_job_registry
 
-    _sessions.clear()
-    _chat_history.clear()
     client = TestClient(app)
     session_resp = client.post(
         "/api/sessions",
@@ -340,11 +328,8 @@ def test_resume_endpoint_starts_with_full_snapshot_and_replays_terminal_event():
     import threading
     from datetime import datetime
 
-    from ds_course_agent.api.state import _chat_history, _sessions
     from ds_course_agent.api.stream_jobs import stream_job_registry
 
-    _sessions.clear()
-    _chat_history.clear()
     client = TestClient(app)
     session_resp = client.post(
         "/api/sessions",
@@ -387,10 +372,6 @@ def test_cancel_preserves_partial_answer_and_marks_it_stopped(monkeypatch):
     import threading
     import time
 
-    from ds_course_agent.api.state import _chat_history, _sessions
-
-    _sessions.clear()
-    _chat_history.clear()
     first_delta_seen = threading.Event()
     release_generator = threading.Event()
 
@@ -473,10 +454,7 @@ def test_continue_stream_replaces_stopped_message_without_visible_user_turn(monk
 
     from ds_course_agent.api.chat_sessions import append_message_locked
     from ds_course_agent.api.schemas.chat import ChatMessage
-    from ds_course_agent.api.state import _chat_history, _sessions
 
-    _sessions.clear()
-    _chat_history.clear()
     client = TestClient(app)
     session_resp = client.post(
         "/api/sessions",
@@ -485,7 +463,7 @@ def test_continue_stream_replaces_stopped_message_without_visible_user_turn(monk
     )
     session_id = session_resp.json()["id"]
     stopped_at = datetime.now()
-    append_message_locked(session_id, ChatMessage(role="user", content="请详细解释"), save=False)
+    append_message_locked(session_id, ChatMessage(role="user", content="请详细解释"))
     append_message_locked(
         session_id,
         ChatMessage(

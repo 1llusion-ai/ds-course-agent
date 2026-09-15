@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from ds_course_agent.assessment.feedback import QuestionRejectionCode
+from ds_course_agent.assessment.feedback import AssessmentFailureKind, QuestionRejectionCode
 from ds_course_agent.assessment.models import (
     Difficulty,
     EvidenceSource,
@@ -18,6 +18,7 @@ from ds_course_agent.assessment.service import AssessmentService
 from ds_course_agent.assessment.verifier import (
     AssessmentEvidenceVerifier,
     AssessmentVerificationError,
+    AssessmentVerifierModelCallError,
     EvidenceExcerpt,
     EvidenceExcerptCatalog,
     EvidenceVerificationBatch,
@@ -277,8 +278,9 @@ def test_verifier_provider_failure_is_not_retried() -> None:
     verifier = AssessmentEvidenceVerifier(model=model)
     source = EvidenceSource(id="S1", text="PCA 通过投影保留主要变化方向来降低特征维度。")
 
-    with pytest.raises(AssessmentVerificationError):
+    with pytest.raises(AssessmentVerifierModelCallError) as error:
         verifier.verify(GenerateQuestionsRequest(target_kc_id="pca"), [_question()], _catalog(source))
+    assert error.value.failure_kind is AssessmentFailureKind.PROVIDER_TRANSIENT_FAILURE
     assert model.invoke_count == 1
     assert _question().difficulty is Difficulty.BASIC
 

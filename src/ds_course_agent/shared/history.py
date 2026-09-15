@@ -33,6 +33,8 @@ SUMMARY_MARKER = "short_memory_summary"
 SUMMARY_TITLE = "短期记忆摘要"
 _SESSION_LOCKS: dict[str, threading.RLock] = {}
 _SESSION_LOCKS_GUARD = threading.Lock()
+_TRANSIENT_HISTORIES: dict[str, TransientChatMessageHistory] = {}
+_TRANSIENT_HISTORIES_GUARD = threading.Lock()
 
 
 def _get_session_lock(file_path: str) -> threading.RLock:
@@ -46,12 +48,41 @@ def _get_session_lock(file_path: str) -> threading.RLock:
         return lock
 
 
-def get_history(session_id, memory_policy: MemoryPolicy | None = None):
-    return FileChatMessageHistory(
-        storage_path=config.storage_path,
-        session_id=session_id,
-        memory_policy=memory_policy,
-    )
+def get_history(
+    session_id,
+    memory_policy: MemoryPolicy | None = None,
+):
+    """Return process-local history when no persistent provider is injected."""
+
+    with _TRANSIENT_HISTORIES_GUARD:
+        history = _TRANSIENT_HISTORIES.get(session_id)
+        if history is None:
+            history = TransientChatMessageHistory(session_id, memory_policy)
+            _TRANSIENT_HISTORIES[session_id] = history
+        return history
+
+
+class TransientChatMessageHistory(BaseChatMessageHistory):
+    """Non-persistent fallback for direct AgentService use outside the API."""
+
+    def __init__(self, session_id: str, memory_policy: MemoryPolicy | None = None) -> None:
+        self.session_id = session_id
+        self.memory_policy = memory_policy or DEFAULT_MEMORY_POLICY
+        self._messages: list[BaseMessage] = []
+        self._lock = threading.RLock()
+
+    @property
+    def messages(self) -> list[BaseMessage]:
+        with self._lock:
+            return list(self._messages)
+
+    def add_messages(self, messages: Sequence[BaseMessage]) -> None:
+        with self._lock:
+            self._messages.extend(messages)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._messages.clear()
 
 
 class FileChatMessageHistory(BaseChatMessageHistory):
@@ -81,7 +112,7 @@ class FileChatMessageHistory(BaseChatMessageHistory):
             return []
 
     def add_messages(self, messages: Sequence[BaseMessage]) -> None:
-        self._warn_incoming_large_messages(messages)
+        self.warn_incoming_large_messages(messages)
         with self._lock:
             all_messages = list(self._read_messages_unlocked())
             all_messages.extend(messages)
@@ -89,8 +120,8 @@ class FileChatMessageHistory(BaseChatMessageHistory):
                 all_messages,
                 preserve_recent=max(1, len(messages)),
             )
-            all_messages = self._compact_messages(all_messages)
-            self._warn_persisted_context(all_messages)
+            all_messages = self.compact_messages(all_messages)
+            self.warn_persisted_context(all_messages)
 
             new_messages = [message_to_dict(message) for message in all_messages]
             # If this raises, the previous JSON file remains intact because
@@ -126,7 +157,7 @@ class FileChatMessageHistory(BaseChatMessageHistory):
                 except OSError:
                     pass
 
-    def _warn_incoming_large_messages(self, messages: Sequence[BaseMessage]) -> None:
+    def warn_incoming_large_messages(self, messages: Sequence[BaseMessage]) -> None:
         try:
             from ds_course_agent.shared.context_governor import warn_if_large_message
 
@@ -141,7 +172,7 @@ class FileChatMessageHistory(BaseChatMessageHistory):
             # History persistence must never fail because telemetry failed.
             pass
 
-    def _warn_persisted_context(self, messages: Sequence[BaseMessage]) -> None:
+    def warn_persisted_context(self, messages: Sequence[BaseMessage]) -> None:
         try:
             from ds_course_agent.shared.context_governor import warn_if_context_over_budget
 
@@ -185,7 +216,7 @@ class FileChatMessageHistory(BaseChatMessageHistory):
             except Exception:
                 return False
 
-    def _compact_messages(self, messages: list[BaseMessage]) -> list[BaseMessage]:
+    def compact_messages(self, messages: list[BaseMessage]) -> list[BaseMessage]:
         policy = self.memory_policy
         max_recent = max(0, int(policy.max_recent_messages))
         summarize_after = max(max_recent + 1, int(policy.summarize_after_messages))
@@ -296,54 +327,3 @@ class FileChatMessageHistory(BaseChatMessageHistory):
         if len(text) <= max_chars:
             return text
         return text[: max_chars - 1].rstrip() + "…"
-
-
-def get_all_sessions(storage_path=None):
-    """获取所有会话ID列表"""
-    if storage_path is None:
-        storage_path = config.storage_path
-
-    if not os.path.exists(storage_path):
-        return []
-
-    sessions = []
-    for filename in os.listdir(storage_path):
-        file_path = os.path.join(storage_path, filename)
-        if os.path.isfile(file_path):
-            sessions.append(filename)
-    return sessions
-
-
-def delete_session(session_id, storage_path=None):
-    """删除指定会话的历史记录"""
-    if storage_path is None:
-        storage_path = config.storage_path
-
-    file_path = os.path.join(storage_path, session_id)
-    try:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            return True
-        return False
-    except Exception:
-        return False
-
-
-def clear_all_sessions(storage_path=None):
-    """清空所有会话历史"""
-    if storage_path is None:
-        storage_path = config.storage_path
-
-    if not os.path.exists(storage_path):
-        return 0
-
-    count = 0
-    for filename in os.listdir(storage_path):
-        file_path = os.path.join(storage_path, filename)
-        if os.path.isfile(file_path):
-            try:
-                os.remove(file_path)
-                count += 1
-            except Exception:
-                pass
-    return count

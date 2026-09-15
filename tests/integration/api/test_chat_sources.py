@@ -7,13 +7,6 @@ from ds_course_agent.api.main import app
 client = TestClient(app)
 
 
-def setup_function():
-    from ds_course_agent.api.state import _chat_history, _sessions
-
-    _sessions.clear()
-    _chat_history.clear()
-
-
 def _create_session(student_id: str = "student001") -> str:
     response = client.post(
         "/api/sessions",

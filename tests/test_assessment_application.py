@@ -15,10 +15,11 @@ from ds_course_agent.assessment.application import (
 from ds_course_agent.assessment.models import GeneratedQuiz, GenerateQuestionsRequest
 from ds_course_agent.assessment.records import AnswerSubmission, AssessmentStatus
 from ds_course_agent.assessment.repository import AssessmentRepository
+from ds_course_agent.teaching.assessment_assignment import AssessmentAssignmentPlanner
 
 
 class StubGenerator:
-    """Return one fixed grounded quiz and record the agent-selected request."""
+    """Return a fixed grounded quiz and record the agent-selected request."""
 
     def __init__(self) -> None:
         self.requests: list[GenerateQuestionsRequest] = []
@@ -30,7 +31,7 @@ class StubGenerator:
                 "title": "支持向量机测验",
                 "questions": [
                     {
-                        "stem": "支持向量机寻找分类超平面时会最大化什么？",
+                        "stem": f"支持向量机题目 {index} 会最大化什么？",
                         "options": [
                             {"id": "A", "text": "特征数量"},
                             {"id": "B", "text": "类别间隔"},
@@ -42,6 +43,7 @@ class StubGenerator:
                         "difficulty": request.difficulty,
                         "source_ids": ["source-1"],
                     }
+                    for index in range(request.count)
                 ],
                 "sources": [
                     {
@@ -86,6 +88,23 @@ def test_assignment_parameters_are_internal_and_persisted(lifecycle) -> None:
     assert summary.status is AssessmentStatus.READY
     assert service.list_assessments("student-1", (AssessmentStatus.READY,)) == (summary,)
     assert service.list_assessments("student-2", (AssessmentStatus.READY,)) == ()
+
+
+def test_assignment_round_trips_teaching_requirement_and_reuses_same_id(tmp_path) -> None:
+    generator = StubGenerator()
+    repository = AssessmentRepository(tmp_path / "assessment.db")
+    service = AssessmentApplicationService(repository=repository, generator=generator)
+    request = AssessmentAssignmentPlanner().plan_for_concept("svm", None, count=2)
+
+    first = service.assign("student-1", request, session_id="session-1", assignment_id="assessment-1")
+    restored = repository.get(first.id, "student-1")
+    second = service.assign("student-1", request, session_id="session-1", assignment_id="assessment-1")
+
+    assert request.teaching_requirement is not None
+    assert restored is not None
+    assert restored.request == request
+    assert second == first
+    assert generator.requests == [request]
 
 
 def test_open_is_idempotent_and_student_projection_is_answer_blind(lifecycle) -> None:

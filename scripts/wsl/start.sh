@@ -8,7 +8,8 @@
 #     shell exits (wsl.exe otherwise reaps background children)
 #   - stops any previous instance first (idempotent), then health-checks both
 #
-# Overrides (env vars): RAG_API_PORT=8084  RAG_WEB_PORT=5185
+# Overrides (env vars): RAG_BIND_HOST=0.0.0.0
+#                       RAG_API_PORT=8084  RAG_WEB_PORT=5185
 #                       RAG_API_RELOAD=1   RAG_OPEN_BROWSER=0
 #
 # cwd-independent: it locates the repo via this script's own path.
@@ -20,6 +21,7 @@ ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 BACKEND_PORT="${RAG_API_PORT:-8084}"
 FRONTEND_PORT="${RAG_WEB_PORT:-5185}"
+BIND_HOST="${RAG_BIND_HOST:-0.0.0.0}"
 API_RELOAD="${RAG_API_RELOAD:-1}"
 OPEN_BROWSER="${RAG_OPEN_BROWSER:-0}"
 PYTHON_BIN="$ROOT/.venv/bin/python"
@@ -56,14 +58,14 @@ RELOAD_ARGS=()
 if [[ "$API_RELOAD" == "1" ]]; then
     RELOAD_ARGS=(--reload)
 fi
-setsid -f "$PYTHON_BIN" main.py api --host 127.0.0.1 --port "$BACKEND_PORT" "${RELOAD_ARGS[@]}" \
+setsid -f "$PYTHON_BIN" main.py api --host "$BIND_HOST" --port "$BACKEND_PORT" "${RELOAD_ARGS[@]}" \
     > "$BACKEND_LOG" 2>&1 < /dev/null
 
 # --- frontend ----------------------------------------------------------
 echo "Starting frontend on port $FRONTEND_PORT ..."
 (
     cd web
-    setsid -f npm run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT" \
+    setsid -f npm run dev -- --host "$BIND_HOST" --port "$FRONTEND_PORT" \
         > "$FRONTEND_LOG" 2>&1 < /dev/null
 )
 

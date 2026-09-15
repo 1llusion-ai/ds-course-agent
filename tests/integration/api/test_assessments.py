@@ -8,6 +8,9 @@ from fastapi.testclient import TestClient
 
 from ds_course_agent.api.main import app
 from ds_course_agent.api.routers.assessments import get_student_assessment_service
+from ds_course_agent.assessment.feedback import AssessmentFailureKind, QuestionRejectionCode
+from ds_course_agent.assessment.models import GenerateQuestionsRequest
+from ds_course_agent.assessment.preparation import AssessmentPreparation, PreparationStatus
 from ds_course_agent.assessment.records import (
     AssessmentResult,
     AssessmentStatus,
@@ -135,6 +138,37 @@ def test_student_lists_assigned_assessments_without_generation_parameters(client
     assert client.post("/api/questions/generate", json={"target_kc_id": "svm"}).status_code == 404
 
 
+def test_preparation_projection_preserves_typed_failure_details(client: TestClient, monkeypatch) -> None:
+    import ds_course_agent.api.routers.assessments as assessments_router
+
+    job = AssessmentPreparation(
+        id="preparation-1",
+        student_id="student-1",
+        session_id="session-1",
+        display_name="支持向量机",
+        request=GenerateQuestionsRequest(target_kc_id="svm", count=2),
+        source_event_ids=("event-1",),
+        status=PreparationStatus.FAILED,
+        failure_kind=AssessmentFailureKind.QUESTION_SLOT_FAILURE,
+        failed_slots=(1,),
+        failure_codes=(QuestionRejectionCode.ANSWER_NOT_SUPPORTED,),
+        updated_at=0.0,
+    )
+
+    class StubLearningLoop:
+        def list_preparations(self, student_id: str):
+            assert student_id == "student-1"
+            return (job,)
+
+    monkeypatch.setattr(assessments_router, "get_session_learning_loop", lambda: StubLearningLoop())
+    response = client.get("/api/assessments/preparations", headers={"x-test-student-id": "student-1"})
+
+    assert response.status_code == 200
+    assert response.json()[0]["failure_kind"] == "question_slot_failure"
+    assert response.json()[0]["failed_slots"] == [1]
+    assert response.json()[0]["failure_codes"] == ["answer_not_supported"]
+
+
 def test_active_assessment_projection_never_contains_answers_or_sources(client: TestClient) -> None:
     service = StubAssessmentApplicationService()
     _override_service(service)
@@ -203,22 +237,18 @@ def test_status_filter_is_typed_and_rejects_unknown_values(client: TestClient) -
     assert invalid.status_code == 422
 
 
-def test_real_submission_dependency_updates_profile_without_duplicate_evidence(client, monkeypatch, tmp_path) -> None:
+def test_real_submission_dependency_publishes_sqlite_evidence_without_duplicates(client, monkeypatch, tmp_path) -> None:
     from tests.test_session_learning_loop import FixtureGenerator, mention
 
-    import ds_course_agent.api.routers.profile as profile_module
     import ds_course_agent.shared.config as config
-    import ds_course_agent.teaching.memory_core as memory_module
     from ds_course_agent.assessment.application import AssessmentApplicationService
     from ds_course_agent.assessment.models import GenerateQuestionsRequest
     from ds_course_agent.assessment.repository import AssessmentRepository
+    from ds_course_agent.teaching.interaction_episode_repository import SQLiteInteractionEpisodeRepository
+    from ds_course_agent.teaching.learning_event_repository import SQLiteLearningEventRepository
     from ds_course_agent.teaching.learning_events import EventType
 
-    memory = memory_module.MemoryCore(str(tmp_path / "history"))
-    monkeypatch.setattr(memory_module, "_memory_core", memory)
-    monkeypatch.setattr(profile_module, "get_memory", lambda: memory)
     monkeypatch.setattr(config, "ASSESSMENT_DB_PATH", str(tmp_path / "assessments.db"))
-    mention(memory, "overfitting")
     service = AssessmentApplicationService(AssessmentRepository(), FixtureGenerator())
     summary = service.assign(
         "student", GenerateQuestionsRequest(target_kc_id="overfitting", count=2), session_id="session"
@@ -237,10 +267,14 @@ def test_real_submission_dependency_updates_profile_without_duplicate_evidence(c
     assert response.json()["session_id"] == "session"
     repeat = client.post(f"/api/assessments/{summary.id}/submit", headers=headers, json=payload)
     assert repeat.json() == response.json()
-    profile = client.get("/api/profile/detail", headers=headers).json()
-    assert profile["practice"][0]["concept_id"] == "overfitting"
-    assert profile["practice"][0]["answered_count"] == 2
-    assert profile["practice"][0]["level"] == "needs_practice"
-    assert len(memory.load_events("student", [EventType.QUESTION_ANSWERED])) == 2
+    events = SQLiteLearningEventRepository(config.APP_DB_PATH).list_for_student(
+        "student", event_types=(EventType.QUESTION_ANSWERED,)
+    )
+    episode = SQLiteInteractionEpisodeRepository(config.APP_DB_PATH).get_for_turn(
+        "student", "session", f"assessment:{summary.id}"
+    )
+    assert len(events) == 2
+    assert episode is not None
+    assert episode.outcome.value == "incorrect_assessment"
     other = client.get(f"/api/assessments/{summary.id}/result", headers={"x-test-student-id": "other"})
     assert other.status_code == 404

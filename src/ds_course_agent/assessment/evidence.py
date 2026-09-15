@@ -40,6 +40,35 @@ class EvidenceWindowReader(Protocol):
         """Return hash-validated source pages around one retrieved document."""
 
 
+MIN_EVIDENCE_SENTENCES = 2
+
+
+@dataclass
+class EvidenceSelectionDiagnostics:
+    """Counters explaining why retrieved documents did or did not become evidence."""
+
+    retrieved_documents: int = 0
+    contents_documents: int = 0
+    invalid_provenance_documents: int = 0
+    candidate_sentences: int = 0
+    accepted_sentences: int = 0
+    accepted_spans: int = 0
+    required_sentences: int = MIN_EVIDENCE_SENTENCES
+    question_count: int = 0
+
+    def as_dict(self) -> dict[str, int]:
+        return {
+            "retrieved_documents": self.retrieved_documents,
+            "contents_documents": self.contents_documents,
+            "invalid_provenance_documents": self.invalid_provenance_documents,
+            "candidate_sentences": self.candidate_sentences,
+            "accepted_sentences": self.accepted_sentences,
+            "accepted_spans": self.accepted_spans,
+            "required_sentences": self.required_sentences,
+            "question_count": self.question_count,
+        }
+
+
 @dataclass(frozen=True)
 class AssessmentTarget:
     """Canonical target and permitted lexical evidence anchors."""
@@ -224,9 +253,14 @@ def select_evidence_spans(
     max_chars: int,
     question_count: int,
     evidence_window_reader: EvidenceWindowReader | None = None,
+    diagnostics: EvidenceSelectionDiagnostics | None = None,
 ) -> list[AssessmentEvidenceSpan]:
     """Select complete, non-conflicting target evidence spans."""
     pattern = _anchor_pattern(target)
+    if diagnostics is not None:
+        diagnostics.retrieved_documents = len(documents)
+        diagnostics.question_count = question_count
+        diagnostics.required_sentences = min(MIN_EVIDENCE_SENTENCES, question_count)
     ranked = sorted(
         enumerate(documents),
         key=lambda pair: (
@@ -243,9 +277,13 @@ def select_evidence_spans(
     remaining = max_chars
     for _, document in ranked:
         if _is_contents(document.page_content, document.metadata):
+            if diagnostics is not None:
+                diagnostics.contents_documents += 1
             continue
         assembled = _assemble_document_span(document, evidence_window_reader)
         if assembled is None:
+            if diagnostics is not None:
+                diagnostics.invalid_provenance_documents += 1
             continue
         text, completeness, starts_complete, ends_complete = assembled
         selected = []
@@ -261,6 +299,8 @@ def select_evidence_spans(
             if not has_terminal and not (sentence_index == len(sentences) - 1 and ends_complete):
                 continue
             normalized = _normalized(sentence)
+            if pattern.search(sentence) and diagnostics is not None:
+                diagnostics.candidate_sentences += 1
             if len(normalized) < 24 or len(sentence) > 1200 or not pattern.search(sentence):
                 continue
             if not _has_balanced_delimiters(sentence):
@@ -281,6 +321,8 @@ def select_evidence_spans(
                 continue
             selected.append(sentence)
             seen.append(normalized)
+            if diagnostics is not None:
+                diagnostics.accepted_sentences += 1
             remaining -= cost
         if not selected:
             continue
@@ -300,10 +342,13 @@ def select_evidence_spans(
                 formula_quality=formula_quality,
             )
         )
+        if diagnostics is not None:
+            diagnostics.accepted_spans += 1
         if len(spans) >= max_sources:
             break
     spans = _remove_formula_conflicts(spans)
-    return spans if spans and len(seen) >= question_count else []
+    required_sentences = min(MIN_EVIDENCE_SENTENCES, question_count)
+    return spans if spans and len(seen) >= required_sentences else []
 
 
 def select_evidence(
@@ -314,6 +359,7 @@ def select_evidence(
     max_chars: int,
     question_count: int,
     evidence_window_reader: EvidenceWindowReader | None = None,
+    diagnostics: EvidenceSelectionDiagnostics | None = None,
 ) -> list[EvidenceSource]:
     """Return public sources derived only from complete typed spans."""
     spans = select_evidence_spans(
@@ -323,5 +369,6 @@ def select_evidence(
         max_chars=max_chars,
         question_count=question_count,
         evidence_window_reader=evidence_window_reader,
+        diagnostics=diagnostics,
     )
     return [EvidenceSource(id=span.id, text=span.text, source=span.source, page=span.page) for span in spans]

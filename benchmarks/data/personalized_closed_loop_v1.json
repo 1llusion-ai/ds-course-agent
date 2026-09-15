@@ -1,0 +1,2267 @@
+{
+  "schema_version": "personalized-closed-loop/1.0",
+  "dataset_name": "personalized_closed_loop_v1",
+  "created_at": "2026-09-13",
+  "generation": {
+    "model": "deterministic-local-v1",
+    "prompt_sha256": "48d5bdb790d1bd19f12016b99041533fbdc5f5652e8b6663a2dc593ae18b0755",
+    "review_status": "frozen",
+    "source": "deterministic_local"
+  },
+  "trajectories": [
+    {
+      "id": "kc_routing_001",
+      "category": "kc_routing",
+      "description": "Deterministic closed-loop case for pca.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 主成分分析 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "pca",
+            "allowed_kc_ids": [
+              "pca"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解主成分分析，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "pca",
+            "allowed_kc_ids": [
+              "pca"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "kc_routing_002",
+      "category": "kc_routing",
+      "description": "Deterministic closed-loop case for svm.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 支持向量机 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "svm",
+            "allowed_kc_ids": [
+              "svm"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解支持向量机，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "svm",
+            "allowed_kc_ids": [
+              "svm"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "kc_routing_003",
+      "category": "kc_routing",
+      "description": "Deterministic closed-loop case for linear_regression.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 线性回归 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "linear_regression",
+            "allowed_kc_ids": [
+              "linear_regression"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解线性回归，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "linear_regression",
+            "allowed_kc_ids": [
+              "linear_regression"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "kc_routing_004",
+      "category": "kc_routing",
+      "description": "Deterministic closed-loop case for decision_tree.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 决策树 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "decision_tree",
+            "allowed_kc_ids": [
+              "decision_tree"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解决策树，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "decision_tree",
+            "allowed_kc_ids": [
+              "decision_tree"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "profile_stratification_001",
+      "category": "profile_stratification",
+      "description": "Deterministic closed-loop case for cross_validation.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 交叉验证 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "cross_validation",
+            "allowed_kc_ids": [
+              "cross_validation"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解交叉验证，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "cross_validation",
+            "allowed_kc_ids": [
+              "cross_validation"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "profile_stratification_002",
+      "category": "profile_stratification",
+      "description": "Deterministic closed-loop case for pca.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 主成分分析 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "pca",
+            "allowed_kc_ids": [
+              "pca"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解主成分分析，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "pca",
+            "allowed_kc_ids": [
+              "pca"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "profile_stratification_003",
+      "category": "profile_stratification",
+      "description": "Deterministic closed-loop case for svm.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 支持向量机 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "svm",
+            "allowed_kc_ids": [
+              "svm"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解支持向量机，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "svm",
+            "allowed_kc_ids": [
+              "svm"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "profile_stratification_004",
+      "category": "profile_stratification",
+      "description": "Deterministic closed-loop case for linear_regression.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 线性回归 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "linear_regression",
+            "allowed_kc_ids": [
+              "linear_regression"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解线性回归，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "linear_regression",
+            "allowed_kc_ids": [
+              "linear_regression"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "profile_stratification_005",
+      "category": "profile_stratification",
+      "description": "Deterministic closed-loop case for decision_tree.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 决策树 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "decision_tree",
+            "allowed_kc_ids": [
+              "decision_tree"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解决策树，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "decision_tree",
+            "allowed_kc_ids": [
+              "decision_tree"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "history_utilization_001",
+      "category": "history_utilization",
+      "description": "Deterministic closed-loop case for cross_validation.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 交叉验证 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "cross_validation",
+            "allowed_kc_ids": [
+              "cross_validation"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解交叉验证，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "cross_validation",
+            "allowed_kc_ids": [
+              "cross_validation"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "history_utilization_002",
+      "category": "history_utilization",
+      "description": "Deterministic closed-loop case for pca.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 主成分分析 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "pca",
+            "allowed_kc_ids": [
+              "pca"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解主成分分析，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "pca",
+            "allowed_kc_ids": [
+              "pca"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "history_utilization_003",
+      "category": "history_utilization",
+      "description": "Deterministic closed-loop case for svm.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 支持向量机 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "svm",
+            "allowed_kc_ids": [
+              "svm"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解支持向量机，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "svm",
+            "allowed_kc_ids": [
+              "svm"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "history_utilization_004",
+      "category": "history_utilization",
+      "description": "Deterministic closed-loop case for linear_regression.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 线性回归 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "linear_regression",
+            "allowed_kc_ids": [
+              "linear_regression"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解线性回归，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "linear_regression",
+            "allowed_kc_ids": [
+              "linear_regression"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "history_utilization_005",
+      "category": "history_utilization",
+      "description": "Deterministic closed-loop case for decision_tree.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 决策树 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "decision_tree",
+            "allowed_kc_ids": [
+              "decision_tree"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解决策树，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "decision_tree",
+            "allowed_kc_ids": [
+              "decision_tree"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "assessment_loop_001",
+      "category": "assessment_loop",
+      "description": "Deterministic closed-loop case for cross_validation.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 交叉验证 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "cross_validation",
+            "allowed_kc_ids": [
+              "cross_validation"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解交叉验证，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "cross_validation",
+            "allowed_kc_ids": [
+              "cross_validation"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "帮我出一道测验题，主题是交叉验证。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "cross_validation",
+            "allowed_kc_ids": [
+              "cross_validation"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "submit_assessment",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": "incorrect",
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "assessment_persisted",
+            "profile_updated"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "assessment_loop_002",
+      "category": "assessment_loop",
+      "description": "Deterministic closed-loop case for pca.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 主成分分析 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "pca",
+            "allowed_kc_ids": [
+              "pca"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解主成分分析，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "pca",
+            "allowed_kc_ids": [
+              "pca"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "帮我出一道测验题，主题是主成分分析。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "pca",
+            "allowed_kc_ids": [
+              "pca"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "submit_assessment",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": "incorrect",
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "assessment_persisted",
+            "profile_updated"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "assessment_loop_003",
+      "category": "assessment_loop",
+      "description": "Deterministic closed-loop case for svm.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 支持向量机 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "svm",
+            "allowed_kc_ids": [
+              "svm"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解支持向量机，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "svm",
+            "allowed_kc_ids": [
+              "svm"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "帮我出一道测验题，主题是支持向量机。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "svm",
+            "allowed_kc_ids": [
+              "svm"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "submit_assessment",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": "incorrect",
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "assessment_persisted",
+            "profile_updated"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "assessment_loop_004",
+      "category": "assessment_loop",
+      "description": "Deterministic closed-loop case for linear_regression.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 线性回归 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "linear_regression",
+            "allowed_kc_ids": [
+              "linear_regression"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解线性回归，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "linear_regression",
+            "allowed_kc_ids": [
+              "linear_regression"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "帮我出一道测验题，主题是线性回归。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "linear_regression",
+            "allowed_kc_ids": [
+              "linear_regression"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "submit_assessment",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": "incorrect",
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "assessment_persisted",
+            "profile_updated"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "student_isolation_001",
+      "category": "student_isolation",
+      "description": "Deterministic closed-loop case for decision_tree.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        },
+        {
+          "actor_id": "student_b"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_b",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "我在决策树上的主要问题是什么？",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "decision_tree",
+            "allowed_kc_ids": [
+              "decision_tree"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_b",
+          "session_alias": "first",
+          "message": "请解释决策树，但不要使用其他学生的历史。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "decision_tree",
+            "allowed_kc_ids": [
+              "decision_tree"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "基于我的历史继续讲解决策树。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "decision_tree",
+            "allowed_kc_ids": [
+              "decision_tree"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful",
+        "student_isolation"
+      ]
+    },
+    {
+      "id": "student_isolation_002",
+      "category": "student_isolation",
+      "description": "Deterministic closed-loop case for cross_validation.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        },
+        {
+          "actor_id": "student_b"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_b",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "我在交叉验证上的主要问题是什么？",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "cross_validation",
+            "allowed_kc_ids": [
+              "cross_validation"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_b",
+          "session_alias": "first",
+          "message": "请解释交叉验证，但不要使用其他学生的历史。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "cross_validation",
+            "allowed_kc_ids": [
+              "cross_validation"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "基于我的历史继续讲解交叉验证。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "cross_validation",
+            "allowed_kc_ids": [
+              "cross_validation"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful",
+        "student_isolation"
+      ]
+    },
+    {
+      "id": "student_isolation_003",
+      "category": "student_isolation",
+      "description": "Deterministic closed-loop case for pca.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        },
+        {
+          "actor_id": "student_b"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_b",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "我在主成分分析上的主要问题是什么？",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "pca",
+            "allowed_kc_ids": [
+              "pca"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_b",
+          "session_alias": "first",
+          "message": "请解释主成分分析，但不要使用其他学生的历史。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "pca",
+            "allowed_kc_ids": [
+              "pca"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "基于我的历史继续讲解主成分分析。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "pca",
+            "allowed_kc_ids": [
+              "pca"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful",
+        "student_isolation"
+      ]
+    },
+    {
+      "id": "student_isolation_004",
+      "category": "student_isolation",
+      "description": "Deterministic closed-loop case for svm.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        },
+        {
+          "actor_id": "student_b"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_b",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "我在支持向量机上的主要问题是什么？",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "svm",
+            "allowed_kc_ids": [
+              "svm"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_b",
+          "session_alias": "first",
+          "message": "请解释支持向量机，但不要使用其他学生的历史。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "svm",
+            "allowed_kc_ids": [
+              "svm"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "基于我的历史继续讲解支持向量机。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "svm",
+            "allowed_kc_ids": [
+              "svm"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "profile_updated",
+            "interaction_persisted",
+            "cross_session_state"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful",
+        "student_isolation"
+      ]
+    },
+    {
+      "id": "lifecycle_idempotency_001",
+      "category": "lifecycle_idempotency",
+      "description": "Deterministic closed-loop case for linear_regression.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 线性回归 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "linear_regression",
+            "allowed_kc_ids": [
+              "linear_regression"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解线性回归，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "linear_regression",
+            "allowed_kc_ids": [
+              "linear_regression"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "帮我出一道测验题，主题是线性回归。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "linear_regression",
+            "allowed_kc_ids": [
+              "linear_regression"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "submit_assessment",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": "incorrect",
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "assessment_persisted",
+            "profile_updated"
+          ]
+        },
+        {
+          "type": "retry_last_action",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "idempotent_persistence"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    },
+    {
+      "id": "lifecycle_idempotency_002",
+      "category": "lifecycle_idempotency",
+      "description": "Deterministic closed-loop case for decision_tree.",
+      "actors": [
+        {
+          "actor_id": "student_a"
+        }
+      ],
+      "steps": [
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "first",
+          "message": "请解释 决策树 的核心概念。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": false,
+            "primary_kc_id": "decision_tree",
+            "allowed_kc_ids": [
+              "decision_tree"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "open_session",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "我还不太理解决策树，请结合上次内容再解释一次。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "decision_tree",
+            "allowed_kc_ids": [
+              "decision_tree"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "chat",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": "帮我出一道测验题，主题是决策树。",
+          "outcome": null,
+          "expected": {
+            "personalized_route": true,
+            "primary_kc_id": "decision_tree",
+            "allowed_kc_ids": [
+              "decision_tree"
+            ],
+            "forbidden_student_facts": [],
+            "expected_difficulty": null
+          },
+          "checks": []
+        },
+        {
+          "type": "submit_assessment",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": "incorrect",
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "assessment_persisted",
+            "profile_updated"
+          ]
+        },
+        {
+          "type": "retry_last_action",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": []
+        },
+        {
+          "type": "checkpoint",
+          "actor_id": "student_a",
+          "session_alias": "second",
+          "message": null,
+          "outcome": null,
+          "expected": null,
+          "checks": [
+            "idempotent_persistence"
+          ]
+        }
+      ],
+      "hard_gates": [
+        "kc_correct",
+        "profile_faithful"
+      ]
+    }
+  ]
+}

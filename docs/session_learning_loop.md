@@ -11,19 +11,26 @@ probability or measured learning gain is claimed by the current rules.
 2. After a successful teaching answer has been persisted, the shared turn
    producer schedules practice for that student's session. Scheduling failures
    are logged independently and do not invalidate the answer.
-3. `AssessmentAssignmentPlanner.plan_session` selects only KCs mentioned in the
-   same student/session. It creates two-question requests. A persistent unique
-   student/session/KC identity prevents repeated follow-ups from creating more
-   automatic quizzes for the same topic.
+3. `AssessmentAssignmentPlanner.plan_session` selects at most three new
+   canonical KCs mentioned in the same student/session. Existing queued,
+   generating, ready, or failed preparations consume this session limit, so
+   repeated mentions and retries do not add another KC. Each selected KC gets
+   exactly two complementary questions: one concept-distinction item and one
+   application-transfer item.
 4. A process-local worker invokes the existing assignment tool. The assessment
-   list shows queued, generating, and failed preparation states. Students can
-   filter by session and retry failures. Active questions remain immutable.
+   list shows queued, generating, and failed preparation states. Failed
+   preparation progress retains accepted and pending slots, evidence, and typed
+   failure reasons; retryable failures refill only pending slots. A preparation
+   becomes `READY` only after the exact requested count passes both quality gates,
+   so partial or unreviewed questions are never published.
 5. The authenticated submission API injects `AssessmentEvidenceRecorder` into
    the assessment application service. The service persists server-scored
    results before publishing typed `QuestionAnsweredEvent` facts.
 6. The recorder uses stable assessment/question event IDs. Retrying submission
    or reading its result repairs interrupted evidence publication without
-   double-counting answers. `MemoryCore` rebuilds the persisted practice profile.
+   double-counting answers. `SQLiteProfileSnapshotRepository` rebuilds the
+   persisted practice profile, exposed to orchestration through
+   `LearnerStateProvider`.
 7. Ordinary grounded concept answers and personalized explanations consume the
    relevant practice evidence. Guidance affects answer generation, not retrieval
    queries. The result view offers a return to the originating conversation.
@@ -69,10 +76,14 @@ clarification/self-report records remain separate from scored practice.
 | `teaching/practice.py` | Evidence summary and conservative readiness rules |
 | `teaching/practice_guidance.py` | Relevant evidence to explanation guidance |
 
-The preparation table shares `ASSESSMENT_DB_PATH` with assessment storage. Events
-and profile projections use `CHAT_HISTORY_DIR`. Runtime files remain under
-`var/` by default. Queue claims use SQLite compare-and-set transitions; automatic
-assignments reuse the preparation ID even after retry.
+The preparation table shares `ASSESSMENT_DB_PATH` with assessment storage. Learning
+events and profile projections use `APP_DB_PATH` through the public
+`LearningEventRepository` and `LearnerStateProvider` interfaces, with SQLite
+implementations as the runtime default. Each persisted assessment also snapshots
+the full `GenerateQuestionsRequest`, including its teaching requirement, so
+assignment identity checks and retries preserve the original objectives. Runtime
+files remain under `var/` by default. Queue claims use SQLite compare-and-set
+transitions; automatic assignments reuse the preparation ID even after retry.
 
 The worker runs one generation at a time per application process. Persisted
 queued work resumes when the student's preparation list is read or another

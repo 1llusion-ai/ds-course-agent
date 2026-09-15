@@ -31,14 +31,14 @@
       <div v-else class="assessment-list">
         <article v-for="job in visiblePreparations" :key="job.id" class="assessment-list-item">
           <div class="assessment-list-item__status" :data-status="job.status">
-            {{ job.status === 'failed' ? '准备失败' : job.status === 'generating' ? '准备中' : '待准备' }}
+            {{ job.status === 'failed' ? '需要重试' : job.status === 'generating' ? '准备中' : '待准备' }}
           </div>
           <div class="assessment-list-item__body">
             <h3>{{ job.display_name }}</h3>
             <p>{{ sessionTitle(job.session_id) }}</p>
           </div>
           <el-button v-if="job.status === 'failed'" class="assessment-retry-button" plain :loading="retrying === job.id" @click="retry(job)">
-            <el-icon><Refresh /></el-icon>重新准备
+            <el-icon><Refresh /></el-icon>再次准备
           </el-button>
           <el-icon v-else class="is-loading"><Loading /></el-icon>
         </article>

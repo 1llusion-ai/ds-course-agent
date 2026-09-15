@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import Barrier
 from types import ModuleType
 from typing import Any
 
@@ -22,9 +23,12 @@ from ds_course_agent.assessment.critic import (
     ItemCritique,
 )
 from ds_course_agent.assessment.evidence import resolve_target
+from ds_course_agent.assessment.feedback import AssessmentFailureKind, QuestionRejectionCode
 from ds_course_agent.assessment.generator import (
+    AssessmentEditorModelCallError,
     AssessmentGenerationError,
     AssessmentGenerator,
+    AssessmentModelCallError,
 )
 from ds_course_agent.assessment.models import (
     Difficulty,
@@ -35,6 +39,7 @@ from ds_course_agent.assessment.models import (
 )
 from ds_course_agent.assessment.service import (
     AssessmentService,
+    AssessmentSlotFailureError,
     AssessmentUnavailableError,
     NoAssessmentEvidence,
     get_assessment_service,
@@ -42,6 +47,7 @@ from ds_course_agent.assessment.service import (
 from ds_course_agent.assessment.verifier import (
     AssessmentEvidenceVerifier,
     AssessmentVerificationError,
+    AssessmentVerifierModelCallError,
     EvidenceExcerptCatalog,
     EvidenceVerificationVerdict,
 )
@@ -165,7 +171,7 @@ class _Critic:
         self.critique_batches = critique_batches
         self.calls: list[tuple[list[GeneratedQuestion], list[GeneratedQuestion]]] = []
 
-    def critique(
+    def critique_batch(
         self,
         request: GenerateQuestionsRequest,
         questions: Sequence[GeneratedQuestion],
@@ -204,6 +210,17 @@ def _quiz_payload(count: int, difficulty: Difficulty, source_ids: list[str] | No
     }
 
 
+def _repair_batch_payload(question: dict[str, Any], slot_index: int) -> dict[str, Any]:
+    return {
+        "revisions": [
+            {
+                "slot_id": f"pca:slot:{slot_index}",
+                "question": question,
+            }
+        ]
+    }
+
+
 def _critique_payload(index: int, question: GeneratedQuestion) -> dict[str, Any]:
     return {
         "question_index": index,
@@ -235,13 +252,15 @@ def _service_with_model(
     context_max_chars: int | None = None,
     verifier: _Verifier | None = None,
     critic: _Critic | None = None,
+    editor: Any | None = None,
 ) -> tuple[AssessmentService, _Retriever]:
     retriever = _Retriever(documents)
     service = AssessmentService(
         retriever=retriever,
-        generator=AssessmentGenerator(model=model),
+        generator=AssessmentGenerator(model=model, editor_model=model),
         verifier=verifier or _Verifier(),
         critic=critic or _Critic(),
+        editor=editor,
         context_max_chars=context_max_chars,
     )
     return service, retriever
@@ -262,7 +281,7 @@ def test_request_contract_trims_kc_id_and_enforces_strict_bounded_count() -> Non
         with pytest.raises(ValidationError):
             GenerateQuestionsRequest(target_kc_id=invalid_kc_id)
 
-    for invalid_rounds in (-1, 2, 1.0, True):
+    for invalid_rounds in (-1, 3, 1.0, True):
         with pytest.raises(ValueError):
             AssessmentService(repair_rounds=invalid_rounds)
 
@@ -365,7 +384,12 @@ def test_service_generates_exact_grounded_quiz_with_server_owned_sources() -> No
 
 
 def test_service_binds_returned_sources_to_the_exact_bounded_model_evidence() -> None:
-    model = _StructuredModel(_quiz_payload(1, Difficulty.BASIC, ["S1"]))
+    model = _StructuredModel(
+        responses=[
+            _quiz_payload(1, Difficulty.BASIC, ["S1"]),
+            _repair_batch_payload(_question_payload(0, Difficulty.BASIC, ["S1"]), 0),
+        ]
+    )
     service, _ = _service_with_model(
         model,
         documents=[
@@ -399,12 +423,43 @@ def test_no_evidence_prevents_any_model_call() -> None:
     assert model.invoke_count == 0
 
 
+def test_quality_gates_run_in_parallel_over_the_same_candidate_pool() -> None:
+    barrier = Barrier(2)
+    gate_inputs: list[tuple[str, int]] = []
+
+    class ParallelVerifier(_Verifier):
+        def verify(self, request, questions, catalog):
+            gate_inputs.append(("verifier", id(questions)))
+            barrier.wait(timeout=2)
+            return super().verify(request, questions, catalog)
+
+    class ParallelCritic(_Critic):
+        def critique_batch(self, request, questions, accepted_questions=()):
+            gate_inputs.append(("critic", id(questions)))
+            barrier.wait(timeout=2)
+            return super().critique_batch(request, questions, accepted_questions)
+
+    model = _StructuredModel(_quiz_payload(2, Difficulty.BASIC))
+    service, _ = _service_with_model(
+        model,
+        verifier=ParallelVerifier(),
+        critic=ParallelCritic(),
+        documents=[_Document(page_content=PCA_EVIDENCE, metadata={})],
+    )
+
+    quiz = service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=2))
+
+    assert len(quiz.questions) == 2
+    assert {name for name, _ in gate_inputs} == {"verifier", "critic"}
+    assert len({pool_id for _, pool_id in gate_inputs}) == 1
+
+
 def test_service_repairs_only_rejected_questions_and_preserves_accepted_questions() -> None:
     initial = _quiz_payload(2, Difficulty.BASIC)
     initial["questions"][1]["stem"] = "如何使用 sort_values 对结果进行排序？"
     repair = _quiz_payload(1, Difficulty.BASIC)
     repair["questions"][0] = _question_payload(2, Difficulty.BASIC)
-    model = _StructuredModel(responses=[initial, repair])
+    model = _StructuredModel(responses=[initial, _repair_batch_payload(repair["questions"][0], 1)])
     service, _ = _service_with_model(
         model,
         documents=[_Document(page_content=PCA_EVIDENCE, metadata={})],
@@ -416,7 +471,7 @@ def test_service_repairs_only_rejected_questions_and_preserves_accepted_question
     assert quiz.questions[0] == GeneratedQuestion.model_validate(initial["questions"][0])
     assert quiz.questions[1] == GeneratedQuestion.model_validate(repair["questions"][0])
     repair_prompt = model.message_batches[1][-1].content
-    assert "题目数量：1" in repair_prompt
+    assert '"slot_id": "pca:slot:1"' in repair_prompt
     assert initial["questions"][0]["stem"] in repair_prompt
     assert "off_topic" in repair_prompt
 
@@ -454,7 +509,7 @@ def test_evidence_verifier_rejects_ambiguous_question_and_repairs_only_that_slot
             ],
         ]
     )
-    model = _StructuredModel(responses=[initial, repair])
+    model = _StructuredModel(responses=[initial, _repair_batch_payload(repair["questions"][0], 1)])
     service, _ = _service_with_model(
         model,
         verifier=verifier,
@@ -517,7 +572,7 @@ def test_item_quality_rejections_trigger_one_bounded_repair(
             [_critique_payload(0, repair_question)],
         ]
     )
-    model = _StructuredModel(responses=[initial, repair])
+    model = _StructuredModel(responses=[initial, _repair_batch_payload(repair["questions"][0], 0)])
     service, _ = _service_with_model(
         model,
         critic=critic,
@@ -540,12 +595,13 @@ def test_quality_verifier_failure_rejects_the_request_without_regeneration() -> 
     model = _StructuredModel(_quiz_payload(1, Difficulty.BASIC))
     service = AssessmentService(
         retriever=_Retriever([_Document(page_content=PCA_EVIDENCE, metadata={})]),
-        generator=AssessmentGenerator(model=model),
+        generator=AssessmentGenerator(model=model, editor_model=model),
         verifier=FailingVerifier(),
     )
 
-    with pytest.raises(AssessmentVerificationError):
+    with pytest.raises(AssessmentSlotFailureError) as error:
         service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
+    assert error.value.failure_kind is AssessmentFailureKind.REVIEWER_UNAVAILABLE
     assert model.invoke_count == 1
 
 
@@ -561,14 +617,15 @@ def test_service_fails_closed_when_an_injected_verifier_omits_question_coverage(
         verifier=IncompleteVerifier(),
     )
 
-    with pytest.raises(AssessmentVerificationError):
+    with pytest.raises(AssessmentSlotFailureError) as error:
         service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
+    assert error.value.failure_kind is AssessmentFailureKind.REVIEWER_UNAVAILABLE
     assert model.invoke_count == 1
 
 
 def test_service_fails_closed_when_an_injected_critic_omits_question_coverage() -> None:
     class IncompleteCritic:
-        def critique(self, *args: Any, **kwargs: Any) -> tuple[ItemCritique, ...]:
+        def critique_batch(self, *args: Any, **kwargs: Any) -> tuple[ItemCritique, ...]:
             return ()
 
     model = _StructuredModel(_quiz_payload(1, Difficulty.BASIC))
@@ -579,8 +636,9 @@ def test_service_fails_closed_when_an_injected_critic_omits_question_coverage() 
         critic=IncompleteCritic(),
     )
 
-    with pytest.raises(AssessmentCritiqueError, match="incomplete question coverage"):
+    with pytest.raises(AssessmentSlotFailureError) as error:
         service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
+    assert error.value.failure_kind is AssessmentFailureKind.REVIEWER_UNAVAILABLE
     assert model.invoke_count == 1
 
 
@@ -605,12 +663,13 @@ def test_service_validates_excerpt_ids_from_an_injected_verifier_without_repair(
         verifier=UnknownExcerptVerifier(),
     )
 
-    with pytest.raises(AssessmentVerificationError):
+    with pytest.raises(AssessmentSlotFailureError) as error:
         service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
+    assert error.value.failure_kind is AssessmentFailureKind.REVIEWER_UNAVAILABLE
     assert model.invoke_count == 1
 
 
-def test_evidence_rejection_does_not_call_item_quality_critic() -> None:
+def test_evidence_rejection_still_runs_both_quality_gates() -> None:
     verifier = _Verifier(
         verdict_batches=[
             [
@@ -635,13 +694,14 @@ def test_evidence_rejection_does_not_call_item_quality_critic() -> None:
     with pytest.raises(AssessmentGenerationError, match="answer_not_supported"):
         service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
 
-    assert model.invoke_count == 2
-    assert critic.calls == []
+    assert model.invoke_count == 3
+    assert len(critic.calls) == 1
+    assert len(verifier.calls) == 1
 
 
-def test_critic_failure_degrades_to_evidence_verified_questions() -> None:
+def test_critic_failure_fails_closed_without_publishing() -> None:
     class FailingCritic:
-        def critique(self, *args: Any, **kwargs: Any) -> tuple[ItemCritique, ...]:
+        def critique_batch(self, *args: Any, **kwargs: Any) -> tuple[ItemCritique, ...]:
             raise AssessmentCritiqueError("critic unavailable")
 
     model = _StructuredModel(_quiz_payload(1, Difficulty.BASIC))
@@ -652,16 +712,123 @@ def test_critic_failure_degrades_to_evidence_verified_questions() -> None:
         critic=FailingCritic(),
     )
 
-    quiz = service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
+    with pytest.raises(AssessmentSlotFailureError) as error:
+        service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
 
-    assert len(quiz.questions) == 1
+    assert error.value.failure_kind is AssessmentFailureKind.REVIEWER_UNAVAILABLE
     assert model.invoke_count == 1
 
 
-def test_critic_only_receives_evidence_accepted_candidates_and_prior_questions() -> None:
+def test_provider_transient_repair_failure_is_slot_scoped_and_bounded() -> None:
+    draft = _quiz_payload(3, Difficulty.BASIC)
+    questions = [GeneratedQuestion.model_validate(item) for item in draft["questions"]]
+    rejected = _critique_payload(1, questions[1])
+    rejected["option_critiques"][1]["same_type_and_granularity"] = False
+    critic = _Critic([[_critique_payload(0, questions[0]), rejected, _critique_payload(2, questions[2])]])
+
+    class FailingEditor:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def revise_items(self, request):
+            self.calls.append(request)
+            raise AssessmentEditorModelCallError("temporary editor outage")
+
+    editor = FailingEditor()
+    model = _StructuredModel(draft)
+    service, _ = _service_with_model(
+        model,
+        critic=critic,
+        editor=editor,
+        documents=[_Document(page_content=PCA_EVIDENCE, metadata={})],
+    )
+
+    with pytest.raises(AssessmentSlotFailureError) as error:
+        service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=3))
+
+    assert error.value.progress is not None
+    assert [item.slot_index for item in error.value.progress.accepted_slots] == [0, 2]
+    assert [item.slot_index for item in error.value.progress.pending_slots] == [1]
+    assert len(editor.calls) == 2
+    assert [slot.slot_index for slot in editor.calls[0].slots] == [1]
+    assert [slot.slot_index for slot in editor.calls[1].slots] == [1]
+    assert editor.calls[0].slots[0].rejection.codes == (QuestionRejectionCode.IMPLAUSIBLE_DISTRACTORS,)
+    assert editor.calls[1].slots[0].rejection.codes == (
+        QuestionRejectionCode.IMPLAUSIBLE_DISTRACTORS,
+        QuestionRejectionCode.PROVIDER_FAILURE,
+    )
+
+
+def test_repair_reviewer_failure_preserves_already_accepted_items() -> None:
+    draft = _quiz_payload(2, Difficulty.BASIC)
+    questions = [GeneratedQuestion.model_validate(item) for item in draft["questions"]]
+    fixed = GeneratedQuestion.model_validate(_question_payload(4, Difficulty.BASIC))
+    rejected = _critique_payload(1, questions[1])
+    rejected["option_critiques"][1]["same_type_and_granularity"] = False
+    critic = _Critic(
+        [
+            [_critique_payload(0, questions[0]), rejected],
+            [_critique_payload(0, fixed)],
+        ]
+    )
+
+    class FailingRepairVerifier(_Verifier):
+        def verify(self, request, questions, catalog):
+            if len(self.calls) == 1:
+                raise AssessmentVerifierModelCallError("temporary verifier outage")
+            return super().verify(request, questions, catalog)
+
+    model = _StructuredModel(responses=[draft, _repair_batch_payload(fixed.model_dump(mode="json"), 1)])
+    service, _ = _service_with_model(
+        model,
+        verifier=FailingRepairVerifier(),
+        critic=critic,
+        documents=[_Document(page_content=PCA_EVIDENCE, metadata={})],
+    )
+
+    with pytest.raises(AssessmentSlotFailureError) as error:
+        service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=2))
+
+    assert error.value.progress is not None
+    assert [item.slot_index for item in error.value.progress.accepted_slots] == [0]
+    assert [item.slot_index for item in error.value.progress.pending_slots] == [1]
+    assert model.invoke_count == 3
+    assert len(critic.calls) == 3
+
+
+def test_all_provider_transient_repair_failures_remain_retryable() -> None:
+    draft = _quiz_payload(1, Difficulty.BASIC)
+    question = GeneratedQuestion.model_validate(draft["questions"][0])
+    critique = _critique_payload(0, question)
+    critique["option_critiques"][1]["same_type_and_granularity"] = False
+
+    class FailingEditor:
+        def revise_items(self, request):
+            raise AssessmentEditorModelCallError("temporary editor outage")
+
+    model = _StructuredModel(draft)
+    service, _ = _service_with_model(
+        model,
+        critic=_Critic([[critique]]),
+        editor=FailingEditor(),
+        documents=[_Document(page_content=PCA_EVIDENCE, metadata={})],
+    )
+
+    with pytest.raises(AssessmentSlotFailureError) as error:
+        service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
+
+    assert error.value.failure_kind is AssessmentFailureKind.PROVIDER_TRANSIENT_FAILURE
+    assert error.value.slot_failures[0].failure_kind is AssessmentFailureKind.PROVIDER_TRANSIENT_FAILURE
+    assert model.invoke_count == 1
+
+
+def test_quality_gates_receive_the_same_candidate_pool_and_repair_only_failed_slot() -> None:
     initial = _quiz_payload(2, Difficulty.BASIC)
     repair = _quiz_payload(1, Difficulty.BASIC)
     repair["questions"][0] = _question_payload(4, Difficulty.BASIC)
+    first = GeneratedQuestion.model_validate(initial["questions"][0])
+    second = GeneratedQuestion.model_validate(initial["questions"][1])
+    fixed = GeneratedQuestion.model_validate(repair["questions"][0])
     verifier = _Verifier(
         verdict_batches=[
             [
@@ -688,8 +855,13 @@ def test_critic_only_receives_evidence_accepted_candidates_and_prior_questions()
             ],
         ]
     )
-    critic = _Critic()
-    model = _StructuredModel(responses=[initial, repair])
+    critic = _Critic(
+        critique_batches=[
+            [_critique_payload(0, first), _critique_payload(1, second)],
+            [_critique_payload(0, fixed)],
+        ]
+    )
+    model = _StructuredModel(responses=[initial, _repair_batch_payload(repair["questions"][0], 1)])
     service, _ = _service_with_model(
         model,
         verifier=verifier,
@@ -699,15 +871,13 @@ def test_critic_only_receives_evidence_accepted_candidates_and_prior_questions()
 
     quiz = service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=2))
 
-    assert quiz.questions[0] == GeneratedQuestion.model_validate(initial["questions"][0]).model_copy(
-        update={"explanation": "The first candidate is supported."}
-    )
-    assert quiz.questions[1] == GeneratedQuestion.model_validate(repair["questions"][0]).model_copy(
-        update={"explanation": "The repaired question is supported."}
-    )
+    assert quiz.questions[0] == first.model_copy(update={"explanation": "The first candidate is supported."})
+    assert quiz.questions[1] == fixed.model_copy(update={"explanation": "The repaired question is supported."})
     assert model.invoke_count == 2
-    assert critic.calls[0] == ([quiz.questions[0]], [])
-    assert critic.calls[1] == ([quiz.questions[1]], [quiz.questions[0]])
+    assert critic.calls[0] == ([first, second], [])
+    assert critic.calls[1] == ([fixed], [quiz.questions[0]])
+    assert verifier.calls[0] == [first, second]
+    assert verifier.calls[1] == [fixed]
     assert verifier.catalogs[0] is verifier.catalogs[1]
     assert "answer_not_supported" in model.message_batches[1][-1].content
 
@@ -735,18 +905,19 @@ def test_quality_verdict_requires_evidence_from_a_question_declared_source() -> 
                 _Document(page_content=second_source, metadata={}),
             ]
         ),
-        generator=AssessmentGenerator(model=model),
+        generator=AssessmentGenerator(model=model, editor_model=model),
         verifier=verifier,
+        critic=_Critic(),
         evidence_top_k=2,
     )
 
     with pytest.raises(AssessmentGenerationError, match="source_mismatch"):
         service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
-    assert model.invoke_count == 2
+    assert model.invoke_count == 3
 
 
 @pytest.mark.parametrize("failure", ["count", "difficulty", "duplicate_stem", "invented_source", "off_topic"])
-def test_service_stops_after_one_unsuccessful_repair_round(failure: str) -> None:
+def test_service_stops_after_bounded_unsuccessful_repair_rounds(failure: str) -> None:
     payload = _quiz_payload(2, Difficulty.BASIC)
     if failure == "count":
         payload["questions"].pop()
@@ -765,10 +936,18 @@ def test_service_stops_after_one_unsuccessful_repair_round(failure: str) -> None
         documents=[_Document(page_content=PCA_EVIDENCE, metadata={})],
     )
 
-    with pytest.raises(AssessmentGenerationError):
+    expected_code = {
+        "count": "question_count_shortfall",
+        "difficulty": "difficulty_mismatch",
+        "duplicate_stem": "duplicate_stem",
+        "invented_source": "unknown_source",
+        "off_topic": "off_topic",
+    }[failure]
+    with pytest.raises(AssessmentGenerationError) as error:
         service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=2))
 
-    assert model.invoke_count == 2
+    assert expected_code in str(error.value)
+    assert model.invoke_count == 3
 
 
 def test_model_failure_is_generation_error_and_never_retried() -> None:
@@ -778,8 +957,9 @@ def test_model_failure_is_generation_error_and_never_retried() -> None:
         documents=[_Document(page_content=PCA_EVIDENCE, metadata={})],
     )
 
-    with pytest.raises(AssessmentGenerationError):
+    with pytest.raises(AssessmentModelCallError) as error:
         service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
+    assert error.value.failure_kind is AssessmentFailureKind.PROVIDER_TRANSIENT_FAILURE
     assert model.invoke_count == 1
 
 
@@ -790,7 +970,7 @@ def test_structured_output_validation_error_can_be_repaired_once() -> None:
     model = _StructuredModel(
         responses=[
             validation_error.value,
-            _quiz_payload(1, Difficulty.BASIC),
+            _repair_batch_payload(_question_payload(0, Difficulty.BASIC), 0),
         ]
     )
     service, _ = _service_with_model(

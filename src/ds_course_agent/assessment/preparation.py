@@ -12,6 +12,11 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.assessment.feedback import (
+    AssessmentFailureKind,
+    AssessmentGenerationProgress,
+    QuestionRejectionCode,
+)
 from ds_course_agent.assessment.models import GenerateQuestionsRequest
 
 
@@ -37,7 +42,26 @@ class AssessmentPreparation(BaseModel):
     source_event_ids: tuple[str, ...]
     status: PreparationStatus = PreparationStatus.QUEUED
     assessment_id: str | None = None
+    failure_kind: AssessmentFailureKind | None = None
+    failed_slots: tuple[int, ...] = ()
+    failure_codes: tuple[QuestionRejectionCode, ...] = ()
+    generation_progress: AssessmentGenerationProgress | None = None
+    retryable: bool = False
     updated_at: float
+
+    @property
+    def accepted_slot_count(self) -> int:
+        """Return how many validated slots are retained for this preparation."""
+
+        return self.generation_progress.accepted_count if self.generation_progress is not None else 0
+
+    @property
+    def pending_slot_count(self) -> int:
+        """Return how many requested slots still need a validated question."""
+
+        return (
+            self.generation_progress.pending_count if self.generation_progress is not None else len(self.failed_slots)
+        )
 
 
 class PreparationRepository:
@@ -121,10 +145,31 @@ class PreparationRepository:
         status: PreparationStatus,
         *,
         assessment_id: str | None = None,
+        failure_kind: AssessmentFailureKind | None = None,
+        failed_slots: tuple[int, ...] = (),
+        failure_codes: tuple[QuestionRejectionCode, ...] = (),
+        generation_progress: AssessmentGenerationProgress | None = None,
+        retryable: bool | None = None,
     ) -> AssessmentPreparation | None:
         """Compare and set a queue state, returning None when another worker won."""
 
-        updated = job.model_copy(update={"status": status, "assessment_id": assessment_id, "updated_at": time.time()})
+        failed = status is PreparationStatus.FAILED
+        progress = generation_progress if generation_progress is not None else job.generation_progress
+        effective_retryable = (
+            bool(retryable) if retryable is not None else bool(progress and progress.retryable) if failed else False
+        )
+        updated = job.model_copy(
+            update={
+                "status": status,
+                "assessment_id": assessment_id if assessment_id is not None else job.assessment_id,
+                "failure_kind": failure_kind if failed else None,
+                "failed_slots": tuple(failed_slots) if failed else (),
+                "failure_codes": tuple(failure_codes) if failed else (),
+                "generation_progress": progress if status is not PreparationStatus.READY else None,
+                "retryable": effective_retryable if failed else False,
+                "updated_at": time.time(),
+            }
+        )
         with self._connection() as connection:
             cursor = connection.execute(
                 "UPDATE assessment_preparations SET status = ?, payload_json = ? "

@@ -22,6 +22,7 @@ from ds_course_agent.tools.course_rag import (
     clear_rag_answer_cache,
     course_rag_tool,
     end_retrieval_trace,
+    retrieve_course_evidence,
 )
 from ds_course_agent.tools.knowledge_base_status import check_knowledge_base_status
 from ds_course_agent.tools.registry import get_rag_tools
@@ -52,6 +53,30 @@ class TestCourseRAGTool:
         assert isinstance(tools, list)
         assert len(tools) >= 1
         assert course_rag_tool in tools
+
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
+    def test_retrieve_course_evidence_does_not_call_answer_model(self, mock_get_service):
+        mock_service = MagicMock()
+        document = Document(page_content="逻辑回归证据", metadata={"book_page": 120})
+        mock_service.retrieve.return_value = SimpleNamespace(
+            has_results=True,
+            documents=[document],
+            formatted_context="逻辑回归证据",
+            retrieval_query="逻辑回归",
+            term_resolution=None,
+        )
+        mock_get_service.return_value = mock_service
+
+        token = begin_query_trace({"entrypoint": "course_evidence_test"})
+        evidence = retrieve_course_evidence("复习逻辑回归")
+        trace = end_query_trace(token)
+
+        assert evidence.context == "逻辑回归证据"
+        assert evidence.documents == (document,)
+        assert evidence.has_results is True
+        mock_service.answer_with_context.assert_not_called()
+        result_event = next(event for event in trace["events"] if event["stage"] == "course_evidence.result")
+        assert result_event["data"] == {"source_count": 1, "has_results": True}
 
     @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_tool_returns_error_message_on_exception(self, mock_get_service):

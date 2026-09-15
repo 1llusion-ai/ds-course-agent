@@ -1,9 +1,11 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
 from ds_course_agent.teaching.learner_state import learner_state_from_profile
 from ds_course_agent.teaching.profile_models import ConceptFocus, StudentProfile, WeakSpotCandidate
 from ds_course_agent.teaching.skill_system import SkillRegistry
+from ds_course_agent.tools.course_rag import CourseRagEvidence
 
 
 def _build_profile() -> StudentProfile:
@@ -126,11 +128,65 @@ def test_personalized_explanation_streams_model_chunks():
         )
     ]
 
-    rag_tool = SimpleNamespace(invoke=lambda question: "课程资料" * 30)
+    evidence = CourseRagEvidence(
+        context="课程资料" * 30,
+        has_results=True,
+        documents=(),
+        sources=(),
+        retrieval_query="请结合我的测验表现解释 PCA",
+        term_resolution=None,
+    )
     with (
         patch.object(executor_module, "_get_llm", return_value=FakeModel()),
-        patch.object(executor_module, "course_rag_tool", rag_tool),
+        patch.object(executor_module, "retrieve_course_evidence", return_value=evidence) as retrieve,
     ):
-        chunks = list(skill.stream("请结合我的测验表现解释 PCA", learner_state, matched))
+        trace_token = begin_query_trace()
+        try:
+            chunks = list(skill.stream("请结合我的测验表现解释 PCA", learner_state, matched))
+        finally:
+            trace = end_query_trace(trace_token)
 
     assert "第一段第二段" in "".join(chunks)
+    retrieve.assert_called_once_with("请结合我的测验表现解释 PCA")
+    stages = [event["stage"] for event in trace["events"]]
+    assert "teaching.personalized_explanation.first_delta" in stages
+    assert "teaching.personalized_explanation.generate_stream" in stages
+
+
+def test_personalized_explanation_uses_retrieval_without_generating_rag_answer():
+    executor_module = SkillRegistry().load_module("personalized-explanation")
+    learner_state = learner_state_from_profile(_build_profile())
+    skill = executor_module.PersonalizedExplanationSkill()
+    matched = [
+        SimpleNamespace(
+            concept_id="logistic_regression",
+            display_name="逻辑回归",
+            chapter="第6章",
+            method="exact_alias",
+            score=0.98,
+        )
+    ]
+    evidence = CourseRagEvidence(
+        context="逻辑回归课程证据" * 30,
+        has_results=True,
+        documents=(),
+        sources=({"reference": "《第6章 监督学习常用算法》第120页"},),
+        retrieval_query="逻辑回归",
+        term_resolution=None,
+    )
+
+    class FakeModel:
+        def stream(self, prompt):
+            assert evidence.context in prompt
+            yield SimpleNamespace(content="流式回答")
+
+    answer_tool = MagicMock()
+    with (
+        patch.object(executor_module, "retrieve_course_evidence", return_value=evidence),
+        patch.object(executor_module, "_get_llm", return_value=FakeModel()),
+        patch.object(executor_module, "course_rag_tool", answer_tool),
+    ):
+        chunks = list(skill.stream("结合我的学习情况复习逻辑回归", learner_state, matched))
+
+    assert chunks[-1] == "流式回答"
+    answer_tool.invoke.assert_not_called()

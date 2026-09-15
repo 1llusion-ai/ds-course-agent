@@ -117,8 +117,8 @@ class AssessmentAssignmentRouteHandler(BufferedRouteHandlerMixin):
             return build_route_result(
                 route_state,
                 build_error_response(
-                    "测验创建失败",
-                    "暂时无法根据课程资料生成测验，请稍后重试。",
+                    "测验暂未准备好",
+                    "本次题目还没有通过教材证据和质量检查。你的学习记录已保存，请稍后再次发起测验请求。",
                     retryable=True,
                 ),
                 degraded=True,
@@ -228,9 +228,17 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
         attr, branch = self._ROUTES[intent]
         skill = getattr(agent, attr)
 
+        def invoke_skill(*args):
+            if callable(skill):
+                return skill(*args)
+            execute_skill = getattr(skill, "execute", None)
+            if not callable(execute_skill):
+                raise TypeError(f"Skill '{attr}' must be callable or expose execute()")
+            return execute_skill(*args)
+
         trace_step("agent.branch", branch=branch)
         if intent == RouteIntent.MISCONCEPTION_REPAIR:
-            return build_route_result(route_state, skill(question, student_id, session_id, "0"))
+            return build_route_result(route_state, invoke_skill(question, student_id, session_id, "0"))
         if intent in {RouteIntent.LEARNING_PATH, RouteIntent.PERSONALIZED_EXPLANATION}:
             learner_state = route_state.learner_state
             if learner_state is None:
@@ -241,8 +249,11 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
                     matched_concepts[0].concept_id,
                     matched_concepts[0].method,
                 )
-            return build_route_result(route_state, skill(question, learner_state, matched_concepts))
-        return build_route_result(route_state, skill(question, student_id, session_id))
+            skill_args = (question, learner_state, matched_concepts)
+            if intent is RouteIntent.PERSONALIZED_EXPLANATION and route_state.personalization_context is not None:
+                skill_args += (route_state.personalization_context,)
+            return build_route_result(route_state, invoke_skill(*skill_args))
+        return build_route_result(route_state, invoke_skill(question, student_id, session_id))
 
     def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str | TurnEvent]:
         if route_state.decision.intent is not RouteIntent.PERSONALIZED_EXPLANATION:
@@ -265,7 +276,16 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
         matched_concepts = route_state.matched_concepts or []
         trace_step("agent.branch", branch="explanation_skill")
         streamed_parts: list[str] = []
-        for chunk in stream_skill(question, learner_state, matched_concepts):
+        import inspect
+
+        stream_args = (question, learner_state, matched_concepts)
+        parameters = inspect.signature(stream_skill).parameters.values()
+        accepts_context = (
+            any(parameter.kind is parameter.VAR_POSITIONAL for parameter in parameters) or len(parameters) >= 4
+        )
+        if accepts_context:
+            stream_args += (route_state.personalization_context,)
+        for chunk in stream_skill(*stream_args):
             text = str(chunk or "")
             if text:
                 streamed_parts.append(text)

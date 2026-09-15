@@ -1,10 +1,10 @@
 """ClarificationDetectorHook and LearningEventHook tests."""
 
-from types import SimpleNamespace
-
 from ds_course_agent.agent.hooks import ClarificationDetectorHook, LearningEventHook
 from ds_course_agent.teaching.knowledge_mapper import MatchedConcept
+from ds_course_agent.teaching.learning_event_repository import LearningEventRecord, SQLiteLearningEventRepository
 from ds_course_agent.teaching.learning_events import EventType, build_concept_mentioned_event
+from ds_course_agent.teaching.profile_snapshot_repository import SQLiteProfileSnapshotRepository
 
 
 def test_clarification_detector_classifies_rules_and_distinction_concept():
@@ -25,18 +25,19 @@ def test_clarification_detector_classifies_rules_and_distinction_concept():
     assert distinction["concept_name"] == "泛化 vs 过拟合"
 
 
-def test_learning_event_hook_records_concept_and_clarification():
+def test_learning_event_hook_records_concept_and_clarification(tmp_path):
     detector = ClarificationDetectorHook()
     hook = LearningEventHook(detector)
+    event_repository = SQLiteLearningEventRepository(tmp_path / "app.db")
     recorded = []
     matched = [MatchedConcept("svm", "支持向量机", "第6章", "exact", 0.95)]
 
-    hook.record_learning_events(
+    recorded_count = hook.record_learning_events(
         question="再解释一下 SVM，我还是不懂。",
         session_id="session-1",
         student_id="student-1",
         matched_concepts=matched,
-        get_memory_core_fn=lambda: SimpleNamespace(load_events=lambda _student_id: []),
+        event_repository=event_repository,
         record_event_fn=recorded.append,
         classify_question_type_fn=lambda _question: "概念理解",
     )
@@ -47,11 +48,13 @@ def test_learning_event_hook_records_concept_and_clarification():
     ]
     assert recorded[0].payload["concept_id"] == "svm"
     assert recorded[1].payload["parent_event_id"] == recorded[0].event_id
+    assert recorded_count == 2
 
 
-def test_learning_event_hook_records_mastery_for_recent_contextual_concept():
+def test_learning_event_hook_records_mastery_for_recent_contextual_concept(tmp_path):
     detector = ClarificationDetectorHook()
     hook = LearningEventHook(detector)
+    event_repository = SQLiteLearningEventRepository(tmp_path / "app.db")
     concept_event = build_concept_mentioned_event(
         session_id="session-1",
         student_id="student-1",
@@ -62,15 +65,15 @@ def test_learning_event_hook_records_mastery_for_recent_contextual_concept():
         matched_score=0.9,
         raw_question="什么是决策树？",
     )
-    memory = SimpleNamespace(load_events=lambda _student_id: [concept_event])
+    event_repository.append(LearningEventRecord(concept_event, "turn-1"))
     recorded = []
 
-    hook.record_learning_events(
+    recorded_count = hook.record_learning_events(
         question="懂了，谢谢",
         session_id="session-1",
         student_id="student-1",
         matched_concepts=[],
-        get_memory_core_fn=lambda: memory,
+        event_repository=event_repository,
         record_event_fn=recorded.append,
         classify_question_type_fn=lambda _question: "概念理解",
     )
@@ -79,16 +82,31 @@ def test_learning_event_hook_records_mastery_for_recent_contextual_concept():
     assert recorded[0].event_type == EventType.MASTERY_SIGNAL
     assert recorded[0].payload["concept_id"] == "decision_tree"
     assert recorded[0].payload["source_event_id"] == concept_event.event_id
+    assert recorded_count == 1
 
 
-def test_learning_event_hook_on_session_end_aggregates_profile():
-    calls = []
-    memory = SimpleNamespace(aggregate_profile=lambda student_id: calls.append(student_id))
+def test_learning_event_hook_on_session_end_projects_sqlite_profile(tmp_path):
+    path = tmp_path / "app.db"
+    event_repository = SQLiteLearningEventRepository(path)
+    event = build_concept_mentioned_event(
+        session_id="session-1",
+        student_id="student-1",
+        concept_id="pca",
+        concept_name="主成分分析",
+        chapter="第7章",
+        question_type="概念理解",
+        matched_score=0.9,
+        raw_question="什么是 PCA？",
+    )
+    event_repository.append(LearningEventRecord(event, "turn-1"))
+    profile_repository = SQLiteProfileSnapshotRepository(path)
 
     LearningEventHook().on_session_end(
         "session-1",
         student_id="student-1",
-        get_memory_core_fn=lambda: memory,
+        profile_repository=profile_repository,
     )
 
-    assert calls == ["student-1"]
+    snapshot = profile_repository.get_latest("student-1")
+    assert snapshot is not None
+    assert set(snapshot.profile.recent_concepts) == {"pca"}

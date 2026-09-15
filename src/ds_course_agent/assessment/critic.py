@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from ds_course_agent.assessment.feedback import AssessmentFailureKind, classify_provider_error
 from ds_course_agent.assessment.generator import AssessmentGenerationError
 from ds_course_agent.assessment.models import (
     MAX_EXPLANATION_LENGTH,
@@ -46,6 +47,14 @@ application=把知识用于给定新情境或计算；analysis=同时结合至�
 
 class AssessmentCritiqueError(AssessmentGenerationError):
     """The pedagogical critic could not return a complete trustworthy review."""
+
+    failure_kind = AssessmentFailureKind.REVIEWER_UNAVAILABLE
+
+
+class AssessmentCriticModelCallError(AssessmentCritiqueError):
+    """The provider failed while running the independent pedagogical review."""
+
+    failure_kind = AssessmentFailureKind.PROVIDER_TRANSIENT_FAILURE
 
 
 class LeakageSignal(str, Enum):
@@ -182,7 +191,7 @@ class AssessmentQualityCritic:
         self._model = model
         self._model_lock = RLock()
 
-    def critique(
+    def critique_batch(
         self,
         request: GenerateQuestionsRequest,
         questions: Sequence[GeneratedQuestion],
@@ -194,13 +203,19 @@ class AssessmentQualityCritic:
             raise AssessmentCritiqueError("at least one candidate question is required")
         messages = self._build_messages(request, questions, accepted_questions)
         structured_model = self._structured_model(self._resolve_model(), len(questions))
+        from langchain_core.exceptions import OutputParserException
+
         try:
             raw_output = structured_model.invoke(messages)
             batch = self._coerce_batch(raw_output)
         except AssessmentCritiqueError:
             raise
+        except (ValidationError, OutputParserException) as exc:
+            raise AssessmentCritiqueError("assessment critic returned invalid structured output") from exc
         except Exception as exc:
-            raise AssessmentCritiqueError("assessment pedagogical critique failed") from exc
+            raise AssessmentCriticModelCallError(
+                "assessment pedagogical critique failed", failure_kind=classify_provider_error(exc)
+            ) from exc
 
         expected_indices = set(range(len(questions)))
         actual_indices = {critique.question_index for critique in batch.critiques}
@@ -221,7 +236,9 @@ class AssessmentQualityCritic:
 
                 self._model = get_assessment_verifier_model()
             except Exception as exc:
-                raise AssessmentCritiqueError("assessment critic model is unavailable") from exc
+                raise AssessmentCritiqueError(
+                    "assessment critic model is unavailable", failure_kind=classify_provider_error(exc)
+                ) from exc
             if self._model is None:
                 raise AssessmentCritiqueError("assessment critic model factory returned no model")
         return self._model
@@ -230,7 +247,11 @@ class AssessmentQualityCritic:
     def _structured_model(model: Any, question_count: int) -> Any:
         factory = getattr(model, "with_structured_output", None)
         if not callable(factory):
-            raise AssessmentCritiqueError("assessment critic model does not support structured output")
+            error = RuntimeError("assessment critic model does not support structured output")
+            raise AssessmentCritiqueError(
+                "assessment critic model does not support structured output",
+                failure_kind=classify_provider_error(error),
+            ) from error
         try:
             schema = CritiqueBatch.model_json_schema()
             schema["title"] = f"CritiqueBatchOf{question_count}"
@@ -238,9 +259,16 @@ class AssessmentQualityCritic:
             schema["$defs"]["ItemCritique"]["properties"]["question_index"]["exclusiveMaximum"] = question_count
             structured_model = factory(schema, method="json_schema")
         except Exception as exc:
-            raise AssessmentCritiqueError("assessment critic cannot configure structured output") from exc
+            raise AssessmentCritiqueError(
+                "assessment critic cannot configure structured output",
+                failure_kind=classify_provider_error(exc),
+            ) from exc
         if not callable(getattr(structured_model, "invoke", None)):
-            raise AssessmentCritiqueError("structured assessment critic does not provide invoke()")
+            error = RuntimeError("structured assessment critic does not provide invoke()")
+            raise AssessmentCritiqueError(
+                "structured assessment critic does not provide invoke()",
+                failure_kind=classify_provider_error(error),
+            ) from error
         return structured_model
 
     @staticmethod
@@ -309,6 +337,7 @@ class AssessmentQualityCritic:
 
 
 __all__ = [
+    "AssessmentCriticModelCallError",
     "AssessmentCritiqueError",
     "AssessmentQualityCritic",
     "CritiqueBatch",

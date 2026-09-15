@@ -261,6 +261,7 @@ class TestFastRouter:
             policy=RetrievalPolicy.REQUIRED,
         )
         assert decision.enrichment.load_learner_state is True
+        assert decision.enrichment.load_learner_memory is True
         assert semantic.calls == []
 
     @pytest.mark.parametrize(
@@ -488,11 +489,43 @@ def _make_pipeline_service(monkeypatch, semantic: _SemanticRouterStub):
     monkeypatch.setattr("ds_course_agent.agent.routing.pipeline.warn_context_budget", lambda *args, **kwargs: None)
     monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
     monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
-    monkeypatch.setattr(service, "_record_learning_events", lambda **kwargs: None)
     return service
 
 
 class TestQueryPipelineEnrichment:
+    def test_personalized_explanation_attaches_empty_typed_memory_context(self, monkeypatch, tmp_path):
+        import ds_course_agent.shared.config as config
+
+        monkeypatch.setattr(config, "APP_DB_PATH", str(tmp_path / "app.db"))
+        semantic = _SemanticRouterStub()
+        service = _make_pipeline_service(monkeypatch, semantic)
+        match = SimpleNamespace(
+            concept_id="overfitting",
+            display_name="过拟合",
+            chapter="模型评估",
+            method="exact_alias",
+            score=0.95,
+            routing_eligible=True,
+            event_eligible=True,
+        )
+        monkeypatch.setattr(service, "_select_skill_candidates", lambda question: {"personalized-explanation"})
+        monkeypatch.setattr(
+            "ds_course_agent.agent.service.map_question_to_concepts",
+            lambda question, top_k=3: [match],
+        )
+
+        state = service._prepare_query_route(
+            "结合我之前的学习情况解释一下过拟合",
+            "session",
+            "student",
+        )
+
+        assert state.decision.intent is RouteIntent.PERSONALIZED_EXPLANATION
+        assert state.decision.enrichment.load_learner_memory is True
+        assert state.personalization_context is not None
+        assert state.personalization_context.target_concept_ids == ("overfitting",)
+        assert state.personalization_context.interaction_episodes == ()
+
     def test_course_service_skips_semantic_router_concepts_and_profile(self, monkeypatch):
         semantic = _SemanticRouterStub()
         service = _make_pipeline_service(monkeypatch, semantic)
@@ -555,29 +588,23 @@ class TestQueryPipelineEnrichment:
         query = "帮我推荐今晚吃什么"
         semantic = _SemanticRouterStub({query: _SemanticOutput(RouteIntent.NOT_LEARNING, 0.97)})
         service = _make_pipeline_service(monkeypatch, semantic)
-        calls = {"concepts": 0, "events": 0}
+        calls = {"concepts": 0}
 
         def concept_map(question, top_k=3):
             calls["concepts"] += 1
             return []
 
-        def record_events(**kwargs):
-            calls["events"] += 1
-
         monkeypatch.setattr("ds_course_agent.agent.service.map_question_to_concepts", concept_map)
-        monkeypatch.setattr(service, "_record_learning_events", record_events)
-
         state = service._prepare_query_route(query, "session", "student")
 
         assert state.decision.family is RouteFamily.BOUNDARY
         assert state.decision.intent is RouteIntent.REFUSAL
-        assert calls == {"concepts": 0, "events": 0}
+        assert calls == {"concepts": 0}
         assert len(semantic.calls) == 1
 
     def test_only_event_eligible_concepts_are_recorded(self, monkeypatch):
         semantic = _SemanticRouterStub()
         service = _make_pipeline_service(monkeypatch, semantic)
-        recorded = []
         matches = [
             SimpleNamespace(
                 concept_id="overfitting",
@@ -603,16 +630,10 @@ class TestQueryPipelineEnrichment:
             "ds_course_agent.agent.service.map_question_to_concepts",
             lambda question, top_k=3: matches,
         )
-        monkeypatch.setattr(
-            service,
-            "_record_learning_events",
-            lambda **kwargs: recorded.extend(kwargs["matched_concepts"]),
-        )
-
         state = service._prepare_query_route("什么是过拟合？", "session", "student")
 
         assert state.decision.execution_mode is ExecutionMode.GROUNDED_GENERATION
-        assert [item.concept_id for item in recorded] == ["overfitting"]
+        assert state.pending_learning_event is True
 
 
 class TestPostprocessorAndRewrite:

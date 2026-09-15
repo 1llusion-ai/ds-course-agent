@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from ds_course_agent.assessment.feedback import AssessmentFailureKind, classify_provider_error
 from ds_course_agent.assessment.formulas import analyze_formula_quality
 from ds_course_agent.assessment.generator import AssessmentGenerationError
 from ds_course_agent.assessment.models import (
@@ -46,6 +47,14 @@ _EMPTY_PARENTHESES = re.compile(r"(?:（\s*）|\(\s*\))")
 
 class AssessmentVerificationError(AssessmentGenerationError):
     """The quality verifier could not produce a complete trustworthy verdict."""
+
+    failure_kind = AssessmentFailureKind.REVIEWER_UNAVAILABLE
+
+
+class AssessmentVerifierModelCallError(AssessmentVerificationError):
+    """The provider failed while running the independent evidence review."""
+
+    failure_kind = AssessmentFailureKind.PROVIDER_TRANSIENT_FAILURE
 
 
 @dataclass(frozen=True)
@@ -229,13 +238,19 @@ class AssessmentEvidenceVerifier:
             raise AssessmentVerificationError("at least one candidate question is required")
         messages = self._build_messages(request, questions, catalog)
         structured_model = self._structured_model(self._resolve_model())
+        from langchain_core.exceptions import OutputParserException
+
         try:
             raw_output = structured_model.invoke(messages)
             batch = self._coerce_batch(raw_output)
         except AssessmentVerificationError:
             raise
+        except (ValidationError, OutputParserException) as exc:
+            raise AssessmentVerificationError("assessment verifier returned invalid structured output") from exc
         except Exception as exc:
-            raise AssessmentVerificationError("assessment quality verification failed") from exc
+            raise AssessmentVerifierModelCallError(
+                "assessment quality verification failed", failure_kind=classify_provider_error(exc)
+            ) from exc
 
         expected_indices = set(range(len(questions)))
         actual_indices = {verdict.question_index for verdict in batch.verdicts}
@@ -257,7 +272,9 @@ class AssessmentEvidenceVerifier:
 
                 self._model = get_assessment_verifier_model()
             except Exception as exc:
-                raise AssessmentVerificationError("assessment verifier model is unavailable") from exc
+                raise AssessmentVerificationError(
+                    "assessment verifier model is unavailable", failure_kind=classify_provider_error(exc)
+                ) from exc
             if self._model is None:
                 raise AssessmentVerificationError("assessment verifier model factory returned no model")
         return self._model
@@ -266,13 +283,24 @@ class AssessmentEvidenceVerifier:
     def _structured_model(model: Any) -> Any:
         factory = getattr(model, "with_structured_output", None)
         if not callable(factory):
-            raise AssessmentVerificationError("assessment verifier model does not support structured output")
+            error = RuntimeError("assessment verifier model does not support structured output")
+            raise AssessmentVerificationError(
+                "assessment verifier model does not support structured output",
+                failure_kind=classify_provider_error(error),
+            ) from error
         try:
             structured_model = factory(EvidenceVerificationBatch, method="json_schema")
         except Exception as exc:
-            raise AssessmentVerificationError("assessment verifier cannot configure structured output") from exc
+            raise AssessmentVerificationError(
+                "assessment verifier cannot configure structured output",
+                failure_kind=classify_provider_error(exc),
+            ) from exc
         if not callable(getattr(structured_model, "invoke", None)):
-            raise AssessmentVerificationError("structured assessment verifier does not provide invoke()")
+            error = RuntimeError("structured assessment verifier does not provide invoke()")
+            raise AssessmentVerificationError(
+                "structured assessment verifier does not provide invoke()",
+                failure_kind=classify_provider_error(error),
+            ) from error
         return structured_model
 
     @staticmethod
@@ -320,6 +348,7 @@ class AssessmentEvidenceVerifier:
 
 __all__ = [
     "AssessmentVerificationError",
+    "AssessmentVerifierModelCallError",
     "AssessmentEvidenceVerifier",
     "EvidenceVerificationBatch",
     "EvidenceVerificationVerdict",

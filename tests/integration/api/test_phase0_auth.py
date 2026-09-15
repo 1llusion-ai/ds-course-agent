@@ -77,7 +77,6 @@ def test_cookie_session_ownership_is_enforced(monkeypatch, tmp_path):
     from ds_course_agent.api.auth import models
     from ds_course_agent.api.auth.deps import get_current_student_id
     from ds_course_agent.api.auth.service import hash_password
-    from ds_course_agent.api.state import _chat_history, _sessions
 
     db_path = tmp_path / "auth.db"
     monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(db_path))
@@ -95,8 +94,6 @@ def test_cookie_session_ownership_is_enforced(monkeypatch, tmp_path):
         student_id="student_b",
         display_name="Bob",
     )
-    _sessions.clear()
-    _chat_history.clear()
     app.dependency_overrides.pop(get_current_student_id, None)
 
     with TestClient(app) as client:

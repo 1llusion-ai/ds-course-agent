@@ -298,6 +298,16 @@ class _OfflineRouteService:
         return learner_state
 
     @staticmethod
+    def _load_personalization_context(*, student_id: str, matched_concepts: list[Any], learner_state: Any) -> Any:
+        from ds_course_agent.teaching.personalization import EmptyLearnerMemoryRetriever
+
+        return EmptyLearnerMemoryRetriever().retrieve(
+            student_id,
+            target_concept_ids=tuple(item.concept_id for item in matched_concepts),
+            learner_state=learner_state,
+        )
+
+    @staticmethod
     def _rewrite_learning_query(context: Any) -> Any:
         from ds_course_agent.agent.routing import get_rewriter
 
@@ -321,6 +331,7 @@ class _OfflineRouteService:
             session_id=kwargs["session_id"],
             history=kwargs["history"],
             learner_state=kwargs["learner_state"],
+            personalization_context=kwargs["personalization_context"],
             matched_concepts=kwargs["matched_concepts"],
             skill_candidate_keys=kwargs["skill_candidate_keys"],
             special_case_response=kwargs["special_case_response"],

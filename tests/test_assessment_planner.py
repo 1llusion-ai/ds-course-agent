@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from ds_course_agent.assessment.models import Difficulty
+from ds_course_agent.assessment.models import Difficulty, TeachingObjectiveKind
 from ds_course_agent.teaching.assessment_assignment import AssessmentAssignmentPlanner
 from ds_course_agent.teaching.learner_state import (
     LearnerConceptFocus,
     LearnerStateSnapshot,
     LearnerWeakSpot,
 )
+from ds_course_agent.teaching.learning_events import build_concept_mentioned_event
 
 
 def _weak_spot(concept_id: str, *, resolved: bool = False) -> LearnerWeakSpot:
@@ -73,3 +74,42 @@ def test_self_reported_resolution_does_not_skip_basic_practice() -> None:
     )
 
     assert request.difficulty is Difficulty.BASIC
+
+
+def test_session_planning_prioritizes_weak_spots_and_caps_new_kcs() -> None:
+    events = [
+        build_concept_mentioned_event("session", "s1", concept_id, concept_id, "第8章", "concept_qa", 1.0, concept_id)
+        for concept_id in ("overfitting", "underfitting", "svm", "decision_tree")
+    ]
+    state = LearnerStateSnapshot(student_id="s1", weak_spot_candidates=(_weak_spot("svm"),))
+
+    plans = AssessmentAssignmentPlanner().plan_session("session", events, state)
+
+    assert [plan.request.target_kc_id for plan in plans] == ["svm", "overfitting", "underfitting"]
+    assert all(plan.request.count == 2 for plan in plans)
+    requirement = plans[0].request.teaching_requirement
+    assert requirement is not None
+    assert {objective.kind for objective in requirement.objectives} == {
+        TeachingObjectiveKind.CONCEPT_DISTINCTION,
+        TeachingObjectiveKind.APPLICATION_TRANSFER,
+    }
+
+
+def test_session_planning_counts_existing_preparations_and_ignores_duplicate_mentions() -> None:
+    events = [
+        build_concept_mentioned_event("session", "s1", concept_id, concept_id, "第8章", "concept_qa", 1.0, concept_id)
+        for concept_id in ("overfitting", "underfitting", "svm", "decision_tree")
+    ]
+    planner = AssessmentAssignmentPlanner()
+    state = LearnerStateSnapshot(student_id="s1")
+
+    remaining = planner.plan_session(
+        "session",
+        events + [events[0]],
+        state,
+        scheduled_kc_ids=("overfitting", "underfitting"),
+    )
+    exhausted = planner.plan_session("session", events, state, scheduled_kc_ids=("overfitting", "underfitting", "svm"))
+
+    assert [plan.request.target_kc_id for plan in remaining] == ["svm"]
+    assert exhausted == ()
