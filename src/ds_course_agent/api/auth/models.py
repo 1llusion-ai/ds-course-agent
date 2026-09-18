@@ -116,3 +116,23 @@ def create_user(
     if user is None:  # pragma: no cover - sqlite failure would be exceptional
         raise RuntimeError(f"Failed to create user {username!r}")
     return user
+
+
+def update_user_password(*, username: str, password_hash: str) -> dict[str, Any] | None:
+    """Replace one existing user's password hash and return the updated user."""
+
+    init_db()
+    with _connect() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE users
+            SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE username = ?
+            """,
+            (password_hash, username),
+        )
+        conn.commit()
+
+    if cursor.rowcount == 0:
+        return None
+    return get_user_by_username(username)

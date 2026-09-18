@@ -125,7 +125,7 @@ function checkCapsLock(event) {
 }
 
 function showPendingHelp() {
-  ElMessage.info('密码找回功能正在完善中。')
+  ElMessage.info('请联系管理员重置密码。')
 }
 
 function goToRegister() {

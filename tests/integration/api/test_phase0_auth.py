@@ -52,6 +52,35 @@ def test_auth_register_validates_required_fields(monkeypatch, tmp_path):
     assert response.status_code == 422
 
 
+def test_admin_password_reset_updates_hash(monkeypatch, tmp_path):
+    from ds_course_agent.api.auth import models
+    from ds_course_agent.api.auth.service import hash_password, verify_password
+
+    db_path = tmp_path / "auth.db"
+    monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(db_path))
+    models.create_or_update_user(
+        username="alice",
+        password_hash=hash_password("old-password"),
+        student_id="alice",
+        display_name="alice",
+    )
+
+    updated = models.update_user_password(username="alice", password_hash=hash_password("new-password"))
+
+    assert updated is not None
+    assert verify_password("new-password", str(updated["password_hash"]))
+    assert not verify_password("old-password", str(updated["password_hash"]))
+
+
+def test_admin_password_reset_returns_none_for_unknown_user(monkeypatch, tmp_path):
+    from ds_course_agent.api.auth import models
+
+    db_path = tmp_path / "auth.db"
+    monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(db_path))
+
+    assert models.update_user_password(username="missing", password_hash="unused") is None
+
+
 def test_auth_login_success_failure_and_me(monkeypatch, tmp_path):
     from ds_course_agent.api.auth import models
     from ds_course_agent.api.auth.service import hash_password
