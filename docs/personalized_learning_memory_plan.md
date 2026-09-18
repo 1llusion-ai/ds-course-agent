@@ -1,6 +1,6 @@
 # 个性化学习记忆与数据持久化开发计划
 
-状态：In Progress（Phase 1-6 已完成，Phase 7 待规划）  
+状态：In Progress（Phase 1-6 已完成，Phase 7 待规划）
 最后更新：2026-09-13
 
 当前开发分支：`feat/personalized-memory-phase1a`
