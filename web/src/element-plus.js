@@ -1,6 +1,7 @@
 import ElAlert from 'element-plus/es/components/alert/index.mjs'
 import ElButton from 'element-plus/es/components/button/index.mjs'
 import ElCard from 'element-plus/es/components/card/index.mjs'
+import ElDialog from 'element-plus/es/components/dialog/index.mjs'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus/es/components/dropdown/index.mjs'
 import { ElForm, ElFormItem } from 'element-plus/es/components/form/index.mjs'
 import ElIcon from 'element-plus/es/components/icon/index.mjs'
@@ -16,6 +17,7 @@ const components = {
   ElAlert,
   ElButton,
   ElCard,
+  ElDialog,
   ElDropdown,
   ElDropdownItem,
   ElDropdownMenu,
