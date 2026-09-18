@@ -18,6 +18,7 @@ FROM nginx:alpine
 # 复制构建产物到nginx目录
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN printf "#!/bin/sh\nexit 0\n" > /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
 
 EXPOSE 80
 
