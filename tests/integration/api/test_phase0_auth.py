@@ -81,6 +81,49 @@ def test_admin_password_reset_returns_none_for_unknown_user(monkeypatch, tmp_pat
     assert models.update_user_password(username="missing", password_hash="unused") is None
 
 
+def test_auth_change_password_requires_current_password_and_updates_login(monkeypatch, tmp_path):
+    from ds_course_agent.api.auth import models
+    from ds_course_agent.api.auth.service import hash_password
+
+    db_path = tmp_path / "auth.db"
+    monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(db_path))
+    monkeypatch.setattr("ds_course_agent.api.auth.service.config.AUTH_SECRET_KEY", "test-secret")
+    models.create_or_update_user(
+        username="alice",
+        password_hash=hash_password("old-password"),
+        student_id="alice",
+        display_name="alice",
+    )
+
+    with TestClient(app) as client:
+        login = client.post("/api/auth/login", json={"username": "alice", "password": "old-password"})
+        assert login.status_code == 200
+
+        wrong = client.post(
+            "/api/auth/change-password",
+            json={"current_password": "wrong-password", "new_password": "new-password"},
+        )
+        assert wrong.status_code == 403
+
+        same = client.post(
+            "/api/auth/change-password",
+            json={"current_password": "old-password", "new_password": "old-password"},
+        )
+        assert same.status_code == 422
+
+        changed = client.post(
+            "/api/auth/change-password",
+            json={"current_password": "old-password", "new_password": "new-password"},
+        )
+        assert changed.status_code == 200
+        assert changed.json() == {"student_id": "alice", "display_name": "alice"}
+
+        old_login = client.post("/api/auth/login", json={"username": "alice", "password": "old-password"})
+        new_login = client.post("/api/auth/login", json={"username": "alice", "password": "new-password"})
+        assert old_login.status_code == 401
+        assert new_login.status_code == 200
+
+
 def test_auth_login_success_failure_and_me(monkeypatch, tmp_path):
     from ds_course_agent.api.auth import models
     from ds_course_agent.api.auth.service import hash_password

@@ -70,6 +70,18 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function changePassword(credentials) {
+    loading.value = true
+    try {
+      const response = await authApi.changePassword(credentials)
+      const nextUser = normalizeUser(response)
+      if (nextUser) setUser(nextUser)
+      return user.value
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function logout() {
     loading.value = true
     try {
@@ -90,6 +102,7 @@ export const useAuthStore = defineStore('auth', () => {
     fetchMe,
     login,
     register,
+    changePassword,
     logout
   }
 })

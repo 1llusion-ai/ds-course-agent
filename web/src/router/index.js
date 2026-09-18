@@ -4,6 +4,7 @@ import ChatView from '../views/ChatView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
+import SettingsView from '../views/SettingsView.vue'
 import { useAuthStore } from '../stores/auth'
 
 const routes = [
@@ -18,6 +19,7 @@ const routes = [
       { path: 'chat', name: 'Chat', component: ChatView },
       { path: 'chat/:sessionId', name: 'ChatWithSession', component: ChatView },
       { path: 'profile', name: 'Profile', component: ProfileView },
+      { path: 'settings', name: 'Settings', component: SettingsView },
       { path: 'knowledge-map', name: 'KnowledgeMap', component: () => import('../views/KnowledgeMapView.vue') },
       { path: 'assessments', name: 'Assessments', component: () => import('../views/AssessmentListView.vue') },
       { path: 'assessments/:assessmentId', name: 'AssessmentTake', component: () => import('../views/AssessmentTakeView.vue') },

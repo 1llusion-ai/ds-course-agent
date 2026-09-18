@@ -62,6 +62,22 @@ def get_user_by_username(username: str) -> dict[str, Any] | None:
     return _row_to_user(row)
 
 
+def get_user_by_student_id(student_id: str) -> dict[str, Any] | None:
+    """Return a user dict by student id, or ``None`` when not found."""
+
+    init_db()
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id, username, password_hash, student_id, display_name, created_at, updated_at
+            FROM users
+            WHERE student_id = ?
+            """,
+            (student_id,),
+        ).fetchone()
+    return _row_to_user(row)
+
+
 def create_or_update_user(
     *,
     username: str,

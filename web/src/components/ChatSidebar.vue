@@ -263,6 +263,8 @@
       <button
         type="button"
         class="utility-entry utility-entry--muted"
+        :class="{ 'utility-entry--active': isSettingsActive }"
+        :aria-current="isSettingsActive ? 'page' : undefined"
         title="设置"
         @click="handleSettingsClick"
       >
@@ -271,7 +273,7 @@
         </span>
         <span v-if="!props.collapsed" class="utility-entry__body">
           <span class="utility-entry__title">设置</span>
-          <span class="utility-entry__meta">后续开放</span>
+          <span class="utility-entry__meta">账号与偏好</span>
         </span>
       </button>
     </div>
@@ -327,6 +329,7 @@ const activeSessionId = computed(() => (
 const isProfileActive = computed(() => route.name === 'Profile')
 const isKnowledgeMapActive = computed(() => route.name === 'KnowledgeMap')
 const isAssessmentActive = computed(() => String(route.name || '').startsWith('Assessment'))
+const isSettingsActive = computed(() => route.name === 'Settings')
 
 const hasSearchQuery = computed(() => Boolean(normalizeSearchText(searchQuery.value)))
 
@@ -411,7 +414,7 @@ function handleProfileOpen() {
 }
 
 function handleSettingsClick() {
-  ElMessage.info('设置页后续开放')
+  router.push('/settings')
 }
 
 function handleSidebarToggle() {

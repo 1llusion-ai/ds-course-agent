@@ -34,6 +34,11 @@ class RegisterRequest(BaseModel):
         return normalized
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
 class AuthUserResponse(BaseModel):
     student_id: str
     display_name: str
@@ -86,6 +91,26 @@ async def register(data: RegisterRequest, response: Response):
         path="/",
     )
     return AuthUserResponse(student_id=student_id, display_name=registered_display_name)
+
+
+@router.post("/change-password", response_model=AuthUserResponse)
+async def change_password(data: ChangePasswordRequest, claims: dict = Depends(get_current_user)):
+    user = models.get_user_by_student_id(str(claims["student_id"]))
+    if not user or not verify_password(data.current_password, str(user.get("password_hash") or "")):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="当前密码不正确")
+    if data.current_password == data.new_password:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="新密码不能与当前密码相同")
+
+    updated = models.update_user_password(
+        username=str(user["username"]),
+        password_hash=hash_password(data.new_password),
+    )
+    if updated is None:  # pragma: no cover - account deletion race is exceptional
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    return AuthUserResponse(
+        student_id=str(updated["student_id"]),
+        display_name=str(updated.get("display_name") or updated["student_id"]),
+    )
 
 
 @router.post("/logout")
