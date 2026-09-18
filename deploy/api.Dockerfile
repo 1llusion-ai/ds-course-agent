@@ -15,7 +15,8 @@ RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors
     apt-get update && apt-get install -y gcc && rm -rf /var/lib/apt/lists/*
 
 COPY config/api-requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
+ENV MAX_CONCURRENCY=1
+RUN CFLAGS="-O1" pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 
 # Active API implementation.
 COPY src/ ./src/

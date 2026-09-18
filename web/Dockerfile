@@ -5,11 +5,12 @@ WORKDIR /app
 
 # 复制package文件并安装依赖
 COPY package*.json ./
+ENV NODE_OPTIONS="--max-old-space-size=768"
 RUN npm ci
 
 # 复制源代码并构建
 COPY . .
-RUN npm run build
+RUN NODE_OPTIONS="--max-old-space-size=768" npm run build
 
 # 生产阶段
 FROM nginx:alpine
@@ -17,6 +18,7 @@ FROM nginx:alpine
 # 复制构建产物到nginx目录
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN printf "#!/bin/sh\nexit 0\n" > /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
 
 EXPOSE 80
 

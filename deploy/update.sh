@@ -129,10 +129,10 @@ docker compose config --quiet
 tag_rollback_images
 
 log "building backend image while current containers remain online"
-docker compose build backend
+COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose build --builder memlimited backend
 
 log "building frontend image while current containers remain online"
-docker compose build frontend
+COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose build --builder memlimited frontend
 
 log "switching to the newly built images"
 switched=1
