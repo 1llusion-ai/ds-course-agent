@@ -9,8 +9,11 @@ and returns source metadata for the UI.
 from __future__ import annotations
 
 import os
+import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
+from math import ceil
 from typing import Any
 
 import requests
@@ -78,6 +81,85 @@ class WebSearchResponse:
 
 class WebSearchError(RuntimeError):
     """Raised for provider/configuration search failures."""
+
+
+@dataclass(frozen=True)
+class _QuotaDecision:
+    allowed: bool
+    scope: str = ""
+    retry_after_seconds: int = 0
+
+
+class _WebSearchQuota:
+    """Process-local sliding-window limiter for external search requests."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._global_events: deque[float] = deque()
+        self._student_events: dict[str, deque[float]] = {}
+
+    @staticmethod
+    def _trim(events: deque[float], cutoff: float) -> None:
+        while events and events[0] <= cutoff:
+            events.popleft()
+
+    @staticmethod
+    def _retry_after(events: deque[float], now: float, window_seconds: int) -> int:
+        if not events:
+            return 1
+        return max(1, int(ceil(events[0] + window_seconds - now)))
+
+    def try_acquire(
+        self,
+        *,
+        student_id: str | None,
+        global_limit: int,
+        student_limit: int,
+        window_seconds: int,
+    ) -> _QuotaDecision:
+        """Reserve one logical search request when the configured limits allow it."""
+
+        if global_limit <= 0 and student_limit <= 0:
+            return _QuotaDecision(True)
+
+        now = time.monotonic()
+        cutoff = now - window_seconds
+        normalized_student_id = str(student_id or "").strip()
+
+        with self._lock:
+            self._trim(self._global_events, cutoff)
+            for key, events in list(self._student_events.items()):
+                self._trim(events, cutoff)
+                if not events:
+                    del self._student_events[key]
+
+            if global_limit > 0 and len(self._global_events) >= global_limit:
+                return _QuotaDecision(
+                    False,
+                    scope="global",
+                    retry_after_seconds=self._retry_after(self._global_events, now, window_seconds),
+                )
+
+            student_events = self._student_events.get(normalized_student_id)
+            if normalized_student_id and student_limit > 0:
+                if student_events is None:
+                    student_events = deque()
+                    self._student_events[normalized_student_id] = student_events
+                if len(student_events) >= student_limit:
+                    return _QuotaDecision(
+                        False,
+                        scope="student",
+                        retry_after_seconds=self._retry_after(student_events, now, window_seconds),
+                    )
+
+            if global_limit > 0:
+                self._global_events.append(now)
+            if normalized_student_id and student_limit > 0 and student_events is not None:
+                student_events.append(now)
+            return _QuotaDecision(True)
+
+
+_search_quota = _WebSearchQuota()
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +375,12 @@ def _run_provider_search(provider: str, query: str, top_k: int) -> list[WebSearc
     raise WebSearchError(f"未知 WEB_SEARCH_PROVIDER: {provider!r}。支持 tavily/serper/brave/duckduckgo。")
 
 
-def search_web(query: str, top_k: int | None = None) -> WebSearchResponse:
+def search_web(
+    query: str,
+    top_k: int | None = None,
+    *,
+    student_id: str | None = None,
+) -> WebSearchResponse:
     """Run configured web search and return compacted evidence + sources."""
 
     from ds_course_agent.shared.query_trace import trace_error, trace_span, trace_step
@@ -323,6 +410,24 @@ def search_web(query: str, top_k: int | None = None) -> WebSearchResponse:
         )
         trace_step("tool.result", tool="web_search_tool", status="disabled")
         return response
+
+    quota = _search_quota.try_acquire(
+        student_id=student_id,
+        global_limit=config_int("WEB_SEARCH_GLOBAL_REQUESTS_PER_WINDOW", 60, minimum=0),
+        student_limit=config_int("WEB_SEARCH_PER_STUDENT_REQUESTS_PER_WINDOW", 10, minimum=0),
+        window_seconds=config_int("WEB_SEARCH_QUOTA_WINDOW_SECONDS", 3600, minimum=1),
+    )
+    if not quota.allowed:
+        subject = "当前账号" if quota.scope == "student" else "系统"
+        message = f"{subject}的联网搜索额度已用尽，请约 {quota.retry_after_seconds} 秒后再试。"
+        trace_step(
+            "tool.result",
+            tool="web_search_tool",
+            status="quota_exceeded",
+            quota_scope=quota.scope,
+            retry_after_seconds=quota.retry_after_seconds,
+        )
+        return WebSearchResponse(query=query, provider=provider, error=message, evidence_context=message)
 
     try:
         with trace_span("tool.web_search.provider", provider=provider, top_k=top_k):

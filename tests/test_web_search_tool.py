@@ -136,3 +136,67 @@ def test_search_web_retries_one_transient_empty_provider_response(monkeypatch):
     assert len(calls) == 2
     assert response.ok is True
     assert response.results[0].title == "OPD"
+
+
+def test_search_web_enforces_global_quota_before_provider_call(monkeypatch):
+    monkeypatch.setattr(web_search_module, "_search_quota", web_search_module._WebSearchQuota())
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_ENABLED", True)
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_PROVIDER", "tavily")
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_API_KEY", "key")
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_GLOBAL_REQUESTS_PER_WINDOW", 1)
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_PER_STUDENT_REQUESTS_PER_WINDOW", 0)
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_QUOTA_WINDOW_SECONDS", 3600)
+
+    calls = []
+
+    def fake_post(*args, **kwargs):
+        calls.append((args, kwargs))
+        return _FakeResponse(
+            {
+                "results": [
+                    {"title": "Result", "url": "https://example.com/result", "content": "摘要"},
+                ]
+            }
+        )
+
+    monkeypatch.setattr(web_search_module.requests, "post", fake_post)
+
+    first = search_web("第一次", student_id="student-1")
+    second = search_web("第二次", student_id="student-2")
+
+    assert first.ok is True
+    assert second.ok is False
+    assert second.error is not None
+    assert "系统的联网搜索额度已用尽" in second.error
+    assert len(calls) == 1
+
+
+def test_search_web_enforces_per_student_quota_without_blocking_other_students(monkeypatch):
+    monkeypatch.setattr(web_search_module, "_search_quota", web_search_module._WebSearchQuota())
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_ENABLED", True)
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_PROVIDER", "tavily")
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_API_KEY", "key")
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_GLOBAL_REQUESTS_PER_WINDOW", 0)
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_PER_STUDENT_REQUESTS_PER_WINDOW", 1)
+    monkeypatch.setattr(web_search_module.config, "WEB_SEARCH_QUOTA_WINDOW_SECONDS", 3600)
+
+    def fake_post(*args, **kwargs):
+        return _FakeResponse(
+            {
+                "results": [
+                    {"title": "Result", "url": "https://example.com/result", "content": "摘要"},
+                ]
+            }
+        )
+
+    monkeypatch.setattr(web_search_module.requests, "post", fake_post)
+
+    first = search_web("第一次", student_id="student-1")
+    blocked = search_web("第二次", student_id="student-1")
+    other_student = search_web("另一位学生", student_id="student-2")
+
+    assert first.ok is True
+    assert blocked.ok is False
+    assert blocked.error is not None
+    assert "当前账号的联网搜索额度已用尽" in blocked.error
+    assert other_student.ok is True

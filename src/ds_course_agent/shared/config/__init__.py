@@ -109,6 +109,9 @@ _SETTING_NAMES = [
     "WEB_SEARCH_CONTEXT_MAX_CHARS",
     "WEB_SEARCH_SNIPPET_MAX_CHARS",
     "WEB_SEARCH_TEACHING_SCOPE_ENABLED",
+    "WEB_SEARCH_GLOBAL_REQUESTS_PER_WINDOW",
+    "WEB_SEARCH_PER_STUDENT_REQUESTS_PER_WINDOW",
+    "WEB_SEARCH_QUOTA_WINDOW_SECONDS",
     "WEB_FETCH_ENABLED",
     "WEB_FETCH_ADAPTIVE_ENABLED",
     "WEB_FETCH_TOP_N",
@@ -236,6 +239,9 @@ web_search_timeout_seconds = WEB_SEARCH_TIMEOUT_SECONDS
 web_search_context_max_chars = WEB_SEARCH_CONTEXT_MAX_CHARS
 web_search_snippet_max_chars = WEB_SEARCH_SNIPPET_MAX_CHARS
 web_search_teaching_scope_enabled = WEB_SEARCH_TEACHING_SCOPE_ENABLED
+web_search_global_requests_per_window = WEB_SEARCH_GLOBAL_REQUESTS_PER_WINDOW
+web_search_per_student_requests_per_window = WEB_SEARCH_PER_STUDENT_REQUESTS_PER_WINDOW
+web_search_quota_window_seconds = WEB_SEARCH_QUOTA_WINDOW_SECONDS
 web_fetch_enabled = WEB_FETCH_ENABLED
 web_fetch_adaptive_enabled = WEB_FETCH_ADAPTIVE_ENABLED
 web_fetch_top_n = WEB_FETCH_TOP_N

@@ -170,6 +170,12 @@ class Settings(BaseSettings):
     WEB_SEARCH_CONTEXT_MAX_CHARS: int = 2500
     WEB_SEARCH_SNIPPET_MAX_CHARS: int = 300
     WEB_SEARCH_TEACHING_SCOPE_ENABLED: bool = True
+    # Process-local sliding-window protection for external search providers.
+    # Zero disables the corresponding limit; deployment with multiple workers
+    # needs a shared limiter if one provider-wide budget is required.
+    WEB_SEARCH_GLOBAL_REQUESTS_PER_WINDOW: int = Field(default=60, ge=0)
+    WEB_SEARCH_PER_STUDENT_REQUESTS_PER_WINDOW: int = Field(default=10, ge=0)
+    WEB_SEARCH_QUOTA_WINDOW_SECONDS: int = Field(default=3600, ge=1)
     WEB_FETCH_ENABLED: bool = False
     WEB_FETCH_ADAPTIVE_ENABLED: bool = True
     WEB_FETCH_TOP_N: int = 4

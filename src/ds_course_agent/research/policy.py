@@ -407,17 +407,27 @@ class WebResearchPolicy:
             return max_top_k
         return min_top_k
 
-    def _invoke_search_web(self, search_web, question: str):
+    def _invoke_search_web(self, search_web, question: str, *, student_id: str | None = None):
         import inspect
 
         top_k = self._search_top_k(question)
         try:
             signature = inspect.signature(search_web)
             params = signature.parameters.values()
-            accepts_top_k = any(param.name == "top_k" for param in params)
+            accepts_top_k = any(
+                param.name == "top_k" and param.kind != inspect.Parameter.POSITIONAL_ONLY for param in params
+            )
+            accepts_student_id = any(
+                param.name == "student_id" and param.kind != inspect.Parameter.POSITIONAL_ONLY for param in params
+            )
             accepts_kwargs = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params)
+            kwargs = {}
             if accepts_top_k or accepts_kwargs:
-                return search_web(question, top_k=top_k)
+                kwargs["top_k"] = top_k
+            if accepts_student_id or accepts_kwargs:
+                kwargs["student_id"] = student_id
+            if kwargs:
+                return search_web(question, **kwargs)
         except (TypeError, ValueError):
             # Some tests monkeypatch ``search_web`` with small callables that
             # do not expose an inspectable signature. Keep that compatibility

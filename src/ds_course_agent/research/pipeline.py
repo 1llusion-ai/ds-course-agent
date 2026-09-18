@@ -59,7 +59,11 @@ class WebResearchPipeline(WebResearchPolicy):
             from ds_course_agent.tools.web_search import search_web
 
             with trace_span("execute.web_search_tool"):
-                web_response = self._invoke_search_web(search_web, question)
+                web_response = self._invoke_search_web(
+                    search_web,
+                    question,
+                    student_id=getattr(route_state, "student_id", None),
+                )
         except Exception as exc:
             trace_error("execute.web_search_tool", exc)
             return PreparedWebAnswer(
@@ -267,7 +271,11 @@ class WebResearchPipeline(WebResearchPolicy):
             from ds_course_agent.tools.web_search import search_web
 
             with trace_span("execute.web_search_tool"):
-                web_response = self._invoke_search_web(search_web, question)
+                web_response = self._invoke_search_web(
+                    search_web,
+                    question,
+                    student_id=getattr(route_state, "student_id", None),
+                )
         except Exception as exc:
             trace_error("execute.web_search_tool", exc)
             event = self._stream_progress_event(

@@ -77,6 +77,19 @@ def test_all_result_projections_use_the_single_typed_adapter(monkeypatch) -> Non
     assert "[1] Result（example.com · 2026-09-08）" in source_index
 
 
+def test_search_invocation_passes_student_identity_to_supported_searchers(monkeypatch) -> None:
+    policy = WebResearchPolicy()
+    monkeypatch.setattr(policy, "_search_top_k", lambda question: 4)
+    observed = {}
+
+    def fake_search(question, *, top_k=None, student_id=None):
+        observed.update(question=question, top_k=top_k, student_id=student_id)
+        return "response"
+
+    assert policy._invoke_search_web(fake_search, "PCA", student_id="student-1") == "response"
+    assert observed == {"question": "PCA", "top_k": 4, "student_id": "student-1"}
+
+
 def test_sync_response_preparation_uses_shared_response_adapters(monkeypatch) -> None:
     from ds_course_agent.research.pipeline import WebResearchPipeline
 
@@ -93,7 +106,7 @@ def test_sync_response_preparation_uses_shared_response_adapters(monkeypatch) ->
     results = [{"href": "https://example.com/result", "name": "Result"}]
 
     monkeypatch.setattr(pipeline, "_web_search_scope_response", lambda question: None)
-    monkeypatch.setattr(pipeline, "_invoke_search_web", lambda search_web, question: response)
+    monkeypatch.setattr(pipeline, "_invoke_search_web", lambda search_web, question, **kwargs: response)
     sources_adapter = _recording_method(monkeypatch, pipeline, "_response_sources", sources)
     results_adapter = _recording_method(monkeypatch, pipeline, "_response_results", results)
     evidence_adapter = _recording_method(monkeypatch, pipeline, "_response_evidence_context", "evidence")
