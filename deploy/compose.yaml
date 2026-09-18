@@ -23,6 +23,7 @@ services:
       # - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - PYTHONUNBUFFERED=1
+      - APP_ENV=production
       # Default compose deployment is fail-closed: code execution is disabled
       # unless an operator explicitly enables the Docker sandbox and mounts a
       # Docker daemon socket above.
@@ -43,7 +44,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5); raise SystemExit(0 if response.status == 200 else 1)",
+          "import urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=5); raise SystemExit(0 if response.status == 200 else 1)",
         ]
       interval: 30s
       timeout: 10s

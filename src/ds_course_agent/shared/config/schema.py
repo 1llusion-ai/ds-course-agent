@@ -35,6 +35,10 @@ class Settings(BaseSettings):
 
     DATALAB_API_KEY: str = ""
 
+    # Explicitly distinguish production from local development and tests. The
+    # stricter readiness contract is only applied when this is ``production``.
+    APP_ENV: Literal["development", "test", "production"] = "development"
+
     EMBEDDING_API_KEY: str = ""
     EMBEDDING_BASE_URL: str = "https://api.siliconflow.cn/v1"
     EMBEDDING_MODEL: str = "Qwen/Qwen3-Embedding-8B"

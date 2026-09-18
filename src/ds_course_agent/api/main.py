@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.shared.logging_config import setup_logging
@@ -18,6 +19,7 @@ from ds_course_agent.assessment.repository import AssessmentRepository
 
 from .auth import models as auth_models
 from .auth.router import router as auth_router
+from .readiness import build_readiness_report
 from .routers import assessments, chat, knowledge_map, profile, sessions
 
 logger = logging.getLogger(__name__)
@@ -76,6 +78,13 @@ app.include_router(assessments.router, prefix="/api/assessments", tags=["assessm
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "service": "rag-tutor-backend"}
+
+
+@app.get("/readyz")
+@app.get("/api/readyz")
+async def readiness_check():
+    report = build_readiness_report()
+    return JSONResponse(status_code=200 if report.ok else 503, content=report.as_dict())
 
 
 __all__ = ["app"]

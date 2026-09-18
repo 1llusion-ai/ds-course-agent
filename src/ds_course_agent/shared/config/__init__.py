@@ -14,6 +14,7 @@ from ds_course_agent.shared.config.schema import Settings
 settings = load_settings()
 
 _SETTING_NAMES = [
+    "APP_ENV",
     "DATALAB_API_KEY",
     "EMBEDDING_API_KEY",
     "EMBEDDING_BASE_URL",

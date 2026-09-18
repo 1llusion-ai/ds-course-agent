@@ -19,6 +19,7 @@ from langchain_core.tools import tool
 import ds_course_agent.shared.config as config  # noqa: F401  # module-level seam: tests monkeypatch web_search.config.*
 from ds_course_agent.shared.config_utils import config_bool, config_float, config_int, config_str
 from ds_course_agent.shared.error_response import truncate_error
+from ds_course_agent.shared.readiness import ReadinessCheck
 from ds_course_agent.shared.text import truncate_text
 from ds_course_agent.tools._shared import (
     _track_retrieval,
@@ -389,11 +390,30 @@ def web_search_tool(question: str) -> str:
     return result
 
 
+def check_web_search_readiness() -> ReadinessCheck:
+    """Validate enabled web-search configuration without calling its provider."""
+
+    search_enabled = config_bool("WEB_SEARCH_ENABLED", False)
+    fetch_enabled = config_bool("WEB_FETCH_ENABLED", False)
+    if fetch_enabled and not search_enabled:
+        return ReadinessCheck("web_search", False, "WEB_FETCH_ENABLED requires WEB_SEARCH_ENABLED")
+    if not search_enabled:
+        return ReadinessCheck("web_search", True, "disabled")
+
+    provider = config_str("WEB_SEARCH_PROVIDER", "tavily").strip().lower()
+    if provider not in {"tavily", "serper", "brave", "duckduckgo"}:
+        return ReadinessCheck("web_search", False, f"unsupported provider {provider!r}")
+    if provider != "duckduckgo" and not _provider_api_key(provider):
+        return ReadinessCheck("web_search", False, f"{provider} API key is not configured")
+    return ReadinessCheck("web_search", True, f"{provider} configuration ready")
+
+
 __all__ = [
     "WebSearchError",
     "WebSearchResult",
     "WebSearchResponse",
     "compact_web_results",
+    "check_web_search_readiness",
     "search_web",
     "web_search_tool",
 ]

@@ -27,6 +27,7 @@ from typing import Any
 
 from ds_course_agent.shared.config.schema import Settings as _ConfigSettings
 from ds_course_agent.shared.config_utils import config_value
+from ds_course_agent.shared.readiness import ReadinessCheck
 
 # Matches a natural-language question appended to the end of a code line, e.g.
 # `print("hi")    这个代码正确吗` -> the trailing `    这个代码正确吗` part.
@@ -974,3 +975,29 @@ class PythonSandbox:
             truncated_stderr += marker
 
         return truncated_stdout, truncated_stderr, True
+
+
+def check_python_execution_readiness() -> ReadinessCheck:
+    """Verify enabled Python execution remains Docker-backed and fail-closed."""
+
+    enabled = bool(_python_exec_setting("PYTHON_EXEC_ENABLED"))
+    if not enabled:
+        return ReadinessCheck("python_sandbox", True, "disabled")
+
+    backend = _normalize_python_exec_backend(_python_exec_setting("PYTHON_EXEC_BACKEND"))
+    allow_host_fallback = bool(_python_exec_setting("PYTHON_EXEC_ALLOW_HOST_FALLBACK"))
+    image = str(_python_exec_setting("PYTHON_EXEC_DOCKER_IMAGE") or "").strip()
+    if backend != "docker":
+        return ReadinessCheck("python_sandbox", False, "enabled Python execution must use the Docker backend")
+    if allow_host_fallback:
+        return ReadinessCheck("python_sandbox", False, "host fallback must remain disabled when Python is enabled")
+    if not image:
+        return ReadinessCheck("python_sandbox", False, "PYTHON_EXEC_DOCKER_IMAGE is required when Python is enabled")
+    if not _DockerPythonExecutor().is_available():
+        return ReadinessCheck("python_sandbox", False, "Docker daemon is unavailable")
+
+    return ReadinessCheck(
+        "python_sandbox",
+        True,
+        f"Docker configuration ready with image {image}",
+    )

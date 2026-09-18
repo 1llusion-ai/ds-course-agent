@@ -27,13 +27,18 @@ from ds_course_agent.retrieval.context_assembler import (
     load_token_counter,
 )
 from ds_course_agent.retrieval.hybrid_retriever import BM25Retriever
-from ds_course_agent.retrieval.index_manifest import PromotedIndexManifest
+from ds_course_agent.retrieval.index_manifest import (
+    PromotedIndexManifest,
+    load_and_validate_manifest,
+    resolve_manifest_path,
+)
 from ds_course_agent.retrieval.term_resolution import (
     COURSE_TERM_POLICY_VERSION,
     CourseTermIndex,
     CourseTermResolution,
 )
 from ds_course_agent.retrieval.timeouts import retrieval_embedding_timeout_seconds
+from ds_course_agent.shared.config.schema import Settings
 from ds_course_agent.shared.embeddings import embed_query_cached, embedding_model_kwargs
 from ds_course_agent.shared.kb_revision import read_kb_revision
 from ds_course_agent.shared.llm import get_rag_text_model
@@ -122,33 +127,24 @@ def _context_window_tokens() -> int:
 
 
 def _index_manifest_path() -> Path:
-    configured = str(getattr(config, "RAG_INDEX_MANIFEST_PATH", "") or "").strip()
-    if configured:
-        path = Path(configured)
-        return path if path.is_absolute() else PROJECT_ROOT / path
-    persist = Path(config.CHROMA_PERSIST_DIR).resolve()
-    return (
-        persist.parent / "production_manifest.json"
-        if persist.name == "chroma"
-        else persist / "production_manifest.json"
+    return resolve_manifest_path(
+        Settings(
+            RAG_INDEX_MANIFEST_PATH=config.RAG_INDEX_MANIFEST_PATH,
+            CHROMA_PERSIST_DIR=config.CHROMA_PERSIST_DIR,
+        )
     )
 
 
 def _load_index_manifest() -> PromotedIndexManifest:
-    path = _index_manifest_path()
-    if not path.is_file():
-        raise RuntimeError(f"production retrieval index manifest is missing: {path}")
-    manifest = PromotedIndexManifest.model_validate_json(path.read_bytes())
-    expected_persist = (PROJECT_ROOT / manifest.persist_directory).resolve()
-    if expected_persist != Path(config.CHROMA_PERSIST_DIR).resolve():
-        raise RuntimeError("production retrieval manifest persist directory does not match configuration")
-    if manifest.destination_collection != config.collection_name:
-        raise RuntimeError("production retrieval manifest collection does not match configuration")
-    if manifest.embedding_model != config.MODEL_EMBEDDING:
-        raise RuntimeError("query embedding model does not match the production retrieval index")
-    if manifest.embedding_distance != "cosine" or manifest.embedding_query_prefix:
-        raise RuntimeError("production retrieval index must use cosine distance and an empty query prefix")
-    return manifest
+    return load_and_validate_manifest(
+        Settings(
+            RAG_INDEX_MANIFEST_PATH=config.RAG_INDEX_MANIFEST_PATH,
+            CHROMA_PERSIST_DIR=config.CHROMA_PERSIST_DIR,
+            COLLECTION_NAME=config.collection_name,
+            COURSE_COLLECTION_NAME="",
+            EMBEDDING_MODEL=config.MODEL_EMBEDDING,
+        )
+    )
 
 
 @dataclass(frozen=True)
