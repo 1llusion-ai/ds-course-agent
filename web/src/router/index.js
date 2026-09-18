@@ -3,11 +3,13 @@ import AppShell from '../layouts/AppShell.vue'
 import ChatView from '../views/ChatView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import LoginView from '../views/LoginView.vue'
+import RegisterView from '../views/RegisterView.vue'
 import { useAuthStore } from '../stores/auth'
 
 const routes = [
   { path: '/', redirect: '/chat' },
   { path: '/login', name: 'Login', component: LoginView, meta: { public: true } },
+  { path: '/register', name: 'Register', component: RegisterView, meta: { public: true } },
   {
     path: '/',
     component: AppShell,
@@ -41,9 +43,11 @@ router.beforeEach(async (to) => {
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
 
   if (isPublicRoute) {
-    if (to.path === '/login' && authStore.isAuthenticated) {
+    if ((to.path === '/login' || to.path === '/register') && authStore.isAuthenticated) {
       const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : ''
-      return redirect.startsWith('/login') ? '/chat' : (redirect || '/chat')
+      const isInternalRedirect = redirect.startsWith('/') && !redirect.startsWith('//')
+        && !redirect.startsWith('/login') && !redirect.startsWith('/register')
+      return isInternalRedirect ? redirect : '/chat'
     }
     return true
   }

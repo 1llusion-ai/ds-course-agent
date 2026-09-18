@@ -3,6 +3,55 @@ from fastapi.testclient import TestClient
 from ds_course_agent.api.main import app
 
 
+def test_auth_register_creates_session_and_rejects_duplicate(monkeypatch, tmp_path):
+    from ds_course_agent.api.auth import models
+    from ds_course_agent.api.auth.service import verify_password
+
+    db_path = tmp_path / "auth.db"
+    monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(db_path))
+    monkeypatch.setattr("ds_course_agent.api.auth.service.config.AUTH_SECRET_KEY", "test-secret")
+    models.init_db()
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/auth/register",
+            json={"username": "  new_user  ", "password": "correct-horse"},
+        )
+        assert created.status_code == 201
+        assert created.json() == {"student_id": "new_user", "display_name": "new_user"}
+        assert "session" in created.cookies
+
+        user = models.get_user_by_username("new_user")
+        assert user is not None
+        assert user["password_hash"] != "correct-horse"
+        assert verify_password("correct-horse", str(user["password_hash"]))
+
+        me = client.get("/api/auth/me")
+        assert me.status_code == 200
+        assert me.json() == {"student_id": "new_user", "display_name": "new_user"}
+
+        duplicate = client.post(
+            "/api/auth/register",
+            json={"username": "new_user", "password": "another-pass"},
+        )
+        assert duplicate.status_code == 409
+
+
+def test_auth_register_validates_required_fields(monkeypatch, tmp_path):
+    from ds_course_agent.api.auth import models
+
+    db_path = tmp_path / "auth.db"
+    monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(db_path))
+    models.init_db()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/auth/register",
+            json={"username": "   ", "password": "short"},
+        )
+    assert response.status_code == 422
+
+
 def test_auth_login_success_failure_and_me(monkeypatch, tmp_path):
     from ds_course_agent.api.auth import models
     from ds_course_agent.api.auth.service import hash_password

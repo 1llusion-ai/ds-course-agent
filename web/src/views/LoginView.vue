@@ -18,13 +18,13 @@
         </div>
 
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent="handleLogin">
-          <el-form-item label="账号" prop="username" for="login-username" :show-message="false">
+          <el-form-item label="用户名" prop="username" for="login-username" :show-message="false">
             <el-input
               id="login-username"
               ref="usernameInputRef"
               v-model.trim="form.username"
               autocomplete="username"
-              placeholder="请输入账号"
+              placeholder="请输入用户名"
               size="large"
             />
           </el-form-item>
@@ -67,7 +67,7 @@
           </el-button>
         </el-form>
 
-        <button type="button" class="login-register" @click="showPendingHelp('register')">
+        <button type="button" class="login-register" @click="goToRegister">
           <span>还没有账号？</span>
           <strong>立即注册</strong>
         </button>
@@ -124,8 +124,13 @@ function checkCapsLock(event) {
   capsLock.value = event.getModifierState?.('CapsLock') || false
 }
 
-function showPendingHelp(kind) {
-  ElMessage.info(kind === 'register' ? '注册功能正在完善中。' : '密码找回功能正在完善中。')
+function showPendingHelp() {
+  ElMessage.info('密码找回功能正在完善中。')
+}
+
+function goToRegister() {
+  const query = typeof route.query.redirect === 'string' ? { redirect: route.query.redirect } : undefined
+  router.push({ name: 'Register', query })
 }
 
 function getLoginRedirect(value) {

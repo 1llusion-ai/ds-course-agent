@@ -54,6 +54,22 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function register(credentials) {
+    loading.value = true
+    try {
+      const response = await authApi.register(credentials)
+      const nextUser = normalizeUser(response)
+      if (nextUser) {
+        setUser(nextUser)
+      } else {
+        await fetchMe()
+      }
+      return user.value
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function logout() {
     loading.value = true
     try {
@@ -73,6 +89,7 @@ export const useAuthStore = defineStore('auth', () => {
     clearUser,
     fetchMe,
     login,
+    register,
     logout
   }
 })

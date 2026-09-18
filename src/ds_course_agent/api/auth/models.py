@@ -90,3 +90,29 @@ def create_or_update_user(
     if user is None:  # pragma: no cover - sqlite failure would be exceptional
         raise RuntimeError(f"Failed to create user {username!r}")
     return user
+
+
+def create_user(
+    *,
+    username: str,
+    password_hash: str,
+    student_id: str,
+    display_name: str,
+) -> dict[str, Any]:
+    """Create a local user account without replacing an existing account."""
+
+    init_db()
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO users (username, password_hash, student_id, display_name)
+            VALUES (?, ?, ?, ?)
+            """,
+            (username, password_hash, student_id, display_name),
+        )
+        conn.commit()
+
+    user = get_user_by_username(username)
+    if user is None:  # pragma: no cover - sqlite failure would be exceptional
+        raise RuntimeError(f"Failed to create user {username!r}")
+    return user
