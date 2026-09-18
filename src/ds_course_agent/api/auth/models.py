@@ -9,6 +9,10 @@ from typing import Any
 import ds_course_agent.shared.config as config
 
 
+class UserCapacityReached(RuntimeError):
+    """Raised when a configured registration capacity has been reached."""
+
+
 def _db_path() -> Path:
     return Path(config.AUTH_DB_PATH)
 
@@ -114,11 +118,22 @@ def create_user(
     password_hash: str,
     student_id: str,
     display_name: str,
+    max_users: int = 0,
 ) -> dict[str, Any]:
     """Create a local user account without replacing an existing account."""
 
     init_db()
     with _connect() as conn:
+        if max_users > 0:
+            # Serialize capped registrations so concurrent requests cannot both
+            # observe spare capacity and exceed the configured class size.
+            conn.execute("BEGIN IMMEDIATE")
+            existing = conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone()
+            if existing is not None:
+                raise sqlite3.IntegrityError("UNIQUE constraint failed: users.username")
+            count = int(conn.execute("SELECT COUNT(*) FROM users").fetchone()[0])
+            if count >= max_users:
+                raise UserCapacityReached
         conn.execute(
             """
             INSERT INTO users (username, password_hash, student_id, display_name)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -107,6 +108,10 @@ class Settings(BaseSettings):
     AUTH_COOKIE_SECURE: bool = False
     AUTH_DB_PATH: str = "var/auth.db"
     CORS_ALLOW_ORIGINS: str = ""
+    AUTH_REGISTRATION_MODE: Literal["open", "invite"] = "open"
+    AUTH_INVITE_CODE: str = ""
+    AUTH_INVITE_EXPIRES_AT: datetime | None = None
+    AUTH_MAX_USERS: int = Field(default=0, ge=0)
 
     COLLECTION_NAME: str = "rag_knowledge_base"
     SIMILARITY_TOP_K: int = 3
@@ -216,6 +221,11 @@ class Settings(BaseSettings):
     @classmethod
     def _normalize_log_level(cls, value: str) -> str:
         return str(value or "INFO").upper()
+
+    @field_validator("AUTH_INVITE_EXPIRES_AT", mode="before")
+    @classmethod
+    def _normalize_optional_invite_expiry(cls, value: object) -> object:
+        return None if value is None or (isinstance(value, str) and not value.strip()) else value
 
     @field_validator("PYTHON_EXEC_BACKEND")
     @classmethod

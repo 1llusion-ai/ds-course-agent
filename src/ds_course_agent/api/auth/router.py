@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import secrets
 import sqlite3
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field, field_validator
@@ -24,6 +26,7 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=1, max_length=128)
     password: str = Field(min_length=8, max_length=256)
+    invite_code: str = Field(default="", max_length=256)
 
     @field_validator("username")
     @classmethod
@@ -32,6 +35,11 @@ class RegisterRequest(BaseModel):
         if not normalized:
             raise ValueError("must not be blank")
         return normalized
+
+    @field_validator("invite_code")
+    @classmethod
+    def normalize_invite_code(cls, value: str) -> str:
+        return value.strip()
 
 
 class ChangePasswordRequest(BaseModel):
@@ -42,6 +50,36 @@ class ChangePasswordRequest(BaseModel):
 class AuthUserResponse(BaseModel):
     student_id: str
     display_name: str
+
+
+_INVITE_REQUIRED_MESSAGE = "需要有效的班级邀请码才能注册。"
+_REGISTRATION_UNAVAILABLE_MESSAGE = "当前暂未开放注册，请联系管理员。"
+_REGISTRATION_CAPACITY_MESSAGE = "本班级注册人数已达到上限，请联系管理员。"
+
+
+def _invite_registration_allowed(invite_code: str) -> bool:
+    mode = str(getattr(config, "AUTH_REGISTRATION_MODE", "open") or "open").strip().lower()
+    app_env = str(getattr(config, "APP_ENV", "development") or "development").strip().lower()
+    if mode == "open":
+        return app_env in {"development", "test"}
+    if mode != "invite":
+        return False
+
+    configured_code = str(getattr(config, "AUTH_INVITE_CODE", "") or "").strip()
+    if not configured_code:
+        return False
+    expires_at = getattr(config, "AUTH_INVITE_EXPIRES_AT", None)
+    if expires_at:
+        if isinstance(expires_at, str):
+            try:
+                expires_at = datetime.fromisoformat(expires_at)
+            except ValueError:
+                return False
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) >= expires_at:
+            return False
+    return bool(invite_code) and secrets.compare_digest(invite_code, configured_code)
 
 
 @router.post("/login", response_model=AuthUserResponse)
@@ -67,14 +105,37 @@ async def login(data: LoginRequest, response: Response):
 
 @router.post("/register", response_model=AuthUserResponse, status_code=status.HTTP_201_CREATED)
 async def register(data: RegisterRequest, response: Response):
+    mode = str(getattr(config, "AUTH_REGISTRATION_MODE", "open") or "open").strip().lower()
+    if mode == "invite":
+        if not _invite_registration_allowed(data.invite_code):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_INVITE_REQUIRED_MESSAGE)
+    elif mode not in {"open"} or str(getattr(config, "APP_ENV", "development")).lower() == "production":
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_REGISTRATION_UNAVAILABLE_MESSAGE)
+
     username = data.username.strip()
+    max_users = 0
+    if mode == "invite":
+        try:
+            max_users = int(getattr(config, "AUTH_MAX_USERS", 0) or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_REGISTRATION_UNAVAILABLE_MESSAGE,
+            ) from None
+        if max_users < 0:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_REGISTRATION_UNAVAILABLE_MESSAGE
+            )
     try:
         user = models.create_user(
             username=username,
             password_hash=hash_password(data.password),
             student_id=username,
             display_name=username,
+            max_users=max_users,
         )
+    except models.UserCapacityReached as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_REGISTRATION_CAPACITY_MESSAGE) from exc
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该用户名已存在") from exc
 

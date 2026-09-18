@@ -35,6 +35,10 @@ services:
       - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-}
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-http://localhost}
       - AUTH_COOKIE_SECURE=${AUTH_COOKIE_SECURE:-false}
+      - AUTH_REGISTRATION_MODE=${AUTH_REGISTRATION_MODE:-invite}
+      - AUTH_INVITE_CODE=${AUTH_INVITE_CODE:-}
+      - AUTH_INVITE_EXPIRES_AT=${AUTH_INVITE_EXPIRES_AT:-}
+      - AUTH_MAX_USERS=${AUTH_MAX_USERS:-60}
       - AUTH_DB_PATH=/app/var/auth.db
     networks:
       - rag-network

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi.testclient import TestClient
 
 from ds_course_agent.api.main import app
@@ -10,6 +12,8 @@ def test_auth_register_creates_session_and_rejects_duplicate(monkeypatch, tmp_pa
     db_path = tmp_path / "auth.db"
     monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(db_path))
     monkeypatch.setattr("ds_course_agent.api.auth.service.config.AUTH_SECRET_KEY", "test-secret")
+    monkeypatch.setattr("ds_course_agent.shared.config.APP_ENV", "test")
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_REGISTRATION_MODE", "open")
     models.init_db()
 
     with TestClient(app) as client:
@@ -50,6 +54,94 @@ def test_auth_register_validates_required_fields(monkeypatch, tmp_path):
             json={"username": "   ", "password": "short"},
         )
     assert response.status_code == 422
+
+
+def test_auth_register_requires_valid_unexpired_invite(monkeypatch, tmp_path):
+    from ds_course_agent.api.auth import models
+
+    db_path = tmp_path / "auth.db"
+    monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(db_path))
+    monkeypatch.setattr("ds_course_agent.shared.config.APP_ENV", "production")
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_REGISTRATION_MODE", "invite")
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_INVITE_CODE", "class-2026")
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_INVITE_EXPIRES_AT", None)
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_MAX_USERS", 0)
+    models.init_db()
+
+    with TestClient(app) as client:
+        missing = client.post(
+            "/api/auth/register",
+            json={"username": "missing", "password": "correct-horse"},
+        )
+        wrong = client.post(
+            "/api/auth/register",
+            json={"username": "wrong", "password": "correct-horse", "invite_code": "wrong-code"},
+        )
+        valid = client.post(
+            "/api/auth/register",
+            json={"username": "student", "password": "correct-horse", "invite_code": "class-2026"},
+        )
+
+    assert missing.status_code == 403
+    assert wrong.status_code == 403
+    assert "class-2026" not in missing.text
+    assert "class-2026" not in wrong.text
+    assert valid.status_code == 201
+
+    monkeypatch.setattr(
+        "ds_course_agent.shared.config.AUTH_INVITE_EXPIRES_AT",
+        datetime.now(timezone.utc) - timedelta(seconds=1),
+    )
+    with TestClient(app) as client:
+        expired = client.post(
+            "/api/auth/register",
+            json={"username": "expired", "password": "correct-horse", "invite_code": "class-2026"},
+        )
+    assert expired.status_code == 403
+
+
+def test_auth_register_fails_closed_for_open_mode_in_production(monkeypatch, tmp_path):
+    from ds_course_agent.api.auth import models
+
+    monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(tmp_path / "auth.db"))
+    monkeypatch.setattr("ds_course_agent.shared.config.APP_ENV", "production")
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_REGISTRATION_MODE", "open")
+    models.init_db()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/auth/register",
+            json={"username": "student", "password": "correct-horse"},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "当前暂未开放注册，请联系管理员。"
+
+
+def test_auth_register_enforces_invite_user_cap(monkeypatch, tmp_path):
+    from ds_course_agent.api.auth import models
+
+    monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(tmp_path / "auth.db"))
+    monkeypatch.setattr("ds_course_agent.shared.config.APP_ENV", "production")
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_REGISTRATION_MODE", "invite")
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_INVITE_CODE", "class-2026")
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_INVITE_EXPIRES_AT", None)
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_MAX_USERS", 1)
+    models.init_db()
+
+    with TestClient(app) as client:
+        first = client.post(
+            "/api/auth/register",
+            json={"username": "first", "password": "correct-horse", "invite_code": "class-2026"},
+        )
+        second = client.post(
+            "/api/auth/register",
+            json={"username": "second", "password": "correct-horse", "invite_code": "class-2026"},
+        )
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+    assert second.json()["detail"] == "本班级注册人数已达到上限，请联系管理员。"
 
 
 def test_admin_password_reset_updates_hash(monkeypatch, tmp_path):

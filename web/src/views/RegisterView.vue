@@ -63,6 +63,16 @@
             />
           </el-form-item>
 
+          <el-form-item label="班级邀请码" prop="inviteCode" for="register-invite-code" :show-message="false">
+            <el-input
+              id="register-invite-code"
+              v-model.trim="form.inviteCode"
+              autocomplete="off"
+              placeholder="如需邀请码，请输入老师提供的代码"
+              size="large"
+            />
+          </el-form-item>
+
           <el-alert
             v-if="errorMessage"
             :title="errorMessage"
@@ -110,7 +120,8 @@ const errorMessage = ref('')
 const form = reactive({
   username: '',
   password: '',
-  confirmPassword: ''
+  confirmPassword: '',
+  inviteCode: ''
 })
 
 const validateConfirmPassword = (_rule, value, callback) => {
@@ -151,16 +162,24 @@ async function handleRegister() {
   try {
     await authStore.register({
       username: form.username,
-      password: form.password
+      password: form.password,
+      invite_code: form.inviteCode.trim()
     })
     await router.replace(getRegisterRedirect(route.query.redirect))
   } catch (error) {
     const status = error?.response?.status
+    const detail = String(error?.response?.data?.detail || '')
     errorMessage.value = status === 409
-      ? '该用户名已被使用，请换一个试试。'
-      : status === 422
-        ? '请检查用户名和密码后再试。'
-        : '暂时无法注册，请检查网络或稍后重试。'
+      ? detail.includes('注册人数')
+        ? '本班级注册人数已达到上限，请联系管理员。'
+        : '该用户名已被使用，请换一个试试。'
+      : status === 403
+        ? '请输入有效的班级邀请码，请向老师获取。'
+        : status === 503
+          ? '当前暂未开放注册，请联系管理员。'
+          : status === 422
+            ? '请检查用户名和密码后再试。'
+            : '暂时无法注册，请检查网络或稍后重试。'
   }
 }
 
