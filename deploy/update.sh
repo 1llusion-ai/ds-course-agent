@@ -4,9 +4,11 @@ set -Eeuo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_DIR="$PROJECT_ROOT/deploy"
+DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-$PROJECT_ROOT/.env}"
 LOCK_FILE="${DEPLOY_LOCK_FILE:-/tmp/ds-course-agent-deploy.lock}"
 WAIT_TIMEOUT_SECONDS="${DEPLOY_WAIT_TIMEOUT_SECONDS:-180}"
 BACKEND_URL="${DEPLOY_BACKEND_URL:-http://127.0.0.1:8000/readyz}"
+BACKEND_LIVENESS_URL="${DEPLOY_BACKEND_LIVENESS_URL:-http://127.0.0.1:8000/health}"
 FRONTEND_URL="${DEPLOY_FRONTEND_URL:-http://127.0.0.1/}"
 BACKEND_IMAGE="ds-course-agent-backend:latest"
 FRONTEND_IMAGE="ds-course-agent-frontend:latest"
@@ -27,6 +29,10 @@ die() {
 
 require_command() {
     command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
+}
+
+compose() {
+    docker compose --env-file "$DEPLOY_ENV_FILE" "$@"
 }
 
 wait_for_url() {
@@ -76,9 +82,9 @@ rollback() {
     docker image tag "$FRONTEND_ROLLBACK_IMAGE" "$FRONTEND_IMAGE"
     (
         cd "$COMPOSE_DIR"
-        docker compose up -d --no-build --force-recreate --remove-orphans
+        compose up -d --no-build --force-recreate --remove-orphans
     )
-    wait_for_url "rollback backend" "$BACKEND_URL"
+    wait_for_url "rollback backend" "$BACKEND_LIVENESS_URL"
     wait_for_url "rollback frontend" "$FRONTEND_URL"
     log "rollback completed"
 }
@@ -93,8 +99,8 @@ on_error() {
 
     (
         cd "$COMPOSE_DIR"
-        docker compose ps || true
-        docker compose logs --tail=100 backend frontend || true
+        compose ps || true
+        compose logs --tail=100 backend frontend || true
     )
     exit "$exit_code"
 }
@@ -105,6 +111,7 @@ require_command curl
 require_command docker
 require_command flock
 require_command git
+[[ -f "$DEPLOY_ENV_FILE" ]] || die "deployment env file not found: $DEPLOY_ENV_FILE"
 
 git_safe() {
     git -c "safe.directory=$PROJECT_ROOT" "$@"
@@ -124,23 +131,23 @@ git_safe fetch origin main
 git_safe merge --ff-only origin/main
 
 cd "$COMPOSE_DIR"
-docker compose config --quiet
+compose config --quiet
 
 tag_rollback_images
 
 log "building backend image while current containers remain online"
-COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose build --builder memlimited backend
+COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 compose build --builder memlimited backend
 
 log "building frontend image while current containers remain online"
-COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker compose build --builder memlimited frontend
+COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 compose build --builder memlimited frontend
 
 log "switching to the newly built images"
 switched=1
-docker compose up -d --no-build --force-recreate --remove-orphans
+compose up -d --no-build --force-recreate --remove-orphans
 
 wait_for_url "backend" "$BACKEND_URL"
 wait_for_url "frontend" "$FRONTEND_URL"
 switched=0
 
-docker compose ps
+compose ps
 log "deployment completed successfully at commit $(git_safe -C "$PROJECT_ROOT" rev-parse --short HEAD)"
