@@ -1,6 +1,8 @@
 from pathlib import Path
 
 from ds_course_agent.shared.config import (
+    API_PER_STUDENT_REQUESTS_PER_WINDOW,
+    API_REQUEST_QUOTA_WINDOW_SECONDS,
     APP_DB_PATH,
     AUTH_COOKIE_SECURE,
     AUTH_DB_PATH,
@@ -33,6 +35,8 @@ from ds_course_agent.shared.config import (
     RAG_RETRIEVAL_CACHE_SIZE,
     RAG_RETRIEVAL_CACHE_TTL_SECONDS,
     RAG_RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS,
+    api_per_student_requests_per_window,
+    api_request_quota_window_seconds,
     app_db_path,
     auth_cookie_secure,
     auth_db_path,
@@ -247,6 +251,20 @@ def test_registration_settings_support_invite_mode_and_optional_expiry():
     assert cfg.AUTH_INVITE_EXPIRES_AT is not None
     assert cfg.AUTH_INVITE_EXPIRES_AT.astimezone(timezone.utc).year == 2026
     assert Settings(AUTH_INVITE_EXPIRES_AT="").AUTH_INVITE_EXPIRES_AT is None
+
+
+def test_api_request_quota_settings_are_exported():
+    cfg = Settings(
+        API_PER_STUDENT_REQUESTS_PER_WINDOW=600,
+        API_REQUEST_QUOTA_WINDOW_SECONDS=1800,
+    )
+
+    assert cfg.API_PER_STUDENT_REQUESTS_PER_WINDOW == 600
+    assert cfg.API_REQUEST_QUOTA_WINDOW_SECONDS == 1800
+    assert API_PER_STUDENT_REQUESTS_PER_WINDOW == settings.API_PER_STUDENT_REQUESTS_PER_WINDOW
+    assert API_REQUEST_QUOTA_WINDOW_SECONDS == settings.API_REQUEST_QUOTA_WINDOW_SECONDS
+    assert api_per_student_requests_per_window == settings.API_PER_STUDENT_REQUESTS_PER_WINDOW
+    assert api_request_quota_window_seconds == settings.API_REQUEST_QUOTA_WINDOW_SECONDS
 
 
 def test_application_database_path_is_exported_and_resolved():

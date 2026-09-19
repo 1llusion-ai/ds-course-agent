@@ -6,13 +6,14 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from ds_course_agent.api.request_quota import enforce_api_request_quota
 from ds_course_agent.api.session_repository import SessionRecord, SQLiteSessionRepository
 from ds_course_agent.api.title_generation import DEFAULT_SESSION_TITLE
 
 from ..auth.deps import get_current_student_id
 from ..schemas.session import SessionCreate, SessionList, SessionResponse, SessionUpdate
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(enforce_api_request_quota)])
 
 
 def _repository() -> SQLiteSessionRepository:

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from ds_course_agent.agent.learning_loop import get_session_learning_loop
 from ds_course_agent.api.auth.deps import get_current_student_id
+from ds_course_agent.api.request_quota import enforce_api_request_quota
 from ds_course_agent.assessment.application import (
     AssessmentApplicationService,
     AssessmentConcurrencyError,
@@ -26,7 +27,7 @@ from ds_course_agent.assessment.records import (
 )
 from ds_course_agent.teaching.assessment_evidence import AssessmentEvidenceRecorder
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(enforce_api_request_quota)])
 DEFAULT_VISIBLE_STATUSES = (AssessmentStatus.READY, AssessmentStatus.IN_PROGRESS)
 
 

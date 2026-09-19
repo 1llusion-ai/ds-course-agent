@@ -71,7 +71,9 @@ import { useAssessmentStore } from '../stores/assessment'
 import { useSessionStore } from '../stores/session'
 import { assessmentStatusText, formatAssessmentTime } from '../utils/assessment'
 
-const POLL_INTERVAL_MS = 10_000
+// The overview request fans out to two API calls. Keep sustained preparation
+// polling below the production per-student request budget.
+const POLL_INTERVAL_MS = 15_000
 const PENDING_PREPARATION_STATUSES = new Set(['pending', 'queued', 'generating'])
 
 const router = useRouter()
@@ -110,21 +112,35 @@ function shouldPoll() {
     && !document.hidden
 }
 
-function schedulePolling() {
+function retryAfterDelayMs(requestError) {
+  if (requestError?.response?.status !== 429) return POLL_INTERVAL_MS
+
+  const headers = requestError.response.headers
+  const rawValue = typeof headers?.get === 'function'
+    ? headers.get('retry-after') ?? headers.get('Retry-After')
+    : headers?.['retry-after'] ?? headers?.['Retry-After'] ?? headers?.['Retry-after']
+  const seconds = Number.parseInt(String(rawValue ?? ''), 10)
+  if (!Number.isFinite(seconds)) return POLL_INTERVAL_MS
+  return Math.max(POLL_INTERVAL_MS, Math.ceil(seconds * 1000))
+}
+
+function schedulePolling(delayMs = POLL_INTERVAL_MS) {
   clearPolling()
   if (!shouldPoll()) return
-  pollTimer = window.setTimeout(() => load(true), POLL_INTERVAL_MS)
+  pollTimer = window.setTimeout(() => load(true), delayMs)
 }
 
 async function load(silent = false) {
   clearPolling()
   if (!silent) error.value = ''
+  let nextPollDelayMs = POLL_INTERVAL_MS
   try {
     await store.fetchOverview(activeTab.value === 'active' ? ['ready', 'in_progress'] : ['submitted'], silent)
   } catch (requestError) {
+    nextPollDelayMs = retryAfterDelayMs(requestError)
     error.value = requestError.response?.data?.detail || '请稍后重试。'
   } finally {
-    schedulePolling()
+    schedulePolling(nextPollDelayMs)
   }
 }
 

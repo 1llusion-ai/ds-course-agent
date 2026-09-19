@@ -14,6 +14,7 @@ from ds_course_agent.kb.toc_parser import get_toc_parser
 from ds_course_agent.tools.course_rag import build_sources_from_documents, get_rag_service
 
 from ..auth.deps import get_current_student_id
+from ..request_quota import enforce_api_request_quota
 from ..schemas.profile import (
     ConceptDetail,
     ConceptFocus,
@@ -25,7 +26,7 @@ from ..schemas.profile import (
     WeakSpot,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(enforce_api_request_quota)])
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 DATA_DIR = PROJECT_ROOT / "data"
 

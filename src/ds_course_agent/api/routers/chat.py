@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 
 from ds_course_agent.api import chat_application
 from ds_course_agent.api.auth.deps import get_current_student_id
+from ds_course_agent.api.request_quota import enforce_api_request_quota
 from ds_course_agent.api.schemas.chat import (
     ChatContinueRequest,
     ChatHistoryResponse,
@@ -26,7 +27,7 @@ from ds_course_agent.api.schemas.chat import (
 )
 from ds_course_agent.api.sse import iter_stream_job_events, streaming_response
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(enforce_api_request_quota)])
 
 
 @router.post("/send", response_model=ChatResponse)

@@ -6,10 +6,11 @@ from fastapi import APIRouter, Depends, Response
 
 from ds_course_agent.api.auth.deps import get_current_student_id
 from ds_course_agent.api.core_bridge import get_memory_core
+from ds_course_agent.api.request_quota import enforce_api_request_quota
 from ds_course_agent.teaching.knowledge_map import KnowledgeMap, get_knowledge_map, overlay_learning_state
 from ds_course_agent.teaching.profile_snapshot_repository import SQLiteProfileReadService
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(enforce_api_request_quota)])
 
 
 @router.get("", response_model=KnowledgeMap)

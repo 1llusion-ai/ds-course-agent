@@ -113,6 +113,12 @@ class Settings(BaseSettings):
     AUTH_INVITE_EXPIRES_AT: datetime | None = None
     AUTH_MAX_USERS: int = Field(default=0, ge=0)
 
+    # Process-local protection for authenticated business API requests. Zero
+    # disables the limit; deployments with multiple workers need shared state
+    # if one student-wide budget must apply across the whole deployment.
+    API_PER_STUDENT_REQUESTS_PER_WINDOW: int = Field(default=0, ge=0)
+    API_REQUEST_QUOTA_WINDOW_SECONDS: int = Field(default=3600, ge=1)
+
     COLLECTION_NAME: str = "rag_knowledge_base"
     SIMILARITY_TOP_K: int = 3
 
