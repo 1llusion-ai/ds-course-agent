@@ -28,3 +28,10 @@ def test_backend_port_is_not_published_publicly() -> None:
 
     assert '"127.0.0.1:8000:8000"' in compose
     assert '\n      - "8000:8000"' not in compose
+
+
+def test_frontend_port_is_private_for_host_tls_proxy() -> None:
+    compose = (PROJECT_ROOT / "deploy" / "compose.yaml").read_text(encoding="utf-8")
+
+    assert '"127.0.0.1:8080:80"' in compose
+    assert '\n      - "80:80"' not in compose
