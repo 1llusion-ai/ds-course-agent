@@ -202,12 +202,12 @@ def special_case_response(question: str) -> str | None:
 
     normalized = normalize_query_text(question)
     if any(pattern == normalized or normalized.startswith(pattern) for pattern in GREETING_TERMS):
-        return "你好！我是《数据科学导论》课程助教，有课程相关的问题可以随时问我。"
+        return "你好！我是“数字力”导学智能体，当前辅导《数据科学导论》课程，有课程相关的问题可以随时问我。"
     if contains_any(normalized, THANKS_TERMS) and len(normalized) <= 12:
         return "不客气，你如果还有《数据科学导论》课程相关的问题，可以继续问我。"
     if contains_any(normalized, HOMEWORK_ANSWER_TERMS):
         return (
-            "抱歉，作为课程助教，我不能直接代写作业或给出标准答案。"
+            "抱歉，作为“数字力”导学智能体，我不能直接代写作业或给出标准答案。"
             "但我可以帮你梳理思路、方法和步骤，和你一起把题目拆开。"
         )
     # General off-topic coverage lives in scope_guard; keep this legacy fast

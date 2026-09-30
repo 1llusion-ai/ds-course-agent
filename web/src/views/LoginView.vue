@@ -4,7 +4,7 @@
       <div class="login-copy">
         <div class="login-brand">
           <img src="/icon/thought_mark.png" alt="" />
-          <strong>数据科学导论</strong>
+          <strong>“数字力”导学智能体</strong>
         </div>
         <h1>
           <span>让每一次提问，</span>

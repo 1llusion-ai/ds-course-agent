@@ -207,7 +207,7 @@ class PersonalizedExplanationSkill:
         has_valid_knowledge = bool(knowledge and knowledge != "无相关资料" and len(knowledge) > 50)
 
         if has_valid_knowledge:
-            return f"""你是《数据科学导论》课程的 AI 助教。请严格基于教材资料回答问题。
+            return f"""你是“数字力”导学智能体，负责《数据科学导论》课程辅导。请严格基于教材资料回答问题。
 
 当前问题：
 {question}
@@ -237,7 +237,7 @@ class PersonalizedExplanationSkill:
 7. 只能根据“教学策略”中明确列出的逐题证据评价测验表现；没有证据时必须说明无法判断，禁止自行推断答题内容或掌握情况。
 """
 
-        return f"""你是《数据科学导论》课程的 AI 助教。
+        return f"""你是“数字力”导学智能体，负责《数据科学导论》课程辅导。
 
 当前问题：
 {question}

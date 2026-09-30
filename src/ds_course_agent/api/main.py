@@ -38,8 +38,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="RAG 课程助教 API",
-    description="智能课程助教系统后端 API",
+    title="“数字力”导学智能体 API",
+    description="“数字力”导学智能体后端 API",
     version="1.0.0",
     lifespan=lifespan,
 )

@@ -60,7 +60,7 @@
 
           <div v-else-if="chatStore.messages.length === 0" class="empty-state">
             <div class="empty-content">
-              <h1>今天想解决什么数据科学问题？</h1>
+              <h1>今天想解决什么学习问题？</h1>
               <ChatInput
                 hero
                 :initial-text="mapQuestion"

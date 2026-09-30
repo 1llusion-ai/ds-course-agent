@@ -77,7 +77,7 @@ def _matches_any(text: str, patterns: tuple[str, ...]) -> bool:
 def _scope_response(*, category: str, bridge_hint: str = "") -> str:
     redirect = bridge_hint or "如果你想从数据科学、AI、编程、论文、开源项目或课程学习角度分析这个主题，我可以继续帮你。"
     return (
-        "这个问题偏通用事实查询，不属于《数据科学导论》课程助教的回答范围，"
+        "这个问题偏通用事实查询，不属于“数字力”导学智能体的《数据科学导论》课程回答范围，"
         "所以本次不进行通用联网搜索，也不直接展开回答。\n\n"
         f"{redirect}"
     )
@@ -368,7 +368,7 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
             "smalltalk",
             0.99,
             "greeting",
-            "你好！我是《数据科学导论》课程助教，可以帮你查课程资料、解释概念、分析代码或寻找课程相关论文/项目。",
+            "你好！我是“数字力”导学智能体，当前辅导《数据科学导论》课程，可以帮你查课程资料、解释概念、分析代码或寻找课程相关论文/项目。",
         )
 
     if normalized in _THANKS_TERMS or compact_lowered in _THANKS_TERMS:

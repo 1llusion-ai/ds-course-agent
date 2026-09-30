@@ -56,7 +56,7 @@ def _build_classification_prompt(user_question: str, matched_concepts: list) -> 
     else:
         concept_info = "（无匹配知识点）"
 
-    return f"""你是《数据科学导论》课程的助教，负责判断学生是否存在错误认知。
+    return f"""你是“数字力”导学智能体，面向《数据科学导论》课程，负责判断学生是否存在错误认知。
 
 学生问题：{user_question}
 
@@ -190,7 +190,7 @@ def misconception_detector(user_question: str, matched_concepts: list) -> dict[s
 def _generate_normal_answer(user_question: str, knowledge: str) -> str:
     if knowledge and knowledge != "无相关资料" and len(knowledge) > 30:
         return f"{knowledge}"
-    prompt = f"""你是《数据科学导论》课程的AI助教。请回答学生的问题。
+    prompt = f"""你是“数字力”导学智能体，负责《数据科学导论》课程辅导。请回答学生的问题。
 
 学生问题：{user_question}
 
@@ -204,7 +204,7 @@ def _generate_gentle_correction_answer(
     correct_answer: str,
     evidence: str,
 ) -> str:
-    prompt = f"""你是《数据科学导论》课程的AI助教。学生提出了一个带有试探性错误假设的问题，请温和地纠正并解释。
+    prompt = f"""你是“数字力”导学智能体，负责《数据科学导论》课程辅导。学生提出了一个带有试探性错误假设的问题，请温和地纠正并解释。
 
 学生问题：{user_question}
 
@@ -229,7 +229,7 @@ def _generate_direct_correction_answer(
     correct_answer: str,
     evidence: str,
 ) -> str:
-    prompt = f"""你是《数据科学导论》课程的AI助教。学生明确表达了一个错误认知，请直接纠正并解释。
+    prompt = f"""你是“数字力”导学智能体，负责《数据科学导论》课程辅导。学生明确表达了一个错误认知，请直接纠正并解释。
 
 学生问题：{user_question}
 

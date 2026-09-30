@@ -81,7 +81,7 @@ watch(() => props.initialText, value => {
   }
 }, { immediate: true })
 const placeholder = computed(() => props.hero
-  ? '问一个数据科学问题、公式推导或代码练习...'
+  ? '问一个课程概念、公式推导或代码练习...'
   : '问一个课程概念、公式推导或代码问题...'
 )
 const webSearchHintText = computed(() => (
