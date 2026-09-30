@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     ASSESSMENT_EDITOR_MODEL_NAME: str = ""
     ASSESSMENT_VERIFIER_MODEL_NAME: str = ""
     ASSESSMENT_MAX_TOKENS: int = Field(default=4096, ge=256, le=32768)
+    ASSESSMENT_EDITOR_MAX_TOKENS: int = Field(default=2048, ge=256, le=32768)
     ASSESSMENT_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0.0, le=300.0, allow_inf_nan=False)
     ASSESSMENT_TEMPERATURE: float = Field(default=0.2, ge=0.0, le=1.0, allow_inf_nan=False)
     ASSESSMENT_CONTEXT_MAX_CHARS: int = Field(default=6000, ge=256, le=32000)

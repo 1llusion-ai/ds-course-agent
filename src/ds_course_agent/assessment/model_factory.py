@@ -7,7 +7,7 @@ from typing import Any
 import ds_course_agent.shared.config as config
 
 
-def _remote_chat_kwargs(*, model_name: str, temperature: float) -> dict[str, Any]:
+def _remote_chat_kwargs(*, model_name: str, temperature: float, max_tokens: int) -> dict[str, Any]:
     """Build the bounded non-streaming provider configuration for assessment calls."""
 
     return {
@@ -15,7 +15,7 @@ def _remote_chat_kwargs(*, model_name: str, temperature: float) -> dict[str, Any
         "api_key": config.API_KEY,
         "base_url": config.BASE_URL,
         "temperature": temperature,
-        "max_completion_tokens": config.ASSESSMENT_MAX_TOKENS,
+        "max_completion_tokens": max_tokens,
         "timeout": config.ASSESSMENT_TIMEOUT_SECONDS,
         "max_retries": 0,
         "streaming": False,
@@ -23,14 +23,20 @@ def _remote_chat_kwargs(*, model_name: str, temperature: float) -> dict[str, Any
     }
 
 
-def _build_assessment_model(model_name: str, *, temperature: float) -> Any:
+def _build_assessment_model(model_name: str, *, temperature: float, max_tokens: int) -> Any:
     """Build one assessment-owned model client without hidden retries."""
 
     configured_name = model_name.strip()
     if config.USE_REMOTE_LLM:
         from langchain_openai import ChatOpenAI
 
-        return ChatOpenAI(**_remote_chat_kwargs(model_name=configured_name, temperature=temperature))
+        return ChatOpenAI(
+            **_remote_chat_kwargs(
+                model_name=configured_name,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        )
 
     from langchain_ollama import ChatOllama
 
@@ -38,7 +44,7 @@ def _build_assessment_model(model_name: str, *, temperature: float) -> Any:
         model=configured_name or config.MODEL_CHAT,
         base_url=config.BASE_URL_CHAT,
         temperature=temperature,
-        num_predict=config.ASSESSMENT_MAX_TOKENS,
+        num_predict=max_tokens,
         reasoning=False,
         sync_client_kwargs={"timeout": config.ASSESSMENT_TIMEOUT_SECONDS},
     )
@@ -50,19 +56,28 @@ def get_assessment_generator_model() -> Any:
     return _build_assessment_model(
         config.ASSESSMENT_GENERATOR_MODEL_NAME,
         temperature=config.ASSESSMENT_TEMPERATURE,
+        max_tokens=config.ASSESSMENT_MAX_TOKENS,
     )
 
 
 def get_assessment_verifier_model() -> Any:
     """Return the independent model used by evidence and pedagogy reviewers."""
 
-    return _build_assessment_model(config.ASSESSMENT_VERIFIER_MODEL_NAME, temperature=0.0)
+    return _build_assessment_model(
+        config.ASSESSMENT_VERIFIER_MODEL_NAME,
+        temperature=0.0,
+        max_tokens=config.ASSESSMENT_MAX_TOKENS,
+    )
 
 
 def get_assessment_editor_model() -> Any:
     """Return the model used only for batch repair of rejected item slots."""
 
-    return _build_assessment_model(config.ASSESSMENT_EDITOR_MODEL_NAME, temperature=0.0)
+    return _build_assessment_model(
+        config.ASSESSMENT_EDITOR_MODEL_NAME,
+        temperature=0.0,
+        max_tokens=config.ASSESSMENT_EDITOR_MAX_TOKENS,
+    )
 
 
 __all__ = [

@@ -178,18 +178,20 @@ Settings use the existing `.env` loader and shared model factory:
 | `ASSESSMENT_EDITOR_MODEL_NAME` | empty | Batch repair editor model; blank reuses the selected chat model |
 | `ASSESSMENT_VERIFIER_MODEL_NAME` | empty | Independent evidence verifier model; blank reuses the selected chat model |
 | `ASSESSMENT_MAX_TOKENS` | 4096 | Separate output budget |
+| `ASSESSMENT_EDITOR_MAX_TOKENS` | 2048 | Smaller output budget for batch repair calls |
 | `ASSESSMENT_TIMEOUT_SECONDS` | 60 | Model client timeout |
 | `ASSESSMENT_TEMPERATURE` | 0.2 | Generation temperature |
 | `ASSESSMENT_CONTEXT_MAX_CHARS` | 6000 | Textbook evidence budget |
 
 Local versus remote model selection and credentials follow the existing shared
 configuration. Generator, editor, and verifier have separate model-name
-factories but share the assessment token, timeout, and provider settings. For
+factories but share the assessment timeout and provider settings. The editor
+has its own smaller output budget because it returns only the repaired slots. For
 each candidate pool, the Evidence verifier and Item quality critic make one
 parallel call over the same candidates. A repair round makes one batch editor
 call for all pending slots, then runs both review gates again in parallel for
-the revised candidates. A SiliconFlow profile can therefore use
-`generator=Qwen/Qwen3.5-9B`, `editor=Pro/deepseek-ai/DeepSeek-V3`, and
+the revised candidates. A latency-oriented SiliconFlow profile can therefore use
+`generator=Qwen/Qwen3.5-9B`, `editor=Qwen/Qwen3.5-9B`, and
 `verifier=Qwen/Qwen3.5-9B`; an empty role-specific name falls back to the
 selected remote or local chat model. Shared model names do not make the two
 review prompts statistically independent; both reviewer inputs still hide the

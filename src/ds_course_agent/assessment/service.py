@@ -351,6 +351,21 @@ class AssessmentService:
             pending = next_pending
             self._log_acceptance(trace, round_index, len(repaired), pending)
 
+            # A provider timeout is retriable, but immediately repeating the
+            # same editor call only burns another full client timeout while the
+            # upstream service is unavailable. Preserve progress and let the
+            # preparation retry boundary decide when to try again.
+            if repair_rejections and all(
+                rejection.failure_kind is AssessmentFailureKind.PROVIDER_TRANSIENT_FAILURE
+                for rejection in repair_rejections.values()
+            ):
+                logger.info(
+                    "assessment request_id=%s stage=repair_retry_skipped round=%s reason=provider_transient_failure",
+                    trace.request_id,
+                    round_index,
+                )
+                break
+
         if pending or len(accepted_by_slot) != request.count:
             reason_text = (
                 ", ".join(dict.fromkeys(code.value for rejection in pending.values() for code in rejection.codes))

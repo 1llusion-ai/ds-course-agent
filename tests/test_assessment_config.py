@@ -21,6 +21,7 @@ from ds_course_agent.shared.config.schema import Settings
         "ASSESSMENT_EDITOR_MODEL_NAME",
         "ASSESSMENT_VERIFIER_MODEL_NAME",
         "ASSESSMENT_MAX_TOKENS",
+        "ASSESSMENT_EDITOR_MAX_TOKENS",
         "ASSESSMENT_TIMEOUT_SECONDS",
         "ASSESSMENT_TEMPERATURE",
         "ASSESSMENT_CONTEXT_MAX_CHARS",
@@ -35,6 +36,8 @@ def test_assessment_settings_exported(field: str) -> None:
     [
         ("ASSESSMENT_MAX_TOKENS", 0),
         ("ASSESSMENT_MAX_TOKENS", 32769),
+        ("ASSESSMENT_EDITOR_MAX_TOKENS", 0),
+        ("ASSESSMENT_EDITOR_MAX_TOKENS", 32769),
         ("ASSESSMENT_TIMEOUT_SECONDS", 0),
         ("ASSESSMENT_TIMEOUT_SECONDS", float("inf")),
         ("ASSESSMENT_TIMEOUT_SECONDS", 301),
@@ -73,6 +76,7 @@ def test_assessment_factories_use_separate_names_and_shared_budget(
     monkeypatch.setattr(config, "USE_REMOTE_LLM", remote)
     monkeypatch.setattr(config, config_field, name)
     monkeypatch.setattr(config, "ASSESSMENT_MAX_TOKENS", 2048)
+    monkeypatch.setattr(config, "ASSESSMENT_EDITOR_MAX_TOKENS", 1024)
     monkeypatch.setattr(config, "ASSESSMENT_TIMEOUT_SECONDS", 23)
     monkeypatch.setattr(config, "ASSESSMENT_TEMPERATURE", 0.1)
     monkeypatch.setattr(config, "REMOTE_MODEL_NAME", "remote-chat")
@@ -87,12 +91,14 @@ def test_assessment_factories_use_separate_names_and_shared_budget(
     assert kwargs["model"] == (name.strip() or ("remote-chat" if remote else "local-chat"))
     assert kwargs["temperature"] == (0.1 if factory_name == "get_assessment_generator_model" else 0.0)
     if remote:
-        assert kwargs["max_completion_tokens"] == 2048
+        expected_tokens = 1024 if factory_name == "get_assessment_editor_model" else 2048
+        assert kwargs["max_completion_tokens"] == expected_tokens
         assert kwargs["timeout"] == 23
         assert kwargs["streaming"] is False
         assert kwargs["max_retries"] == 0
     else:
-        assert kwargs["num_predict"] == 2048
+        expected_tokens = 1024 if factory_name == "get_assessment_editor_model" else 2048
+        assert kwargs["num_predict"] == expected_tokens
         assert kwargs["sync_client_kwargs"] == {"timeout": 23}
         assert kwargs["reasoning"] is False
 

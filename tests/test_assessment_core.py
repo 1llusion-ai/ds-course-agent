@@ -749,14 +749,9 @@ def test_provider_transient_repair_failure_is_slot_scoped_and_bounded() -> None:
     assert error.value.progress is not None
     assert [item.slot_index for item in error.value.progress.accepted_slots] == [0, 2]
     assert [item.slot_index for item in error.value.progress.pending_slots] == [1]
-    assert len(editor.calls) == 2
+    assert len(editor.calls) == 1
     assert [slot.slot_index for slot in editor.calls[0].slots] == [1]
-    assert [slot.slot_index for slot in editor.calls[1].slots] == [1]
     assert editor.calls[0].slots[0].rejection.codes == (QuestionRejectionCode.IMPLAUSIBLE_DISTRACTORS,)
-    assert editor.calls[1].slots[0].rejection.codes == (
-        QuestionRejectionCode.IMPLAUSIBLE_DISTRACTORS,
-        QuestionRejectionCode.PROVIDER_FAILURE,
-    )
 
 
 def test_repair_reviewer_failure_preserves_already_accepted_items() -> None:
@@ -792,8 +787,8 @@ def test_repair_reviewer_failure_preserves_already_accepted_items() -> None:
     assert error.value.progress is not None
     assert [item.slot_index for item in error.value.progress.accepted_slots] == [0]
     assert [item.slot_index for item in error.value.progress.pending_slots] == [1]
-    assert model.invoke_count == 3
-    assert len(critic.calls) == 3
+    assert model.invoke_count == 2
+    assert len(critic.calls) == 2
 
 
 def test_all_provider_transient_repair_failures_remain_retryable() -> None:
