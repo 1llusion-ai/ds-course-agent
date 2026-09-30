@@ -523,7 +523,7 @@ async function handleLogout() {
   padding: 20px 24px 24px;
 }
 
-:global(html.theme-dark) .settings-page {
+:global(html.theme-dark .settings-page) {
   --settings-border: var(--dark-border);
   --settings-surface: var(--dark-panel);
   --settings-text: var(--dark-text);
@@ -531,37 +531,37 @@ async function handleLogout() {
   background: var(--dark-bg);
 }
 
-:global(html.theme-dark) .settings-form :deep(.el-form-item__label) {
+:global(html.theme-dark .settings-form .el-form-item__label) {
   color: var(--dark-text-muted);
 }
 
-:global(html.theme-dark) .settings-form :deep(.el-input__wrapper) {
+:global(html.theme-dark .settings-form .el-input__wrapper) {
   background: var(--dark-panel);
   box-shadow: 0 0 0 1px var(--dark-border) inset;
 }
 
-:global(html.theme-dark) .settings-form :deep(.el-input__wrapper:hover) {
+:global(html.theme-dark .settings-form .el-input__wrapper:hover) {
   box-shadow: 0 0 0 1px #666 inset;
 }
 
-:global(html.theme-dark) .settings-form :deep(.el-input__wrapper.is-focus),
-:global(html.theme-dark) .settings-form :deep(.el-form-item.is-error .el-input__wrapper.is-focus) {
+:global(html.theme-dark .settings-form .el-input__wrapper.is-focus),
+:global(html.theme-dark .settings-form .el-form-item.is-error .el-input__wrapper.is-focus) {
   box-shadow: 0 0 0 1px #8e9bd0 inset, 0 0 0 3px rgba(142, 155, 208, 0.14);
 }
 
-:global(html.theme-dark) .settings-form :deep(.el-form-item.is-error .el-input__wrapper),
-:global(html.theme-dark) .settings-form :deep(.el-form-item.is-error .el-input__wrapper:hover) {
+:global(html.theme-dark .settings-form .el-form-item.is-error .el-input__wrapper),
+:global(html.theme-dark .settings-form .el-form-item.is-error .el-input__wrapper:hover) {
   box-shadow: 0 0 0 1px var(--dark-border) inset;
 }
 
-:global(html.theme-dark) .settings-cancel {
+:global(html.theme-dark .settings-cancel) {
   color: var(--dark-text);
   background: var(--dark-panel);
   border-color: var(--dark-border);
 }
 
-:global(html.theme-dark) .settings-cancel:hover,
-:global(html.theme-dark) .settings-cancel:focus {
+:global(html.theme-dark .settings-cancel:hover),
+:global(html.theme-dark .settings-cancel:focus) {
   background: var(--dark-hover);
   border-color: #666;
 }

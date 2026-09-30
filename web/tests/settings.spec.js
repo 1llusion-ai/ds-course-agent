@@ -39,6 +39,9 @@ test('settings lets an authenticated learner change password and toggle theme', 
   const themeSwitch = page.locator('.el-switch')
   await themeSwitch.click()
   await expect(page.locator('html')).toHaveClass(/theme-dark/)
+  await expect(page.locator('.settings-page')).toHaveCSS('background-color', 'rgb(33, 33, 33)')
+  await expect(page.locator('.settings-list').nth(2)).toHaveCSS('background-color', 'rgb(42, 42, 42)')
+  await expect(page.locator('.settings-row__copy strong').nth(2)).toHaveCSS('color', 'rgb(236, 236, 236)')
 })
 
 test('settings gives a specific message when new passwords differ', async ({ page }) => {
