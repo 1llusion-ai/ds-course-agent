@@ -42,29 +42,6 @@
       </div>
     </div>
 
-    <label
-      class="course-switcher"
-      :class="{ 'course-switcher--collapsed': props.collapsed }"
-      :title="courseStore.currentCourse?.display_name || '切换课程'"
-    >
-      <span v-if="!props.collapsed" class="course-switcher__label">当前课程</span>
-      <span v-else class="course-switcher__mark" aria-hidden="true">课</span>
-      <select
-        class="course-switcher__select"
-        :value="courseStore.selectedCourseId"
-        :disabled="courseStore.loading"
-        aria-label="切换课程"
-        @change="handleCourseChange($event.target.value)"
-      >
-        <option v-if="!courseStore.courses.length" :value="courseStore.selectedCourseId">
-          {{ courseStore.selectedCourseId === 'data-science-intro' ? '数据科学导论' : courseStore.selectedCourseId }}
-        </option>
-        <option v-for="course in courseStore.courses" :key="course.course_id" :value="course.course_id">
-          {{ course.display_name }}{{ course.is_ready ? '' : ' · 资源准备中' }}
-        </option>
-      </select>
-    </label>
-
     <div class="sidebar-top">
       <button
         type="button"
@@ -304,7 +281,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -524,11 +501,10 @@ function handleCreate() {
   emit('new-chat')
 }
 
-function handleCourseChange(courseId) {
+watch(() => courseStore.selectedCourseId, () => {
   closeSessionSearch()
   cancelSessionRename()
-  courseStore.selectCourse(courseId)
-}
+})
 
 function setSessionRenameInputRef(el, sessionId) {
   if (el) {
@@ -699,68 +675,6 @@ onBeforeUnmount(() => {
 
 .chat-sidebar--collapsed {
   width: 4rem;
-}
-
-.course-switcher {
-  position: relative;
-  display: grid;
-  gap: 5px;
-  margin: 0 14px 12px;
-}
-
-.course-switcher__label {
-  color: #77788c;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-}
-
-.course-switcher__select {
-  width: 100%;
-  min-width: 0;
-  min-height: 38px;
-  padding: 8px;
-  border: 1px solid #dedeea;
-  border-radius: 9px;
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.course-switcher__select:focus-visible {
-  outline: 2px solid #7773c9;
-  outline-offset: 2px;
-}
-
-.course-switcher__select option {
-  color: #30334a;
-  background: #ffffff;
-}
-
-.course-switcher--collapsed {
-  margin: 0 12px 10px;
-}
-
-.course-switcher--collapsed .course-switcher__select {
-  height: 40px;
-  color: transparent;
-  appearance: none;
-}
-
-.course-switcher__mark {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-:global(html.theme-dark) .course-switcher__select {
-  border-color: var(--dark-border);
 }
 
 .sidebar-brand-row {

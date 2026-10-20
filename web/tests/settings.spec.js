@@ -43,8 +43,14 @@ test('settings lets an authenticated learner change password and toggle theme', 
   await themeSwitch.click()
   await expect(page.locator('html')).toHaveClass(/theme-dark/)
   await expect(page.locator('.settings-page')).toHaveCSS('background-color', 'rgb(33, 33, 33)')
-  await expect(page.locator('.settings-list').nth(2)).toHaveCSS('background-color', 'rgb(42, 42, 42)')
+  await expect(page.getByRole('region', { name: '外观' }).locator('.settings-list')).toHaveCSS('background-color', 'rgb(42, 42, 42)')
   await expect(page.locator('.settings-row__copy strong').nth(2)).toHaveCSS('color', 'rgb(236, 236, 236)')
+  await expect(page.getByRole('combobox', { name: '切换课程' })).toHaveCSS('background-color', 'rgb(42, 42, 42)')
+  await page.setViewportSize({ width: 390, height: 844 })
+  const courseRow = page.getByRole('region', { name: '课程' }).locator('.settings-row')
+  await expect(courseRow).toHaveCSS('flex-direction', 'column')
+  await expect(page.getByRole('combobox', { name: '切换课程' })).toBeInViewport()
+  expect(await page.locator('.settings-page').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
 })
 
 test('settings gives a specific message when new passwords differ', async ({ page }) => {

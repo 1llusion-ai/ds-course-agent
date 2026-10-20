@@ -18,6 +18,34 @@
         </div>
       </section>
 
+      <section class="settings-group" aria-labelledby="course-settings-title">
+        <h2 id="course-settings-title">课程</h2>
+        <div class="settings-list">
+          <div class="settings-row settings-row--course">
+            <div class="settings-row__copy">
+              <label for="settings-course">当前课程</label>
+              <span id="settings-course-description">切换后将打开该课程的学习对话</span>
+            </div>
+            <select
+              id="settings-course"
+              class="settings-course-select"
+              :value="courseStore.selectedCourseId"
+              :disabled="courseStore.loading || !courseStore.courses.length"
+              aria-label="切换课程"
+              aria-describedby="settings-course-description"
+              @change="courseStore.selectCourse($event.target.value)"
+            >
+              <option v-if="!courseStore.courses.length" :value="courseStore.selectedCourseId">
+                {{ courseStore.loading ? '正在加载课程…' : '暂无可选课程' }}
+              </option>
+              <option v-for="course in courseStore.courses" :key="course.course_id" :value="course.course_id">
+                {{ course.display_name }}{{ course.is_ready ? '' : ' · 资源准备中' }}
+              </option>
+            </select>
+          </div>
+        </div>
+      </section>
+
       <section class="settings-group" aria-labelledby="security-settings-title">
         <h2 id="security-settings-title">安全</h2>
         <div class="settings-list">
@@ -167,11 +195,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '../stores/auth'
+import { useCourseStore } from '../stores/course'
 
 const APP_SHELL_CONTEXT_KEY = 'ds-course-agent.app-shell'
 const appShell = inject(APP_SHELL_CONTEXT_KEY, null)
 const router = useRouter()
 const authStore = useAuthStore()
+const courseStore = useCourseStore()
 const formRef = ref(null)
 const passwordDialogVisible = ref(false)
 const errorMessage = ref('')
@@ -352,7 +382,8 @@ async function handleLogout() {
   min-width: 0;
 }
 
-.settings-row__copy strong {
+.settings-row__copy strong,
+.settings-row__copy label {
   color: var(--settings-text);
   font-size: 14px;
   font-weight: 600;
@@ -372,6 +403,31 @@ async function handleLogout() {
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.settings-course-select {
+  width: 230px;
+  max-width: 50%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  color: var(--settings-text);
+  background: var(--settings-surface);
+  border: 1px solid var(--settings-border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-course-select:focus-visible {
+  outline: 2px solid var(--settings-action);
+  outline-offset: 2px;
+}
+
+.settings-course-select:disabled {
+  color: var(--settings-muted);
+  cursor: default;
 }
 
 .settings-row__action {
@@ -585,6 +641,16 @@ async function handleLogout() {
 
   .settings-row__value {
     max-width: 42%;
+  }
+
+  .settings-row--course {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-course-select {
+    width: 100%;
+    max-width: 100%;
   }
 }
 </style>
