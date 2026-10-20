@@ -31,9 +31,10 @@ from ds_course_agent.agent.route_executor import (
     iter_route_response,
 )
 from ds_course_agent.agent.routing import ExecutionMode, RouteExecutionResult, RouteState
+from ds_course_agent.courses import CourseContext
 from ds_course_agent.runtime.model_stream import iter_text_chunks
 from ds_course_agent.shared.query_trace import trace_step
-from ds_course_agent.tools._shared import _track_retrieval, begin_retrieval_trace, end_retrieval_trace
+from ds_course_agent.tools._shared import _track_retrieval, begin_retrieval_trace, course_scope, end_retrieval_trace
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,10 @@ def _schedule_session_practice(agent: TurnAgent, state: RouteState, result: Rout
     if state.decision.execution_mode is ExecutionMode.GROUNDED_GENERATION and not result.used_retrieval:
         return
     try:
-        loop.schedule(state.student_id, state.session_id)
+        if state.course_context is None:
+            loop.schedule(state.student_id, state.session_id)
+        else:
+            loop.schedule(state.student_id, state.session_id, course_id=state.course_context.course_id)
     except Exception:
         logger.exception("Failed to schedule practice after session %s", state.session_id)
 
@@ -59,6 +63,7 @@ class TurnAgent(RouteAgent, Protocol):
         session_id: str,
         student_id: str | None = None,
         web_search: bool = False,
+        course_context: CourseContext | None = None,
     ) -> RouteState: ...
 
     def _tool_progress_label(self, tool_name: str, default: str) -> str: ...
@@ -73,6 +78,7 @@ def iter_turn_events(
     *,
     student_id: str | None = None,
     web_search: bool = False,
+    course_context: CourseContext | None = None,
     stream: bool,
     manage_history: bool = True,
     persist_completed_assistant: bool = False,
@@ -88,11 +94,12 @@ def iter_turn_events(
     )
 
     try:
-        route_state = (
-            agent._prepare_query_route(user_input, session_id, student_id, web_search=True)
-            if web_search
-            else agent._prepare_query_route(user_input, session_id, student_id)
-        )
+        prepare_kwargs: dict[str, Any] = {}
+        if web_search:
+            prepare_kwargs["web_search"] = True
+        if course_context is not None:
+            prepare_kwargs["course_context"] = course_context
+        route_state = agent._prepare_query_route(user_input, session_id, student_id, **prepare_kwargs)
     except Exception as exc:
         yield TurnErrorEvent(
             stream_id=stream_id,
@@ -115,7 +122,8 @@ def iter_turn_events(
         route_state.history.add_messages([HumanMessage(content=user_input)])
 
     if not stream:
-        result = execute_route(agent, route_state, stream=False)
+        with course_scope(str(route_state.course_context.course_id) if route_state.course_context else None):
+            result = execute_route(agent, route_state, stream=False)
         if result.content:
             trace_step(
                 "turn.first_token",
@@ -160,7 +168,12 @@ def iter_turn_events(
 
     retrieval_token = begin_retrieval_trace()
     try:
-        for item in iter_route_response(agent, route_state):
+
+        def scoped_route_events():
+            with course_scope(str(route_state.course_context.course_id) if route_state.course_context else None):
+                yield from iter_route_response(agent, route_state)
+
+        for item in scoped_route_events():
             if isinstance(item, RouteResultEvent):
                 route_result = item.result
                 degraded = degraded or item.result.degraded

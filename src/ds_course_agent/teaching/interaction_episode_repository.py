@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 from ds_course_agent.shared.database import connect_sqlite
 from ds_course_agent.teaching.database import migrate_learner_memory_database
 from ds_course_agent.teaching.personalization import EpisodeOutcome, InteractionEpisode
@@ -33,10 +34,19 @@ class SQLiteInteractionEpisodeRepository:
         try:
             connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
-                "SELECT * FROM interaction_episodes WHERE id = ? AND student_id = ?",
-                (episode.episode_id, episode.student_id),
+                "SELECT * FROM interaction_episodes WHERE id = ? AND student_id = ? AND course_id = ?",
+                (episode.episode_id, episode.student_id, str(CourseId(episode.course_id))),
             ).fetchone()
             values = self._episode_values(episode)
+            if (
+                episode.related_episode_id is not None
+                and connection.execute(
+                    "SELECT 1 FROM interaction_episodes WHERE id = ? AND student_id = ? AND course_id = ?",
+                    (episode.related_episode_id, episode.student_id, str(CourseId(episode.course_id))),
+                ).fetchone()
+                is None
+            ):
+                raise sqlite3.IntegrityError("FOREIGN KEY constraint failed")
             changed = existing is None or tuple(existing) != values
             if existing is None:
                 connection.execute(
@@ -45,8 +55,8 @@ class SQLiteInteractionEpisodeRepository:
                         id, student_id, session_id, turn_id, learner_question,
                         observed_signals_json, inferred_difficulties_json,
                         teaching_approach_json, outcome, related_episode_id,
-                        created_at, updated_at, extractor_version
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        created_at, updated_at, extractor_version, course_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     values,
                 )
@@ -58,10 +68,10 @@ class SQLiteInteractionEpisodeRepository:
                         observed_signals_json = ?, inferred_difficulties_json = ?,
                         teaching_approach_json = ?, outcome = ?,
                         related_episode_id = ?, created_at = ?, updated_at = ?,
-                        extractor_version = ?
-                    WHERE id = ? AND student_id = ?
+                        extractor_version = ?, course_id = ?
+                    WHERE id = ? AND student_id = ? AND course_id = ?
                     """,
-                    (*values[2:], episode.episode_id, episode.student_id),
+                    (*values[2:], episode.episode_id, episode.student_id, str(CourseId(episode.course_id))),
                 )
             self._replace_concepts(connection, episode)
             self._replace_evidence(connection, episode)
@@ -77,6 +87,7 @@ class SQLiteInteractionEpisodeRepository:
         self,
         student_id: str,
         *,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
         concept_ids: Sequence[str] = (),
         outcomes: Sequence[EpisodeOutcome] = (),
         limit: int = 6,
@@ -87,8 +98,9 @@ class SQLiteInteractionEpisodeRepository:
         if not 1 <= limit <= 100:
             raise ValueError("limit must be between 1 and 100")
         migrate_learner_memory_database(self._path)
-        clauses = ["e.student_id = ?"]
-        params: list[object] = [student_id]
+        normalized_course_id = CourseId(course_id)
+        clauses = ["e.student_id = ?", "e.course_id = ?"]
+        params: list[object] = [student_id, str(normalized_course_id)]
         if outcomes:
             placeholders = ", ".join("?" for _ in outcomes)
             clauses.append(f"e.outcome IN ({placeholders})")
@@ -97,7 +109,7 @@ class SQLiteInteractionEpisodeRepository:
             placeholders = ", ".join("?" for _ in concept_ids)
             clauses.append(
                 "EXISTS (SELECT 1 FROM interaction_episode_concepts c "
-                "WHERE c.episode_id = e.id AND c.student_id = e.student_id "
+                "WHERE c.episode_id = e.id AND c.student_id = e.student_id AND c.course_id = e.course_id "
                 f"AND c.concept_id IN ({placeholders}))"
             )
             params.extend(concept_ids)
@@ -116,17 +128,25 @@ class SQLiteInteractionEpisodeRepository:
             connection.close()
         return tuple(episodes)
 
-    def get_for_turn(self, student_id: str, session_id: str, turn_id: str) -> InteractionEpisode | None:
+    def get_for_turn(
+        self,
+        student_id: str,
+        session_id: str,
+        turn_id: str,
+        *,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
+    ) -> InteractionEpisode | None:
         """Return the projection for one student-scoped completed turn."""
         self._validate_student_id(student_id)
+        normalized_course_id = CourseId(course_id)
         if not session_id.strip() or not turn_id.strip():
             raise ValueError("session_id and turn_id are required")
         migrate_learner_memory_database(self._path)
         connection = connect_sqlite(self._path)
         try:
             row = connection.execute(
-                "SELECT * FROM interaction_episodes WHERE student_id = ? AND session_id = ? AND turn_id = ?",
-                (student_id, session_id, turn_id),
+                "SELECT * FROM interaction_episodes WHERE student_id = ? AND course_id = ? AND session_id = ? AND turn_id = ?",
+                (student_id, str(normalized_course_id), session_id, turn_id),
             ).fetchone()
             if row is None:
                 return None
@@ -137,30 +157,42 @@ class SQLiteInteractionEpisodeRepository:
     @staticmethod
     def _replace_concepts(connection: sqlite3.Connection, episode: InteractionEpisode) -> None:
         connection.execute(
-            "DELETE FROM interaction_episode_concepts WHERE episode_id = ? AND student_id = ?",
-            (episode.episode_id, episode.student_id),
+            "DELETE FROM interaction_episode_concepts WHERE episode_id = ? AND student_id = ? AND course_id = ?",
+            (episode.episode_id, episode.student_id, str(CourseId(episode.course_id))),
         )
         connection.executemany(
             """
-            INSERT INTO interaction_episode_concepts (episode_id, student_id, concept_id)
-            VALUES (?, ?, ?)
+            INSERT INTO interaction_episode_concepts (episode_id, student_id, concept_id, course_id)
+            VALUES (?, ?, ?, ?)
             """,
-            ((episode.episode_id, episode.student_id, concept_id) for concept_id in dict.fromkeys(episode.concept_ids)),
+            (
+                (episode.episode_id, episode.student_id, concept_id, str(CourseId(episode.course_id)))
+                for concept_id in dict.fromkeys(episode.concept_ids)
+            ),
         )
 
     @staticmethod
     def _replace_evidence(connection: sqlite3.Connection, episode: InteractionEpisode) -> None:
         connection.execute(
-            "DELETE FROM interaction_episode_evidence WHERE episode_id = ? AND student_id = ?",
-            (episode.episode_id, episode.student_id),
+            "DELETE FROM interaction_episode_evidence WHERE episode_id = ? AND student_id = ? AND course_id = ?",
+            (episode.episode_id, episode.student_id, str(CourseId(episode.course_id))),
         )
+        for event_id in dict.fromkeys(episode.evidence_event_ids):
+            if (
+                connection.execute(
+                    "SELECT 1 FROM learning_events WHERE id = ? AND student_id = ? AND course_id = ?",
+                    (event_id, episode.student_id, str(CourseId(episode.course_id))),
+                ).fetchone()
+                is None
+            ):
+                raise sqlite3.IntegrityError("FOREIGN KEY constraint failed")
         connection.executemany(
             """
-            INSERT INTO interaction_episode_evidence (episode_id, learning_event_id, student_id)
-            VALUES (?, ?, ?)
+            INSERT INTO interaction_episode_evidence (episode_id, learning_event_id, student_id, course_id)
+            VALUES (?, ?, ?, ?)
             """,
             (
-                (episode.episode_id, event_id, episode.student_id)
+                (episode.episode_id, event_id, episode.student_id, str(CourseId(episode.course_id)))
                 for event_id in dict.fromkeys(episode.evidence_event_ids)
             ),
         )
@@ -170,16 +202,16 @@ class SQLiteInteractionEpisodeRepository:
         concepts = connection.execute(
             """
             SELECT concept_id FROM interaction_episode_concepts
-            WHERE episode_id = ? AND student_id = ? ORDER BY concept_id
+            WHERE episode_id = ? AND student_id = ? AND course_id = ? ORDER BY concept_id
             """,
-            (episode.episode_id, episode.student_id),
+            (episode.episode_id, episode.student_id, str(CourseId(episode.course_id))),
         ).fetchall()
         evidence = connection.execute(
             """
             SELECT learning_event_id FROM interaction_episode_evidence
-            WHERE episode_id = ? AND student_id = ? ORDER BY learning_event_id
+            WHERE episode_id = ? AND student_id = ? AND course_id = ? ORDER BY learning_event_id
             """,
-            (episode.episode_id, episode.student_id),
+            (episode.episode_id, episode.student_id, str(CourseId(episode.course_id))),
         ).fetchall()
         return replace(
             episode,
@@ -203,6 +235,7 @@ class SQLiteInteractionEpisodeRepository:
             episode.created_at.isoformat(),
             episode.updated_at.isoformat(),
             episode.extractor_version,
+            str(CourseId(episode.course_id)),
         )
 
     @staticmethod
@@ -223,6 +256,7 @@ class SQLiteInteractionEpisodeRepository:
             created_at=datetime.fromisoformat(str(row["created_at"])),
             updated_at=datetime.fromisoformat(str(row["updated_at"])),
             extractor_version=str(row["extractor_version"]),
+            course_id=CourseId(row["course_id"] if "course_id" in row.keys() else DEFAULT_COURSE_ID),
         )
 
     @staticmethod

@@ -20,7 +20,7 @@ from ds_course_agent.assessment.repository import AssessmentRepository
 from .auth import models as auth_models
 from .auth.router import router as auth_router
 from .readiness import build_readiness_report
-from .routers import assessments, chat, knowledge_map, profile, sessions
+from .routers import assessments, chat, courses, knowledge_map, profile, sessions
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
+app.include_router(courses.router, prefix="/api/courses", tags=["courses"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(profile.router, prefix="/api/profile", tags=["profile"])
 app.include_router(knowledge_map.router, prefix="/api/knowledge-map", tags=["knowledge-map"])

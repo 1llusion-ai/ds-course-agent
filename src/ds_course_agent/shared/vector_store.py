@@ -11,17 +11,29 @@ import ds_course_agent.shared.config as config
 class VectorStoreService:
     """Own the Chroma client and collection used by vector retrieval."""
 
-    def __init__(self, embedding: Any) -> None:
+    def __init__(
+        self,
+        embedding: Any,
+        *,
+        collection_name: str | None = None,
+        persist_directory: str | None = None,
+    ) -> None:
         self.embedding = embedding
+        # Retrieval callers may bind a course index explicitly.  Falling back
+        # to the legacy config values keeps offline tools and old callers
+        # compatible while avoiding a second global collection inside the
+        # service itself.
+        self.collection_name = str(collection_name or config.collection_name)
+        self.persist_directory = str(persist_directory or config.CHROMA_PERSIST_DIR)
 
-        client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
+        client = chromadb.PersistentClient(path=self.persist_directory)
         try:
             vector_store = Chroma(
-                collection_name=config.collection_name,
+                collection_name=self.collection_name,
                 embedding_function=self.embedding,
                 client=client,
             )
-            collection = client.get_collection(config.collection_name)
+            collection = client.get_collection(self.collection_name)
         except Exception:
             client.close()
             raise

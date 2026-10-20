@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test'
+import { mockDefaultCourse } from './helpers/courses'
+
+test.beforeEach(async ({ page }) => { await mockDefaultCourse(page) })
 
 test('login registration entry opens the form and successful registration enters chat', async ({ page }) => {
   await page.route('**/api/auth/me', route => route.fulfill({
@@ -11,7 +14,7 @@ test('login registration entry opens the form and successful registration enters
     contentType: 'application/json',
     json: { student_id: 'new_user', display_name: 'new_user' }
   }))
-  await page.route('**/api/sessions', route => route.fulfill({ json: { sessions: [] } }))
+  await page.route('**/api/sessions?**', route => route.fulfill({ json: { sessions: [] } }))
 
   await page.goto('/login')
   await page.getByRole('button', { name: /立即注册/ }).click()

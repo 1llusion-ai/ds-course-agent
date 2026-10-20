@@ -226,6 +226,7 @@ import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch 
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowRight, Close, Connection, Menu, Search } from '@element-plus/icons-vue'
 import { knowledgeMapApi } from '../api/knowledgeMap'
+import { useCourseStore } from '../stores/course'
 import PanelToggleIcon from '../components/PanelToggleIcon.vue'
 import ResizableSidePanel from '../components/ResizableSidePanel.vue'
 import { chapterColor, learningStateMeta, learningStates, questionForNode, relationTypes } from '../utils/knowledgeMap'
@@ -234,6 +235,7 @@ const KnowledgeMapCanvas = defineAsyncComponent(() => import('../components/Know
 
 const route = useRoute()
 const router = useRouter()
+const courseStore = useCourseStore()
 const graph = ref(null)
 const loading = ref(true)
 const error = ref('')
@@ -321,7 +323,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    graph.value = await knowledgeMapApi.get()
+    graph.value = await knowledgeMapApi.get(courseStore.selectedCourseId)
     if (typeof route.query.concept === 'string') selectNode(route.query.concept)
   } catch { error.value = '知识图谱暂时无法加载，请稍后重试。' }
   finally { loading.value = false }

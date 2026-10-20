@@ -1,0 +1,793 @@
+{
+  "schema_version": "course-toc/1.0",
+  "course_id": "digital-literacy",
+  "title": "数字素养与技能导论",
+  "page_offset": -16,
+  "page_mapping": "book_page = physical_page + page_offset",
+  "source": {
+    "kind": "local_pdf",
+    "type": "local_pdf",
+    "path": "var/course_sources/digital-literacy-course.pdf",
+    "sha256": null,
+    "status": "placeholder",
+    "placeholder": true
+  },
+  "known_anomalies": [
+    "目录首章存在错误书签。",
+    "目录漏列 6.4.2，但正文中存在该小节。",
+    "目录中的 8.1 标题漏写“数”字。",
+    "目录中的第 6 章 6.1 条目重复。"
+  ],
+  "toc": [
+    {
+      "kind": "chapter",
+      "number": 1,
+      "title": "数字素养",
+      "book_page_start": 1,
+      "book_page_end": 37,
+      "physical_page_start": 17,
+      "physical_page_end": 53,
+      "children": [
+        {
+          "title": "1.1 数字时代",
+          "book_page_start": 1,
+          "children": [
+            {
+              "title": "1.1.1 通信概述",
+              "book_page_start": 1
+            },
+            {
+              "title": "1.1.2 数字技术的奠基人",
+              "book_page_start": 4
+            },
+            {
+              "title": "1.1.3 数字技术的发展",
+              "book_page_start": 8
+            },
+            {
+              "title": "1.1.4 数字技术与数字化",
+              "book_page_start": 14
+            },
+            {
+              "title": "1.1.5 数字化生活",
+              "book_page_start": 16
+            },
+            {
+              "title": "1.1.6 数字鸿沟",
+              "book_page_start": 18
+            }
+          ]
+        },
+        {
+          "title": "1.2 数字素养",
+          "book_page_start": 19,
+          "children": [
+            {
+              "title": "1.2.1 演进与发展",
+              "book_page_start": 19
+            },
+            {
+              "title": "1.2.2 数字素养能力框架",
+              "book_page_start": 21
+            },
+            {
+              "title": "1.2.3 数字素养教育",
+              "book_page_start": 23
+            },
+            {
+              "title": "1.2.4 全球趋势",
+              "book_page_start": 24
+            }
+          ]
+        },
+        {
+          "title": "1.3 我国数字素养与技能培养",
+          "book_page_start": 25,
+          "children": [
+            {
+              "title": "1.3.1 主要政策与活动",
+              "book_page_start": 25
+            },
+            {
+              "title": "1.3.2 《数字素养与技能认证》团体标准",
+              "book_page_start": 26
+            },
+            {
+              "title": "1.3.3 数字素养与技能评估体系",
+              "book_page_start": 30
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "chapter",
+      "number": 2,
+      "title": "数字内容获取、评价与管理",
+      "book_page_start": 38,
+      "book_page_end": 69,
+      "physical_page_start": 54,
+      "physical_page_end": 85,
+      "children": [
+        {
+          "title": "2.1 数字内容概述",
+          "book_page_start": 38,
+          "children": [
+            {
+              "title": "2.1.1 基本概念",
+              "book_page_start": 38
+            },
+            {
+              "title": "2.1.2 DIKW 体系",
+              "book_page_start": 39
+            }
+          ]
+        },
+        {
+          "title": "2.2 数字内容获取",
+          "book_page_start": 39,
+          "children": [
+            {
+              "title": "2.2.1 信息源的分类",
+              "book_page_start": 39
+            },
+            {
+              "title": "2.2.2 信息源的评价",
+              "book_page_start": 40
+            },
+            {
+              "title": "2.2.3 计算机与网络信息源",
+              "book_page_start": 41
+            }
+          ]
+        },
+        {
+          "title": "2.3 信息检索概述",
+          "book_page_start": 44,
+          "children": [
+            {
+              "title": "2.3.1 信息检索的基本原理",
+              "book_page_start": 44
+            },
+            {
+              "title": "2.3.2 常用数字内容检索工具",
+              "book_page_start": 46
+            }
+          ]
+        },
+        {
+          "title": "2.4 数字内容组织与管理",
+          "book_page_start": 57,
+          "children": [
+            {
+              "title": "2.4.1 数字内容组织",
+              "book_page_start": 57
+            },
+            {
+              "title": "2.4.2 数字内容的存储与管理",
+              "book_page_start": 58
+            },
+            {
+              "title": "2.4.3 数字内容备份",
+              "book_page_start": 63
+            },
+            {
+              "title": "2.4.4 数字内容间的相互转化",
+              "book_page_start": 64
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "chapter",
+      "number": 3,
+      "title": "数字内容开发与利用",
+      "book_page_start": 70,
+      "book_page_end": 100,
+      "physical_page_start": 86,
+      "physical_page_end": 116,
+      "children": [
+        {
+          "title": "3.1 办公文档的创建与编辑",
+          "book_page_start": 70,
+          "children": [
+            {
+              "title": "3.1.1 主流的软件工具",
+              "book_page_start": 70
+            },
+            {
+              "title": "3.1.2 文字文档的创建与编辑",
+              "book_page_start": 70
+            },
+            {
+              "title": "3.1.3 表格文档的创建与编辑",
+              "book_page_start": 73
+            },
+            {
+              "title": "3.1.4 演示文档的创建与编辑",
+              "book_page_start": 78
+            },
+            {
+              "title": "3.1.5 智能文档",
+              "book_page_start": 81
+            }
+          ]
+        },
+        {
+          "title": "3.2 图片文档的创建与编辑",
+          "book_page_start": 82,
+          "children": [
+            {
+              "title": "3.2.1 图像文档的格式",
+              "book_page_start": 82
+            },
+            {
+              "title": "3.2.2 基于 Windows 的图片创建与编辑",
+              "book_page_start": 83
+            },
+            {
+              "title": "3.2.3 基于智能终端的图片创建与编辑",
+              "book_page_start": 84
+            }
+          ]
+        },
+        {
+          "title": "3.3 视频文档的创建与编辑",
+          "book_page_start": 89,
+          "children": [
+            {
+              "title": "3.3.1 视频文档的格式",
+              "book_page_start": 89
+            },
+            {
+              "title": "3.3.2 视频文档的浏览",
+              "book_page_start": 89
+            },
+            {
+              "title": "3.3.3 基于 Windows 的视频创建与编辑",
+              "book_page_start": 90
+            },
+            {
+              "title": "3.3.4 基于智能终端的视频编辑",
+              "book_page_start": 91
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "chapter",
+      "number": 4,
+      "title": "数字沟通与协作",
+      "book_page_start": 101,
+      "book_page_end": 122,
+      "physical_page_start": 117,
+      "physical_page_end": 138,
+      "children": [
+        {
+          "title": "4.1 数字沟通",
+          "book_page_start": 101,
+          "children": [
+            {
+              "title": "4.1.1 沟通方式的变迁",
+              "book_page_start": 101
+            },
+            {
+              "title": "4.1.2 电子邮件",
+              "book_page_start": 101
+            },
+            {
+              "title": "4.1.3 社交媒体",
+              "book_page_start": 103
+            }
+          ]
+        },
+        {
+          "title": "4.2 数字内容共享与协作",
+          "book_page_start": 105,
+          "children": [
+            {
+              "title": "4.2.1 数字内容共享",
+              "book_page_start": 105
+            },
+            {
+              "title": "4.2.2 云文档",
+              "book_page_start": 106
+            },
+            {
+              "title": "4.2.3 数字协作",
+              "book_page_start": 109
+            },
+            {
+              "title": "4.2.4 云办公",
+              "book_page_start": 110
+            }
+          ]
+        },
+        {
+          "title": "4.3 沟通协作的规范",
+          "book_page_start": 115,
+          "children": [
+            {
+              "title": "4.3.1 数字版权与许可",
+              "book_page_start": 115
+            },
+            {
+              "title": "4.3.2 数字沟通礼仪",
+              "book_page_start": 115
+            }
+          ]
+        },
+        {
+          "title": "4.4 数字身份的管理",
+          "book_page_start": 116,
+          "children": [
+            {
+              "title": "4.4.1 数字身份",
+              "book_page_start": 116
+            },
+            {
+              "title": "4.4.2 安全管理",
+              "book_page_start": 117
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "chapter",
+      "number": 5,
+      "title": "数字技术通识",
+      "book_page_start": 123,
+      "book_page_end": 196,
+      "physical_page_start": 139,
+      "physical_page_end": 212,
+      "children": [
+        {
+          "title": "5.1 大数据",
+          "book_page_start": 123,
+          "children": [
+            {
+              "title": "5.1.1 大数据基本概念",
+              "book_page_start": 123
+            },
+            {
+              "title": "5.1.2 大数据的典型应用",
+              "book_page_start": 126
+            }
+          ]
+        },
+        {
+          "title": "5.2 云计算",
+          "book_page_start": 127,
+          "children": [
+            {
+              "title": "5.2.1 云计算基本概念",
+              "book_page_start": 127
+            },
+            {
+              "title": "5.2.2 云计算的典型应用",
+              "book_page_start": 130
+            }
+          ]
+        },
+        {
+          "title": "5.3 物联网",
+          "book_page_start": 130,
+          "children": [
+            {
+              "title": "5.3.1 物联网基本概念",
+              "book_page_start": 130
+            },
+            {
+              "title": "5.3.2 物联网的典型应用",
+              "book_page_start": 131
+            }
+          ]
+        },
+        {
+          "title": "5.4 人工智能",
+          "book_page_start": 132,
+          "children": [
+            {
+              "title": "5.4.1 人工智能基本概念",
+              "book_page_start": 132
+            },
+            {
+              "title": "5.4.2 人工智能的典型应用",
+              "book_page_start": 133
+            },
+            {
+              "title": "5.4.3 人工智能核心技术",
+              "book_page_start": 136
+            },
+            {
+              "title": "5.4.4 人工智能前沿与大模型技术",
+              "book_page_start": 139
+            },
+            {
+              "title": "5.4.5 大模型技术应用与发展",
+              "book_page_start": 141
+            }
+          ]
+        },
+        {
+          "title": "5.5 区块链",
+          "book_page_start": 148,
+          "children": [
+            {
+              "title": "5.5.1 区块链基本概念",
+              "book_page_start": 148
+            },
+            {
+              "title": "5.5.2 区块链的典型应用",
+              "book_page_start": 150
+            }
+          ]
+        },
+        {
+          "title": "5.6 数字孪生",
+          "book_page_start": 151,
+          "children": [
+            {
+              "title": "5.6.1 数字孪生基本概念",
+              "book_page_start": 151
+            },
+            {
+              "title": "5.6.2 数字孪生的典型应用",
+              "book_page_start": 152
+            }
+          ]
+        },
+        {
+          "title": "5.7 机器人流程自动化 RPA",
+          "book_page_start": 153,
+          "children": [
+            {
+              "title": "5.7.1 RPA 基本概念",
+              "book_page_start": 153
+            },
+            {
+              "title": "5.7.2 典型应用",
+              "book_page_start": 154
+            }
+          ]
+        },
+        {
+          "title": "5.8 概率论与数理统计",
+          "book_page_start": 155,
+          "children": [
+            {
+              "title": "5.8.1 概率论的基本知识",
+              "book_page_start": 155
+            },
+            {
+              "title": "5.8.2 条件概率与全概率",
+              "book_page_start": 160
+            },
+            {
+              "title": "5.8.3 随机变量及其分布",
+              "book_page_start": 162
+            },
+            {
+              "title": "5.8.4 条件分布",
+              "book_page_start": 168
+            },
+            {
+              "title": "5.8.5 数理统计量的基本知识",
+              "book_page_start": 170
+            },
+            {
+              "title": "5.8.6 成对数据的统计分析",
+              "book_page_start": 176
+            }
+          ]
+        },
+        {
+          "title": "5.9 增强现实、虚拟现实和元宇宙",
+          "book_page_start": 180,
+          "children": [
+            {
+              "title": "5.9.1 增强现实",
+              "book_page_start": 180
+            },
+            {
+              "title": "5.9.2 虚拟现实",
+              "book_page_start": 181
+            },
+            {
+              "title": "5.9.3 元宇宙",
+              "book_page_start": 183
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "chapter",
+      "number": 6,
+      "title": "数字安全与防护",
+      "book_page_start": 197,
+      "book_page_end": 230,
+      "physical_page_start": 213,
+      "physical_page_end": 246,
+      "children": [
+        {
+          "title": "6.1 网络安全",
+          "book_page_start": 197,
+          "children": [
+            {
+              "title": "6.1.1 常见的网络安全威胁",
+              "book_page_start": 197
+            },
+            {
+              "title": "6.1.2 网络安全技术",
+              "book_page_start": 199
+            },
+            {
+              "title": "6.1.3 计算机病毒与防护",
+              "book_page_start": 203
+            }
+          ]
+        },
+        {
+          "title": "6.2 数据安全",
+          "book_page_start": 213,
+          "children": [
+            {
+              "title": "6.2.1 数据安全的基本概念",
+              "book_page_start": 213
+            },
+            {
+              "title": "6.2.2 防护技术",
+              "book_page_start": 214
+            },
+            {
+              "title": "6.2.3 大数据时代下基于全生命周期的数据安全防护",
+              "book_page_start": 215
+            }
+          ]
+        },
+        {
+          "title": "6.3 个人信息安全",
+          "book_page_start": 217,
+          "children": [
+            {
+              "title": "6.3.1 个人信息安全的基本概念",
+              "book_page_start": 217
+            },
+            {
+              "title": "6.3.2 个人信息的主要类别",
+              "book_page_start": 217
+            },
+            {
+              "title": "6.3.3 个人信息泄露的危害",
+              "book_page_start": 217
+            },
+            {
+              "title": "6.3.4 个人信息泄露的途径",
+              "book_page_start": 218
+            },
+            {
+              "title": "6.3.5 个人信息保护",
+              "book_page_start": 218
+            }
+          ]
+        },
+        {
+          "title": "6.4 数字健康安全",
+          "book_page_start": 220,
+          "children": [
+            {
+              "title": "6.4.1 数字技术上瘾机制",
+              "book_page_start": 220
+            },
+            {
+              "title": "6.4.2 其他数字危害应知应会",
+              "book_page_start": 222
+            },
+            {
+              "title": "6.4.3 健康数字生活",
+              "book_page_start": 224
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "chapter",
+      "number": 7,
+      "title": "数字伦理",
+      "book_page_start": 231,
+      "book_page_end": 250,
+      "physical_page_start": 247,
+      "physical_page_end": 266,
+      "children": [
+        {
+          "title": "7.1 数字伦理概述",
+          "book_page_start": 231,
+          "children": [
+            {
+              "title": "7.1.1 数字伦理概念与内涵",
+              "book_page_start": 231
+            },
+            {
+              "title": "7.1.2 数字命运共同体概念与内涵",
+              "book_page_start": 233
+            }
+          ]
+        },
+        {
+          "title": "7.2 数字伦理应用",
+          "book_page_start": 234,
+          "children": [
+            {
+              "title": "7.2.1 数字隐私",
+              "book_page_start": 234
+            },
+            {
+              "title": "7.2.2 数字版权",
+              "book_page_start": 235
+            },
+            {
+              "title": "7.2.3 网络言论",
+              "book_page_start": 236
+            },
+            {
+              "title": "7.2.4 算法道德",
+              "book_page_start": 237
+            },
+            {
+              "title": "7.2.5 人工智能伦理",
+              "book_page_start": 237
+            },
+            {
+              "title": "7.2.6 健康使用数字技术",
+              "book_page_start": 238
+            }
+          ]
+        },
+        {
+          "title": "7.3 数字伦理案例分析",
+          "book_page_start": 239,
+          "children": [
+            {
+              "title": "7.3.1 隐私保护案例",
+              "book_page_start": 239
+            },
+            {
+              "title": "7.3.2 他人数字隐私保护案例",
+              "book_page_start": 239
+            },
+            {
+              "title": "7.3.3 数字版权保护案例",
+              "book_page_start": 240
+            },
+            {
+              "title": "7.3.4 网络言论案例",
+              "book_page_start": 241
+            },
+            {
+              "title": "7.3.5 算法道德案例",
+              "book_page_start": 241
+            },
+            {
+              "title": "7.3.6 人工智能伦理案例",
+              "book_page_start": 242
+            },
+            {
+              "title": "7.3.7 健康使用数字技术案例",
+              "book_page_start": 243
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "chapter",
+      "number": 8,
+      "title": "法律法规与政策",
+      "book_page_start": 251,
+      "book_page_end": 276,
+      "physical_page_start": 267,
+      "physical_page_end": 292,
+      "children": [
+        {
+          "title": "8.1 字素养与技能政策",
+          "book_page_start": 251,
+          "children": [
+            {
+              "title": "8.1.1 提升全民数字素养与技能的内涵与意义",
+              "book_page_start": 251
+            },
+            {
+              "title": "8.1.2 提升我国公民数字工作能力的五种方式",
+              "book_page_start": 252
+            },
+            {
+              "title": "8.1.3 数字化应用场景",
+              "book_page_start": 253
+            },
+            {
+              "title": "8.1.4 主要任务及重点工程",
+              "book_page_start": 253
+            },
+            {
+              "title": "8.1.5 特定群体数字素养与技能提升举措",
+              "book_page_start": 254
+            }
+          ]
+        },
+        {
+          "title": "8.2 数字素养与技能法律法规",
+          "book_page_start": 255,
+          "children": [
+            {
+              "title": "8.2.1 网络安全相关法律法规",
+              "book_page_start": 255
+            },
+            {
+              "title": "8.2.2 数字版权法律法规",
+              "book_page_start": 264
+            },
+            {
+              "title": "8.2.3 其他相关法律法规与政策",
+              "book_page_start": 269
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "appendix",
+      "title": "附录",
+      "book_page_start": 277,
+      "book_page_end": 312,
+      "physical_page_start": 293,
+      "physical_page_end": 328,
+      "children": [
+        {
+          "title": "数字化能力水平认证（DCLC）",
+          "book_page_start": 277
+        },
+        {
+          "title": "人才数字力 DCI 一级数字素养认证样题解析",
+          "book_page_start": 277
+        },
+        {
+          "title": "附件 1：数字化能力水平认证（DCLC）",
+          "book_page_start": 278
+        },
+        {
+          "title": "附件 2：提升全民数字素养与技能行动纲要",
+          "book_page_start": 282
+        },
+        {
+          "title": "附件 3：中华人民共和国网络安全法",
+          "book_page_start": 290
+        },
+        {
+          "title": "附件 4：网络信息内容生态治理规定",
+          "book_page_start": 297
+        },
+        {
+          "title": "附件 5：中华人民共和国个人信息保护法",
+          "book_page_start": 301
+        },
+        {
+          "title": "附件 6：中华人民共和国数据安全法",
+          "book_page_start": 308
+        }
+      ]
+    },
+    {
+      "kind": "references",
+      "title": "参考文献",
+      "book_page_start": 313,
+      "book_page_end": 316,
+      "physical_page_start": 329,
+      "physical_page_end": 332
+    }
+  ]
+}

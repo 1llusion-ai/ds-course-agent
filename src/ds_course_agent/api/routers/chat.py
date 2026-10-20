@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 
 from ds_course_agent.api import chat_application
 from ds_course_agent.api.auth.deps import get_current_student_id
+from ds_course_agent.api.course_context import normalize_course_id
 from ds_course_agent.api.request_quota import enforce_api_request_quota
 from ds_course_agent.api.schemas.chat import (
     ChatContinueRequest,
@@ -25,6 +26,7 @@ from ds_course_agent.api.schemas.chat import (
     ChatResponse,
     ChatStreamRequest,
 )
+from ds_course_agent.api.session_repository import DEFAULT_COURSE_ID
 from ds_course_agent.api.sse import iter_stream_job_events, streaming_response
 
 router = APIRouter(dependencies=[Depends(enforce_api_request_quota)])
@@ -63,39 +65,43 @@ async def continue_message_stream(
 @router.get("/resume/{session_id}")
 async def resume_message_stream(
     session_id: str,
+    course_id: str = DEFAULT_COURSE_ID,
     student_id: str = Depends(get_current_student_id),
 ) -> StreamingResponse:
     """Replay an active or recently completed stream."""
 
-    job = chat_application.get_resume_job(session_id, student_id)
+    job = chat_application.get_resume_job(session_id, student_id, normalize_course_id(course_id))
     return streaming_response(iter_stream_job_events(job, include_snapshot=True))
 
 
 @router.post("/cancel/{session_id}")
 async def cancel_chat_generation(
     session_id: str,
+    course_id: str = DEFAULT_COURSE_ID,
     student_id: str = Depends(get_current_student_id),
 ) -> dict[str, Any]:
     """Request cancellation of the active stream for a session."""
 
-    return chat_application.cancel_generation(session_id, student_id)
+    return chat_application.cancel_generation(session_id, student_id, normalize_course_id(course_id))
 
 
 @router.get("/history/{session_id}", response_model=ChatHistoryResponse)
 async def get_chat_history(
     session_id: str,
+    course_id: str = DEFAULT_COURSE_ID,
     student_id: str = Depends(get_current_student_id),
 ) -> ChatHistoryResponse:
     """Return persisted chat history and active stream state."""
 
-    return chat_application.get_history(session_id, student_id)
+    return chat_application.get_history(session_id, student_id, normalize_course_id(course_id))
 
 
 @router.delete("/history/{session_id}")
 async def clear_chat_history(
     session_id: str,
+    course_id: str = DEFAULT_COURSE_ID,
     student_id: str = Depends(get_current_student_id),
 ) -> dict[str, str]:
     """Clear persisted chat history for a session."""
 
-    return await chat_application.clear_history(session_id, student_id)
+    return await chat_application.clear_history(session_id, student_id, normalize_course_id(course_id))

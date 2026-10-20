@@ -16,7 +16,12 @@ from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 
 from ds_course_agent.api.schemas.chat import ChatMessage
-from ds_course_agent.api.session_repository import MessageRecord, SessionRecord, SQLiteSessionRepository
+from ds_course_agent.api.session_repository import (
+    DEFAULT_COURSE_ID,
+    MessageRecord,
+    SessionRecord,
+    SQLiteSessionRepository,
+)
 from ds_course_agent.api.timestamps import parse_timestamp, timestamps_match
 from ds_course_agent.api.title_generation import (
     DEFAULT_SESSION_TITLE,
@@ -26,10 +31,11 @@ from ds_course_agent.api.title_generation import (
     build_fallback_session_title,
     looks_like_unprocessed_question_title,
 )
+from ds_course_agent.courses import CourseId
 
 logger = logging.getLogger(__name__)
 _SESSION_LOCK_POLL_SECONDS = 0.01
-_title_generation_pending: set[str] = set()
+_title_generation_pending: set[tuple[str, str]] = set()
 _title_generation_tasks: set[asyncio.Task] = set()
 _history_locks: dict[str, threading.RLock] = {}
 _history_locks_guard = threading.Lock()
@@ -41,8 +47,13 @@ def _repository() -> SQLiteSessionRepository:
     return SQLiteSessionRepository()
 
 
-def _session_data(session_id: str) -> tuple[SessionRecord, dict[str, Any]] | None:
-    record = _repository().find_session(session_id)
+def _normalize_course_id(course_id: str = DEFAULT_COURSE_ID) -> str:
+    return str(CourseId(course_id))
+
+
+def _session_data(session_id: str, course_id: str = DEFAULT_COURSE_ID) -> tuple[SessionRecord, dict[str, Any]] | None:
+    course_id = _normalize_course_id(course_id)
+    record = _repository().find_session(session_id, course_id)
     if record is None:
         return None
     return record, {
@@ -210,6 +221,7 @@ def _message_record_from_dict(
     session_id: str,
     student_id: str,
     position: int,
+    course_id: str = DEFAULT_COURSE_ID,
 ) -> MessageRecord:
     return MessageRecord(
         message_id=message_id,
@@ -237,6 +249,7 @@ def _message_record_from_dict(
         progress_events=data.get("progress_events") or data.get("progressEvents"),
         metadata=data.get("metadata"),
         langchain_payload=data.get("langchain_payload"),
+        course_id=_normalize_course_id(course_id),
     )
 
 
@@ -245,6 +258,7 @@ def _message_dict_from_record(record: MessageRecord) -> dict[str, Any]:
         "_message_id": record.message_id,
         "_position": record.position,
         "_student_id": record.student_id,
+        "_course_id": record.course_id,
         "role": record.role,
         "content": record.content,
         "timestamp": record.created_at.isoformat(),
@@ -269,23 +283,25 @@ def _message_dict_from_record(record: MessageRecord) -> dict[str, Any]:
     }
 
 
-def _history_lock(session_id: str) -> threading.RLock:
+def _history_lock(session_id: str, course_id: str = DEFAULT_COURSE_ID) -> threading.RLock:
+    lock_key = f"{_normalize_course_id(course_id)}:{session_id}"
     with _history_locks_guard:
-        lock = _history_locks.get(session_id)
+        lock = _history_locks.get(lock_key)
         if lock is None:
             lock = threading.RLock()
-            _history_locks[session_id] = lock
+            _history_locks[lock_key] = lock
         return lock
 
 
-def session_operation_lock(session_id: str) -> threading.Lock:
+def session_operation_lock(session_id: str, course_id: str = DEFAULT_COURSE_ID) -> threading.Lock:
     """Return the lock that serializes complete turns for one session."""
 
+    lock_key = f"{_normalize_course_id(course_id)}:{session_id}"
     with _session_operation_locks_guard:
-        lock = _session_operation_locks.get(session_id)
+        lock = _session_operation_locks.get(lock_key)
         if lock is None:
             lock = threading.Lock()
-            _session_operation_locks[session_id] = lock
+            _session_operation_locks[lock_key] = lock
         return lock
 
 
@@ -299,7 +315,7 @@ async def acquire_threading_lock(lock: threading.Lock) -> None:
 
 
 @asynccontextmanager
-async def session_operation_guard(session_id: str) -> AsyncIterator[None]:
+async def session_operation_guard(session_id: str, course_id: str = DEFAULT_COURSE_ID) -> AsyncIterator[None]:
     """Serialize complete send operations for one session.
 
     Without this, two concurrent sends can interleave user/assistant messages
@@ -308,7 +324,7 @@ async def session_operation_guard(session_id: str) -> AsyncIterator[None]:
     without tying request lifetime to asyncio's default executor.
     """
 
-    lock = session_operation_lock(session_id)
+    lock = session_operation_lock(session_id, course_id)
     await acquire_threading_lock(lock)
     try:
         yield
@@ -316,11 +332,12 @@ async def session_operation_guard(session_id: str) -> AsyncIterator[None]:
         lock.release()
 
 
-def append_message_locked(session_id: str, message: ChatMessage) -> dict[str, Any]:
+def append_message_locked(session_id: str, message: ChatMessage, course_id: str = DEFAULT_COURSE_ID) -> dict[str, Any]:
     """Append one message under the per-session history lock."""
 
-    with _history_lock(session_id):
-        session = _repository().find_session(session_id)
+    course_id = _normalize_course_id(course_id)
+    with _history_lock(session_id, course_id):
+        session = _repository().find_session(session_id, course_id)
         if session is None:
             raise KeyError(session_id)
         item = message_to_dict(message)
@@ -331,6 +348,7 @@ def append_message_locked(session_id: str, message: ChatMessage) -> dict[str, An
                 session_id=session_id,
                 student_id=session.student_id,
                 position=-1,
+                course_id=course_id,
             )
         )
         item["_message_id"] = stored.message_id
@@ -339,25 +357,30 @@ def append_message_locked(session_id: str, message: ChatMessage) -> dict[str, An
         return item
 
 
-def remove_message_by_identity(session_id: str, message_item: dict[str, Any]) -> bool:
+def remove_message_by_identity(
+    session_id: str, message_item: dict[str, Any], course_id: str = DEFAULT_COURSE_ID
+) -> bool:
     """Remove exactly the message object previously appended for this turn."""
 
-    with _history_lock(session_id):
+    course_id = _normalize_course_id(course_id)
+    with _history_lock(session_id, course_id):
         message_id = str(message_item.get("_message_id") or "")
         student_id = str(message_item.get("_student_id") or "")
         if not message_id or not student_id:
             return False
-        return _repository().delete_message(student_id, session_id, message_id)
+        return _repository().delete_message(student_id, session_id, message_id, course_id)
 
 
 def replace_message_by_identity(
     session_id: str,
     message_item: dict[str, Any],
     message: ChatMessage,
+    course_id: str = DEFAULT_COURSE_ID,
 ) -> bool:
     """Replace exactly one stored message while preserving turn order."""
 
-    with _history_lock(session_id):
+    course_id = _normalize_course_id(course_id)
+    with _history_lock(session_id, course_id):
         message_id = str(message_item.get("_message_id") or "")
         student_id = str(message_item.get("_student_id") or "")
         position = int(message_item.get("_position", -1))
@@ -370,28 +393,35 @@ def replace_message_by_identity(
                 session_id=session_id,
                 student_id=student_id,
                 position=position,
+                course_id=course_id,
             )
         )
 
 
-def replace_latest_generated_assistant(session_id: str, message: ChatMessage) -> bool:
+def replace_latest_generated_assistant(
+    session_id: str, message: ChatMessage, course_id: str = DEFAULT_COURSE_ID
+) -> bool:
     """Replace the agent's completed assistant placeholder with the API projection."""
 
-    with _history_lock(session_id):
-        history = list_messages(session_id)
+    course_id = _normalize_course_id(course_id)
+    with _history_lock(session_id, course_id):
+        history = list_messages(session_id, course_id)
         if not history:
             return False
         target = history[-1]
         if target.get("role") != "assistant" or target.get("langchain_payload") is None:
             return False
-        return replace_message_by_identity(session_id, target, message)
+        return replace_message_by_identity(session_id, target, message, course_id)
 
 
-def find_stopped_assistant_turn(session_id: str, message_timestamp: datetime) -> dict[str, Any]:
+def find_stopped_assistant_turn(
+    session_id: str, message_timestamp: datetime, course_id: str = DEFAULT_COURSE_ID
+) -> dict[str, Any]:
     """Return the latest stopped assistant item for continuation."""
 
-    with _history_lock(session_id):
-        history = list_messages(session_id)
+    course_id = _normalize_course_id(course_id)
+    with _history_lock(session_id, course_id):
+        history = list_messages(session_id, course_id)
         if not history:
             raise HTTPException(status_code=409, detail="没有可继续生成的回答")
         target = history[-1]
@@ -404,18 +434,25 @@ def find_stopped_assistant_turn(session_id: str, message_timestamp: datetime) ->
         return target
 
 
-def _first_user_message(session_id: str, fallback: str = "") -> str:
-    for item in list_messages(session_id):
+def _first_user_message(session_id: str, fallback: str = "", course_id: str = DEFAULT_COURSE_ID) -> str:
+    for item in list_messages(session_id, course_id):
         if item.get("role") == "user" and item.get("content"):
             return str(item.get("content") or "")
     return fallback
 
 
-def _should_schedule_title_generation(session_id: str, message: str, *, is_first_message: bool) -> bool:
-    if session_id in _title_generation_pending:
+def _should_schedule_title_generation(
+    session_id: str,
+    message: str,
+    *,
+    is_first_message: bool,
+    course_id: str = DEFAULT_COURSE_ID,
+) -> bool:
+    course_id = _normalize_course_id(course_id)
+    if (course_id, session_id) in _title_generation_pending:
         return False
 
-    loaded = _session_data(session_id)
+    loaded = _session_data(session_id, course_id)
     if loaded is None:
         return False
     _record, session = loaded
@@ -441,7 +478,13 @@ def _should_schedule_title_generation(session_id: str, message: str, *, is_first
     return False
 
 
-def _apply_immediate_fallback_title(session_id: str, message: str, *, is_first_message: bool) -> None:
+def _apply_immediate_fallback_title(
+    session_id: str,
+    message: str,
+    *,
+    is_first_message: bool,
+    course_id: str = DEFAULT_COURSE_ID,
+) -> None:
     """Give a new/default session a usable title before async LLM naming finishes.
 
     Title generation intentionally runs in the background so fast replies (for
@@ -452,7 +495,8 @@ def _apply_immediate_fallback_title(session_id: str, message: str, *, is_first_m
     replace this title with an LLM-polished one later.
     """
 
-    loaded = _session_data(session_id)
+    course_id = _normalize_course_id(course_id)
+    loaded = _session_data(session_id, course_id)
     if loaded is None:
         return
     record, session = loaded
@@ -479,17 +523,26 @@ def _apply_immediate_fallback_title(session_id: str, message: str, *, is_first_m
     _save_session_data(record, session)
 
 
-def schedule_title_generation(session_id: str, message: str, *, is_first_message: bool) -> None:
+def schedule_title_generation(
+    session_id: str,
+    message: str,
+    *,
+    is_first_message: bool,
+    course_id: str = DEFAULT_COURSE_ID,
+) -> None:
     """Generate or retry the session title in the background without blocking replies."""
-    if not _should_schedule_title_generation(session_id, message, is_first_message=is_first_message):
+    course_id = _normalize_course_id(course_id)
+    if not _should_schedule_title_generation(
+        session_id, message, is_first_message=is_first_message, course_id=course_id
+    ):
         return
 
-    _apply_immediate_fallback_title(session_id, message, is_first_message=is_first_message)
-    _title_generation_pending.add(session_id)
+    _apply_immediate_fallback_title(session_id, message, is_first_message=is_first_message, course_id=course_id)
+    _title_generation_pending.add((course_id, session_id))
 
     async def _bg_generate_title():
         try:
-            seed_message = _first_user_message(session_id, message)
+            seed_message = _first_user_message(session_id, message, course_id)
             # Keep compatibility with tests/extensions that monkeypatch the
             # older single-value helper while the default implementation still
             # delegates to the richer source-aware generator.
@@ -502,7 +555,7 @@ def schedule_title_generation(session_id: str, message: str, *, is_first_message
                 )
                 else "llm"
             )
-            loaded = _session_data(session_id)
+            loaded = _session_data(session_id, course_id)
             if loaded is not None:
                 record, session = loaded
                 session["title"] = generated_title
@@ -513,7 +566,7 @@ def schedule_title_generation(session_id: str, message: str, *, is_first_message
                 _save_session_data(record, session)
         except Exception:
             logger.debug("会话标题生成失败", exc_info=True)
-            loaded = _session_data(session_id)
+            loaded = _session_data(session_id, course_id)
             if loaded is not None:
                 record, session = loaded
                 session["title"] = build_fallback_session_title(message)
@@ -523,7 +576,7 @@ def schedule_title_generation(session_id: str, message: str, *, is_first_message
                 session["updated_at"] = datetime.now(timezone.utc).isoformat()
                 _save_session_data(record, session)
         finally:
-            _title_generation_pending.discard(session_id)
+            _title_generation_pending.discard((course_id, session_id))
 
     task = asyncio.create_task(_bg_generate_title())
     _title_generation_tasks.add(task)
@@ -534,33 +587,39 @@ def schedule_title_generation(session_id: str, message: str, *, is_first_message
         _title_generation_tasks.discard(task)
 
 
-def message_count(session_id: str) -> int:
+def message_count(session_id: str, course_id: str = DEFAULT_COURSE_ID) -> int:
     """Return the number of persisted messages for a session."""
 
-    session = _repository().find_session(session_id)
+    session = _repository().find_session(session_id, _normalize_course_id(course_id))
     return session.message_count if session else 0
 
 
-def list_messages(session_id: str) -> list[dict[str, Any]]:
+def list_messages(session_id: str, course_id: str = DEFAULT_COURSE_ID) -> list[dict[str, Any]]:
     """Return a stable list snapshot of persisted message dictionaries."""
 
-    with _history_lock(session_id):
-        return [_message_dict_from_record(record) for record in _repository().list_messages_by_session(session_id)]
+    course_id = _normalize_course_id(course_id)
+    with _history_lock(session_id, course_id):
+        return [
+            _message_dict_from_record(record)
+            for record in _repository().list_messages_by_session(session_id, course_id)
+        ]
 
 
-def clear_messages(session_id: str) -> None:
+def clear_messages(session_id: str, course_id: str = DEFAULT_COURSE_ID) -> None:
     """Delete all persisted messages for one session."""
 
-    with _history_lock(session_id):
-        session = _repository().find_session(session_id)
+    course_id = _normalize_course_id(course_id)
+    with _history_lock(session_id, course_id):
+        session = _repository().find_session(session_id, course_id)
         if session is not None:
-            _repository().clear_messages(session.student_id, session_id)
+            _repository().clear_messages(session.student_id, session_id, course_id)
 
 
-def ensure_session_owner(session_id: str, student_id: str) -> None:
+def ensure_session_owner(session_id: str, student_id: str, course_id: str = DEFAULT_COURSE_ID) -> None:
     """Raise an HTTP error unless the student owns the session."""
 
-    session = _repository().find_session(session_id)
+    course_id = _normalize_course_id(course_id)
+    session = _repository().find_session(session_id, course_id)
     if session is None:
         raise HTTPException(status_code=404, detail="会话不存在")
     if session.student_id != student_id:

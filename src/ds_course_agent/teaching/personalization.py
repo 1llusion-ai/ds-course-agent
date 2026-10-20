@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Protocol
 
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
 
 
@@ -64,6 +65,7 @@ class InteractionEpisode:
     created_at: datetime
     updated_at: datetime
     extractor_version: str
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
 
 
 @dataclass(frozen=True)
@@ -157,10 +159,13 @@ class SQLiteLearnerMemoryRetriever:
             raise ValueError("learner state does not belong to the requested student")
 
         concepts = tuple(dict.fromkeys(str(item) for item in target_concept_ids if str(item).strip()))
-        assessment_evidence = self._assessment_evidence(student_id, concepts)
+        scope = {} if learner_state.course_id == DEFAULT_COURSE_ID else {"course_id": learner_state.course_id}
+        assessment_evidence = self._assessment_evidence(student_id, concepts, **scope)
         evidence_budget = 6 - len(assessment_evidence)
         exact_episodes = self._rank_episodes(
-            self._episode_repository.list_for_student(student_id, concept_ids=concepts, limit=20) if concepts else ()
+            self._episode_repository.list_for_student(student_id, concept_ids=concepts, limit=20, **scope)
+            if concepts
+            else ()
         )
         episodes = list(exact_episodes[: min(3, evidence_budget)])
         evidence_budget -= len(episodes)
@@ -174,7 +179,7 @@ class SQLiteLearnerMemoryRetriever:
                 )
             )
             related_episodes = self._rank_episodes(
-                self._episode_repository.list_for_student(student_id, concept_ids=related_ids, limit=10)
+                self._episode_repository.list_for_student(student_id, concept_ids=related_ids, limit=10, **scope)
                 if related_ids
                 else ()
             )
@@ -220,6 +225,8 @@ class SQLiteLearnerMemoryRetriever:
         self,
         student_id: str,
         concept_ids: Sequence[str],
+        *,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
     ) -> tuple[AssessmentEvidence, ...]:
         if not concept_ids:
             return ()
@@ -230,6 +237,7 @@ class SQLiteLearnerMemoryRetriever:
             event_types=(EventType.QUESTION_ANSWERED,),
             concept_ids=concept_ids,
             limit=20,
+            course_id=course_id,
         )
         evidence = []
         for record in records:

@@ -200,10 +200,12 @@ def web_search_turn_fields(
     }
 
 
-def active_stream_snapshot(session_id: str, student_id: str) -> dict[str, Any] | None:
+def active_stream_snapshot(
+    session_id: str, student_id: str, course_id: str = "data-science-intro"
+) -> dict[str, Any] | None:
     """Return the owned active stream snapshot for history restoration."""
 
-    job = stream_job_registry.get_for_owner(session_id, student_id, active_only=True)
+    job = stream_job_registry.get_for_owner(session_id, student_id, course_id, active_only=True)
     if not job:
         return None
     return job.snapshot().to_dict()
@@ -213,6 +215,7 @@ def launch_stream_worker(
     *,
     session_id: str,
     student_id: str,
+    course_id: str = "data-science-intro",
     operation_lock: threading.Lock,
     event_source: StreamEventSource,
     message_timestamp: datetime,
@@ -228,6 +231,7 @@ def launch_stream_worker(
     job = stream_job_registry.register(
         session_id=session_id,
         student_id=student_id,
+        course_id=course_id,
         cancel_event=stop_event,
         message_timestamp=message_timestamp,
         initial_content=initial_content,
@@ -248,12 +252,13 @@ def launch_stream_worker(
             if persisted_final.is_set():
                 return None
             if replace_message_item is None:
-                if not chat_sessions.replace_latest_generated_assistant(session_id, message):
-                    chat_sessions.append_message_locked(session_id, message)
+                if not chat_sessions.replace_latest_generated_assistant(session_id, message, course_id):
+                    chat_sessions.append_message_locked(session_id, message, course_id)
             elif not chat_sessions.replace_message_by_identity(
                 session_id,
                 replace_message_item,
                 message,
+                course_id,
             ):
                 raise RuntimeError("被续写的回答已不存在")
             persisted_final.set()

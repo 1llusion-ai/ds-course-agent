@@ -1,0 +1,20 @@
+{
+  "schema_version": "course-resources/1.0",
+  "course_id": "data-science-intro",
+  "display_name": "数据科学导论",
+  "description": "概念答疑、课程资料问答、学习建议",
+  "revision": "6e5f0b09676cbde5e4166582bb0767788471cad07c92c8b9ef5a0c40f4d929c2",
+  "status": "ready",
+  "prompt_path": "docs/prompts/system_prompt.txt",
+  "knowledge_graph_path": "data/knowledge_graph.json",
+  "toc_path": "data/目录.json",
+  "schedule_path": "data/course_schedule.json",
+  "index": {
+    "collection_name": "course_c37b7b78",
+    "persist_directory": "var/chroma_candidates/production_switch_20260910/qwen3_8b_native/chroma",
+    "manifest_path": "var/chroma_candidates/production_switch_20260910/qwen3_8b_native/production_manifest.json",
+    "revision": "6e5f0b09676cbde5e4166582bb0767788471cad07c92c8b9ef5a0c40f4d929c2",
+    "embedding_model": "Qwen/Qwen3-Embedding-8B",
+    "metadata_schema_version": "retrieval-provenance/1.0"
+  }
+}

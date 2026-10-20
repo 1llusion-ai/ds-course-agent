@@ -1,11 +1,14 @@
 import { expect, test } from '@playwright/test'
+import { mockDefaultCourse } from './helpers/courses'
+
+test.beforeEach(async ({ page }) => { await mockDefaultCourse(page) })
 
 test('settings lets an authenticated learner change password and toggle theme', async ({ page }) => {
   await page.route('**/api/auth/me', route => route.fulfill({
     json: { student_id: 'alice', display_name: 'alice' }
   }))
-  await page.route('**/api/sessions', route => route.fulfill({ json: { sessions: [] } }))
-  await page.route('**/api/profile/summary', route => route.fulfill({ json: {} }))
+  await page.route('**/api/sessions?**', route => route.fulfill({ json: { sessions: [] } }))
+  await page.route('**/api/profile/summary?**', route => route.fulfill({ json: {} }))
 
   let requestPayload
   await page.route('**/api/auth/change-password', async route => {
@@ -48,8 +51,8 @@ test('settings gives a specific message when new passwords differ', async ({ pag
   await page.route('**/api/auth/me', route => route.fulfill({
     json: { student_id: 'alice', display_name: 'alice' }
   }))
-  await page.route('**/api/sessions', route => route.fulfill({ json: { sessions: [] } }))
-  await page.route('**/api/profile/summary', route => route.fulfill({ json: {} }))
+  await page.route('**/api/sessions?**', route => route.fulfill({ json: { sessions: [] } }))
+  await page.route('**/api/profile/summary?**', route => route.fulfill({ json: {} }))
 
   await page.goto('/settings')
   await page.getByRole('button', { name: '更改' }).click()

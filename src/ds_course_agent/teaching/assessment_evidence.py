@@ -66,9 +66,10 @@ class AssessmentEvidenceRecorder:
             created_at=now,
             updated_at=now,
             extractor_version="assessment-evidence-v1",
+            course_id=record.course_id,
         )
         self._episode_repository.save(episode)
-        self._profile_repository.project(record.student_id)
+        self._profile_repository.project(record.student_id, course_id=record.course_id)
 
     @staticmethod
     def _build_event(record, question_id, question, answer) -> QuestionAnsweredEvent:
@@ -78,6 +79,7 @@ class AssessmentEvidenceRecorder:
             session_id=record.session_id or f"assessment:{record.id}",
             student_id=record.student_id,
             timestamp=record.submitted_at.timestamp(),
+            course_id=record.course_id,
             observation=PracticeObservation(
                 assessment_id=record.id,
                 question_id=question_id,

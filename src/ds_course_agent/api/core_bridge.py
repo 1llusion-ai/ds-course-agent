@@ -38,6 +38,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from ds_course_agent.api.course_context import build_course_context
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -70,7 +72,24 @@ def get_agent_service() -> "AgentService":
     return _agent_service
 
 
-def chat_with_history(message: str, session_id: str, student_id: str, web_search: bool = False) -> dict:
+def _course_context(course_id: str, *, session_id: str, student_id: str):
+    """Build the typed turn context at the API composition boundary."""
+
+    return build_course_context(
+        course_id,
+        session_id=session_id,
+        student_id=student_id,
+        ready=True,
+    )
+
+
+def chat_with_history(
+    message: str,
+    session_id: str,
+    student_id: str,
+    web_search: bool = False,
+    course_id: str = "data-science-intro",
+) -> dict:
     from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
     from ds_course_agent.tools.course_rag import begin_retrieval_trace, end_retrieval_trace
 
@@ -78,6 +97,7 @@ def chat_with_history(message: str, session_id: str, student_id: str, web_search
         meta={
             "session_id": session_id,
             "student_id": student_id,
+            "course_id": course_id,
             "web_search": bool(web_search),
         }
     )
@@ -91,6 +111,7 @@ def chat_with_history(message: str, session_id: str, student_id: str, web_search
                 "user_input": message,
                 "session_id": session_id,
                 "student_id": student_id,
+                "course_context": _course_context(course_id, session_id=session_id, student_id=student_id),
                 "manage_history": False,
                 "persist_completed_assistant": True,
             }
@@ -129,6 +150,7 @@ def stream_chat_with_history(
     session_id: str,
     student_id: str,
     web_search: bool = False,
+    course_id: str = "data-science-intro",
 ) -> Iterator[dict[str, Any]]:
     from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace, trace_error, trace_span
     from ds_course_agent.tools.course_rag import begin_retrieval_trace, end_retrieval_trace
@@ -137,6 +159,7 @@ def stream_chat_with_history(
         meta={
             "session_id": session_id,
             "student_id": student_id,
+            "course_id": course_id,
             "web_search": bool(web_search),
         }
     )
@@ -162,6 +185,7 @@ def stream_chat_with_history(
                 "user_input": message,
                 "session_id": session_id,
                 "student_id": student_id,
+                "course_context": _course_context(course_id, session_id=session_id, student_id=student_id),
                 "manage_history": False,
                 "persist_completed_assistant": True,
             }
@@ -225,6 +249,7 @@ def stream_continue_with_history(
     partial_content: str,
     session_id: str,
     student_id: str,
+    course_id: str = "data-science-intro",
 ) -> Iterator[dict]:
     """Continue an interrupted assistant answer without adding a visible user turn."""
 
@@ -240,6 +265,7 @@ def stream_continue_with_history(
         meta={
             "session_id": session_id,
             "student_id": student_id,
+            "course_id": course_id,
             "continuation": True,
         }
     )
@@ -257,7 +283,7 @@ def stream_continue_with_history(
         try:
             with trace_span("core_bridge.get_agent_service"):
                 service = get_agent_service()
-            history = get_history(session_id, student_id=student_id)
+            history = get_history(session_id, student_id=student_id, course_id=course_id)
             transient_history = list(history.messages)
             if partial_content:
                 transient_history.append(AIMessage(content=partial_content))

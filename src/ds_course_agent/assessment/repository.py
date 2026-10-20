@@ -16,6 +16,7 @@ from ds_course_agent.assessment.models import (
     QuestionOption,
 )
 from ds_course_agent.assessment.records import AssessmentRecord, AssessmentStatus, StoredAnswer
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 from ds_course_agent.shared.database import connect_sqlite
 
 
@@ -38,8 +39,8 @@ class AssessmentRepository:
                 INSERT INTO assessments (
                     id, student_id, session_id, title, status, assigned_at, opened_at,
                     submitted_at, target_kc_id, difficulty, question_type, requested_count,
-                    teaching_requirement_json, version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    teaching_requirement_json, version, course_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 self._assessment_values(record),
             )
@@ -52,12 +53,20 @@ class AssessmentRepository:
         finally:
             connection.close()
 
-    def get(self, assessment_id: str, student_id: str) -> AssessmentRecord | None:
+    def get(
+        self,
+        assessment_id: str,
+        student_id: str,
+        *,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
+    ) -> AssessmentRecord | None:
+        normalized_course_id = CourseId(course_id)
         self.init_db()
         connection = connect_sqlite(self._path)
         try:
             row = connection.execute(
-                "SELECT * FROM assessments WHERE id = ? AND student_id = ?", (assessment_id, student_id)
+                "SELECT * FROM assessments WHERE id = ? AND student_id = ? AND course_id = ?",
+                (assessment_id, student_id, str(normalized_course_id)),
             ).fetchone()
             return self._record_from_connection(connection, row) if row else None
         finally:
@@ -67,7 +76,10 @@ class AssessmentRepository:
         self,
         student_id: str,
         statuses: Sequence[AssessmentStatus],
+        *,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
     ) -> tuple[AssessmentRecord, ...]:
+        normalized_course_id = CourseId(course_id)
         if not statuses:
             return ()
         self.init_db()
@@ -75,9 +87,9 @@ class AssessmentRepository:
         connection = connect_sqlite(self._path)
         try:
             rows = connection.execute(
-                f"SELECT * FROM assessments WHERE student_id = ? AND status IN ({placeholders}) "
+                f"SELECT * FROM assessments WHERE student_id = ? AND course_id = ? AND status IN ({placeholders}) "
                 "ORDER BY assigned_at DESC",
-                (student_id, *(status.value for status in statuses)),
+                (student_id, str(normalized_course_id), *(status.value for status in statuses)),
             ).fetchall()
             return tuple(self._record_from_connection(connection, row) for row in rows)
         finally:
@@ -94,7 +106,7 @@ class AssessmentRepository:
                 """
                 UPDATE assessments
                 SET status = ?, assigned_at = ?, opened_at = ?, submitted_at = ?, version = ?
-                WHERE id = ? AND student_id = ? AND version = ?
+                WHERE id = ? AND student_id = ? AND course_id = ? AND version = ?
                 """,
                 (
                     record.status.value,
@@ -104,6 +116,7 @@ class AssessmentRepository:
                     record.version,
                     record.id,
                     record.student_id,
+                    str(CourseId(record.course_id)),
                     expected_version,
                 ),
             )
@@ -136,6 +149,7 @@ class AssessmentRepository:
             request.count,
             request.teaching_requirement.model_dump_json() if request.teaching_requirement is not None else None,
             record.version,
+            str(CourseId(record.course_id)),
         )
 
     @staticmethod
@@ -251,6 +265,7 @@ class AssessmentRepository:
             submitted_at=row["submitted_at"],
             answers=answers,
             version=row["version"],
+            course_id=CourseId(row["course_id"]),
         )
 
 

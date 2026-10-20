@@ -28,6 +28,13 @@ version. Package ownership and migration status remain authoritative in
 - Turn lifecycle changes travel through the finite event types in
   `agent/events.py`. API payload dictionaries are boundary projections, not the
   domain control protocol.
+- Every API turn carries an explicit `CourseContext` into `QueryPipeline` and
+  `RouteState`. Chat requests that omit `course_id` retain the
+  `data-science-intro` scope. A `(course_id, session_id)` has exactly one student
+  owner; the same session ID may be used in different courses, while histories,
+  operation locks, title tasks, stream replay and cancellation remain isolated.
+  Unready courses may be listed and own empty sessions, but cannot start or
+  continue chat generation.
 
 ## Contract 3: Structural Tool Gating
 

@@ -2,8 +2,10 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import { assessmentsApi } from '../api/assessments'
+import { useCourseStore } from './course'
 
 export const useAssessmentStore = defineStore('assessment', () => {
+  const courseStore = useCourseStore()
   const assessments = ref([])
   const current = ref(null)
   const result = ref(null)
@@ -26,7 +28,8 @@ export const useAssessmentStore = defineStore('assessment', () => {
     if (!silent) loading.value = true
     try {
       const [items, jobs] = await Promise.all([
-        assessmentsApi.list(statuses), assessmentsApi.preparations()
+        assessmentsApi.list(statuses, courseStore.selectedCourseId),
+        assessmentsApi.preparations(courseStore.selectedCourseId)
       ])
       if (isCurrentState(requestStateVersion) && requestVersion === overviewVersion) {
         assessments.value = items
@@ -46,7 +49,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
     const requestStateVersion = stateVersion
     loading.value = true
     try {
-      const value = await assessmentsApi.list(statuses)
+      const value = await assessmentsApi.list(statuses, courseStore.selectedCourseId)
       if (isCurrentState(requestStateVersion) && requestVersion === overviewVersion) {
         assessments.value = value
         return value
@@ -64,7 +67,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
     const requestStateVersion = stateVersion
     loading.value = true
     try {
-      const value = await assessmentsApi.open(assessmentId)
+      const value = await assessmentsApi.open(assessmentId, courseStore.selectedCourseId)
       if (isCurrentState(requestStateVersion) && requestVersion === assessmentVersion) {
         current.value = value
         return value
@@ -83,7 +86,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
     const requestStateVersion = stateVersion
     submitting.value = true
     let request
-    request = assessmentsApi.submit(assessmentId, answers)
+    request = assessmentsApi.submit(assessmentId, answers, courseStore.selectedCourseId)
       .then(value => {
         if (isCurrentState(requestStateVersion)) {
           result.value = value
@@ -106,7 +109,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
     const requestStateVersion = stateVersion
     loading.value = true
     try {
-      const value = await assessmentsApi.result(assessmentId)
+      const value = await assessmentsApi.result(assessmentId, courseStore.selectedCourseId)
       if (isCurrentState(requestStateVersion) && requestVersion === resultVersion) {
         result.value = value
         return value

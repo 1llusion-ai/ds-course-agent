@@ -76,6 +76,14 @@ ASSESSMENT_MIGRATIONS = (
         name="persist_assessment_teaching_requirement",
         statements=("ALTER TABLE assessments ADD COLUMN teaching_requirement_json TEXT",),
     ),
+    Migration(
+        version=5,
+        name="scope_assessments_by_course",
+        statements=(
+            "ALTER TABLE assessments ADD COLUMN course_id TEXT NOT NULL DEFAULT 'data-science-intro'",
+            "CREATE INDEX idx_assessments_student_course_status ON assessments(student_id, course_id, status, assigned_at DESC)",
+        ),
+    ),
 )
 
 
@@ -103,7 +111,8 @@ def _backfill_legacy(connection: sqlite3.Connection) -> int:
                 id, student_id, session_id, title, status, assigned_at, opened_at,
                 submitted_at, target_kc_id, difficulty, question_type, requested_count,
                 teaching_requirement_json, version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                , course_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 payload["id"],
@@ -124,6 +133,7 @@ def _backfill_legacy(connection: sqlite3.Connection) -> int:
                     else None
                 ),
                 payload["version"],
+                payload.get("course_id", "data-science-intro"),
             ),
         )
         for position, (question_id, question) in enumerate(

@@ -34,6 +34,7 @@ from ds_course_agent.agent.taxonomy import (
     special_case_response,
 )
 from ds_course_agent.agent.turn_runner import collect_turn_result, iter_turn_events, turn_event_payload
+from ds_course_agent.courses import CourseContext
 from ds_course_agent.runtime.model_runtime import ModelRuntime, check_ollama_connection
 from ds_course_agent.runtime.model_stream import iter_text_chunks
 from ds_course_agent.shared.llm import get_chat_model
@@ -204,6 +205,11 @@ class AgentService:
                     special_case_response=state.special_case_response,
                     learning_event_hook=self._get_learning_event_hook(),
                     classify_question_type_fn=self._classify_question_type,
+                    **(
+                        {"course_id": state.course_context.course_id}
+                        if getattr(state, "course_context", None) is not None
+                        else {}
+                    ),
                 )
             from ds_course_agent.shared.query_trace import trace_step
 
@@ -350,6 +356,7 @@ class AgentService:
         session_id: str,
         student_id: str = None,
         web_search: bool = False,
+        course_context: CourseContext | None = None,
     ) -> RouteState:
         """构建 QueryContext 并执行统一路由决策（sync/stream 共享入口）。
 
@@ -364,6 +371,7 @@ class AgentService:
             session_id,
             student_id,
             web_search=web_search,
+            course_context=course_context,
         )
 
     def _enrich_skills(self, context, user_input: str) -> set:
@@ -507,7 +515,8 @@ class AgentService:
         _track_retrieval([], attempted=True, used=False)
 
         try:
-            service = get_rag_service()
+            course_id = str(route_state.course_context.course_id) if route_state.course_context is not None else None
+            service = get_rag_service() if course_id in (None, "data-science-intro") else get_rag_service(course_id)
             with trace_span("tool.course_rag.retrieve"):
                 result = service.retrieve(
                     question,
@@ -631,6 +640,7 @@ class AgentService:
         web_search: bool = False,
         manage_history: bool = True,
         persist_completed_assistant: bool = False,
+        course_context: CourseContext | None = None,
     ) -> RouteExecutionResult | Iterator[dict[str, Any]]:
         """
         带历史记录的聊天。
@@ -646,6 +656,7 @@ class AgentService:
                     web_search=True,
                     manage_history=manage_history,
                     persist_completed_assistant=persist_completed_assistant,
+                    course_context=course_context,
                 )
             return self.stream_chat_with_history(
                 user_input,
@@ -653,6 +664,7 @@ class AgentService:
                 student_id=student_id,
                 manage_history=manage_history,
                 persist_completed_assistant=persist_completed_assistant,
+                course_context=course_context,
             )
 
         return collect_turn_result(
@@ -665,6 +677,7 @@ class AgentService:
                 stream=False,
                 manage_history=manage_history,
                 persist_completed_assistant=persist_completed_assistant,
+                course_context=course_context,
             )
         )
 
@@ -676,6 +689,7 @@ class AgentService:
         web_search: bool = False,
         manage_history: bool = True,
         persist_completed_assistant: bool = False,
+        course_context: CourseContext | None = None,
     ) -> Iterator[dict[str, Any]]:
         """Stream the API projection of the shared typed turn executor."""
 
@@ -688,6 +702,7 @@ class AgentService:
             stream=True,
             manage_history=manage_history,
             persist_completed_assistant=persist_completed_assistant,
+            course_context=course_context,
         ):
             yield turn_event_payload(event)
 

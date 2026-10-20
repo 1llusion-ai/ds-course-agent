@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test'
+import { mockDefaultCourse } from './helpers/courses'
+
+test.beforeEach(async ({ page }) => { await mockDefaultCourse(page) })
 
 const DARK_BG = 'rgb(33, 33, 33)'
 const DARK_PANEL = 'rgb(42, 42, 42)'
@@ -25,8 +28,8 @@ async function mockShell(page) {
   await page.route('**/api/auth/me', route => route.fulfill({
     json: { student_id: 'student', display_name: '测试学生' }
   }))
-  await page.route('**/api/sessions', route => route.fulfill({ json: { sessions: [] } }))
-  await page.route('**/api/profile/summary', route => route.fulfill({ json: {} }))
+  await page.route('**/api/sessions?**', route => route.fulfill({ json: { sessions: [] } }))
+  await page.route('**/api/profile/summary?**', route => route.fulfill({ json: {} }))
 }
 
 async function expectBackground(page, selector, color) {
@@ -38,7 +41,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('assessment list uses dark surfaces', async ({ page }) => {
-  await page.route('**/api/assessments/preparations', route => route.fulfill({ json: [{
+  await page.route('**/api/assessments/preparations?**', route => route.fulfill({ json: [{
     id: 'preparation-1',
     display_name: '欠拟合',
     status: 'failed',
@@ -64,7 +67,7 @@ test('assessment list uses dark surfaces', async ({ page }) => {
 })
 
 test('knowledge map and directory use dark surfaces', async ({ page }) => {
-  await page.route('**/api/knowledge-map', route => route.fulfill({ json: graph }))
+  await page.route('**/api/knowledge-map?**', route => route.fulfill({ json: graph }))
 
   await page.goto('/knowledge-map')
 

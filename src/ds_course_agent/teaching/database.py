@@ -120,6 +120,23 @@ LEARNER_MEMORY_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=5,
+        name="scope_learner_memory_by_course",
+        statements=(
+            "ALTER TABLE learning_events ADD COLUMN course_id TEXT NOT NULL DEFAULT 'data-science-intro'",
+            "ALTER TABLE interaction_episodes ADD COLUMN course_id TEXT NOT NULL DEFAULT 'data-science-intro'",
+            "ALTER TABLE interaction_episode_concepts ADD COLUMN course_id TEXT NOT NULL DEFAULT 'data-science-intro'",
+            "ALTER TABLE interaction_episode_evidence ADD COLUMN course_id TEXT NOT NULL DEFAULT 'data-science-intro'",
+            "ALTER TABLE learner_profile_snapshots RENAME TO learner_profile_snapshots_legacy_course",
+            "CREATE TABLE learner_profile_snapshots (student_id TEXT NOT NULL, course_id TEXT NOT NULL DEFAULT 'data-science-intro', version INTEGER NOT NULL, computed_at TEXT NOT NULL, source_event_cursor TEXT NOT NULL, payload_json TEXT NOT NULL, PRIMARY KEY (student_id, course_id, version))",
+            "INSERT INTO learner_profile_snapshots (student_id, course_id, version, computed_at, source_event_cursor, payload_json) SELECT student_id, 'data-science-intro', version, computed_at, source_event_cursor, payload_json FROM learner_profile_snapshots_legacy_course",
+            "DROP TABLE learner_profile_snapshots_legacy_course",
+            "CREATE INDEX idx_learning_events_student_course_time ON learning_events(student_id, course_id, observed_at DESC)",
+            "CREATE INDEX idx_interaction_episodes_student_course_time ON interaction_episodes(student_id, course_id, updated_at DESC)",
+            "CREATE INDEX idx_profile_snapshots_student_course_latest ON learner_profile_snapshots(student_id, course_id, version DESC)",
+        ),
+    ),
 )
 
 

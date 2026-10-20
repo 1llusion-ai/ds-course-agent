@@ -141,6 +141,21 @@ def test_get_marker_executable_finds_sibling_entrypoint(monkeypatch, tmp_path):
     assert _get_marker_executable() == str(marker_executable)
 
 
+def test_get_marker_executable_keeps_venv_bin_before_python_symlink_resolution(monkeypatch, tmp_path):
+    venv_bin = tmp_path / "venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    system_python = tmp_path / "system-python"
+    system_python.touch()
+    python_executable = venv_bin / "python"
+    python_executable.symlink_to(system_python)
+    marker_executable = venv_bin / "marker_single"
+    marker_executable.touch()
+    monkeypatch.setattr("sys.executable", str(python_executable))
+    monkeypatch.setattr("sys.prefix", str(tmp_path / "unrelated-prefix"))
+
+    assert _get_marker_executable() == str(marker_executable)
+
+
 def test_parse_with_marker_uses_json_without_extracted_images(monkeypatch, tmp_path):
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4\n")

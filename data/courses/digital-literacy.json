@@ -1,0 +1,36 @@
+{
+  "schema_version": "course-resources/1.0",
+  "course_id": "digital-literacy",
+  "display_name": "数字素养与技能导论",
+  "description": "数字素养基础、数字技能实践与安全责任",
+  "revision": "64549a24cefdd4c934c16d3bdc7fcb92b1d76d16b6754dd4f1bb94f7a6a40f41",
+  "status": "ready",
+  "prompt_path": "",
+  "knowledge_graph_path": "",
+  "toc_path": "data/courses/digital-literacy/toc.json",
+  "schedule_path": "",
+  "resource_metadata": {
+    "source": {
+      "kind": "local_pdf",
+      "type": "local_pdf",
+      "path": "var/course_sources/digital-literacy-course.pdf",
+      "sha256": "7c516f878df0e9b2457ed8734f7867c59a2713109dc6a089fda4ff5b364e3109",
+      "status": "verified"
+    },
+    "page_offset": -16,
+    "known_anomalies": [
+      "目录首章存在错误书签。",
+      "目录漏列 6.4.2，但正文中存在该小节。",
+      "目录中的 8.1 标题漏写“数”字。",
+      "目录中的第 6 章 6.1 条目重复。"
+    ]
+  },
+  "index": {
+    "collection_name": "digital_literacy_7c516f878df0e9b2_student_v1",
+    "persist_directory": "var/chroma_candidates/digital-literacy/sha256-7c516f878df0e9b2/student-v1/chroma",
+    "manifest_path": "var/chroma_candidates/digital-literacy/sha256-7c516f878df0e9b2/student-v1/production_manifest.json",
+    "revision": "64549a24cefdd4c934c16d3bdc7fcb92b1d76d16b6754dd4f1bb94f7a6a40f41",
+    "embedding_model": "Qwen/Qwen3-Embedding-8B",
+    "metadata_schema_version": "retrieval-provenance/1.0"
+  }
+}

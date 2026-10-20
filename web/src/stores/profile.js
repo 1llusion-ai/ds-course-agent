@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { profileApi } from '../api/profile'
+import { useCourseStore } from './course'
 
 export const useProfileStore = defineStore('profile', () => {
+  const courseStore = useCourseStore()
   const summary = ref(null)
   const detail = ref(null)
   const conceptDetail = ref(null)
@@ -16,7 +18,7 @@ export const useProfileStore = defineStore('profile', () => {
     const version = ++summaryVersion
     loading.value = true
     try {
-      const value = await profileApi.getSummary()
+      const value = await profileApi.getSummary(courseStore.selectedCourseId)
       if (version === summaryVersion) summary.value = value
     } finally {
       if (version === summaryVersion) loading.value = false
@@ -27,7 +29,7 @@ export const useProfileStore = defineStore('profile', () => {
     const version = ++detailVersion
     loading.value = true
     try {
-      const value = await profileApi.getDetail(days)
+      const value = await profileApi.getDetail(days, courseStore.selectedCourseId)
       if (version === detailVersion) detail.value = value
     } finally {
       if (version === detailVersion) loading.value = false
@@ -39,7 +41,7 @@ export const useProfileStore = defineStore('profile', () => {
     const version = ++conceptVersion
     conceptLoading.value = true
     try {
-      const value = await profileApi.getConcept(conceptId)
+      const value = await profileApi.getConcept(conceptId, courseStore.selectedCourseId)
       if (version === conceptVersion) conceptDetail.value = value
       return conceptDetail.value
     } finally {
@@ -53,7 +55,7 @@ export const useProfileStore = defineStore('profile', () => {
 
   async function resolveWeakSpot(conceptId) {
     if (!conceptId) return null
-    return profileApi.resolveWeakSpot(conceptId)
+    return profileApi.resolveWeakSpot(conceptId, courseStore.selectedCourseId)
   }
 
   function resetForUser() {

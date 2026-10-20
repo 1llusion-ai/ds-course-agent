@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pypdf import PdfReader
 
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 from ds_course_agent.kb.toc_parser import get_toc_parser
 from ds_course_agent.tools.course_rag import build_sources_from_documents, get_rag_service
 
@@ -270,10 +271,14 @@ def _retrieve_distinction_excerpt_with_rag(labels: list[str]) -> tuple[str | Non
 
 
 @router.get("/summary", response_model=ProfileSummary)
-async def get_profile_summary(student_id: str = Depends(get_current_student_id)):
+async def get_profile_summary(
+    student_id: str = Depends(get_current_student_id),
+    course_id: CourseId = Query(default=DEFAULT_COURSE_ID),
+):
     memory_core = get_memory()
-    memory_core.aggregate_profile(student_id)
-    profile = memory_core.get_profile(student_id)
+    scope = {} if course_id == DEFAULT_COURSE_ID else {"course_id": course_id}
+    memory_core.aggregate_profile(student_id, **scope)
+    profile = memory_core.get_profile(student_id, **scope)
 
     recent_concepts = [
         _serialize_concept_focus(concept_id, focus) for concept_id, focus in _sorted_recent_concepts(profile)[:5]
@@ -297,12 +302,15 @@ async def get_profile_detail(
     student_id: str = Depends(get_current_student_id),
     days: int = Query(default=7, ge=7, le=90),
     timezone_offset_minutes: int = Query(default=0, ge=-840, le=840),
+    course_id: CourseId = Query(default=DEFAULT_COURSE_ID),
 ):
     memory_core = get_memory()
+    scope = {} if course_id == DEFAULT_COURSE_ID else {"course_id": course_id}
     snapshot = memory_core.get_profile_window(
         student_id,
         days,
         timezone_offset_minutes=timezone_offset_minutes,
+        **scope,
     )
     profile = snapshot.profile
 
@@ -340,11 +348,13 @@ async def get_profile_detail(
 async def resolve_weak_spot(
     concept_id: str,
     student_id: str = Depends(get_current_student_id),
+    course_id: CourseId = Query(default=DEFAULT_COURSE_ID),
 ):
     memory_core = get_memory()
 
     try:
-        resolved_spot = memory_core.resolve_active_weak_spot(student_id, concept_id)
+        scope = {} if course_id == DEFAULT_COURSE_ID else {"course_id": course_id}
+        resolved_spot = memory_core.resolve_active_weak_spot(student_id, concept_id, **scope)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Weak spot not found") from exc
     except RuntimeError as exc:
@@ -471,7 +481,11 @@ async def get_concept_detail(concept_id: str):
 
 
 @router.post("/aggregate")
-async def aggregate_profile(student_id: str = Depends(get_current_student_id)):
+async def aggregate_profile(
+    student_id: str = Depends(get_current_student_id),
+    course_id: CourseId = Query(default=DEFAULT_COURSE_ID),
+):
     memory_core = get_memory()
-    memory_core.aggregate_profile(student_id)
+    scope = {} if course_id == DEFAULT_COURSE_ID else {"course_id": course_id}
+    memory_core.aggregate_profile(student_id, **scope)
     return {"message": "画像已更新", "student_id": student_id}

@@ -61,7 +61,7 @@ class _CircuitState:
 _CIRCUIT = _CircuitState()
 
 
-def embedding_model_kwargs(*, timeout_seconds: float | None = None) -> dict[str, Any]:
+def embedding_model_kwargs(*, timeout_seconds: float | None = None, model: str | None = None) -> dict[str, Any]:
     """Return normalized kwargs for LangChain OpenAI-compatible embeddings."""
 
     timeout = (
@@ -70,7 +70,7 @@ def embedding_model_kwargs(*, timeout_seconds: float | None = None) -> dict[str,
         else float(getattr(config, "EMBEDDING_TIMEOUT_SECONDS", 8.0) or 8.0)
     )
     return {
-        "model": config.MODEL_EMBEDDING,
+        "model": str(model or config.MODEL_EMBEDDING),
         "api_key": config.API_KEY,
         "base_url": config.BASE_URL,
         "tiktoken_enabled": False,
@@ -80,10 +80,10 @@ def embedding_model_kwargs(*, timeout_seconds: float | None = None) -> dict[str,
     }
 
 
-def create_embedding_model(*, timeout_seconds: float | None = None) -> OpenAIEmbeddings:
+def create_embedding_model(*, timeout_seconds: float | None = None, model: str | None = None) -> OpenAIEmbeddings:
     """Create the project's default embedding client."""
 
-    return OpenAIEmbeddings(**embedding_model_kwargs(timeout_seconds=timeout_seconds))
+    return OpenAIEmbeddings(**embedding_model_kwargs(timeout_seconds=timeout_seconds, model=model))
 
 
 def _cache_maxsize() -> int:

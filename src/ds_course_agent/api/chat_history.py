@@ -10,24 +10,27 @@ from datetime import datetime, timezone
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
 
 from ds_course_agent.api.session_repository import (
+    DEFAULT_COURSE_ID,
     MessageRecord,
     SessionRecord,
     SessionRepository,
     SQLiteSessionRepository,
 )
 from ds_course_agent.api.title_generation import DEFAULT_SESSION_TITLE
+from ds_course_agent.courses import CourseId
 from ds_course_agent.shared.history import DEFAULT_MEMORY_POLICY, FileChatMessageHistory, MemoryPolicy
 
 _SESSION_LOCKS: dict[str, threading.RLock] = {}
 _SESSION_LOCKS_GUARD = threading.Lock()
 
 
-def _session_lock(session_id: str) -> threading.RLock:
+def _session_lock(session_id: str, course_id: str = DEFAULT_COURSE_ID) -> threading.RLock:
+    lock_key = f"{CourseId(course_id)}:{session_id}"
     with _SESSION_LOCKS_GUARD:
-        lock = _SESSION_LOCKS.get(session_id)
+        lock = _SESSION_LOCKS.get(lock_key)
         if lock is None:
             lock = threading.RLock()
-            _SESSION_LOCKS[session_id] = lock
+            _SESSION_LOCKS[lock_key] = lock
         return lock
 
 
@@ -36,11 +39,13 @@ def get_history(
     memory_policy: MemoryPolicy | None = None,
     *,
     student_id: str | None = None,
+    course_id: str = DEFAULT_COURSE_ID,
 ) -> SQLiteChatMessageHistory:
     return SQLiteChatMessageHistory(
         session_id=session_id,
         memory_policy=memory_policy,
         student_id=student_id,
+        course_id=course_id,
     )
 
 
@@ -53,15 +58,17 @@ class SQLiteChatMessageHistory(FileChatMessageHistory):
         memory_policy: MemoryPolicy | None = None,
         *,
         student_id: str | None = None,
+        course_id: str = DEFAULT_COURSE_ID,
         repository: SessionRepository | None = None,
     ) -> None:
         self.storage_path = ""
         self.session_id = session_id
+        self.course_id = str(CourseId(course_id))
         self.file_path = f"sqlite:{session_id}"
         self.memory_policy = memory_policy or DEFAULT_MEMORY_POLICY
-        self._lock = _session_lock(session_id)
+        self._lock = _session_lock(session_id, self.course_id)
         self._repository = repository or SQLiteSessionRepository()
-        session = self._repository.find_session(session_id)
+        session = self._repository.find_session(session_id, self.course_id)
         if session is None:
             now = datetime.now(timezone.utc)
             resolved_student_id = student_id or session_id
@@ -73,6 +80,7 @@ class SQLiteChatMessageHistory(FileChatMessageHistory):
                     title_source="implicit",
                     created_at=now,
                     updated_at=now,
+                    course_id=self.course_id,
                 )
             )
             self.student_id = resolved_student_id
@@ -84,7 +92,7 @@ class SQLiteChatMessageHistory(FileChatMessageHistory):
     @property
     def messages(self) -> list[BaseMessage]:
         with self._lock:
-            records = self._repository.list_messages(self.student_id, self.session_id)
+            records = self._repository.list_messages(self.student_id, self.session_id, self.course_id)
             payloads = []
             for record in records:
                 if record.langchain_payload is not None:
@@ -122,6 +130,7 @@ class SQLiteChatMessageHistory(FileChatMessageHistory):
                         content=str(getattr(message, "content", "")),
                         created_at=now,
                         langchain_payload=payload,
+                        course_id=self.course_id,
                     )
                 )
             self._repository.append_messages(records)
@@ -129,11 +138,11 @@ class SQLiteChatMessageHistory(FileChatMessageHistory):
 
     def clear(self) -> None:
         with self._lock:
-            self._repository.clear_messages(self.student_id, self.session_id)
+            self._repository.clear_messages(self.student_id, self.session_id, self.course_id)
 
     def delete(self) -> bool:
         with self._lock:
-            return self._repository.delete_session(self.student_id, self.session_id)
+            return self._repository.delete_session(self.student_id, self.session_id, self.course_id)
 
 
 __all__ = ["SQLiteChatMessageHistory", "get_history"]

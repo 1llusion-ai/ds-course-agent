@@ -180,15 +180,23 @@ def _get_marker_executable() -> str:
     """获取当前 Python 环境对应的 marker_single 可执行文件路径"""
     import sys
 
-    python_dir = Path(sys.executable).resolve().parent
-    # marker_single 与当前环境的 Python 可执行文件位于同一 Scripts/bin 目录。
-    candidates = [
-        python_dir / "marker_single.exe",
-        python_dir / "marker_single",
-    ]
-    for candidate in candidates:
-        if candidate.is_file():
-            return str(candidate)
+    # Keep the venv path before resolving symlinks: Debian venvs commonly link
+    # ``bin/python`` to ``/usr/bin/python3.x`` while entry points stay in the
+    # venv's bin directory.
+    executable = Path(sys.executable)
+    directories: list[Path] = [executable.parent]
+    prefix_bin = Path(sys.prefix) / ("Scripts" if os.name == "nt" else "bin")
+    directories.append(prefix_bin)
+    directories.append(executable.resolve().parent)
+    seen: set[Path] = set()
+    for directory in directories:
+        directory = directory.resolve()
+        if directory in seen:
+            continue
+        seen.add(directory)
+        for candidate in (directory / "marker_single.exe", directory / "marker_single"):
+            if candidate.is_file():
+                return str(candidate)
     return shutil.which("marker_single") or "marker_single"
 
 

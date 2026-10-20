@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Literal
 
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 from ds_course_agent.teaching.practice import PracticeObservation
 
 
@@ -32,6 +33,7 @@ class BaseEvent:
     student_id: str
     event_type: EventType
     timestamp: float = field(default_factory=time.time)
+    course_id: CourseId = field(default=CourseId(DEFAULT_COURSE_ID))
 
     def to_dict(self) -> dict[str, Any]:
         event_type = self.event_type.value if hasattr(self.event_type, "value") else str(self.event_type)
@@ -41,6 +43,7 @@ class BaseEvent:
             "student_id": self.student_id,
             "event_type": event_type,
             "timestamp": self.timestamp,
+            "course_id": str(self.course_id),
         }
 
     @classmethod
@@ -53,6 +56,7 @@ class BaseEvent:
             "student_id": data["student_id"],
             "event_type": event_type,
             "timestamp": float(data.get("timestamp", 0.0) or 0.0),
+            "course_id": CourseId(data.get("course_id", DEFAULT_COURSE_ID)),
         }
 
         if event_type == EventType.CONCEPT_MENTIONED:

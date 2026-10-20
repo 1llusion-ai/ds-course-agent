@@ -19,6 +19,7 @@ from ds_course_agent.assessment.preparation import (
     PreparationRepository,
     PreparationStatus,
 )
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 from ds_course_agent.teaching.assessment_assignment import AssessmentAssignmentPlanner
 from ds_course_agent.teaching.learner_state import LearnerStateProvider, SQLiteProfileLearnerStateProvider
 from ds_course_agent.teaching.learning_event_repository import LearningEventRepository, SQLiteLearningEventRepository
@@ -53,35 +54,39 @@ class SessionLearningLoop:
         self._futures: dict[str, Future[None]] = {}
         self._lock = RLock()
 
-    def schedule(self, student_id: str, session_id: str) -> None:
+    def schedule(self, student_id: str, session_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID) -> None:
         """Use only this student's session events to schedule canonical course KCs."""
 
+        normalized_course_id = CourseId(course_id)
+        scope = {} if normalized_course_id == DEFAULT_COURSE_ID else {"course_id": normalized_course_id}
         events = tuple(
             record.event
-            for record in self._event_repository.list_all_for_student(student_id)
+            for record in self._event_repository.list_all_for_student(student_id, **scope)
             if record.event.event_type is EventType.CONCEPT_MENTIONED
         )
         if not events:
             return
-        learner = self._learner_state_provider.get_state(student_id)
+        learner = self._learner_state_provider.get_state(student_id, **scope)
         planner = AssessmentAssignmentPlanner()
         scheduled_kc_ids = {
             job.request.target_kc_id
-            for job in self._preparations.list_for_student(student_id)
+            for job in self._preparations.list_for_student(student_id, **scope)
             if job.session_id == session_id
         }
         for plan in planner.plan_session(session_id, events, learner, scheduled_kc_ids=scheduled_kc_ids):
             job = self._preparations.enqueue(
-                student_id, session_id, plan.display_name, plan.request, plan.source_event_ids
+                student_id, session_id, plan.display_name, plan.request, plan.source_event_ids, **scope
             )
             if job.status is PreparationStatus.QUEUED:
                 self._submit(job)
 
-    def list_preparations(self, student_id: str) -> tuple[AssessmentPreparation, ...]:
+    def list_preparations(
+        self, student_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID
+    ) -> tuple[AssessmentPreparation, ...]:
         """List owner-scoped preparations and resume persisted queued requests."""
 
         jobs = []
-        for job in self._preparations.list_for_student(student_id):
+        for job in self._preparations.list_for_student(student_id, course_id=course_id):
             with self._lock:
                 active = self._futures.get(job.id)
                 if (
@@ -102,10 +107,12 @@ class SessionLearningLoop:
             jobs.append(job)
         return tuple(jobs)
 
-    def retry(self, preparation_id: str, student_id: str) -> AssessmentPreparation:
+    def retry(
+        self, preparation_id: str, student_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID
+    ) -> AssessmentPreparation:
         """Retry a failed request while retaining the same assessment identity."""
 
-        job = self._preparations.get(preparation_id, student_id)
+        job = self._preparations.get(preparation_id, student_id, course_id=course_id)
         with self._lock:
             active = self._futures.get(job.id)
             if active is not None and not active.done():
@@ -143,6 +150,7 @@ class SessionLearningLoop:
                     session_id=running.session_id,
                     assignment_id=running.id,
                     generation_progress=running.generation_progress,
+                    course_id=running.course_id,
                 )
             )
             self._preparations.transition(running, PreparationStatus.READY, assessment_id=summary.id)

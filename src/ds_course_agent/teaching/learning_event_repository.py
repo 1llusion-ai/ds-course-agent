@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Protocol
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 from ds_course_agent.shared.database import connect_sqlite
 from ds_course_agent.teaching.database import migrate_learner_memory_database
 from ds_course_agent.teaching.learning_events import BaseEvent, EventType
@@ -36,6 +37,7 @@ class LearningEventRepository(Protocol):
         self,
         student_id: str,
         *,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
         event_types: Sequence[EventType] = (),
         concept_ids: Sequence[str] = (),
         limit: int = 100,
@@ -83,6 +85,7 @@ class SQLiteLearningEventRepository:
         self,
         student_id: str,
         *,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
         event_types: Sequence[EventType] = (),
         concept_ids: Sequence[str] = (),
         limit: int = 100,
@@ -90,12 +93,13 @@ class SQLiteLearningEventRepository:
         """Return one student's newest events with optional typed filters."""
 
         self._validate_student_id(student_id)
+        normalized_course_id = CourseId(course_id)
         if not 1 <= limit <= 500:
             raise ValueError("limit must be between 1 and 500")
         migrate_learner_memory_database(self._path)
 
-        clauses = ["student_id = ?"]
-        params: list[object] = [student_id]
+        clauses = ["student_id = ?", "course_id = ?"]
+        params: list[object] = [student_id, str(normalized_course_id)]
         if event_types:
             placeholders = ", ".join("?" for _ in event_types)
             clauses.append(f"event_type IN ({placeholders})")
@@ -106,7 +110,7 @@ class SQLiteLearningEventRepository:
             params.extend(concept_ids)
         params.append(limit)
         query = (
-            "SELECT id, student_id, session_id, turn_id, event_type, "
+            "SELECT id, student_id, session_id, turn_id, event_type, course_id, "
             "observed_at, payload_json, schema_version FROM learning_events WHERE "
             + " AND ".join(clauses)
             + " ORDER BY observed_at DESC, rowid DESC LIMIT ?"
@@ -118,9 +122,17 @@ class SQLiteLearningEventRepository:
             connection.close()
         return tuple(self._record_from_row(row) for row in rows)
 
-    def list_for_turn(self, student_id: str, session_id: str, turn_id: str) -> tuple[LearningEventRecord, ...]:
+    def list_for_turn(
+        self,
+        student_id: str,
+        session_id: str,
+        turn_id: str,
+        *,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
+    ) -> tuple[LearningEventRecord, ...]:
         """Return all facts already written for one completed turn."""
         self._validate_student_id(student_id)
+        normalized_course_id = CourseId(course_id)
         if not session_id.strip() or not turn_id.strip():
             raise ValueError("session_id and turn_id are required")
         migrate_learner_memory_database(self._path)
@@ -128,31 +140,34 @@ class SQLiteLearningEventRepository:
         try:
             rows = connection.execute(
                 """
-                SELECT id, student_id, session_id, turn_id, event_type,
+                SELECT id, student_id, session_id, turn_id, event_type, course_id,
                        observed_at, payload_json, schema_version
                 FROM learning_events
-                WHERE student_id = ? AND session_id = ? AND turn_id = ?
+                WHERE student_id = ? AND course_id = ? AND session_id = ? AND turn_id = ?
                 ORDER BY observed_at ASC, rowid ASC
                 """,
-                (student_id, session_id, turn_id),
+                (student_id, str(normalized_course_id), session_id, turn_id),
             ).fetchall()
         finally:
             connection.close()
         return tuple(self._record_from_row(row) for row in rows)
 
-    def list_all_for_student(self, student_id: str) -> tuple[LearningEventRecord, ...]:
+    def list_all_for_student(
+        self, student_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID
+    ) -> tuple[LearningEventRecord, ...]:
         """Return all facts for replay; never returns another student's facts."""
 
         self._validate_student_id(student_id)
+        normalized_course_id = CourseId(course_id)
         migrate_learner_memory_database(self._path)
         connection = connect_sqlite(self._path)
         try:
             rows = connection.execute(
-                """SELECT id, student_id, session_id, turn_id, event_type,
+                """SELECT id, student_id, session_id, turn_id, event_type, course_id,
                           observed_at, payload_json, schema_version
-                   FROM learning_events WHERE student_id = ?
+                   FROM learning_events WHERE student_id = ? AND course_id = ?
                    ORDER BY observed_at ASC, rowid ASC""",
-                (student_id,),
+                (student_id, str(normalized_course_id)),
             ).fetchall()
         finally:
             connection.close()
@@ -165,8 +180,8 @@ class SQLiteLearningEventRepository:
             """
             INSERT OR IGNORE INTO learning_events (
                 id, student_id, session_id, turn_id, event_type,
-                concept_id, observed_at, payload_json, schema_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                concept_id, course_id, observed_at, payload_json, schema_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             values,
         )
@@ -175,7 +190,7 @@ class SQLiteLearningEventRepository:
         existing = connection.execute(
             """
             SELECT id, student_id, session_id, turn_id, event_type,
-                   concept_id, observed_at, payload_json, schema_version
+                   concept_id, course_id, observed_at, payload_json, schema_version
             FROM learning_events WHERE id = ?
             """,
             (record.event.event_id,),
@@ -195,6 +210,7 @@ class SQLiteLearningEventRepository:
             record.turn_id,
             event.event_type.value,
             payload.get("concept_id"),
+            str(CourseId(event.course_id)),
             datetime.fromtimestamp(event.timestamp, timezone.utc).isoformat(),
             json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
             record.schema_version,
@@ -210,6 +226,7 @@ class SQLiteLearningEventRepository:
                 "session_id": row["session_id"],
                 "event_type": row["event_type"],
                 "timestamp": observed_at.timestamp(),
+                "course_id": row["course_id"] if "course_id" in row.keys() else DEFAULT_COURSE_ID,
                 "payload": json.loads(row["payload_json"]),
             }
         )

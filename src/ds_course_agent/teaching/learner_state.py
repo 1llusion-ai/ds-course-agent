@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 from ds_course_agent.teaching.memory_core import MemoryCore, get_memory_core
 from ds_course_agent.teaching.practice import ConceptPractice
 from ds_course_agent.teaching.profile_models import StudentProfile, WeakSpotCandidate
@@ -98,6 +99,7 @@ class LearnerStateSnapshot:
     provider: str = "rule_based"
     model_version: str = "rules-v1"
     practice: Mapping[str, ConceptPractice] = field(default_factory=dict)
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
 
     def summary(self) -> LearnerStateSummary:
         """Project the full state into the fields allowed to affect routing."""
@@ -193,11 +195,16 @@ class SQLiteProfileLearnerStateProvider:
         self,
         student_id: str,
         concept_ids: Sequence[str] = (),
+        *,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
     ) -> LearnerStateSnapshot:
         del concept_ids
-        if student_id not in self._snapshots.list_student_ids():
-            return self._fallback.get_state(student_id)
-        snapshot = self._snapshots.project(student_id)
+        normalized_course_id = CourseId(course_id)
+        if student_id not in self._snapshots.list_student_ids(course_id=normalized_course_id):
+            if normalized_course_id == DEFAULT_COURSE_ID:
+                return self._fallback.get_state(student_id)
+            return LearnerStateSnapshot(student_id=student_id, course_id=normalized_course_id)
+        snapshot = self._snapshots.project(student_id, course_id=normalized_course_id)
         state = learner_state_from_profile(snapshot.profile)
         return LearnerStateSnapshot(
             student_id=state.student_id,
@@ -210,6 +217,7 @@ class SQLiteProfileLearnerStateProvider:
             provider="sqlite_profile_snapshot",
             model_version=f"snapshot-v{snapshot.version}",
             practice=state.practice,
+            course_id=normalized_course_id,
         )
 
 

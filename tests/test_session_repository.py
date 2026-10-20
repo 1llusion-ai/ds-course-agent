@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import ast
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from ds_course_agent.api.session_repository import (
+    DEFAULT_COURSE_ID,
+    SESSION_MIGRATIONS,
     MessageRecord,
     SessionRecord,
     SQLiteSessionRepository,
 )
+from ds_course_agent.shared.database import SQLiteMigrationRunner
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
@@ -114,6 +118,78 @@ def test_deleting_first_message_resequences_remaining_positions(tmp_path) -> Non
     remaining = repository.list_messages("student-1", "session-1")
     assert [record.position for record in remaining] == [0, 1]
     assert [record.content for record in remaining] == ["二", "三"]
+
+
+def test_old_session_schema_migrates_to_default_course_and_is_idempotent(tmp_path) -> None:
+    path = tmp_path / "legacy.db"
+    SQLiteMigrationRunner(path).apply(SESSION_MIGRATIONS[:1])
+    timestamp = "2026-01-01T00:00:00+00:00"
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("legacy-session", "student-1", "旧会话", "manual", timestamp, timestamp, None, 0, 0, None, None),
+        )
+        connection.execute(
+            "INSERT INTO messages (id, session_id, student_id, position, role, content, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("legacy-message", "legacy-session", "student-1", 0, "user", "旧消息", timestamp),
+        )
+
+    repository = SQLiteSessionRepository(path)
+    assert repository.get_session("student-1", "legacy-session").course_id == DEFAULT_COURSE_ID
+    assert repository.list_messages("student-1", "legacy-session")[0].course_id == DEFAULT_COURSE_ID
+    assert repository.migrate() == ()
+
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 1
+        assert connection.execute("SELECT course_id FROM sessions").fetchone()[0] == DEFAULT_COURSE_ID
+
+
+def test_same_student_session_isolated_by_course_scope(tmp_path) -> None:
+    path = tmp_path / "scoped.db"
+    repository = SQLiteSessionRepository(path)
+    now = datetime.now(timezone.utc)
+    default_session = _session()
+    other_session = SessionRecord(
+        session_id=default_session.session_id,
+        student_id=default_session.student_id,
+        title="另一门课程",
+        title_source="manual",
+        created_at=now,
+        updated_at=now,
+        course_id="digital-literacy",
+    )
+    repository.create_session(default_session)
+    repository.create_session(other_session)
+    repository.append_message(_message("default-message", "user", "默认课程", position=0))
+    repository.append_message(
+        MessageRecord(
+            message_id="other-message",
+            session_id=other_session.session_id,
+            student_id=other_session.student_id,
+            role="user",
+            content="另一课程",
+            created_at=now,
+            position=0,
+            course_id=other_session.course_id,
+        )
+    )
+
+    assert repository.list_sessions("student-1", DEFAULT_COURSE_ID)[0].title == "测试会话"
+    assert repository.list_sessions("student-1", "digital-literacy")[0].title == "另一门课程"
+    assert repository.get_session("student-1", "session-1", "digital-literacy").title == "另一门课程"
+    assert repository.get_session("student-1", "session-1", "missing-course") is None
+    assert [item.content for item in repository.list_messages("student-1", "session-1")] == ["默认课程"]
+
+
+def test_course_session_identity_has_exactly_one_student_owner(tmp_path) -> None:
+    repository = SQLiteSessionRepository(tmp_path / "owner.db")
+    repository.create_session(_session("student-1", "same-session"))
+    with pytest.raises(sqlite3.IntegrityError):
+        repository.create_session(_session("student-2", "same-session"))
+    assert repository.get_session("student-2", "same-session") is None
+    assert repository.find_session("same-session").student_id == "student-1"
 
 
 def test_api_session_persistence_stays_behind_repository_boundary() -> None:

@@ -44,6 +44,7 @@ class ActiveStreamJob:
     started_at: datetime
     message_timestamp: datetime
     cancel_event: threading.Event
+    course_id: str = "data-science-intro"
     initial_content: str = ""
     initial_progress_events: list[dict[str, Any]] = field(default_factory=list)
     _events: list[dict[str, Any]] = field(default_factory=list, init=False, repr=False)
@@ -128,7 +129,7 @@ class StreamJobRegistry:
     """Own active/recent stream jobs and enforce session ownership."""
 
     def __init__(self) -> None:
-        self._jobs: dict[str, ActiveStreamJob] = {}
+        self._jobs: dict[tuple[str, str, str], ActiveStreamJob] = {}
         self._lock = threading.RLock()
 
     def register(
@@ -136,6 +137,7 @@ class StreamJobRegistry:
         *,
         session_id: str,
         student_id: str,
+        course_id: str = "data-science-intro",
         cancel_event: threading.Event,
         message_timestamp: datetime,
         initial_content: str = "",
@@ -148,19 +150,21 @@ class StreamJobRegistry:
             job = ActiveStreamJob(
                 session_id=session_id,
                 student_id=student_id,
+                course_id=course_id,
                 started_at=datetime.now(),
                 message_timestamp=message_timestamp,
                 cancel_event=cancel_event,
                 initial_content=initial_content,
                 initial_progress_events=list(initial_progress_events or []),
             )
-            self._jobs[session_id] = job
+            self._jobs[(student_id, course_id, session_id)] = job
             return job
 
     def get_for_owner(
         self,
         session_id: str,
         student_id: str,
+        course_id: str = "data-science-intro",
         *,
         active_only: bool = False,
     ) -> ActiveStreamJob | None:
@@ -168,21 +172,33 @@ class StreamJobRegistry:
 
         with self._lock:
             self._prune_expired_locked()
-            job = self._jobs.get(session_id)
+            job = self._jobs.get((student_id, course_id, session_id))
             if not job or job.student_id != student_id:
                 return None
             if active_only and job.snapshot().terminal:
                 return None
             return job
 
-    def discard(self, session_id: str, job: ActiveStreamJob | None = None) -> None:
+    def discard(
+        self,
+        session_id: str,
+        job: ActiveStreamJob | None = None,
+        course_id: str = "data-science-intro",
+        student_id: str | None = None,
+    ) -> None:
         """Remove a job only when it is still the registered instance."""
 
         with self._lock:
-            current = self._jobs.get(session_id)
+            keys = [
+                key
+                for key, value in self._jobs.items()
+                if key[2] == session_id and (student_id is None or key[0] == student_id) and key[1] == course_id
+            ]
+            current = self._jobs.get(keys[0]) if keys else None
             if current is None or (job is not None and current is not job):
                 return
-            self._jobs.pop(session_id, None)
+            if keys:
+                self._jobs.pop(keys[0], None)
 
     def clear(self) -> None:
         """Clear registry state for application teardown and isolated tests."""
@@ -192,9 +208,9 @@ class StreamJobRegistry:
 
     def _prune_expired_locked(self) -> None:
         now = datetime.now()
-        expired = [session_id for session_id, job in self._jobs.items() if job.is_expired(now)]
-        for session_id in expired:
-            self._jobs.pop(session_id, None)
+        expired = [key for key, job in self._jobs.items() if job.is_expired(now)]
+        for key in expired:
+            self._jobs.pop(key, None)
 
 
 stream_job_registry = StreamJobRegistry()

@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test'
+import { mockDefaultCourse } from './helpers/courses'
+
+test.beforeEach(async ({ page }) => { await mockDefaultCourse(page) })
 
 test('assessment polling respects Retry-After after a quota response', async ({ page }) => {
   await page.addInitScript(() => {
@@ -11,11 +14,11 @@ test('assessment polling respects Retry-After after a quota response', async ({ 
   await page.route('**/api/auth/me', route => route.fulfill({
     json: { student_id: 'student', display_name: '测试学生' }
   }))
-  await page.route('**/api/sessions', route => route.fulfill({ json: { sessions: [] } }))
-  await page.route('**/api/profile/summary', route => route.fulfill({ json: {} }))
+  await page.route('**/api/sessions?**', route => route.fulfill({ json: { sessions: [] } }))
+  await page.route('**/api/profile/summary?**', route => route.fulfill({ json: {} }))
 
   let preparationRequests = 0
-  await page.route('**/api/assessments/preparations', route => {
+  await page.route('**/api/assessments/preparations?**', route => {
     preparationRequests += 1
     if (preparationRequests === 1) {
       return route.fulfill({ json: [{

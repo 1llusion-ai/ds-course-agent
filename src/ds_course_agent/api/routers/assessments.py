@@ -25,6 +25,7 @@ from ds_course_agent.assessment.records import (
     StudentAssessment,
     SubmitAssessmentRequest,
 )
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 from ds_course_agent.teaching.assessment_evidence import AssessmentEvidenceRecorder
 
 router = APIRouter(dependencies=[Depends(enforce_api_request_quota)])
@@ -45,24 +46,32 @@ class PreparationSummary(BaseModel):
     accepted_slot_count: int = 0
     pending_slot_count: int = 0
     retryable: bool = False
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
 
 
 @router.get("/preparations", response_model=tuple[PreparationSummary, ...])
-async def list_preparations(student_id: str = Depends(get_current_student_id)) -> tuple[PreparationSummary, ...]:
+async def list_preparations(
+    student_id: str = Depends(get_current_student_id),
+    course_id: CourseId = Query(default=DEFAULT_COURSE_ID),
+) -> tuple[PreparationSummary, ...]:
     """Show automatic practice preparation after completed course conversations."""
 
-    jobs = await run_in_threadpool(get_session_learning_loop().list_preparations, student_id)
+    jobs = await run_in_threadpool(get_session_learning_loop().list_preparations, student_id, course_id=course_id)
     return tuple(PreparationSummary.model_validate(job, from_attributes=True) for job in jobs)
 
 
 @router.post("/preparations/{preparation_id}/retry", response_model=PreparationSummary)
 async def retry_preparation(
-    preparation_id: str, student_id: str = Depends(get_current_student_id)
+    preparation_id: str,
+    student_id: str = Depends(get_current_student_id),
+    course_id: CourseId = Query(default=DEFAULT_COURSE_ID),
 ) -> PreparationSummary:
     """Retry one failed preparation owned by the authenticated student."""
 
     try:
-        job = await run_in_threadpool(get_session_learning_loop().retry, preparation_id, student_id)
+        job = await run_in_threadpool(
+            get_session_learning_loop().retry, preparation_id, student_id, course_id=course_id
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Preparation not found.") from exc
     return PreparationSummary.model_validate(job, from_attributes=True)
@@ -110,10 +119,11 @@ async def list_assessments(
     ),
     student_id: str = Depends(get_current_student_id),
     service: AssessmentApplicationService = Depends(get_student_assessment_service),
+    course_id: CourseId = Query(default=DEFAULT_COURSE_ID),
 ) -> tuple[AssessmentSummary, ...]:
     """List the student's assigned assessments without generation controls."""
 
-    return await run_in_threadpool(service.list_assessments, student_id, _parse_statuses(statuses))
+    return await run_in_threadpool(service.list_assessments, student_id, _parse_statuses(statuses), course_id=course_id)
 
 
 @router.post("/{assessment_id}/open", response_model=StudentAssessment)
@@ -121,11 +131,12 @@ async def open_assessment(
     assessment_id: str,
     student_id: str = Depends(get_current_student_id),
     service: AssessmentApplicationService = Depends(get_student_assessment_service),
+    course_id: CourseId = Query(default=DEFAULT_COURSE_ID),
 ) -> StudentAssessment:
     """Open an assigned assessment and set its first-open timestamp."""
 
     try:
-        return await run_in_threadpool(service.open, assessment_id, student_id)
+        return await run_in_threadpool(service.open, assessment_id, student_id, course_id=course_id)
     except Exception as exc:
         raise _map_lifecycle_error(exc) from exc
 
@@ -135,11 +146,12 @@ async def get_assessment(
     assessment_id: str,
     student_id: str = Depends(get_current_student_id),
     service: AssessmentApplicationService = Depends(get_student_assessment_service),
+    course_id: CourseId = Query(default=DEFAULT_COURSE_ID),
 ) -> StudentAssessment:
     """Return active question text and options without answer material."""
 
     try:
-        return await run_in_threadpool(service.get, assessment_id, student_id)
+        return await run_in_threadpool(service.get, assessment_id, student_id, course_id=course_id)
     except Exception as exc:
         raise _map_lifecycle_error(exc) from exc
 
@@ -150,11 +162,12 @@ async def submit_assessment(
     request: SubmitAssessmentRequest,
     student_id: str = Depends(get_current_student_id),
     service: AssessmentApplicationService = Depends(get_student_assessment_service),
+    course_id: CourseId = Query(default=DEFAULT_COURSE_ID),
 ) -> AssessmentResult:
     """Submit all answers once and return the server-scored result."""
 
     try:
-        return await run_in_threadpool(service.submit, assessment_id, student_id, request.answers)
+        return await run_in_threadpool(service.submit, assessment_id, student_id, request.answers, course_id=course_id)
     except Exception as exc:
         raise _map_lifecycle_error(exc) from exc
 
@@ -164,10 +177,11 @@ async def get_assessment_result(
     assessment_id: str,
     student_id: str = Depends(get_current_student_id),
     service: AssessmentApplicationService = Depends(get_student_assessment_service),
+    course_id: CourseId = Query(default=DEFAULT_COURSE_ID),
 ) -> AssessmentResult:
     """Return answers, explanations, and textbook sources after submission."""
 
     try:
-        return await run_in_threadpool(service.result, assessment_id, student_id)
+        return await run_in_threadpool(service.result, assessment_id, student_id, course_id=course_id)
     except Exception as exc:
         raise _map_lifecycle_error(exc) from exc

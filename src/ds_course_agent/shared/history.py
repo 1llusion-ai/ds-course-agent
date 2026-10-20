@@ -33,7 +33,7 @@ SUMMARY_MARKER = "short_memory_summary"
 SUMMARY_TITLE = "短期记忆摘要"
 _SESSION_LOCKS: dict[str, threading.RLock] = {}
 _SESSION_LOCKS_GUARD = threading.Lock()
-_TRANSIENT_HISTORIES: dict[str, TransientChatMessageHistory] = {}
+_TRANSIENT_HISTORIES: dict[tuple[str | None, str | None, str], TransientChatMessageHistory] = {}
 _TRANSIENT_HISTORIES_GUARD = threading.Lock()
 
 
@@ -51,14 +51,18 @@ def _get_session_lock(file_path: str) -> threading.RLock:
 def get_history(
     session_id,
     memory_policy: MemoryPolicy | None = None,
+    *,
+    student_id: str | None = None,
+    course_id: str | None = None,
 ):
     """Return process-local history when no persistent provider is injected."""
 
+    key = (student_id, course_id, session_id)
     with _TRANSIENT_HISTORIES_GUARD:
-        history = _TRANSIENT_HISTORIES.get(session_id)
+        history = _TRANSIENT_HISTORIES.get(key)
         if history is None:
             history = TransientChatMessageHistory(session_id, memory_policy)
-            _TRANSIENT_HISTORIES[session_id] = history
+            _TRANSIENT_HISTORIES[key] = history
         return history
 
 

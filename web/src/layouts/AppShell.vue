@@ -33,7 +33,7 @@
 
     <main class="app-shell__workspace" aria-label="课程学习工作区">
       <router-view v-slot="{ Component }">
-        <KeepAlive include="KnowledgeMapView">
+        <KeepAlive :key="courseStore.selectedCourseId" include="KnowledgeMapView">
           <component :is="Component" />
         </KeepAlive>
       </router-view>
@@ -50,6 +50,7 @@ import ChatSidebar from '../components/ChatSidebar.vue'
 import PanelResizeHandle from '../components/PanelResizeHandle.vue'
 import { useResizablePanel } from '../composables/useResizablePanel'
 import { useChatStore } from '../stores/chat'
+import { useCourseStore } from '../stores/course'
 import { useSessionStore } from '../stores/session'
 import { scheduleKnowledgeMapPrefetch } from '../utils/prefetch'
 
@@ -63,6 +64,7 @@ const THEME_STORAGE_KEY = 'ds-course-agent.theme'
 
 const router = useRouter()
 const chatStore = useChatStore()
+const courseStore = useCourseStore()
 const sessionStore = useSessionStore()
 const sidebarCollapsed = ref(readSidebarCollapsedPreference())
 const narrowViewport = ref(false)
@@ -84,6 +86,7 @@ const {
 const theme = ref(readThemePreference())
 const sessionBootstrapPending = ref(!sessionStore.loaded)
 let cancelKnowledgeMapPrefetch = () => {}
+let sessionBootstrapVersion = 0
 const isDarkTheme = computed(() => theme.value === 'dark')
 const updateViewport = () => { narrowViewport.value = window.innerWidth <= 760 }
 
@@ -94,6 +97,28 @@ provide(APP_SHELL_CONTEXT_KEY, {
 })
 
 watch(theme, applyThemePreference, { immediate: true })
+
+watch(() => courseStore.selectedCourseId, async () => {
+  sessionBootstrapPending.value = true
+  await router.replace('/chat')
+  await bootstrapSessions()
+})
+
+async function bootstrapSessions() {
+  const bootstrapVersion = ++sessionBootstrapVersion
+  sessionBootstrapPending.value = true
+  try {
+    await sessionStore.fetchSessions()
+  } catch (error) {
+    if (bootstrapVersion !== sessionBootstrapVersion) return
+    console.error('加载会话列表失败:', error)
+    ElMessage.error('加载会话列表失败，请稍后重试。')
+  } finally {
+    if (bootstrapVersion === sessionBootstrapVersion) {
+      sessionBootstrapPending.value = false
+    }
+  }
+}
 
 function readSidebarCollapsedPreference() {
   if (typeof window === 'undefined') return false
@@ -145,17 +170,15 @@ onMounted(async () => {
   cancelKnowledgeMapPrefetch = scheduleKnowledgeMapPrefetch()
   updateViewport()
   window.addEventListener('resize', updateViewport)
-  if (sessionStore.loaded) {
-    sessionBootstrapPending.value = false
-    return
-  }
-
   try {
-    await sessionStore.fetchSessions()
+    await courseStore.fetchCourses()
   } catch (error) {
-    console.error('加载会话列表失败:', error)
-    ElMessage.error('加载会话列表失败，请稍后重试。')
-  } finally {
+    console.error('加载课程列表失败:', error)
+    ElMessage.error('加载课程列表失败，请稍后重试。')
+  }
+  if (!sessionStore.loaded) {
+    await bootstrapSessions()
+  } else {
     sessionBootstrapPending.value = false
   }
 })

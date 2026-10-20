@@ -2,7 +2,9 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { sessionsApi } from '../api/sessions'
+import { DEFAULT_COURSE_ID } from '../api/courses'
 import { useAuthStore } from './auth'
+import { useCourseStore } from './course'
 import { accountStorageKey, readLocalStorage, writeLocalStorage } from '../utils/storage'
 
 const DEFAULT_SESSION_TITLE = '新会话'
@@ -14,13 +16,18 @@ function sleep(ms) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
-function readPinnedSessionIds(user) {
+function pinnedStorageKey(user, courseId) {
+  const key = accountStorageKey(PINNED_SESSIONS_STORAGE_KEY, user)
+  return courseId === DEFAULT_COURSE_ID ? key : `${key}:${courseId}`
+}
+
+function readPinnedSessionIds(user, courseId) {
   if (typeof window === 'undefined') {
     return []
   }
 
   try {
-    const key = accountStorageKey(PINNED_SESSIONS_STORAGE_KEY, user)
+    const key = pinnedStorageKey(user, courseId)
     const value = JSON.parse(readLocalStorage(key) || '[]')
     return Array.isArray(value) ? value.filter(Boolean) : []
   } catch (error) {
@@ -28,22 +35,23 @@ function readPinnedSessionIds(user) {
   }
 }
 
-function persistPinnedSessionIds(ids, user) {
+function persistPinnedSessionIds(ids, user, courseId) {
   if (typeof window === 'undefined') {
     return
   }
-  const key = accountStorageKey(PINNED_SESSIONS_STORAGE_KEY, user)
+  const key = pinnedStorageKey(user, courseId)
   writeLocalStorage(key, JSON.stringify(ids))
 }
 
 export const useSessionStore = defineStore('session', () => {
   const authStore = useAuthStore()
+  const courseStore = useCourseStore()
   const sessions = ref([])
   const currentSessionId = ref(null)
   const loading = ref(false)
   const loaded = ref(false)
   const unreadCounts = ref({})
-  const pinnedSessionIds = ref(readPinnedSessionIds(authStore.user))
+  const pinnedSessionIds = ref(readPinnedSessionIds(authStore.user, courseStore.selectedCourseId))
   let fetchPromise = null
   let stateVersion = 0
 
@@ -62,13 +70,13 @@ export const useSessionStore = defineStore('session', () => {
     })
   )
 
-  async function runFetchSessions() {
+  async function runFetchSessions(courseId = courseStore.selectedCourseId) {
     const requestStateVersion = stateVersion
     let lastError = null
 
     for (let attempt = 0; attempt <= SESSION_FETCH_RETRIES; attempt += 1) {
       try {
-        const response = await sessionsApi.list()
+        const response = await sessionsApi.list(courseId)
         const nextSessions = Array.isArray(response.sessions) ? response.sessions : []
         if (requestStateVersion !== stateVersion) {
           return nextSessions
@@ -89,13 +97,13 @@ export const useSessionStore = defineStore('session', () => {
     throw lastError
   }
 
-  async function fetchSessions() {
+  async function fetchSessions(courseId = courseStore.selectedCourseId) {
     if (fetchPromise) {
       return fetchPromise
     }
 
     loading.value = true
-    const request = runFetchSessions()
+    const request = runFetchSessions(courseId)
     fetchPromise = request
     return request.finally(() => {
       if (fetchPromise === request) {
@@ -106,14 +114,18 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function createSession(title = DEFAULT_SESSION_TITLE) {
-    const response = await sessionsApi.create({ title })
+    const requestStateVersion = stateVersion
+    const response = await sessionsApi.create({ title }, courseStore.selectedCourseId)
+    if (requestStateVersion !== stateVersion) return null
     sessions.value.unshift(response)
     currentSessionId.value = response.id
     return response
   }
 
   async function updateSession(sessionId, data) {
-    const response = await sessionsApi.update(sessionId, data)
+    const requestStateVersion = stateVersion
+    const response = await sessionsApi.update(sessionId, data, courseStore.selectedCourseId)
+    if (requestStateVersion !== stateVersion) return response
     sessions.value = sessions.value.map(session =>
       session.id === sessionId ? { ...session, ...response } : session
     )
@@ -131,7 +143,7 @@ export const useSessionStore = defineStore('session', () => {
     const nextPinned = pinnedSessionIds.value.filter(id => validIds.has(id))
     if (nextPinned.length !== pinnedSessionIds.value.length) {
       pinnedSessionIds.value = nextPinned
-      persistPinnedSessionIds(nextPinned, authStore.user)
+      persistPinnedSessionIds(nextPinned, authStore.user, courseStore.selectedCourseId)
     }
   }
 
@@ -146,7 +158,7 @@ export const useSessionStore = defineStore('session', () => {
       ? pinnedSessionIds.value.filter(id => id !== sessionId)
       : [sessionId, ...pinnedSessionIds.value]
     pinnedSessionIds.value = nextPinned
-    persistPinnedSessionIds(nextPinned, authStore.user)
+    persistPinnedSessionIds(nextPinned, authStore.user, courseStore.selectedCourseId)
   }
 
   function shouldAutoTitle(sessionId) {
@@ -158,7 +170,9 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function deleteSession(sessionId) {
-    await sessionsApi.delete(sessionId)
+    const requestStateVersion = stateVersion
+    await sessionsApi.delete(sessionId, courseStore.selectedCourseId)
+    if (requestStateVersion !== stateVersion) return
     sessions.value = sessions.value.filter(session => session.id !== sessionId)
     if (isPinned(sessionId)) {
       togglePin(sessionId)
@@ -189,9 +203,13 @@ export const useSessionStore = defineStore('session', () => {
     sessions.value = []
     currentSessionId.value = null
     unreadCounts.value = {}
-    pinnedSessionIds.value = readPinnedSessionIds(authStore.user)
+    pinnedSessionIds.value = readPinnedSessionIds(authStore.user, courseStore.selectedCourseId)
     loading.value = false
     loaded.value = false
+  }
+
+  function resetForCourse() {
+    resetForUser()
   }
 
   return {
@@ -214,6 +232,7 @@ export const useSessionStore = defineStore('session', () => {
     setCurrentSession,
     markRead,
     incrementUnread,
-    resetForUser
+    resetForUser,
+    resetForCourse
   }
 })

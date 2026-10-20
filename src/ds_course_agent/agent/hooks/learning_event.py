@@ -11,6 +11,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from ds_course_agent.agent.hooks.clarification import ClarificationDetectorHook
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 
 if TYPE_CHECKING:
     from ds_course_agent.teaching.learning_event_repository import LearningEventRepository
@@ -30,8 +31,11 @@ class LearningEventHook:
         concept_id: str | None = None,
         *,
         event_repository: LearningEventRepository,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
     ) -> BaseEvent | None:
-        events = tuple(record.event for record in event_repository.list_all_for_student(student_id))
+        events = tuple(
+            record.event for record in event_repository.list_all_for_student(student_id, course_id=course_id)
+        )
         fallback_event = None
         from ds_course_agent.teaching.learning_events import EventType
 
@@ -58,6 +62,7 @@ class LearningEventHook:
         session_id: str,
         *,
         event_repository: LearningEventRepository,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
     ) -> dict[str, Any] | None:
         if matched_concepts:
             primary = matched_concepts[0]
@@ -79,6 +84,7 @@ class LearningEventHook:
             student_id,
             session_id,
             event_repository=event_repository,
+            course_id=course_id,
         )
         if not recent_event:
             return None
@@ -103,6 +109,7 @@ class LearningEventHook:
         event_repository: LearningEventRepository,
         record_event_fn: Callable[[Any], Any],
         classify_question_type_fn: Callable[[str], str],
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
     ) -> int:
         if special_case_response and not self.detector.is_mastery_signal(question):
             return 0
@@ -113,6 +120,7 @@ class LearningEventHook:
             student_id,
             session_id,
             event_repository=event_repository,
+            course_id=course_id,
         )
         if not learning_concept:
             return 0
@@ -121,6 +129,7 @@ class LearningEventHook:
 
         def record(event: Any) -> None:
             nonlocal recorded_count
+            event.course_id = CourseId(course_id)
             record_event_fn(event)
             recorded_count += 1
 

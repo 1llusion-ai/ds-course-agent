@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import html
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from ds_course_agent.courses import CourseCatalog
 from ds_course_agent.shared.config_utils import (
     config_bool,
     config_float,
@@ -22,6 +25,7 @@ from ds_course_agent.shared.config_utils import (
     config_str,
     config_value,
 )
+from ds_course_agent.shared.paths import PROJECT_ROOT
 
 if TYPE_CHECKING:
     from ds_course_agent.retrieval.service import RAGService
@@ -39,6 +43,8 @@ _retrieval_trace: ContextVar[RetrievalTrace | None] = ContextVar(
     default=None,
 )
 _rag_service: RAGService | None = None
+_course_rag_services: dict[str, RAGService] = {}
+_course_id: ContextVar[str | None] = ContextVar("course_id", default=None)
 
 
 def strip_html_tags(text: Any) -> str:
@@ -67,8 +73,39 @@ def normalize_tool_text(text: Any, *, strip_tags: bool = True) -> str:
     return value.strip()
 
 
-def get_rag_service() -> RAGService:
+@contextmanager
+def course_scope(course_id: str | None) -> Iterator[None]:
+    """Bind the current turn's course for tools invoked by the model runtime."""
+
+    token = _course_id.set(str(course_id) if course_id is not None else None)
+    try:
+        yield
+    finally:
+        _course_id.reset(token)
+
+
+def _course_manifest(course_id: str):
+    catalog = CourseCatalog.from_directory(PROJECT_ROOT / "data" / "courses")
+    manifest = catalog.require(course_id)
+    if not manifest.is_ready or manifest.index_binding is None:
+        raise RuntimeError(f"course {course_id} does not have a ready retrieval index")
+    return manifest
+
+
+def get_rag_service(course_id: str | None = None) -> RAGService:
+    """Return a retrieval service bound to the current course index."""
+
     global _rag_service
+    resolved_course_id = str(course_id or _course_id.get() or "data-science-intro")
+    if resolved_course_id != "data-science-intro":
+        service = _course_rag_services.get(resolved_course_id)
+        if service is None:
+            from ds_course_agent.retrieval.service import RAGService
+
+            manifest = _course_manifest(resolved_course_id)
+            service = RAGService(manifest.index_binding, course_name=manifest.display_name)
+            _course_rag_services[resolved_course_id] = service
+        return service
     if _rag_service is None:
         from ds_course_agent.retrieval.service import RAGService
 
@@ -167,6 +204,7 @@ __all__ = [
     "end_retrieval_trace",
     "get_retrieval_trace",
     "get_rag_service",
+    "course_scope",
     "merge_retrieval_sources",
     "normalize_tool_text",
     "strip_html_tags",

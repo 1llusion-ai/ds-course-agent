@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from ds_course_agent.api.course_context import normalize_course_id, require_course
 from ds_course_agent.api.request_quota import enforce_api_request_quota
 from ds_course_agent.api.session_repository import SessionRecord, SQLiteSessionRepository
 from ds_course_agent.api.title_generation import DEFAULT_SESSION_TITLE
@@ -28,11 +29,13 @@ def _session_to_response(record: SessionRecord) -> SessionResponse:
         created_at=record.created_at,
         updated_at=record.updated_at,
         message_count=record.message_count,
+        course_id=record.course_id,
     )
 
 
-def _owned_session(session_id: str, student_id: str) -> SessionRecord:
-    record = _repository().find_session(session_id)
+def _owned_session(session_id: str, student_id: str, course_id: str = "data-science-intro") -> SessionRecord:
+    course_id = normalize_course_id(course_id)
+    record = _repository().find_session(session_id, course_id)
     if record is None:
         raise HTTPException(status_code=404, detail="会话不存在")
     if record.student_id != student_id:
@@ -44,6 +47,7 @@ def _owned_session(session_id: str, student_id: str) -> SessionRecord:
 async def create_session(data: SessionCreate, student_id: str = Depends(get_current_student_id)):
     session_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
+    require_course(data.course_id)
     record = SessionRecord(
         session_id=session_id,
         title=data.title,
@@ -51,26 +55,38 @@ async def create_session(data: SessionCreate, student_id: str = Depends(get_curr
         student_id=student_id,
         created_at=now,
         updated_at=now,
+        course_id=data.course_id,
     )
     _repository().create_session(record)
     return _session_to_response(record)
 
 
 @router.get("", response_model=SessionList)
-async def list_sessions(student_id: str = Depends(get_current_student_id)):
-    sessions = [_session_to_response(record) for record in _repository().list_sessions(student_id)]
+async def list_sessions(course_id: str = "data-science-intro", student_id: str = Depends(get_current_student_id)):
+    course_id = normalize_course_id(course_id)
+    require_course(course_id)
+    sessions = [_session_to_response(record) for record in _repository().list_sessions(student_id, course_id)]
     return SessionList(sessions=sessions, total=len(sessions))
 
 
 @router.get("/{session_id}", response_model=SessionResponse)
-async def get_session(session_id: str, student_id: str = Depends(get_current_student_id)):
-    return _session_to_response(_owned_session(session_id, student_id))
+async def get_session(
+    session_id: str,
+    course_id: str = "data-science-intro",
+    student_id: str = Depends(get_current_student_id),
+):
+    return _session_to_response(_owned_session(session_id, student_id, course_id))
 
 
 @router.delete("/{session_id}")
-async def delete_session(session_id: str, student_id: str = Depends(get_current_student_id)):
-    _owned_session(session_id, student_id)
-    _repository().delete_session(student_id, session_id)
+async def delete_session(
+    session_id: str,
+    course_id: str = "data-science-intro",
+    student_id: str = Depends(get_current_student_id),
+):
+    course_id = normalize_course_id(course_id)
+    _owned_session(session_id, student_id, course_id)
+    _repository().delete_session(student_id, session_id, course_id)
     return {"message": "会话已删除", "session_id": session_id}
 
 
@@ -78,9 +94,10 @@ async def delete_session(session_id: str, student_id: str = Depends(get_current_
 async def update_session(
     session_id: str,
     data: SessionUpdate,
+    course_id: str = "data-science-intro",
     student_id: str = Depends(get_current_student_id),
 ):
-    record = _owned_session(session_id, student_id)
+    record = _owned_session(session_id, student_id, course_id)
     updated = replace(
         record,
         title=data.title if data.title is not None else record.title,

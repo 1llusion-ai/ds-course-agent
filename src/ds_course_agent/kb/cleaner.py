@@ -42,9 +42,9 @@ HEADER_PATTERNS = [
 ]
 
 FOOTER_PATTERNS = [
-    re.compile(r"[\s]*版权所有[\s\S]*$", re.IGNORECASE),
-    re.compile(r"[\s]*Copyright[\s\S]*$", re.IGNORECASE),
-    re.compile(r"[\s]*All rights reserved[\s\S]*$", re.IGNORECASE),
+    re.compile(r"[ \t]*版权所有(?:[ \t，,：:]*侵权必究)?[ \t。.]?", re.IGNORECASE),
+    re.compile(r"[ \t]*Copyright[ \t]+(?:©|\(c\)|\d{4})[^\n]*", re.IGNORECASE),
+    re.compile(r"[ \t]*All rights reserved[ \t]*[.。]?[ \t]*", re.IGNORECASE),
 ]
 
 TITLE_PATTERNS = [
@@ -177,8 +177,8 @@ def remove_headers_footers_safe(text: str) -> tuple[str, int]:
             continue
 
         should_remove = False
-        for pattern in HEADER_PATTERNS:
-            if pattern.match(line):
+        for pattern in (*HEADER_PATTERNS, *FOOTER_PATTERNS):
+            if pattern.fullmatch(line):
                 should_remove = True
                 removed_count += len(line)
                 break
@@ -186,14 +186,7 @@ def remove_headers_footers_safe(text: str) -> tuple[str, int]:
         if not should_remove:
             result_lines.append(line)
 
-    text = "\n".join(result_lines)
-
-    for pattern in FOOTER_PATTERNS:
-        matches = pattern.findall(text)
-        removed_count += sum(len(m) for m in matches)
-        text = pattern.sub("", text)
-
-    return text, removed_count
+    return "\n".join(result_lines), removed_count
 
 
 def normalize_punctuation(text: str) -> str:

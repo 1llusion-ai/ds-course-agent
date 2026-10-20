@@ -68,6 +68,7 @@ import { ArrowRight, ChatDotRound, DocumentChecked, Loading, Refresh, Warning } 
 
 import { assessmentsApi } from '../api/assessments'
 import { useAssessmentStore } from '../stores/assessment'
+import { useCourseStore } from '../stores/course'
 import { useSessionStore } from '../stores/session'
 import { assessmentStatusText, formatAssessmentTime } from '../utils/assessment'
 
@@ -79,6 +80,7 @@ const PENDING_PREPARATION_STATUSES = new Set(['pending', 'queued', 'generating']
 const router = useRouter()
 const route = useRoute()
 const store = useAssessmentStore()
+const courseStore = useCourseStore()
 const sessionStore = useSessionStore()
 const sessionFilter = ref(sessionStore.currentSessionId || '')
 const activeTab = ref(route.query.tab === 'completed' ? 'completed' : 'active')
@@ -147,7 +149,7 @@ async function load(silent = false) {
 async function retry(job) {
   retrying.value = job.id
   try {
-    await assessmentsApi.retryPreparation(job.id)
+    await assessmentsApi.retryPreparation(job.id, courseStore.selectedCourseId)
     await load(true)
   } catch (requestError) {
     error.value = requestError.response?.data?.detail || '暂时无法准备测验。'

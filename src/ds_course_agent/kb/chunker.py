@@ -8,9 +8,10 @@
 """
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from ds_course_agent.kb.toc_parser import TOCParser, get_toc_parser
+from ds_course_agent.kb.toc_parser import SectionInfo, TOCParser, get_toc_parser
 
 
 @dataclass
@@ -29,6 +30,7 @@ class ChunkMetadataV2:
     section_number: str = ""  # 节编号，如 "1.1"
     subsection: str = ""  # 子节标题，如 "1.1.1 数据"
     subsection_number: str = ""  # 子节编号，如 "1.1.1"
+    heading_path: str = ""  # 稳定的章/节/小节检索上下文
 
     # 内容属性
     is_chapter_start: bool = False
@@ -59,28 +61,36 @@ class ChunkingResultV2:
     avg_chunk_size: float
 
 
+@dataclass(frozen=True)
+class _SectionSpan:
+    """An original page interval owned by one TOC ancestry path."""
+
+    text: str
+    path: tuple[SectionInfo, ...]
+    is_heading_start: bool = False
+
+
 class CourseChunkerV2:
     """课程分块器V2 - 基于目录结构"""
 
     def __init__(self, toc_parser: TOCParser | None = None):
         self.toc = toc_parser or get_toc_parser()
-        self.section_patterns = self.toc.generate_section_regex()
+        self._paths: list[tuple[SectionInfo, ...]] = []
+
+        def collect(sections: list[SectionInfo], parents: tuple[SectionInfo, ...] = ()) -> None:
+            for section in sections:
+                path = (*parents, section)
+                self._paths.append(path)
+                collect(section.children, path)
+
+        collect(self.toc.sections)
+        self._heading_patterns = [(path, self._heading_pattern(path[-1])) for path in self._paths]
 
         # 习题检测 - 改进：检测"习题"关键字或习题编号格式
         self.exercise_pattern = re.compile(
             r"(?:^|\n)\s*习题\s*(?:\n|$)|"  # "习题"标题
             r"(?:^|\n)\s*习题解析|"  # "习题解析"
             r"(?:^|\n)\s*\d+\.[\s]*(?:找出|写出|选取|解释|说明|分析|讨论|计算)",  # 习题编号开头
-            re.MULTILINE,
-        )
-
-        # 二级/三级标题检测（用于强制切块）
-        self.subsection_header_pattern = re.compile(
-            r"^\s*(\d+\.\d+\.\d+)\s+",  # 1.4.2 格式
-            re.MULTILINE,
-        )
-        self.section_header_pattern = re.compile(
-            r"^\s*(\d+\.\d+)\s+",  # 1.4 格式
             re.MULTILINE,
         )
 
@@ -92,13 +102,6 @@ class CourseChunkerV2:
         end_page = max(section.end_page or section.page, section.page)
         return section.page <= page <= end_page
 
-    def _get_section_by_page(self, page: int):
-        """Return the most specific TOC section with sane same-page ranges."""
-        candidates = [section for section in self.toc.all_sections if self._section_contains_page(section, page)]
-        if not candidates:
-            return None
-        return max(candidates, key=lambda section: section.level)
-
     def _get_chapter_by_page(self, page: int):
         """Return the chapter containing the textbook page."""
         for section in self.toc.sections:
@@ -106,134 +109,167 @@ class CourseChunkerV2:
                 return section
         return None
 
-    def _detect_sections_in_text(self, text: str, page: int) -> dict:
+    @staticmethod
+    def _heading_pattern(section: SectionInfo) -> re.Pattern:
+        """Require an actual TOC number and name, rather than a numeric prefix."""
+        number = re.escape(section.number)
+        chapter = re.fullmatch(r"第(\d+)章", section.number)
+        if chapter:
+            value = int(chapter.group(1))
+            chinese = "一二三四五六七八九十"
+            aliases = [str(value)]
+            if 1 <= value <= 10:
+                aliases.append(chinese[value - 1])
+            number = r"第\s*(?:" + "|".join(aliases) + r")\s*章"
+        elif section.number:
+            number += r"(?!\d)(?:\.(?!\d))?"
+        # PDF text layers commonly interchange full-/half-width punctuation.
+        punctuation = {"（": "[（(]", "(": "[（(]", "）": "[）)]", ")": "[）)]", "：": "[：:]", ":": "[：:]"}
+        name = r"\s*".join(punctuation.get(char, re.escape(char)) for char in section.name if not char.isspace())
+        return re.compile(number + r"\s*" + name)
+
+    @staticmethod
+    def _is_heading_boundary(text: str, offset: int) -> bool:
+        """Recognize a heading start after layout whitespace or sentence end.
+
+        Cleaner may join a Chinese heading to its following body, so the
+        heading's right edge is its exact TOC name, not a required newline.
+        Inline cross-references such as ``见7.2.5 人工智能伦理`` are excluded.
         """
-        检测文本中的章节信息
+        before = text[:offset]
+        line_prefix = before.rsplit("\n", 1)[-1]
+        if not line_prefix.strip(" \t#*"):
+            return True
+        return before.rstrip().endswith(tuple('。！？；.!?;）)》”"'))
 
-        策略：
-        1. 优先根据页码从目录查找
-        2. 再用正则匹配文本中的章节标题，优先匹配最长/最具体的编号
+    @staticmethod
+    def _matches_heading_block_prefix(text: str, offset: int, pattern: re.Pattern, hints: Sequence[str]) -> bool:
+        """Use a parser SectionHeader prefix when text layout is malformed.
+
+        A parser may append a heading to the end of a math fragment.  Require
+        that very fragment before the TOC title in both the block and body,
+        rather than trusting any occurrence of the same title elsewhere.
         """
-        result = {
-            "chapter": "",
-            "chapter_number": "",
-            "section": "",
-            "section_number": "",
-            "subsection": "",
-            "subsection_number": "",
-            "is_section_start": False,
-        }
+        punctuation = str.maketrans("，；：！？（）", ",;:!?()")
 
-        # 1. 根据页码获取最具体的章节信息
-        sec_by_page = self._get_section_by_page(page)
-        if sec_by_page:
-            if sec_by_page.level == 1:
-                result["chapter"] = sec_by_page.name
-                result["chapter_number"] = sec_by_page.number
-            elif sec_by_page.level == 2:
-                result["section"] = sec_by_page.name
-                result["section_number"] = sec_by_page.number
-                # 同时获取父章节
-                chapter = self._get_chapter_by_page(page)
-                if chapter:
-                    result["chapter"] = chapter.name
-                    result["chapter_number"] = chapter.number
-            elif sec_by_page.level == 3:
-                # 子节：需要同时填充章、节、子节信息
-                result["subsection"] = sec_by_page.name
-                result["subsection_number"] = sec_by_page.number
-                # 从子节编号提取节编号 (如 1.4.1 -> 1.4)
-                parts = sec_by_page.number.split(".")
-                if len(parts) == 3:
-                    parent_section_num = f"{parts[0]}.{parts[1]}"
-                    # 查找父节信息
-                    for sec in self.toc.all_sections:
-                        if sec.number == parent_section_num:
-                            result["section"] = sec.name
-                            result["section_number"] = sec.number
-                            break
-                # 获取章信息
-                chapter = self._get_chapter_by_page(page)
-                if chapter:
-                    result["chapter"] = chapter.name
-                    result["chapter_number"] = chapter.number
+        def compact(value: str) -> str:
+            return re.sub(r"\s+", "", value.translate(punctuation))
 
-        # 2. 用正则匹配文本中的章节标题
-        # 策略：找到所有匹配，选择最长/最具体的编号（避免 1.4.1 被识别为 4.1）
-        best_match_number = None
-        best_match_priority = 0  # 优先级：3级编号 > 2级编号 > 1级编号
-        page_chapter_prefix = ""
-        if result.get("chapter_number"):
-            match = re.search(r"\d+", result["chapter_number"])
-            page_chapter_prefix = match.group(0) if match else ""
-
-        if not page_chapter_prefix:
-            return result
-
-        for number, pattern in self.section_patterns.items():
-            toc_section = next((sec for sec in self.toc.all_sections if sec.number == number), None)
-            if toc_section and not self._section_contains_page(toc_section, page):
+        for hint in hints:
+            match = pattern.search(hint)
+            if match is None:
                 continue
+            prefix = compact(hint[: match.start()])
+            if prefix and compact(text[:offset]).endswith(prefix):
+                return True
+        return False
 
-            # 页码范围是主信号。正文页中如果 OCR 混入目录/页眉里的其他章节编号，
-            # 不允许它覆盖当前页所属章；只在同一章内用标题匹配细化到节/子节。
-            if page_chapter_prefix and "." in number:
-                if number.split(".", 1)[0] != page_chapter_prefix:
-                    continue
-            if page_chapter_prefix and number.startswith("第"):
-                match = re.search(r"\d+", number)
-                if match and match.group(0) != page_chapter_prefix:
-                    continue
+    def _page_spans(
+        self,
+        text: str,
+        page: int,
+        previous_path: tuple[SectionInfo, ...] = (),
+        heading_hints: Sequence[str] = (),
+    ) -> list[_SectionSpan]:
+        """Locate ordered real headings and preserve the page's original text.
 
-            matches = pattern.findall(text)
-            if matches:
-                # 计算优先级：子节(3部分) > 节(2部分) > 章
-                if "." in number:
-                    parts = number.split(".")
-                    priority = len(parts)  # 2 或 3
-                else:
-                    priority = 1  # 第X章
+        The caller supplies previous_path only for adjacent input pages.
+        Page ranges are a fallback for isolated inputs; they never override
+        a known continuation before the next real heading.
+        """
+        chapter = self._get_chapter_by_page(page)
+        if chapter is None:
+            return [_SectionSpan(text, ())]
+        chapter_paths = [path for path in self._paths if path[0] is chapter]
+        if previous_path and previous_path[0] is chapter:
+            current_path = previous_path
+        else:
+            candidates = [path for path in chapter_paths if self._section_contains_page(path[-1], page)]
+            current_path = (
+                max(enumerate(candidates), key=lambda item: (len(item[1]), item[1][-1].page, item[0]))[1]
+                if candidates
+                else (chapter,)
+            )
 
-                # 选择优先级更高的匹配
-                if priority > best_match_priority:
-                    best_match_priority = priority
-                    best_match_number = number
-
-        # 根据最佳匹配更新结果
-        if best_match_number:
-            # 查找完整的章节信息
-            for sec in self.toc.all_sections:
-                if sec.number == best_match_number:
-                    if sec.level == 1:
-                        result["chapter"] = sec.name
-                        result["chapter_number"] = sec.number
-                    elif sec.level == 2:
-                        result["section"] = sec.name
-                        result["section_number"] = sec.number
-                        result["is_section_start"] = True
-                    elif sec.level == 3:
-                        result["subsection"] = sec.name
-                        result["subsection_number"] = sec.number
-                        result["is_section_start"] = True
-                        # 同时更新父节信息
-                        parts = sec.number.split(".")
-                        if len(parts) == 3:
-                            parent_section_num = f"{parts[0]}.{parts[1]}"
-                            for parent_sec in self.toc.all_sections:
-                                if parent_sec.number == parent_section_num:
-                                    result["section"] = parent_sec.name
-                                    result["section_number"] = parent_sec.number
-                                    break
+        boundaries: list[tuple[int, tuple[SectionInfo, ...]]] = []
+        for path, pattern in self._heading_patterns:
+            section = path[-1]
+            if path[0] is not chapter or section.page != page:
+                continue
+            for match in pattern.finditer(text):
+                if self._is_heading_boundary(text, match.start()) or self._matches_heading_block_prefix(
+                    text, match.start(), pattern, heading_hints
+                ):
+                    boundaries.append((match.start(), path))
                     break
+        boundaries.sort(key=lambda item: item[0])
 
-        return result
+        # Cleaner can join an unnumbered parent and child ("附录：子标题").
+        # Accept only a direct ancestor title followed by separators, not an
+        # arbitrary colon in running prose.
+        for path, pattern in self._heading_patterns:
+            if path[0] is not chapter or path[-1].page != page or len(path) < 2:
+                continue
+            if any(matched_path is path for _, matched_path in boundaries):
+                continue
+            for match in pattern.finditer(text):
+                parent_boundary = next(
+                    (
+                        (offset, parent)
+                        for offset, parent in reversed(boundaries)
+                        if parent == path[:-1] and offset < match.start()
+                    ),
+                    None,
+                )
+                if parent_boundary is None:
+                    continue
+                parent_offset, parent = parent_boundary
+                parent_match = self._heading_pattern(parent[-1]).match(text, parent_offset)
+                if parent_match and not text[parent_match.end() : match.start()].strip(" \t\n：:，,；;—-"):
+                    boundaries.append((match.start(), path))
+                    break
+        boundaries.sort(key=lambda item: item[0])
+
+        # With no previous page, text preceding the first heading is still
+        # a continuation of the preceding TOC entry, not the new heading.
+        if boundaries and boundaries[0][0] > 0 and not (previous_path and previous_path[0] is chapter):
+            first_section = boundaries[0][1][-1]
+            preceding = [path for path in chapter_paths if path[-1].page < first_section.page]
+            current_path = (
+                max(enumerate(preceding), key=lambda item: (item[1][-1].page, len(item[1]), item[0]))[1]
+                if preceding
+                else (chapter,)
+            )
+
+        spans: list[_SectionSpan] = []
+        start = 0
+        is_heading_start = False
+        for offset, path in boundaries:
+            if offset > start:
+                spans.append(_SectionSpan(text[start:offset], current_path, is_heading_start))
+            current_path = path
+            start = offset
+            is_heading_start = True
+        if start < len(text):
+            spans.append(_SectionSpan(text[start:], current_path, is_heading_start))
+        return spans
+
+    @staticmethod
+    def _span_metadata(span: _SectionSpan) -> ChunkMetadataV2:
+        """Project a TOC ancestry into the existing public chunk contract."""
+        metadata = ChunkMetadataV2()
+        fields = (("chapter", "chapter_number"), ("section", "section_number"), ("subsection", "subsection_number"))
+        for section, (name_key, number_key) in zip(span.path, fields, strict=False):
+            setattr(metadata, name_key, section.name)
+            setattr(metadata, number_key, section.number)
+        metadata.heading_path = " > ".join(f"{section.number} {section.name}".strip() for section in span.path)
+        return metadata
 
     def _split_by_semantic(
         self,
         text: str,
         chunk_size: int = 1300,
         overlap: int = 300,
-        section_info: dict = None,
         max_chunk_size: int | None = None,
     ) -> list[str]:
         """
@@ -241,7 +277,7 @@ class CourseChunkerV2:
 
         改进：
         1. chunk_size 1300，overlap 300，减少语义断裂
-        2. 在二级/三级标题处强制切块，让"标题+首段"在同一块
+        2. 标题归属区间由 _page_spans 统一确定，不跨区间重叠
         3. 代码块边界保护，避免在代码中间切断
         4. 1500 字符硬上限，防止异常长块
         """
@@ -393,21 +429,11 @@ class CourseChunkerV2:
             next_is_code = i + 1 < len(paragraphs) and _is_code_block(paragraphs[i + 1])
             code_continues = is_code and (_ends_with_code_block_open(para) or next_is_code)
 
-            # 检查是否是二级/三级标题（用于强制切块）
-            is_subsection_header = bool(self.subsection_header_pattern.match(para))
-            is_section_header = bool(self.section_header_pattern.match(para))
-            is_header = is_section_header or is_subsection_header
-
-            # 强制切块条件：
-            # 1. 当前块已足够大（且不在代码块中间）
-            # 2. 遇到二级/三级标题，且当前块非空且已累积一定内容
-            # 3. 达到硬上限
+            # Semantic size/code boundaries operate only inside one TOC span.
             should_split = False
             if current_size + para_size > max_chunk_size and current_chunk:
                 should_split = True
             elif current_size + para_size > chunk_size and current_chunk and not code_continues:
-                should_split = True
-            elif is_header and current_chunk and current_size > 300:
                 should_split = True
 
             if should_split:
@@ -447,6 +473,7 @@ class CourseChunkerV2:
         chunk_overlap: int = 300,  # 块间重叠，减少边界语义损失
         page_offset: int = 0,  # 页码偏移量（用于章节PDF）
         max_chunk_size: int | None = None,
+        heading_hints: Mapping[int, Sequence[str]] | None = None,
     ) -> ChunkingResultV2:
         """
         对文档进行分块
@@ -457,53 +484,48 @@ class CourseChunkerV2:
             parser_source: PDF 解析器来源
             chunk_size: 分块大小
             chunk_overlap: 重叠大小
+            heading_hints: 可选的物理页码到解析器 SectionHeader 文本映射；
+                仅用于验证粘连在数学行末等异常版面中的原标题。
         """
         chunks: list[ChunkV2] = []
 
-        # 按页处理
+        previous_path: tuple[SectionInfo, ...] = ()
+        previous_page: int | None = None
         for relative_page_num, text in pages:
-            if not text.strip():
-                continue
-
-            # 计算教材页码（用于目录查询）
             absolute_page_num = relative_page_num + page_offset
-            if absolute_page_num < 1:
+            if not text.strip() or absolute_page_num < 1:
+                previous_path = ()
+                previous_page = None
                 continue
-            book_pages = [absolute_page_num]
+            if previous_page is None or relative_page_num != previous_page + 1:
+                previous_path = ()
 
-            # 检测章节信息（使用绝对页码）
-            section_info = self._detect_sections_in_text(text, absolute_page_num)
-
-            # 语义分块
-            semantic_chunks = self._split_by_semantic(
+            spans = self._page_spans(
                 text,
-                chunk_size,
-                chunk_overlap,
-                section_info,
-                max_chunk_size=max_chunk_size,
+                absolute_page_num,
+                previous_path,
+                (heading_hints or {}).get(relative_page_num, ()),
             )
-
-            for i, chunk_text in enumerate(semantic_chunks):
-                if not chunk_text.strip():
-                    continue
-
-                metadata = ChunkMetadataV2(
-                    source_file=filename,
-                    parser_source=parser_source,
-                    source_pages=[relative_page_num],  # 保存相对页码
-                    book_pages=book_pages,  # 保存教材页码
-                    chunk_type="semantic",
-                    chapter=section_info.get("chapter", ""),
-                    chapter_number=section_info.get("chapter_number", ""),
-                    section=section_info.get("section", ""),
-                    section_number=section_info.get("section_number", ""),
-                    subsection=section_info.get("subsection", ""),
-                    subsection_number=section_info.get("subsection_number", ""),
-                    is_section_start=(i == 0 and section_info.get("is_section_start", False)),
-                    contains_exercise=bool(self.exercise_pattern.search(chunk_text)),
+            for span in spans:
+                semantic_chunks = self._split_by_semantic(
+                    span.text,
+                    chunk_size,
+                    chunk_overlap,
+                    max_chunk_size=max_chunk_size,
                 )
-
-                chunks.append(ChunkV2(content=chunk_text, metadata=metadata))
+                for i, chunk_text in enumerate(semantic_chunks):
+                    if not chunk_text.strip():
+                        continue
+                    metadata = self._span_metadata(span)
+                    metadata.source_file = filename
+                    metadata.parser_source = parser_source
+                    metadata.source_pages = [relative_page_num]
+                    metadata.book_pages = [absolute_page_num]
+                    metadata.is_section_start = i == 0 and span.is_heading_start
+                    metadata.contains_exercise = bool(self.exercise_pattern.search(chunk_text))
+                    chunks.append(ChunkV2(content=chunk_text, metadata=metadata))
+            previous_path = spans[-1].path if spans else ()
+            previous_page = relative_page_num
 
         # 创建结构分块（章节导航）
         struct_chunks = self._create_struct_chunks(filename, parser_source)

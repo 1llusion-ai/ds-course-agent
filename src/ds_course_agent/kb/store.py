@@ -17,6 +17,7 @@ import json
 import os
 import re
 import zlib
+from collections.abc import Mapping
 from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime
@@ -90,7 +91,16 @@ def sanitize_collection_name(name: str, fallback_prefix: str = "course") -> str:
 class CourseKnowledgeBase:
     """课程知识库管理"""
 
-    def __init__(self, course_name: str | None = None):
+    def __init__(
+        self,
+        course_name: str | None = None,
+        *,
+        collection_name: str | None = None,
+        persist_directory: str | None = None,
+        embedding_model: str | None = None,
+        metadata_context: Mapping[str, object] | None = None,
+        collection_metadata: Mapping[str, object] | None = None,
+    ):
         from langchain_chroma import Chroma
 
         import ds_course_agent.shared.config as config
@@ -101,7 +111,9 @@ class CourseKnowledgeBase:
 
         self.course_name = course_name or config.COURSE_NAME
 
-        if config.COURSE_COLLECTION_NAME:
+        if collection_name:
+            self.collection_name = sanitize_collection_name(collection_name)
+        elif config.COURSE_COLLECTION_NAME:
             self.collection_name = config.COURSE_COLLECTION_NAME
         else:
             sanitized = sanitize_collection_name(self.course_name)
@@ -110,18 +122,27 @@ class CourseKnowledgeBase:
             else:
                 self.collection_name = f"course_{sanitized}"
 
-        os.makedirs(config.CHROMA_PERSIST_DIR, exist_ok=True)
+        self.persist_directory = str(persist_directory or config.CHROMA_PERSIST_DIR)
+        self.metadata_context = dict(metadata_context or {})
+        self.collection_metadata = dict(collection_metadata or {})
+        os.makedirs(self.persist_directory, exist_ok=True)
 
-        self.embedding = create_embedding_model()
+        self.embedding = create_embedding_model(model=embedding_model)
 
         self.vector_store = self._chroma_cls(
             collection_name=self.collection_name,
             embedding_function=self.embedding,
-            persist_directory=config.CHROMA_PERSIST_DIR,
+            persist_directory=self.persist_directory,
+            **({"collection_metadata": self.collection_metadata} if getattr(self, "collection_metadata", None) else {}),
         )
 
-        self.hash_file = Path(config.CHROMA_PERSIST_DIR) / f"{self.collection_name}_hashes.json"
+        self.hash_file = Path(self.persist_directory) / f"{self.collection_name}_hashes.json"
         self.hashes = self._load_hashes()
+
+    def _persist_directory(self) -> str:
+        """Return the instance-bound store path, preserving test doubles."""
+
+        return str(getattr(self, "persist_directory", self._config.CHROMA_PERSIST_DIR))
 
     def _load_hashes(self) -> dict[str, str]:
         """加载已处理的分块哈希"""
@@ -172,7 +193,7 @@ class CourseKnowledgeBase:
                 "course": self.course_name,
                 "source": metadata.source_file,
                 "chunk_type": metadata.chunk_type,
-                "heading_path": "",
+                "heading_path": getattr(metadata, "heading_path", ""),
                 "chapter": metadata.chapter,
                 "chapter_no": metadata.chapter_number,
                 "section": metadata.section,
@@ -202,11 +223,13 @@ class CourseKnowledgeBase:
                         "book_pages": book_pages_json,
                     }
                 )
+            if getattr(self, "metadata_context", None):
+                result.update(self.metadata_context)
             return result
         else:
             # V1 结构 (旧版 course_chunker)
             source_pages_json = json.dumps(metadata.source_pages) if hasattr(metadata, "source_pages") else "[]"
-            return {
+            result = {
                 "course": self.course_name,
                 "source": metadata.source,
                 "chunk_type": getattr(metadata, "chunk_type", "struct"),
@@ -227,6 +250,37 @@ class CourseKnowledgeBase:
                 "position": metadata.position,
                 "ingest_time": datetime.now().isoformat(),
             }
+            if getattr(self, "metadata_context", None):
+                result.update(self.metadata_context)
+            return result
+
+    def _embedding_text(self, chunk) -> str:
+        """Build the raw-vector text while preserving readable evidence."""
+        content = str(getattr(chunk, "content", "") or "")
+        metadata = getattr(chunk, "metadata", None)
+        heading = str(getattr(metadata, "heading_path", "") or "").strip()
+        heading_text = content if not heading or heading in content else f"{heading}\n\n{content}"
+        chapter = str(getattr(metadata, "chapter", "") or "").strip()
+        heading_parts = {part.strip() for part in heading.split(">") if part.strip()}
+        if chapter == "参考文献" or "参考文献" in heading_parts:
+            return f"参考文献条目列表（来源索引）\n\n{heading_text}"
+        return heading_text
+
+    def _write_embedding_batch(self, texts, embedding_texts, metadatas, ids) -> None:
+        """Persist original documents with vectors made from heading context."""
+        collection = getattr(self.vector_store, "_collection", None)
+        embedding = getattr(self, "embedding", None)
+        if collection is not None and embedding is not None and type(collection).__module__.startswith("chromadb"):
+            vectors = embedding.embed_documents(list(embedding_texts))
+            collection.upsert(
+                ids=list(ids),
+                embeddings=vectors,
+                documents=list(texts),
+                metadatas=list(metadatas),
+            )
+            return
+        # Keep the public path for test doubles and alternate vector stores.
+        self.vector_store.add_texts(texts, metadatas=metadatas, ids=ids)
 
     def ingest_chunks(
         self,
@@ -243,6 +297,7 @@ class CourseKnowledgeBase:
         filtered_count = 0
 
         batch_texts = []
+        batch_embedding_texts = []
         batch_metadatas = []
         batch_ids = []
 
@@ -266,6 +321,7 @@ class CourseKnowledgeBase:
                 metadata = self._build_metadata(chunk)
 
                 batch_texts.append(chunk.content)
+                batch_embedding_texts.append(self._embedding_text(chunk))
                 batch_metadatas.append(metadata)
                 batch_ids.append(chunk_hash)
 
@@ -273,12 +329,15 @@ class CourseKnowledgeBase:
 
                 if len(batch_texts) >= batch_size:
                     if not write_started:
-                        write_stack.enter_context(
-                            knowledge_base_write(self.collection_name, self._config.CHROMA_PERSIST_DIR)
-                        )
+                        write_stack.enter_context(knowledge_base_write(self.collection_name, self._persist_directory()))
                         write_started = True
                     try:
-                        self.vector_store.add_texts(batch_texts, metadatas=batch_metadatas, ids=batch_ids)
+                        self._write_embedding_batch(
+                            batch_texts,
+                            batch_embedding_texts,
+                            batch_metadatas,
+                            batch_ids,
+                        )
                         success_count += len(batch_texts)
                         print(f"    入库进度: {success_count}/{len(chunks)} (过滤非语义块: {filtered_count})")
                     except Exception as e:
@@ -288,16 +347,20 @@ class CourseKnowledgeBase:
                             self.hashes.pop(h, None)
 
                     batch_texts = []
+                    batch_embedding_texts = []
                     batch_metadatas = []
                     batch_ids = []
 
             if batch_texts:
                 if not write_started:
-                    write_stack.enter_context(
-                        knowledge_base_write(self.collection_name, self._config.CHROMA_PERSIST_DIR)
-                    )
+                    write_stack.enter_context(knowledge_base_write(self.collection_name, self._persist_directory()))
                 try:
-                    self.vector_store.add_texts(batch_texts, metadatas=batch_metadatas, ids=batch_ids)
+                    self._write_embedding_batch(
+                        batch_texts,
+                        batch_embedding_texts,
+                        batch_metadatas,
+                        batch_ids,
+                    )
                     success_count += len(batch_texts)
                 except Exception as e:
                     error_count += len(batch_texts)
@@ -369,12 +432,17 @@ class CourseKnowledgeBase:
 
     def clear(self):
         """清空知识库"""
-        with knowledge_base_write(self.collection_name, self._config.CHROMA_PERSIST_DIR):
+        with knowledge_base_write(self.collection_name, self._persist_directory()):
             self.vector_store.delete_collection()
             self.vector_store = self._chroma_cls(
                 collection_name=self.collection_name,
                 embedding_function=self.embedding,
-                persist_directory=self._config.CHROMA_PERSIST_DIR,
+                persist_directory=self._persist_directory(),
+                **(
+                    {"collection_metadata": self.collection_metadata}
+                    if getattr(self, "collection_metadata", None)
+                    else {}
+                ),
             )
         self.hashes = {}
         self._save_hashes()

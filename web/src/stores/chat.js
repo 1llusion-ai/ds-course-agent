@@ -14,12 +14,14 @@ import {
   sourcesFromProgressDetails
 } from './chatMessages'
 import { useSessionStore } from './session'
+import { useCourseStore } from './course'
 
 const STREAM_LONG_WAIT_MS = 15_000
 const STREAM_IDLE_TIMEOUT_MS = 120_000
 const STREAM_RECONNECT_DELAY_MS = 1_000
 
 export const useChatStore = defineStore('chat', () => {
+  const courseStore = useCourseStore()
   const messages = ref([])
   const activeSessionId = ref(null)
   const messagesBySession = ref({})
@@ -67,13 +69,13 @@ export const useChatStore = defineStore('chat', () => {
     reconnectTimersBySession.delete(sessionId)
   }
 
-  function scheduleHistoryReconnect(sessionId) {
+  function scheduleHistoryReconnect(sessionId, courseId = courseStore.selectedCourseId) {
     if (!sessionId || reconnectTimersBySession.has(sessionId) || typeof window === 'undefined') return
     const timerId = window.setTimeout(() => {
       reconnectTimersBySession.delete(sessionId)
-      fetchHistory(sessionId).catch(error => {
+      fetchHistory(sessionId, courseId).catch(error => {
         console.warn('恢复生成流失败:', error)
-        scheduleHistoryReconnect(sessionId)
+        scheduleHistoryReconnect(sessionId, courseId)
       })
     }, STREAM_RECONNECT_DELAY_MS)
     reconnectTimersBySession.set(sessionId, timerId)
@@ -224,6 +226,7 @@ export const useChatStore = defineStore('chat', () => {
       let longWaitTimer = null
       let idleTimeoutTimer = null
       const requestStateVersion = stateVersion
+      const courseId = options.courseId || courseStore.selectedCourseId
 
       const clearStreamTimers = () => {
         if (longWaitTimer !== null) {
@@ -297,7 +300,7 @@ export const useChatStore = defineStore('chat', () => {
         idleTimeoutTimer = window.setTimeout(() => {
           const timeoutError = new Error('stream generation timed out')
           timeoutError.code = 'ECONNABORTED'
-          chatApi.cancelStream(sessionId).catch(() => {})
+          chatApi.cancelStream(sessionId, courseId).catch(() => {})
           const partialContent = getPendingMessage(sessionId, requestId)?.content?.trim()
           finishWithError(
             partialContent
@@ -313,6 +316,7 @@ export const useChatStore = defineStore('chat', () => {
         settled = true
         clearStreamTimers()
         source.close()
+        resolve(null)
       }
 
       activeRequestsBySession.set(sessionId, {
@@ -320,7 +324,7 @@ export const useChatStore = defineStore('chat', () => {
         close: closeSilently,
         cancel: async () => {
           try {
-            await chatApi.cancelStream(sessionId)
+            await chatApi.cancelStream(sessionId, courseId)
           } catch (error) {
             console.warn('通知后端停止生成失败:', error)
           }
@@ -397,7 +401,7 @@ export const useChatStore = defineStore('chat', () => {
           clearStreamTimers()
           clearActiveRequest(sessionId, requestId)
           source.close()
-          scheduleHistoryReconnect(sessionId)
+          scheduleHistoryReconnect(sessionId, courseId)
           reject(error || new Error('resume stream connection interrupted'))
           return
         }
@@ -413,15 +417,15 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
-  function resumeActiveStream(sessionId) {
+  function resumeActiveStream(sessionId, courseId = courseStore.selectedCourseId) {
     if (!sessionId || activeRequestsBySession.has(sessionId)) return
     const pendingMessage = getLoadingMessage(sessionId)
     if (!pendingMessage?.requestId) return
 
     clearReconnectTimer(sessionId)
     setPendingCount(sessionId, 1)
-    const source = chatApi.resumeStream(sessionId)
-    consumeStream(sessionId, pendingMessage.requestId, source, { resuming: true })
+    const source = chatApi.resumeStream(sessionId, courseId)
+    consumeStream(sessionId, pendingMessage.requestId, source, { resuming: true, courseId })
       .catch(error => {
         console.warn('生成流重连中断:', error)
       })
@@ -432,11 +436,11 @@ export const useChatStore = defineStore('chat', () => {
       })
   }
 
-  async function fetchHistory(sessionId) {
+  async function fetchHistory(sessionId, courseId = courseStore.selectedCourseId) {
     const requestVersion = (historyRequestVersions.get(sessionId) || 0) + 1
     const requestStateVersion = stateVersion
     historyRequestVersions.set(sessionId, requestVersion)
-    const response = await chatApi.getHistory(sessionId)
+    const response = await chatApi.getHistory(sessionId, courseId)
     if (requestStateVersion !== stateVersion || historyRequestVersions.get(sessionId) !== requestVersion) return response
     const history = Array.isArray(response.messages)
       ? response.messages.map(normalizeHistoryMessage)
@@ -459,7 +463,7 @@ export const useChatStore = defineStore('chat', () => {
     setSessionMessages(sessionId, nextMessages)
     if (activeStream) {
       setPendingCount(sessionId, 1)
-      resumeActiveStream(sessionId)
+      resumeActiveStream(sessionId, courseId)
     } else if (!hasActiveRequest) {
       clearReconnectTimer(sessionId)
       setPendingCount(sessionId, 0)
@@ -471,6 +475,7 @@ export const useChatStore = defineStore('chat', () => {
     const requestStateVersion = stateVersion
     const response = await chatApi.send({
       session_id: sessionId,
+      course_id: options.courseId || courseStore.selectedCourseId,
       message,
       web_search: Boolean(options.webSearch)
     })
@@ -484,6 +489,7 @@ export const useChatStore = defineStore('chat', () => {
   function sendMessageViaStream(sessionId, message, requestId, options = {}) {
     const source = chatApi.sendStream({
       session_id: sessionId,
+      course_id: options.courseId || courseStore.selectedCourseId,
       message,
       web_search: Boolean(options.webSearch)
     })
@@ -491,6 +497,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function sendMessage(sessionId, message, options = {}) {
+    options = { ...options, courseId: options.courseId || courseStore.selectedCourseId }
     const requestStateVersion = stateVersion
     const requestId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const userMessage = {
@@ -534,6 +541,7 @@ export const useChatStore = defineStore('chat', () => {
 
   async function continueMessage(sessionId, targetMessage, options = {}) {
     if (!sessionId || !targetMessage?.timestamp || isSessionPending(sessionId)) return null
+    options = { ...options, courseId: options.courseId || courseStore.selectedCourseId }
 
     const requestStateVersion = stateVersion
     const requestId = markMessageAsGenerating(sessionId, targetMessage)
@@ -543,6 +551,7 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const source = chatApi.continueStream({
         session_id: sessionId,
+        course_id: options.courseId || courseStore.selectedCourseId,
         message_timestamp: targetMessage.timestamp
       })
       return await consumeStream(sessionId, requestId, source, options)
@@ -579,6 +588,7 @@ export const useChatStore = defineStore('chat', () => {
 
   async function cancelActiveRequest(sessionId = activeSessionId.value) {
     if (!sessionId) return false
+    const requestStateVersion = stateVersion
     const activeRequest = activeRequestsBySession.get(sessionId)
     if (activeRequest) {
       await activeRequest.cancel()
@@ -588,7 +598,8 @@ export const useChatStore = defineStore('chat', () => {
     const pendingMessage = getLoadingMessage(sessionId)
     if (!pendingMessage) return false
 
-    await chatApi.cancelStream(sessionId)
+    await chatApi.cancelStream(sessionId, courseStore.selectedCourseId)
+    if (requestStateVersion !== stateVersion) return false
     clearReconnectTimer(sessionId)
     setPendingCount(sessionId, 0)
     const stoppedMessage = buildStoppedMessage(pendingMessage)
@@ -613,6 +624,10 @@ export const useChatStore = defineStore('chat', () => {
     pendingCountsBySession.value = {}
   }
 
+  function resetForCourse() {
+    resetForUser()
+  }
+
   return {
     messages,
     loading,
@@ -624,6 +639,7 @@ export const useChatStore = defineStore('chat', () => {
     setActiveSession,
     clearMessages,
     cancelActiveRequest,
-    resetForUser
+    resetForUser,
+    resetForCourse
   }
 })

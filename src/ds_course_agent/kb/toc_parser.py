@@ -43,8 +43,28 @@ class TOCParser:
         with open(self.toc_path, encoding="utf-8") as f:
             data = json.load(f)
 
+        self.schema_version = str(data.get("schema_version") or "")
         self.title = data.get("title", "")
-        self._parse_toc_items(data.get("toc", []), level=1)
+        items = data.get("toc", [])
+        if data.get("schema_version") == "course-toc/1.0":
+            # Course manifests keep physical and textbook pages explicitly,
+            # while the legacy chunker consumes the textbook page coordinate.
+            # Adapt only the data shape here; the chunking algorithm remains
+            # the single CourseChunkerV2 implementation.
+            def normalize_entry(entry: dict) -> dict:
+                title = str(entry.get("title") or "").strip()
+                kind = entry.get("kind")
+                number = entry.get("number")
+                if kind == "chapter" and number is not None:
+                    title = f"第{number}章 {title}".strip()
+                return {
+                    "title": title,
+                    "page": entry.get("book_page_start", 0),
+                    "children": [normalize_entry(child) for child in entry.get("children", [])],
+                }
+
+            items = [normalize_entry(entry) for entry in data.get("toc", [])]
+        self._parse_toc_items(items, level=1)
         self._calculate_end_pages()
 
     def _parse_toc_items(self, items: list, level: int):
@@ -168,6 +188,8 @@ class TOCParser:
         # 返回层级最深的章节（最具体的）
         # 例如：第8页同时匹配 "第1章"(level=1), "1.4"(level=2), "1.4.1"(level=3)
         # 应该返回 "1.4.1"
+        if self.schema_version == "course-toc/1.0":
+            return max(enumerate(matched_sections), key=lambda item: (item[1].level, item[0]))[1]
         return max(matched_sections, key=lambda s: s.level)
 
     def generate_section_regex(self) -> dict[str, re.Pattern]:

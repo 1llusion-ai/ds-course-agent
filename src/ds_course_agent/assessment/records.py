@@ -13,6 +13,7 @@ from ds_course_agent.assessment.models import (
     GenerateQuestionsRequest,
     QuestionOption,
 )
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 
 
 class AssessmentStatus(str, Enum):
@@ -53,6 +54,7 @@ class AssessmentRecord(BaseModel):
     submitted_at: datetime | None = None
     answers: tuple[StoredAnswer, ...] = ()
     version: int = Field(default=1, ge=1)
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
 
     @model_validator(mode="after")
     def _validate_lifecycle(self) -> AssessmentRecord:
@@ -87,6 +89,7 @@ class AssessmentSummary(BaseModel):
     question_count: int
     assigned_at: datetime
     opened_at: datetime | None
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
 
 
 class StudentQuestion(BaseModel):
@@ -110,6 +113,7 @@ class StudentAssessment(BaseModel):
     assigned_at: datetime
     opened_at: datetime | None
     questions: tuple[StudentQuestion, ...]
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
 
 
 class AnswerSubmission(BaseModel):
@@ -164,3 +168,4 @@ class AssessmentResult(BaseModel):
     question_count: int = Field(ge=1)
     score_percent: float = Field(ge=0, le=100)
     questions: tuple[QuestionResult, ...]
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)

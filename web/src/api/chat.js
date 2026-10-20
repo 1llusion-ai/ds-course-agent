@@ -28,7 +28,7 @@ function dispatchSseFrame(target, frame) {
   target.onmessage?.({ data })
 }
 
-function createFetchSseStream(url, { method = 'GET', data } = {}) {
+function createFetchSseStream(url, { method = 'GET', data, params } = {}) {
   const controller = new AbortController()
   let closedByClient = false
   const stream = {
@@ -56,7 +56,9 @@ function createFetchSseStream(url, { method = 'GET', data } = {}) {
         request.body = JSON.stringify(data)
       }
 
-      const response = await fetch(url, request)
+      const query = new URLSearchParams(params || {}).toString()
+      const requestUrl = query ? `${url}?${query}` : url
+      const response = await fetch(requestUrl, request)
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -114,10 +116,18 @@ function createFetchSseStream(url, { method = 'GET', data } = {}) {
 
 export const chatApi = {
   send: (data) => client.post('/chat/send', data, { timeout: 600000 }),
-  getHistory: (sessionId) => client.get(`/chat/history/${sessionId}`),
-  clearHistory: (sessionId) => client.delete(`/chat/history/${sessionId}`),
-  cancelStream: (sessionId) => client.post(`/chat/cancel/${sessionId}`),
+  getHistory: (sessionId, courseId) => client.get(`/chat/history/${sessionId}`, {
+    params: { course_id: courseId }
+  }),
+  clearHistory: (sessionId, courseId) => client.delete(`/chat/history/${sessionId}`, {
+    params: { course_id: courseId }
+  }),
+  cancelStream: (sessionId, courseId) => client.post(`/chat/cancel/${sessionId}`, null, {
+    params: { course_id: courseId }
+  }),
   sendStream: (data) => createFetchSseStream('/api/chat/send/stream', { method: 'POST', data }),
   continueStream: (data) => createFetchSseStream('/api/chat/continue/stream', { method: 'POST', data }),
-  resumeStream: (sessionId) => createFetchSseStream(`/api/chat/resume/${sessionId}`)
+  resumeStream: (sessionId, courseId) => createFetchSseStream(`/api/chat/resume/${sessionId}`, {
+    params: { course_id: courseId }
+  })
 }

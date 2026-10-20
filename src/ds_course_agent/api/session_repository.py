@@ -13,6 +13,8 @@ from typing import Any, Protocol
 import ds_course_agent.shared.config as config
 from ds_course_agent.shared.database import Migration, connect_sqlite
 
+DEFAULT_COURSE_ID = "data-science-intro"
+
 SESSION_MIGRATIONS = (
     Migration(
         version=2,
@@ -84,6 +86,121 @@ SESSION_MIGRATIONS = (
             """,
         ),
     ),
+    Migration(
+        version=3,
+        name="scope_sessions_by_course",
+        statements=(
+            "ALTER TABLE messages RENAME TO messages_legacy_course",
+            "ALTER TABLE sessions RENAME TO sessions_legacy_course",
+            "ALTER TABLE deleted_session_ids RENAME TO deleted_session_ids_legacy_course",
+            "DROP INDEX IF EXISTS idx_messages_student_session_position",
+            "DROP INDEX IF EXISTS idx_sessions_student_updated",
+            """
+            CREATE TABLE sessions (
+                id TEXT NOT NULL,
+                student_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                title_source TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                deleted_at TEXT,
+                title_generation_attempts INTEGER NOT NULL DEFAULT 0,
+                title_generation_pending INTEGER NOT NULL DEFAULT 0,
+                title_repaired_from TEXT,
+                legacy_session_id TEXT,
+                PRIMARY KEY (id, student_id, course_id),
+                UNIQUE (id, course_id)
+            )
+            """,
+            """
+            CREATE INDEX idx_sessions_student_course_updated
+            ON sessions(student_id, course_id, deleted_at, updated_at DESC)
+            """,
+            """
+            CREATE TABLE messages (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                student_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                turn_id TEXT,
+                role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                route_family TEXT,
+                route_intent TEXT,
+                execution_mode TEXT,
+                generation_status TEXT NOT NULL DEFAULT 'completed' CHECK (
+                    generation_status IN ('completed', 'stopped', 'error')
+                ),
+                generation_error TEXT,
+                retrieval_attempted INTEGER NOT NULL DEFAULT 0,
+                used_retrieval INTEGER NOT NULL DEFAULT 0,
+                degraded INTEGER NOT NULL DEFAULT 0,
+                web_search_requested INTEGER NOT NULL DEFAULT 0,
+                web_search_used INTEGER NOT NULL DEFAULT 0,
+                web_search_status TEXT NOT NULL DEFAULT 'not_requested',
+                web_search_reason TEXT,
+                sources_json TEXT,
+                progress_json TEXT,
+                progress_events_json TEXT,
+                metadata_json TEXT,
+                langchain_payload_json TEXT,
+                UNIQUE (session_id, student_id, course_id, position),
+                FOREIGN KEY (session_id, student_id, course_id)
+                    REFERENCES sessions(id, student_id, course_id) ON DELETE CASCADE
+            )
+            """,
+            """
+            CREATE INDEX idx_messages_student_course_session_position
+            ON messages(student_id, course_id, session_id, position)
+            """,
+            """
+            CREATE TABLE deleted_session_ids (
+                session_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                deleted_at TEXT NOT NULL,
+                PRIMARY KEY (session_id, course_id)
+            )
+            """,
+            """
+            INSERT INTO sessions (
+                id, student_id, course_id, title, title_source, created_at, updated_at,
+                deleted_at, title_generation_attempts, title_generation_pending,
+                title_repaired_from, legacy_session_id
+            )
+            SELECT id, student_id, 'data-science-intro', title, title_source, created_at, updated_at,
+                   deleted_at, title_generation_attempts, title_generation_pending,
+                   title_repaired_from, legacy_session_id
+            FROM sessions_legacy_course
+            """,
+            """
+            INSERT INTO messages (
+                id, session_id, student_id, course_id, position, turn_id, role, content, created_at,
+                route_family, route_intent, execution_mode, generation_status,
+                generation_error, retrieval_attempted, used_retrieval, degraded,
+                web_search_requested, web_search_used, web_search_status,
+                web_search_reason, sources_json, progress_json, progress_events_json,
+                metadata_json, langchain_payload_json
+            )
+            SELECT id, session_id, student_id, 'data-science-intro', position, turn_id, role, content, created_at,
+                   route_family, route_intent, execution_mode, generation_status,
+                   generation_error, retrieval_attempted, used_retrieval, degraded,
+                   web_search_requested, web_search_used, web_search_status,
+                   web_search_reason, sources_json, progress_json, progress_events_json,
+                   metadata_json, langchain_payload_json
+            FROM messages_legacy_course
+            """,
+            """
+            INSERT INTO deleted_session_ids (session_id, course_id, deleted_at)
+            SELECT session_id, 'data-science-intro', deleted_at FROM deleted_session_ids_legacy_course
+            """,
+            "DROP TABLE messages_legacy_course",
+            "DROP TABLE sessions_legacy_course",
+            "DROP TABLE deleted_session_ids_legacy_course",
+        ),
+    ),
 )
 
 
@@ -101,6 +218,7 @@ class SessionRecord:
     title_generation_pending: bool = False
     title_repaired_from: str | None = None
     legacy_session_id: str | None = None
+    course_id: str = DEFAULT_COURSE_ID
 
 
 @dataclass(frozen=True)
@@ -130,20 +248,23 @@ class MessageRecord:
     progress_events: list[dict[str, Any]] | None = None
     metadata: dict[str, Any] | None = None
     langchain_payload: dict[str, Any] | None = None
+    course_id: str = DEFAULT_COURSE_ID
 
 
 class SessionRepository(Protocol):
     def create_session(self, record: SessionRecord) -> None: ...
 
-    def get_session(self, student_id: str, session_id: str) -> SessionRecord | None: ...
+    def get_session(
+        self, student_id: str, session_id: str, course_id: str = DEFAULT_COURSE_ID
+    ) -> SessionRecord | None: ...
 
-    def find_session(self, session_id: str) -> SessionRecord | None: ...
+    def find_session(self, session_id: str, course_id: str = DEFAULT_COURSE_ID) -> SessionRecord | None: ...
 
-    def list_sessions(self, student_id: str) -> tuple[SessionRecord, ...]: ...
+    def list_sessions(self, student_id: str, course_id: str = DEFAULT_COURSE_ID) -> tuple[SessionRecord, ...]: ...
 
     def save_session(self, record: SessionRecord) -> None: ...
 
-    def delete_session(self, student_id: str, session_id: str) -> bool: ...
+    def delete_session(self, student_id: str, session_id: str, course_id: str = DEFAULT_COURSE_ID) -> bool: ...
 
     def append_message(self, record: MessageRecord) -> MessageRecord: ...
 
@@ -151,11 +272,15 @@ class SessionRepository(Protocol):
 
     def replace_message(self, record: MessageRecord) -> bool: ...
 
-    def delete_message(self, student_id: str, session_id: str, message_id: str) -> bool: ...
+    def delete_message(
+        self, student_id: str, session_id: str, message_id: str, course_id: str = DEFAULT_COURSE_ID
+    ) -> bool: ...
 
-    def list_messages(self, student_id: str, session_id: str) -> tuple[MessageRecord, ...]: ...
+    def list_messages(
+        self, student_id: str, session_id: str, course_id: str = DEFAULT_COURSE_ID
+    ) -> tuple[MessageRecord, ...]: ...
 
-    def clear_messages(self, student_id: str, session_id: str) -> int: ...
+    def clear_messages(self, student_id: str, session_id: str, course_id: str = DEFAULT_COURSE_ID) -> int: ...
 
 
 class SQLiteSessionRepository:
@@ -178,10 +303,10 @@ class SQLiteSessionRepository:
             connection.execute(
                 """
                 INSERT INTO sessions (
-                    id, student_id, title, title_source, created_at, updated_at,
+                    id, student_id, course_id, title, title_source, created_at, updated_at,
                     deleted_at, title_generation_attempts, title_generation_pending,
                     title_repaired_from, legacy_session_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 self._session_values(record),
             )
@@ -203,7 +328,7 @@ class SQLiteSessionRepository:
                     deleted_at = ?, title_generation_attempts = ?,
                     title_generation_pending = ?, title_repaired_from = ?,
                     legacy_session_id = ?
-                WHERE id = ? AND student_id = ?
+                WHERE id = ? AND student_id = ? AND course_id = ?
                 """,
                 (
                     record.title,
@@ -216,6 +341,7 @@ class SQLiteSessionRepository:
                     record.legacy_session_id,
                     record.session_id,
                     record.student_id,
+                    record.course_id,
                 ),
             )
             if cursor.rowcount != 1:
@@ -227,69 +353,77 @@ class SQLiteSessionRepository:
         finally:
             connection.close()
 
-    def get_session(self, student_id: str, session_id: str) -> SessionRecord | None:
+    def get_session(self, student_id: str, session_id: str, course_id: str = DEFAULT_COURSE_ID) -> SessionRecord | None:
         self._validate_identity(student_id, session_id)
+        self._validate_course_id(course_id)
         self.migrate()
         connection = connect_sqlite(self._path)
         try:
             row = connection.execute(
-                self._session_select() + " WHERE s.id = ? AND s.student_id = ? AND s.deleted_at IS NULL",
-                (session_id, student_id),
+                self._session_select()
+                + " WHERE s.id = ? AND s.student_id = ? AND s.course_id = ? AND s.deleted_at IS NULL",
+                (session_id, student_id, course_id),
             ).fetchone()
         finally:
             connection.close()
         return self._session_from_row(row) if row else None
 
-    def find_session(self, session_id: str) -> SessionRecord | None:
+    def find_session(self, session_id: str, course_id: str = DEFAULT_COURSE_ID) -> SessionRecord | None:
         if not session_id.strip():
             raise ValueError("session_id is required")
+        self._validate_course_id(course_id)
         self.migrate()
         connection = connect_sqlite(self._path)
         try:
             row = connection.execute(
-                self._session_select() + " WHERE s.id = ? AND s.deleted_at IS NULL",
-                (session_id,),
+                self._session_select() + " WHERE s.id = ? AND s.course_id = ? AND s.deleted_at IS NULL",
+                (session_id, course_id),
             ).fetchone()
         finally:
             connection.close()
         return self._session_from_row(row) if row else None
 
-    def list_sessions(self, student_id: str) -> tuple[SessionRecord, ...]:
+    def list_sessions(self, student_id: str, course_id: str = DEFAULT_COURSE_ID) -> tuple[SessionRecord, ...]:
         self._validate_student_id(student_id)
+        self._validate_course_id(course_id)
         self.migrate()
         connection = connect_sqlite(self._path)
         try:
             rows = connection.execute(
-                self._session_select()
-                + " WHERE s.student_id = ? AND s.deleted_at IS NULL ORDER BY s.updated_at DESC, s.id DESC",
-                (student_id,),
+                self._session_select() + " WHERE s.student_id = ? AND s.course_id = ? AND s.deleted_at IS NULL "
+                "ORDER BY s.updated_at DESC, s.id DESC",
+                (student_id, course_id),
             ).fetchall()
         finally:
             connection.close()
         return tuple(self._session_from_row(row) for row in rows)
 
-    def delete_session(self, student_id: str, session_id: str) -> bool:
+    def delete_session(self, student_id: str, session_id: str, course_id: str = DEFAULT_COURSE_ID) -> bool:
         self._validate_identity(student_id, session_id)
+        self._validate_course_id(course_id)
         self.migrate()
         now = self._iso(datetime.now(timezone.utc))
         connection = connect_sqlite(self._path)
         try:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                "SELECT 1 FROM sessions WHERE id = ? AND student_id = ? AND deleted_at IS NULL",
-                (session_id, student_id),
+                "SELECT 1 FROM sessions WHERE id = ? AND student_id = ? AND course_id = ? AND deleted_at IS NULL",
+                (session_id, student_id, course_id),
             ).fetchone()
             if row is None:
                 connection.rollback()
                 return False
-            connection.execute("DELETE FROM messages WHERE session_id = ? AND student_id = ?", (session_id, student_id))
             connection.execute(
-                "UPDATE sessions SET deleted_at = ?, updated_at = ? WHERE id = ? AND student_id = ?",
-                (now, now, session_id, student_id),
+                "DELETE FROM messages WHERE session_id = ? AND student_id = ? AND course_id = ?",
+                (session_id, student_id, course_id),
             )
             connection.execute(
-                "INSERT OR REPLACE INTO deleted_session_ids (session_id, deleted_at) VALUES (?, ?)",
-                (session_id, now),
+                "UPDATE sessions SET deleted_at = ?, updated_at = ? WHERE id = ? AND student_id = ? AND course_id = ?",
+                (now, now, session_id, student_id, course_id),
+            )
+            connection.execute(
+                "INSERT OR REPLACE INTO deleted_session_ids (session_id, course_id, deleted_at) VALUES (?, ?, ?)",
+                (session_id, course_id, now),
             )
             connection.commit()
             return True
@@ -308,7 +442,7 @@ class SQLiteSessionRepository:
             return ()
         for record in batch:
             self._validate_message(record, require_position=False)
-        identities = {(record.student_id, record.session_id) for record in batch}
+        identities = {(record.student_id, record.session_id, record.course_id) for record in batch}
         if len(identities) != 1:
             raise ValueError("message batch must belong to one session")
         self.migrate()
@@ -316,15 +450,16 @@ class SQLiteSessionRepository:
         try:
             connection.execute("BEGIN IMMEDIATE")
             active_session = connection.execute(
-                "SELECT 1 FROM sessions WHERE id = ? AND student_id = ? AND deleted_at IS NULL",
-                (batch[0].session_id, batch[0].student_id),
+                "SELECT 1 FROM sessions WHERE id = ? AND student_id = ? AND course_id = ? AND deleted_at IS NULL",
+                (batch[0].session_id, batch[0].student_id, batch[0].course_id),
             ).fetchone()
             if active_session is None:
                 raise KeyError(batch[0].session_id)
             next_position = int(
                 connection.execute(
-                    "SELECT COALESCE(MAX(position), -1) + 1 FROM messages WHERE session_id = ? AND student_id = ?",
-                    (batch[0].session_id, batch[0].student_id),
+                    "SELECT COALESCE(MAX(position), -1) + 1 FROM messages "
+                    "WHERE session_id = ? AND student_id = ? AND course_id = ?",
+                    (batch[0].session_id, batch[0].student_id, batch[0].course_id),
                 ).fetchone()[0]
             )
             stored_records = tuple(
@@ -334,11 +469,13 @@ class SQLiteSessionRepository:
             for stored in stored_records:
                 connection.execute(self._message_insert_sql(), self._message_values(stored))
             connection.execute(
-                "UPDATE sessions SET updated_at = ? WHERE id = ? AND student_id = ? AND deleted_at IS NULL",
+                "UPDATE sessions SET updated_at = ? WHERE id = ? AND student_id = ? AND course_id = ? "
+                "AND deleted_at IS NULL",
                 (
                     self._iso(stored_records[-1].created_at),
                     stored_records[-1].session_id,
                     stored_records[-1].student_id,
+                    stored_records[-1].course_id,
                 ),
             )
             connection.commit()
@@ -363,9 +500,15 @@ class SQLiteSessionRepository:
                     web_search_used = ?, web_search_status = ?, web_search_reason = ?,
                     sources_json = ?, progress_json = ?, progress_events_json = ?,
                     metadata_json = ?, langchain_payload_json = ?
-                WHERE id = ? AND session_id = ? AND student_id = ?
+                WHERE id = ? AND session_id = ? AND student_id = ? AND course_id = ?
                 """,
-                (*self._message_values(record)[4:], record.message_id, record.session_id, record.student_id),
+                (
+                    *self._message_values(record)[5:],
+                    record.message_id,
+                    record.session_id,
+                    record.student_id,
+                    record.course_id,
+                ),
             )
             connection.commit()
             return cursor.rowcount == 1
@@ -375,8 +518,11 @@ class SQLiteSessionRepository:
         finally:
             connection.close()
 
-    def delete_message(self, student_id: str, session_id: str, message_id: str) -> bool:
+    def delete_message(
+        self, student_id: str, session_id: str, message_id: str, course_id: str = DEFAULT_COURSE_ID
+    ) -> bool:
         self._validate_identity(student_id, session_id)
+        self._validate_course_id(course_id)
         if not message_id.strip():
             raise ValueError("message_id is required")
         self.migrate()
@@ -384,8 +530,8 @@ class SQLiteSessionRepository:
         try:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                "SELECT position FROM messages WHERE id = ? AND session_id = ? AND student_id = ?",
-                (message_id, session_id, student_id),
+                "SELECT position FROM messages WHERE id = ? AND session_id = ? AND student_id = ? AND course_id = ?",
+                (message_id, session_id, student_id, course_id),
             ).fetchone()
             if row is None:
                 connection.rollback()
@@ -393,12 +539,14 @@ class SQLiteSessionRepository:
             position = int(row["position"])
             connection.execute("DELETE FROM messages WHERE id = ?", (message_id,))
             connection.execute(
-                "UPDATE messages SET position = -position - 1 WHERE session_id = ? AND student_id = ? AND position > ?",
-                (session_id, student_id, position),
+                "UPDATE messages SET position = -position - 1 WHERE session_id = ? AND student_id = ? "
+                "AND course_id = ? AND position > ?",
+                (session_id, student_id, course_id, position),
             )
             connection.execute(
-                "UPDATE messages SET position = -position - 2 WHERE session_id = ? AND student_id = ? AND position < 0",
-                (session_id, student_id),
+                "UPDATE messages SET position = -position - 2 WHERE session_id = ? AND student_id = ? "
+                "AND course_id = ? AND position < 0",
+                (session_id, student_id, course_id),
             )
             connection.commit()
             return True
@@ -408,38 +556,44 @@ class SQLiteSessionRepository:
         finally:
             connection.close()
 
-    def list_messages(self, student_id: str, session_id: str) -> tuple[MessageRecord, ...]:
+    def list_messages(
+        self, student_id: str, session_id: str, course_id: str = DEFAULT_COURSE_ID
+    ) -> tuple[MessageRecord, ...]:
         self._validate_identity(student_id, session_id)
+        self._validate_course_id(course_id)
         self.migrate()
         connection = connect_sqlite(self._path)
         try:
             rows = connection.execute(
-                "SELECT * FROM messages WHERE student_id = ? AND session_id = ? ORDER BY position",
-                (student_id, session_id),
+                "SELECT * FROM messages WHERE student_id = ? AND session_id = ? AND course_id = ? ORDER BY position",
+                (student_id, session_id, course_id),
             ).fetchall()
         finally:
             connection.close()
         return tuple(self._message_from_row(row) for row in rows)
 
-    def list_messages_by_session(self, session_id: str) -> tuple[MessageRecord, ...]:
-        session = self.find_session(session_id)
+    def list_messages_by_session(
+        self, session_id: str, course_id: str = DEFAULT_COURSE_ID
+    ) -> tuple[MessageRecord, ...]:
+        session = self.find_session(session_id, course_id)
         if session is None:
             return ()
-        return self.list_messages(session.student_id, session_id)
+        return self.list_messages(session.student_id, session_id, course_id)
 
-    def clear_messages(self, student_id: str, session_id: str) -> int:
+    def clear_messages(self, student_id: str, session_id: str, course_id: str = DEFAULT_COURSE_ID) -> int:
         self._validate_identity(student_id, session_id)
+        self._validate_course_id(course_id)
         self.migrate()
         connection = connect_sqlite(self._path)
         try:
             connection.execute("BEGIN IMMEDIATE")
             cursor = connection.execute(
-                "DELETE FROM messages WHERE student_id = ? AND session_id = ?",
-                (student_id, session_id),
+                "DELETE FROM messages WHERE student_id = ? AND session_id = ? AND course_id = ?",
+                (student_id, session_id, course_id),
             )
             connection.execute(
-                "UPDATE sessions SET updated_at = ? WHERE id = ? AND student_id = ?",
-                (self._iso(datetime.now(timezone.utc)), session_id, student_id),
+                "UPDATE sessions SET updated_at = ? WHERE id = ? AND student_id = ? AND course_id = ?",
+                (self._iso(datetime.now(timezone.utc)), session_id, student_id, course_id),
             )
             connection.commit()
             return int(cursor.rowcount)
@@ -449,18 +603,24 @@ class SQLiteSessionRepository:
         finally:
             connection.close()
 
-    def replace_all_messages(self, student_id: str, session_id: str, records: Sequence[MessageRecord]) -> None:
+    def replace_all_messages(
+        self, student_id: str, session_id: str, records: Sequence[MessageRecord], course_id: str = DEFAULT_COURSE_ID
+    ) -> None:
         self._validate_identity(student_id, session_id)
+        self._validate_course_id(course_id)
         batch = tuple(records)
         for record in batch:
             self._validate_message(record)
-            if record.student_id != student_id or record.session_id != session_id:
+            if record.student_id != student_id or record.session_id != session_id or record.course_id != course_id:
                 raise ValueError("message batch identity mismatch")
         self.migrate()
         connection = connect_sqlite(self._path)
         try:
             connection.execute("BEGIN IMMEDIATE")
-            connection.execute("DELETE FROM messages WHERE student_id = ? AND session_id = ?", (student_id, session_id))
+            connection.execute(
+                "DELETE FROM messages WHERE student_id = ? AND session_id = ? AND course_id = ?",
+                (student_id, session_id, course_id),
+            )
             for record in batch:
                 connection.execute(self._message_insert_sql(), self._message_values(record))
             connection.commit()
@@ -485,8 +645,10 @@ class SQLiteSessionRepository:
             self._validate_session(record)
         for record in message_batch:
             self._validate_message(record)
-        known_sessions = {(record.session_id, record.student_id) for record in session_batch}
-        if any((record.session_id, record.student_id) not in known_sessions for record in message_batch):
+        known_sessions = {(record.session_id, record.student_id, record.course_id) for record in session_batch}
+        if any(
+            (record.session_id, record.student_id, record.course_id) not in known_sessions for record in message_batch
+        ):
             raise ValueError("every imported message must have a matching imported session")
 
         self.migrate()
@@ -503,39 +665,43 @@ class SQLiteSessionRepository:
             now = self._iso(datetime.now(timezone.utc))
             for session_id in deleted_ids:
                 cursor = connection.execute(
-                    "INSERT OR IGNORE INTO deleted_session_ids (session_id, deleted_at) VALUES (?, ?)",
-                    (session_id, now),
+                    "INSERT OR IGNORE INTO deleted_session_ids (session_id, course_id, deleted_at) VALUES (?, ?, ?)",
+                    (session_id, DEFAULT_COURSE_ID, now),
                 )
                 counts["tombstones_imported"] += int(cursor.rowcount == 1)
 
             tombstones = {
-                str(row["session_id"])
-                for row in connection.execute("SELECT session_id FROM deleted_session_ids").fetchall()
+                (str(row["session_id"]), str(row["course_id"]))
+                for row in connection.execute("SELECT session_id, course_id FROM deleted_session_ids").fetchall()
             }
             for record in session_batch:
-                if record.session_id in tombstones:
+                if (record.session_id, record.course_id) in tombstones:
                     counts["sessions_skipped"] += 1
                     continue
                 values = self._session_values(record)
                 cursor = connection.execute(
                     """
                     INSERT OR IGNORE INTO sessions (
-                        id, student_id, title, title_source, created_at, updated_at,
+                        id, student_id, course_id, title, title_source, created_at, updated_at,
                         deleted_at, title_generation_attempts, title_generation_pending,
                         title_repaired_from, legacy_session_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     values,
                 )
                 if cursor.rowcount == 1:
                     counts["sessions_imported"] += 1
                     continue
-                existing = connection.execute("SELECT * FROM sessions WHERE id = ?", (record.session_id,)).fetchone()
+                existing = connection.execute(
+                    "SELECT * FROM sessions WHERE id = ? AND student_id = ? AND course_id = ?",
+                    (record.session_id, record.student_id, record.course_id),
+                ).fetchone()
                 existing_values = tuple(
                     existing[key]
                     for key in (
                         "id",
                         "student_id",
+                        "course_id",
                         "title",
                         "title_source",
                         "created_at",
@@ -552,7 +718,7 @@ class SQLiteSessionRepository:
                 counts["sessions_skipped"] += 1
 
             for record in message_batch:
-                if record.session_id in tombstones:
+                if (record.session_id, record.course_id) in tombstones:
                     counts["messages_skipped"] += 1
                     continue
                 values = self._message_values(record)
@@ -563,8 +729,8 @@ class SQLiteSessionRepository:
                     counts["messages_imported"] += 1
                     continue
                 existing = connection.execute(
-                    "SELECT * FROM messages WHERE session_id = ? AND position = ?",
-                    (record.session_id, record.position),
+                    "SELECT * FROM messages WHERE session_id = ? AND student_id = ? AND course_id = ? AND position = ?",
+                    (record.session_id, record.student_id, record.course_id, record.position),
                 ).fetchone()
                 if existing is None:
                     raise ValueError(f"message import conflict: {record.message_id}")
@@ -574,6 +740,7 @@ class SQLiteSessionRepository:
                         "id",
                         "session_id",
                         "student_id",
+                        "course_id",
                         "position",
                         "turn_id",
                         "role",
@@ -613,7 +780,7 @@ class SQLiteSessionRepository:
     def _session_select() -> str:
         return (
             "SELECT s.*, (SELECT COUNT(*) FROM messages m "
-            "WHERE m.session_id = s.id AND m.student_id = s.student_id) AS message_count "
+            "WHERE m.session_id = s.id AND m.student_id = s.student_id AND m.course_id = s.course_id) AS message_count "
             "FROM sessions s"
         )
 
@@ -621,13 +788,13 @@ class SQLiteSessionRepository:
     def _message_insert_sql() -> str:
         return """
             INSERT INTO messages (
-                id, session_id, student_id, position, turn_id, role, content, created_at,
+                id, session_id, student_id, course_id, position, turn_id, role, content, created_at,
                 route_family, route_intent, execution_mode, generation_status,
                 generation_error, retrieval_attempted, used_retrieval, degraded,
                 web_search_requested, web_search_used, web_search_status,
                 web_search_reason, sources_json, progress_json, progress_events_json,
                 metadata_json, langchain_payload_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
     @classmethod
@@ -635,6 +802,7 @@ class SQLiteSessionRepository:
         return (
             record.session_id,
             record.student_id,
+            record.course_id,
             record.title,
             record.title_source,
             cls._iso(record.created_at),
@@ -652,6 +820,7 @@ class SQLiteSessionRepository:
             record.message_id,
             record.session_id,
             record.student_id,
+            record.course_id,
             record.position,
             record.turn_id,
             record.role,
@@ -683,6 +852,7 @@ class SQLiteSessionRepository:
             student_id=str(row["student_id"]),
             title=str(row["title"]),
             title_source=str(row["title_source"]),
+            course_id=str(row["course_id"]),
             created_at=cls._datetime(row["created_at"]),
             updated_at=cls._datetime(row["updated_at"]),
             message_count=int(row["message_count"]),
@@ -699,6 +869,7 @@ class SQLiteSessionRepository:
             message_id=str(row["id"]),
             session_id=str(row["session_id"]),
             student_id=str(row["student_id"]),
+            course_id=str(row["course_id"]),
             position=int(row["position"]),
             turn_id=row["turn_id"],
             role=str(row["role"]),
@@ -744,12 +915,14 @@ class SQLiteSessionRepository:
     @classmethod
     def _validate_session(cls, record: SessionRecord) -> None:
         cls._validate_identity(record.student_id, record.session_id)
+        cls._validate_course_id(record.course_id)
         if not record.title.strip() or not record.title_source.strip():
             raise ValueError("session title and title_source are required")
 
     @classmethod
     def _validate_message(cls, cls_record: MessageRecord, *, require_position: bool = True) -> None:
         cls._validate_identity(cls_record.student_id, cls_record.session_id)
+        cls._validate_course_id(cls_record.course_id)
         if not cls_record.message_id.strip():
             raise ValueError("message_id is required")
         if require_position and cls_record.position < 0:
@@ -762,6 +935,11 @@ class SQLiteSessionRepository:
         cls._validate_student_id(student_id)
         if not session_id or not session_id.strip():
             raise ValueError("session_id is required")
+
+    @staticmethod
+    def _validate_course_id(course_id: str) -> None:
+        if not course_id or not str(course_id).strip():
+            raise ValueError("course_id is required")
 
     @staticmethod
     def _validate_student_id(student_id: str) -> None:

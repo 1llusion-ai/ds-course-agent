@@ -61,10 +61,12 @@
           <div v-else-if="chatStore.messages.length === 0" class="empty-state">
             <div class="empty-content">
               <h1>今天想解决什么学习问题？</h1>
+              <p v-if="courseUnavailable" role="status">当前课程资源正在准备中，请先切换到其他课程。</p>
               <ChatInput
                 hero
                 :initial-text="mapQuestion"
                 :loading="chatStore.loading"
+                :disabled="courseUnavailable"
                 :web-search-enabled="webSearchEnabled"
                 :web-search-hint="webSearchHint"
                 class="empty-composer"
@@ -72,7 +74,7 @@
                 @toggle-web-search="toggleWebSearch"
                 @cancel="handleCancelGeneration"
               />
-              <div class="prompt-grid">
+              <div v-if="!courseUnavailable" class="prompt-grid">
                 <button
                   v-for="prompt in starterPrompts"
                   :key="prompt"
@@ -103,6 +105,7 @@
           <ChatInput
             :initial-text="mapQuestion"
             :loading="chatStore.loading"
+            :disabled="courseUnavailable"
             :web-search-enabled="webSearchEnabled"
             :web-search-hint="webSearchHint"
             @send="handleSend"
@@ -201,6 +204,7 @@ import ChatMessage from '../components/ChatMessage.vue'
 import PanelToggleIcon from '../components/PanelToggleIcon.vue'
 import ResizableSidePanel from '../components/ResizableSidePanel.vue'
 import { useChatStore } from '../stores/chat'
+import { useCourseStore } from '../stores/course'
 import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
 import { domainFromUrl, faviconUrl, isExternalUrl } from '../utils/url'
@@ -216,6 +220,7 @@ const stickToBottom = ref(true)
 
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
+const courseStore = useCourseStore()
 const profileStore = useProfileStore()
 const webSearchEnabled = ref(readWebSearchPreference())
 const webSearchTurnNotice = ref('')
@@ -235,6 +240,7 @@ let scrollFrameId = null
 let messagesResizeObserver = null
 
 const headerTitle = computed(() => sessionStore.currentSession?.title || '新对话')
+const courseUnavailable = computed(() => courseStore.currentCourse?.is_ready === false)
 const canRenameCurrentSession = computed(() => Boolean(sessionStore.currentSessionId && sessionStore.currentSession))
 const showSessionLoading = computed(() => sessionBootstrapPending.value || sessionLoading.value)
 const sessionLoadingText = computed(() => (
@@ -256,6 +262,15 @@ function messageKey(message, index) {
   const identity = message.requestId || `${message.timestamp || 'message'}-${index}`
   return `${message.role || 'message'}-${identity}`
 }
+
+watch(() => courseStore.selectedCourseId, () => {
+  sessionLoadToken += 1
+  sessionLoading.value = false
+  cancelHeaderRename()
+  closeSourcesPanel()
+  sourcesPanelSources.value = []
+  setWebSearchEnabled(false)
+})
 
 watch(
   [() => route.params.sessionId, () => sessionStore.loaded, () => sessionStore.sortedSessions.length],
@@ -339,8 +354,10 @@ async function loadSession(sessionId) {
 }
 
 async function handleSend(message, sendOptions = {}) {
+  if (courseUnavailable.value || showSessionLoading.value) return
+  const courseId = courseStore.selectedCourseId
   const useWebSearch = Boolean(sendOptions?.webSearch ?? webSearchEnabled.value)
-  const streamOptions = { onProgress: scrollToBottom, webSearch: useWebSearch }
+  const streamOptions = { onProgress: scrollToBottom, webSearch: useWebSearch, courseId }
   const currentSessionId = sessionStore.currentSessionId
   let targetSessionId = currentSessionId
   let shouldRefreshTitle = false
@@ -350,10 +367,12 @@ async function handleSend(message, sendOptions = {}) {
 
   if (!currentSessionId) {
     const newSession = await sessionStore.createSession()
+    if (!newSession || courseId !== courseStore.selectedCourseId) return
     targetSessionId = newSession.id
     shouldRefreshTitle = true
     chatStore.setActiveSession(newSession.id)
     await router.push(`/chat/${newSession.id}`)
+    if (courseId !== courseStore.selectedCourseId) return
     sendPromise = chatStore.sendMessage(newSession.id, message, streamOptions)
   } else {
     shouldRefreshTitle = sessionStore.shouldAutoTitle(currentSessionId)
@@ -362,20 +381,23 @@ async function handleSend(message, sendOptions = {}) {
   }
 
   if (shouldRefreshTitle && targetSessionId) {
-    scheduleSessionTitleRefresh(targetSessionId)
+    scheduleSessionTitleRefresh(targetSessionId, courseId)
   }
 
   try {
     const assistantMessage = await sendPromise
+    if (courseId !== courseStore.selectedCourseId) return
     updateWebSearchTurnNotice(assistantMessage)
   } catch (error) {
+    if (courseId !== courseStore.selectedCourseId) return
     if (error?.code !== 'REQUEST_CANCELLED') {
       console.error('发送消息失败:', error)
       ElMessage.error('发送失败，请稍后重试。')
     }
   } finally {
+    if (courseId !== courseStore.selectedCourseId) return
     if (shouldRefreshTitle && targetSessionId) {
-      await refreshSessionTitle(targetSessionId)
+      await refreshSessionTitle(targetSessionId, courseId)
     }
     try {
       await profileStore.fetchSummary()
@@ -504,9 +526,11 @@ function updateWebSearchTurnNotice(message = {}) {
   webSearchTurnNotice.value = `本轮未使用联网搜索：${reason}`
 }
 
-async function refreshSessionTitle(sessionId) {
+async function refreshSessionTitle(sessionId, courseId = courseStore.selectedCourseId) {
+  if (courseId !== courseStore.selectedCourseId) return
   try {
-    await sessionStore.fetchSessions()
+    await sessionStore.fetchSessions(courseId)
+    if (courseId !== courseStore.selectedCourseId) return
     const stillOnTargetSession = (
       sessionId &&
       (route.params.sessionId === sessionId || sessionStore.currentSessionId === sessionId)
@@ -519,10 +543,10 @@ async function refreshSessionTitle(sessionId) {
   }
 }
 
-function scheduleSessionTitleRefresh(sessionId) {
+function scheduleSessionTitleRefresh(sessionId, courseId) {
   if (!sessionId || typeof window === 'undefined') return
   window.setTimeout(() => {
-    refreshSessionTitle(sessionId)
+    refreshSessionTitle(sessionId, courseId)
   }, 700)
 }
 

@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 from ds_course_agent.teaching.interaction_episode_repository import SQLiteInteractionEpisodeRepository
 from ds_course_agent.teaching.learning_event_repository import (
     LearningEventRecord,
@@ -44,6 +45,7 @@ class TeachingMemoryWriter:
         special_case_response: str | None,
         learning_event_hook: Any,
         classify_question_type_fn: Callable[[str], str],
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
     ) -> int:
         """Write generated facts, then project them into one episode.
 
@@ -51,11 +53,13 @@ class TeachingMemoryWriter:
         receives an in-memory collector, so a failed model turn cannot leave
         learning facts behind during route preparation.
         """
-        existing_episode = self._episode_repository.get_for_turn(student_id, session_id, turn_id)
+        normalized_course_id = CourseId(course_id)
+        scope = {} if normalized_course_id == DEFAULT_COURSE_ID else {"course_id": normalized_course_id}
+        existing_episode = self._episode_repository.get_for_turn(student_id, session_id, turn_id, **scope)
         if existing_episode is not None:
             return 0
 
-        existing_records = self._event_repository.list_for_turn(student_id, session_id, turn_id)
+        existing_records = self._event_repository.list_for_turn(student_id, session_id, turn_id, **scope)
         events: list[Any] = [record.event for record in existing_records]
         if not events:
             learning_event_hook.record_learning_events(
@@ -67,6 +71,7 @@ class TeachingMemoryWriter:
                 event_repository=self._event_repository,
                 record_event_fn=events.append,
                 classify_question_type_fn=classify_question_type_fn,
+                **scope,
             )
         if not events:
             return 0
@@ -80,16 +85,18 @@ class TeachingMemoryWriter:
             student_id=student_id,
             turn_id=turn_id,
             events=events,
+            course_id=normalized_course_id,
         )
         related = self._episode_repository.list_for_student(
             student_id,
             concept_ids=episode.concept_ids,
             limit=10,
+            **scope,
         )
         if related:
             episode = replace(episode, related_episode_id=related[0].episode_id)
         self._episode_repository.save(episode)
-        self._profile_repository.project(student_id)
+        self._profile_repository.project(student_id, **scope)
         return len(events)
 
     def _build_episode(
@@ -100,6 +107,7 @@ class TeachingMemoryWriter:
         student_id: str,
         turn_id: str,
         events: Sequence[Any],
+        course_id: CourseId = CourseId(DEFAULT_COURSE_ID),
     ) -> InteractionEpisode:
         from ds_course_agent.teaching.learning_events import EventType
 
@@ -129,7 +137,7 @@ class TeachingMemoryWriter:
 
         now = datetime.now(timezone.utc)
         return InteractionEpisode(
-            episode_id=self._episode_id(student_id, session_id, turn_id),
+            episode_id=self._episode_id(student_id, session_id, turn_id, course_id=course_id),
             student_id=student_id,
             session_id=session_id,
             turn_id=turn_id,
@@ -144,11 +152,14 @@ class TeachingMemoryWriter:
             created_at=now,
             updated_at=now,
             extractor_version="turn-writer-v1",
+            course_id=course_id,
         )
 
     @staticmethod
-    def _episode_id(student_id: str, session_id: str, turn_id: str) -> str:
-        digest = hashlib.sha256(f"{student_id}\0{session_id}\0{turn_id}".encode()).hexdigest()[:24]
+    def _episode_id(
+        student_id: str, session_id: str, turn_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID
+    ) -> str:
+        digest = hashlib.sha256(f"{student_id}\0{course_id}\0{session_id}\0{turn_id}".encode()).hexdigest()[:24]
         return f"episode_{digest}"
 
 

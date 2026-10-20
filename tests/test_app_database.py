@@ -20,7 +20,7 @@ def test_migration_dry_run_does_not_create_database(tmp_path) -> None:
     plan = plan_learner_memory_database(path)
 
     assert plan.applied_versions == ()
-    assert [migration.version for migration in plan.pending] == [1, 4]
+    assert [migration.version for migration in plan.pending] == [1, 4, 5]
     assert not path.exists()
 
 
@@ -31,9 +31,9 @@ def test_learner_memory_schema_applies_once_and_is_inspectable(tmp_path) -> None
     second = migrate_learner_memory_database(path)
     plan = plan_learner_memory_database(path)
 
-    assert [migration.version for migration in first] == [1, 4]
+    assert [migration.version for migration in first] == [1, 4, 5]
     assert second == ()
-    assert plan.applied_versions == (1, 4)
+    assert plan.applied_versions == (1, 4, 5)
     assert plan.pending == ()
 
     with sqlite3.connect(path) as connection:
@@ -43,6 +43,14 @@ def test_learner_memory_schema_applies_once_and_is_inspectable(tmp_path) -> None
         migration_rows = connection.execute(
             "SELECT version, name, checksum FROM schema_migrations ORDER BY version"
         ).fetchall()
+        learning_event_columns = {row[1] for row in connection.execute("PRAGMA table_info(learning_events)").fetchall()}
+        episode_columns = {row[1] for row in connection.execute("PRAGMA table_info(interaction_episodes)").fetchall()}
+        evidence_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(interaction_episode_evidence)").fetchall()
+        }
+        snapshot_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(learner_profile_snapshots)").fetchall()
+        }
 
     assert {
         "schema_migrations",
@@ -55,7 +63,12 @@ def test_learner_memory_schema_applies_once_and_is_inspectable(tmp_path) -> None
     assert migration_rows == [
         (1, "create_learner_memory_tables", LEARNER_MEMORY_MIGRATIONS[0].checksum),
         (4, "create_learner_profile_snapshots", LEARNER_MEMORY_MIGRATIONS[1].checksum),
+        (5, "scope_learner_memory_by_course", LEARNER_MEMORY_MIGRATIONS[2].checksum),
     ]
+    assert "course_id" in learning_event_columns
+    assert "course_id" in episode_columns
+    assert "course_id" in evidence_columns
+    assert "course_id" in snapshot_columns
 
 
 def test_episode_evidence_foreign_keys_reject_cross_student_links(tmp_path) -> None:

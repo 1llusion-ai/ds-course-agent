@@ -16,6 +16,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import OpenAIEmbeddings
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.courses import CourseIndexBinding
 from ds_course_agent.retrieval.context_assembler import (
     AssembledContext,
     ChunkProvenance,
@@ -48,20 +49,26 @@ from ds_course_agent.shared.vector_store import VectorStoreService
 logger = logging.getLogger(__name__)
 
 _NO_CONTEXT = "无相关资料"
-_RAG_ANSWER_SYSTEM_PROMPT = (
-    "你是“数字力”导学智能体，负责《数据科学导论》课程辅导。只能依据参考材料回答；材料不足时请明确说明。"
+_RAG_ANSWER_SYSTEM_PROMPT_TEMPLATE = (
+    "你是“数字力”导学智能体，负责《{course_name}》课程辅导。只能依据参考材料回答；材料不足时请明确说明。"
     "请给出教学型回答，而不是摘要式短答。默认结构：先用一句话给直接结论，"
     "再解释核心定义/机制，补充一个简单例子或类比，最后指出常见误区或学习建议。"
     "回答应聚焦当前问题，避免无关背景，不要编造教材外信息。参考材料：\n{context}"
 )
+_RAG_ANSWER_SYSTEM_PROMPT = _RAG_ANSWER_SYSTEM_PROMPT_TEMPLATE.format(course_name="数据科学导论", context="{context}")
 _RAG_ANSWER_USER_PROMPT = "请基于参考材料认真讲解用户提问：\n{input}"
 
 
-def build_rag_prompt_template() -> ChatPromptTemplate:
+def build_rag_prompt_template(course_name: str | None = None) -> ChatPromptTemplate:
     """Build the single production prompt used for grounded textbook answers."""
+    normalized_course_name = str(course_name or config.COURSE_NAME or "数据科学导论").strip()
+    system_prompt = _RAG_ANSWER_SYSTEM_PROMPT_TEMPLATE.format(
+        course_name=normalized_course_name,
+        context="{context}",
+    )
     return ChatPromptTemplate.from_messages(
         [
-            ("system", _RAG_ANSWER_SYSTEM_PROMPT + "\n{answer_guidance}"),
+            ("system", system_prompt + "\n{answer_guidance}"),
             ("user", _RAG_ANSWER_USER_PROMPT),
         ]
     ).partial(answer_guidance="")
@@ -126,7 +133,15 @@ def _context_window_tokens() -> int:
     return max(1, int(getattr(config, "CONTEXT_WINDOW_TOKENS", 8192) or 8192))
 
 
-def _index_manifest_path() -> Path:
+def _index_manifest_path(index_binding: CourseIndexBinding | None = None) -> Path:
+    if index_binding is not None:
+        return resolve_manifest_path(
+            Settings(
+                RAG_INDEX_MANIFEST_PATH=config.RAG_INDEX_MANIFEST_PATH,
+                CHROMA_PERSIST_DIR=config.CHROMA_PERSIST_DIR,
+            ),
+            index_binding.manifest_path,
+        )
     return resolve_manifest_path(
         Settings(
             RAG_INDEX_MANIFEST_PATH=config.RAG_INDEX_MANIFEST_PATH,
@@ -135,15 +150,23 @@ def _index_manifest_path() -> Path:
     )
 
 
-def _load_index_manifest() -> PromotedIndexManifest:
+def _load_index_manifest(index_binding: CourseIndexBinding | None = None) -> PromotedIndexManifest:
+    settings = Settings(
+        RAG_INDEX_MANIFEST_PATH=config.RAG_INDEX_MANIFEST_PATH,
+        CHROMA_PERSIST_DIR=config.CHROMA_PERSIST_DIR,
+        COLLECTION_NAME=config.collection_name,
+        COURSE_COLLECTION_NAME="",
+        EMBEDDING_MODEL=config.MODEL_EMBEDDING,
+    )
+    if index_binding is None:
+        return load_and_validate_manifest(settings)
     return load_and_validate_manifest(
-        Settings(
-            RAG_INDEX_MANIFEST_PATH=config.RAG_INDEX_MANIFEST_PATH,
-            CHROMA_PERSIST_DIR=config.CHROMA_PERSIST_DIR,
-            COLLECTION_NAME=config.collection_name,
-            COURSE_COLLECTION_NAME="",
-            EMBEDDING_MODEL=config.MODEL_EMBEDDING,
-        )
+        settings,
+        manifest_path=index_binding.manifest_path,
+        persist_directory=index_binding.persist_directory,
+        collection_name=index_binding.collection_name,
+        embedding_model=index_binding.embedding_model,
+        revision=index_binding.revision,
     )
 
 
@@ -191,6 +214,9 @@ def _retrieval_cache_key(
     similarity_threshold: float | None,
     revision: str,
     term_resolution_query: str | None = None,
+    collection_name: str | None = None,
+    persist_directory: str | None = None,
+    embedding_model: str | None = None,
 ) -> str:
     """Bind cached retrievals to the complete vector/context policy identity."""
     threshold_key = "none" if similarity_threshold is None else f"{float(similarity_threshold):.6g}"
@@ -207,9 +233,9 @@ def _retrieval_cache_key(
             f"overflow={_context_overflow_policy()}",
             f"header={_context_header_policy()}",
             f"revision={revision}",
-            f"collection={getattr(config, 'collection_name', getattr(config, 'COLLECTION_NAME', ''))}",
-            f"persist={getattr(config, 'CHROMA_PERSIST_DIR', '')}",
-            f"embedding_model={getattr(config, 'MODEL_EMBEDDING', '')}",
+            f"collection={collection_name if collection_name is not None else getattr(config, 'collection_name', getattr(config, 'COLLECTION_NAME', ''))}",
+            f"persist={persist_directory if persist_directory is not None else getattr(config, 'CHROMA_PERSIST_DIR', '')}",
+            f"embedding_model={embedding_model if embedding_model is not None else getattr(config, 'MODEL_EMBEDDING', '')}",
             f"embedding_base={getattr(config, 'BASE_URL', '')}",
             f"term_policy={COURSE_TERM_POLICY_VERSION}",
         ]
@@ -246,6 +272,9 @@ def _get_cached_retrieval_result(
     similarity_threshold: float | None,
     revision: str,
     term_resolution_query: str | None = None,
+    collection_name: str | None = None,
+    persist_directory: str | None = None,
+    embedding_model: str | None = None,
 ) -> RetrievalResult | None:
     maxsize = _rag_retrieval_cache_size()
     ttl = _rag_retrieval_cache_ttl_seconds()
@@ -258,6 +287,9 @@ def _get_cached_retrieval_result(
         similarity_threshold=similarity_threshold,
         revision=revision,
         term_resolution_query=term_resolution_query,
+        collection_name=collection_name,
+        persist_directory=persist_directory,
+        embedding_model=embedding_model,
     )
     now = time.monotonic()
     with _RETRIEVAL_CACHE_LOCK:
@@ -299,6 +331,9 @@ def _store_cached_retrieval_result(
     similarity_threshold: float | None,
     revision: str,
     term_resolution_query: str | None = None,
+    collection_name: str | None = None,
+    persist_directory: str | None = None,
+    embedding_model: str | None = None,
 ) -> None:
     maxsize = _rag_retrieval_cache_size()
     ttl = _rag_retrieval_cache_ttl_seconds()
@@ -319,6 +354,9 @@ def _store_cached_retrieval_result(
         similarity_threshold=similarity_threshold,
         revision=revision,
         term_resolution_query=term_resolution_query,
+        collection_name=collection_name,
+        persist_directory=persist_directory,
+        embedding_model=embedding_model,
     )
     with _RETRIEVAL_CACHE_LOCK:
         _RETRIEVAL_CACHE[key] = (time.monotonic(), _clone_retrieval_result(result))
@@ -386,12 +424,40 @@ def _build_evidence_page_index(
 class RAGService:
     """Course-term or raw-vector retrieval with one token-bounded assembly path."""
 
-    def __init__(self) -> None:
-        self.index_manifest = _load_index_manifest()
-        self.embedding = OpenAIEmbeddings(
-            **embedding_model_kwargs(timeout_seconds=retrieval_embedding_timeout_seconds())
+    def __init__(self, index_binding: CourseIndexBinding | None = None, course_name: str | None = None) -> None:
+        """Create a retriever bound to one course index.
+
+        ``index_binding`` is supplied by the course-resource composition root.
+        Omitting it retains the historical data-science configuration path for
+        existing tools and deployments.
+        """
+        self.index_binding = index_binding
+        self.course_name = str(course_name or config.COURSE_NAME or "数据科学导论").strip()
+        self._collection_name = (
+            str(index_binding.collection_name) if index_binding is not None else str(config.collection_name)
         )
-        self.vector_store_service = VectorStoreService(embedding=self.embedding)
+        self._persist_directory = (
+            str((PROJECT_ROOT / index_binding.persist_directory).resolve())
+            if index_binding is not None and not Path(index_binding.persist_directory).is_absolute()
+            else str(index_binding.persist_directory)
+            if index_binding is not None
+            else str(config.CHROMA_PERSIST_DIR)
+        )
+        self._embedding_model = (
+            str(index_binding.embedding_model) if index_binding is not None else str(config.MODEL_EMBEDDING)
+        )
+        self.index_manifest = _load_index_manifest(index_binding)
+        self.embedding = OpenAIEmbeddings(
+            **embedding_model_kwargs(
+                timeout_seconds=retrieval_embedding_timeout_seconds(),
+                model=self._embedding_model,
+            )
+        )
+        self.vector_store_service = VectorStoreService(
+            embedding=self.embedding,
+            collection_name=self._collection_name,
+            persist_directory=self._persist_directory,
+        )
         if self.vector_store_service.collection.count() != self.index_manifest.document_count:
             self.vector_store_service.close()
             raise RuntimeError("production retrieval collection count does not match its manifest")
@@ -413,7 +479,7 @@ class RAGService:
         self.provenance_issues = provenance_issues
         if provenance_issues:
             logger.warning("Skipped %d malformed retrieval chunks during page-index build", len(provenance_issues))
-        self.prompt_template = build_rag_prompt_template()
+        self.prompt_template = build_rag_prompt_template(self.course_name)
         self.chat_model = get_rag_text_model()
         self._token_counter = load_token_counter(PROJECT_ROOT / "var" / "cache" / "tiktoken")
 
@@ -472,7 +538,10 @@ class RAGService:
         depth = max(1, int(top_k)) if top_k is not None else _candidate_depth()
         manifest = getattr(self, "index_manifest", None)
         manifest_revision = manifest.collection_revision if manifest is not None else "test"
-        runtime_revision = read_kb_revision(config.collection_name, config.CHROMA_PERSIST_DIR)
+        collection_name = str(getattr(self, "_collection_name", getattr(config, "collection_name", "")))
+        persist_directory = str(getattr(self, "_persist_directory", getattr(config, "CHROMA_PERSIST_DIR", "")))
+        embedding_model = str(getattr(self, "_embedding_model", getattr(config, "MODEL_EMBEDDING", "")))
+        runtime_revision = read_kb_revision(collection_name, persist_directory)
         revision = f"{manifest_revision}:{runtime_revision}"
         cached_result = _get_cached_retrieval_result(
             question,
@@ -480,6 +549,9 @@ class RAGService:
             similarity_threshold=similarity_threshold,
             revision=revision,
             term_resolution_query=term_resolution_query,
+            collection_name=collection_name,
+            persist_directory=persist_directory,
+            embedding_model=embedding_model,
         )
         if cached_result is not None:
             _warn_large_rag_payload(
@@ -649,6 +721,9 @@ class RAGService:
             similarity_threshold=similarity_threshold,
             revision=revision,
             term_resolution_query=term_resolution_query,
+            collection_name=collection_name,
+            persist_directory=persist_directory,
+            embedding_model=embedding_model,
         )
         return result
 

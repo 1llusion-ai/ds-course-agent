@@ -26,7 +26,9 @@ class StubAssessmentApplicationService:
         self.calls: list[tuple[object, ...]] = []
         self.now = datetime(2026, 9, 12, 8, 0, tzinfo=timezone.utc)
 
-    def list_assessments(self, student_id: str, statuses: tuple[AssessmentStatus, ...]):
+    def list_assessments(
+        self, student_id: str, statuses: tuple[AssessmentStatus, ...], *, course_id: str = "data-science-intro"
+    ):
         self.calls.append(("list", student_id, statuses))
         return (
             AssessmentSummary(
@@ -39,19 +41,21 @@ class StubAssessmentApplicationService:
             ),
         )
 
-    def open(self, assessment_id: str, student_id: str) -> StudentAssessment:
+    def open(self, assessment_id: str, student_id: str, *, course_id: str = "data-science-intro") -> StudentAssessment:
         self.calls.append(("open", assessment_id, student_id))
         return self._assessment(AssessmentStatus.IN_PROGRESS)
 
-    def get(self, assessment_id: str, student_id: str) -> StudentAssessment:
+    def get(self, assessment_id: str, student_id: str, *, course_id: str = "data-science-intro") -> StudentAssessment:
         self.calls.append(("get", assessment_id, student_id))
         return self._assessment(AssessmentStatus.IN_PROGRESS)
 
-    def submit(self, assessment_id: str, student_id: str, answers) -> AssessmentResult:
+    def submit(
+        self, assessment_id: str, student_id: str, answers, *, course_id: str = "data-science-intro"
+    ) -> AssessmentResult:
         self.calls.append(("submit", assessment_id, student_id, answers))
         return self._result()
 
-    def result(self, assessment_id: str, student_id: str) -> AssessmentResult:
+    def result(self, assessment_id: str, student_id: str, *, course_id: str = "data-science-intro") -> AssessmentResult:
         self.calls.append(("result", assessment_id, student_id))
         return self._result()
 
@@ -156,7 +160,7 @@ def test_preparation_projection_preserves_typed_failure_details(client: TestClie
     )
 
     class StubLearningLoop:
-        def list_preparations(self, student_id: str):
+        def list_preparations(self, student_id: str, *, course_id: str = "data-science-intro"):
             assert student_id == "student-1"
             return (job,)
 

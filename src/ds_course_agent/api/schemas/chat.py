@@ -4,6 +4,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from ds_course_agent.agent.routing.models import ExecutionMode, RouteFamily, RouteIntent
+from ds_course_agent.courses import CourseId
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID
 
 
 class ChatMessage(BaseModel):
@@ -37,6 +39,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     session_id: str
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
     message: str = Field(min_length=1, max_length=2000)
     stream: bool = False
     web_search: bool = False
@@ -44,18 +47,21 @@ class ChatRequest(BaseModel):
 
 class ChatStreamRequest(BaseModel):
     session_id: str
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
     message: str = Field(min_length=1, max_length=20000)
     web_search: bool = False
 
 
 class ChatContinueRequest(BaseModel):
     session_id: str
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
     message_timestamp: datetime
 
 
 class ChatResponse(BaseModel):
     message: ChatMessage
     session_id: str
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
 
 
 class ActiveStreamSnapshot(BaseModel):
@@ -70,6 +76,7 @@ class ActiveStreamSnapshot(BaseModel):
 
 class ChatHistoryResponse(BaseModel):
     session_id: str
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
     messages: list[ChatMessage]
     total: int
     active_stream: ActiveStreamSnapshot | None = None

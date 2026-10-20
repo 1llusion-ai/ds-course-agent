@@ -13,9 +13,11 @@ Learning 后，按 ``RouteDecision.enrichment`` 计划执行。Embedding 不再�
 from __future__ import annotations
 
 import logging
+from inspect import signature
 from typing import Any
 
 from ds_course_agent.agent import scope_guard as _scope_guard
+from ds_course_agent.courses import CourseContext
 from ds_course_agent.runtime.context import warn_context_budget
 from ds_course_agent.shared import history as _history
 from ds_course_agent.shared.query_trace import trace_span, trace_step
@@ -137,6 +139,7 @@ class QueryPipeline:
         student_id: str,
         *,
         web_search: bool = False,
+        course_context: CourseContext | None = None,
     ) -> RouteState:
         """Build a typed RouteState through one linear preprocess→route→build pass."""
 
@@ -147,10 +150,21 @@ class QueryPipeline:
 
         with trace_span("prepare.history_load"):
             history_provider = getattr(agent, "history_provider", _history.get_history)
+            history_kwargs = {"student_id": student_id}
+            if course_context is not None:
+                history_kwargs["course_id"] = str(course_context.course_id)
+            provider_signature = signature(history_provider)
             try:
-                history = history_provider(session_id, student_id=student_id)
+                provider_signature.bind(session_id, **history_kwargs)
             except TypeError:
-                history = history_provider(session_id)
+                if course_context is not None and str(course_context.course_id) != "data-science-intro":
+                    raise TypeError("history provider must accept course_id for a non-default course") from None
+                history_kwargs.pop("course_id", None)
+                try:
+                    provider_signature.bind(session_id, **history_kwargs)
+                except TypeError:
+                    history_kwargs = {}
+            history = history_provider(session_id, **history_kwargs)
             chat_history = history.messages
             if (
                 chat_history
@@ -194,6 +208,7 @@ class QueryPipeline:
                 student_id=student_id,
                 chat_history=chat_history,
             )
+        context.course_context = course_context
         # 类型化路由控制信号（Contract 2）：不走 metadata，规则表直接读 typed 字段。
         context.web_search_requested = bool(web_search)
         context.special_case_response = special_case_response

@@ -18,6 +18,7 @@ from ds_course_agent.assessment.feedback import (
     QuestionRejectionCode,
 )
 from ds_course_agent.assessment.models import GenerateQuestionsRequest
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 
 
 class PreparationStatus(str, Enum):
@@ -48,6 +49,7 @@ class AssessmentPreparation(BaseModel):
     generation_progress: AssessmentGenerationProgress | None = None
     retryable: bool = False
     updated_at: float
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
 
     @property
     def accepted_slot_count(self) -> int:
@@ -78,6 +80,12 @@ class PreparationRepository:
             "CREATE TABLE IF NOT EXISTS assessment_preparations "
             "(id TEXT PRIMARY KEY, student_id TEXT NOT NULL, status TEXT NOT NULL, payload_json TEXT NOT NULL)"
         )
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(assessment_preparations)")}
+        if "course_id" not in columns:
+            connection.execute(
+                "ALTER TABLE assessment_preparations ADD COLUMN course_id TEXT NOT NULL DEFAULT 'data-science-intro'"
+            )
+            connection.commit()
         return connection
 
     @contextmanager
@@ -98,10 +106,13 @@ class PreparationRepository:
         display_name: str,
         request: GenerateQuestionsRequest,
         source_event_ids: tuple[str, ...],
+        *,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
     ) -> AssessmentPreparation:
         """Schedule at most one automatic assessment per student/session/KC."""
 
-        identity = "\0".join((student_id, session_id, request.target_kc_id))
+        normalized_course_id = CourseId(course_id)
+        identity = "\0".join((student_id, str(normalized_course_id), session_id, request.target_kc_id))
         job = AssessmentPreparation(
             id=hashlib.sha256(identity.encode()).hexdigest(),
             student_id=student_id,
@@ -110,32 +121,38 @@ class PreparationRepository:
             request=request,
             source_event_ids=source_event_ids,
             updated_at=time.time(),
+            course_id=normalized_course_id,
         )
         with self._connection() as connection:
             connection.execute(
-                "INSERT OR IGNORE INTO assessment_preparations VALUES (?, ?, ?, ?)",
-                (job.id, student_id, job.status.value, job.model_dump_json()),
+                "INSERT OR IGNORE INTO assessment_preparations (id, student_id, status, payload_json, course_id) VALUES (?, ?, ?, ?, ?)",
+                (job.id, student_id, job.status.value, job.model_dump_json(), str(normalized_course_id)),
             )
-        return self.get(job.id, student_id)
+        return self.get(job.id, student_id, course_id=normalized_course_id)
 
-    def get(self, preparation_id: str, student_id: str) -> AssessmentPreparation:
+    def get(
+        self, preparation_id: str, student_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID
+    ) -> AssessmentPreparation:
         """Read an owner-scoped request."""
 
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT payload_json FROM assessment_preparations WHERE id = ? AND student_id = ?",
-                (preparation_id, student_id),
+                "SELECT payload_json FROM assessment_preparations WHERE id = ? AND student_id = ? AND course_id = ?",
+                (preparation_id, student_id, str(CourseId(course_id))),
             ).fetchone()
         if row is None:
             raise KeyError(preparation_id)
         return AssessmentPreparation.model_validate_json(row["payload_json"])
 
-    def list_for_student(self, student_id: str) -> tuple[AssessmentPreparation, ...]:
+    def list_for_student(
+        self, student_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID
+    ) -> tuple[AssessmentPreparation, ...]:
         """Read all preparation states for one learner."""
 
         with self._connection() as connection:
             rows = connection.execute(
-                "SELECT payload_json FROM assessment_preparations WHERE student_id = ?", (student_id,)
+                "SELECT payload_json FROM assessment_preparations WHERE student_id = ? AND course_id = ?",
+                (student_id, str(CourseId(course_id))),
             ).fetchall()
         return tuple(AssessmentPreparation.model_validate_json(row["payload_json"]) for row in rows)
 
@@ -173,7 +190,14 @@ class PreparationRepository:
         with self._connection() as connection:
             cursor = connection.execute(
                 "UPDATE assessment_preparations SET status = ?, payload_json = ? "
-                "WHERE id = ? AND student_id = ? AND payload_json = ?",
-                (status.value, updated.model_dump_json(), job.id, job.student_id, job.model_dump_json()),
+                "WHERE id = ? AND student_id = ? AND course_id = ? AND payload_json = ?",
+                (
+                    status.value,
+                    updated.model_dump_json(),
+                    job.id,
+                    job.student_id,
+                    str(job.course_id),
+                    job.model_dump_json(),
+                ),
             )
         return updated if cursor.rowcount else None

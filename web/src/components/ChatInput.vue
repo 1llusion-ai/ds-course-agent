@@ -6,6 +6,7 @@
         rows="1"
         class="input-field"
         :placeholder="placeholder"
+        :disabled="disabled"
         @keydown.enter="handleEnterKey"
         @input="handleInput"
         ref="textareaRef"
@@ -18,7 +19,7 @@
             :class="{ 'web-search-toggle--active': webSearchEnabled }"
             :aria-pressed="webSearchEnabled"
             :title="webSearchEnabled ? '联网搜索已开启' : '开启联网搜索'"
-            :disabled="loading"
+            :disabled="loading || disabled"
             @click="handleToggleWebSearch"
           >
             <svg class="web-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -36,7 +37,7 @@
           type="button"
           class="send-btn"
           :class="{ 'send-btn--stop': loading }"
-          :disabled="!loading && !inputText.trim()"
+          :disabled="disabled || (!loading && !inputText.trim())"
           :aria-label="loading ? '停止生成' : '发送消息'"
           :title="loading ? '停止生成' : '发送消息'"
           @click="handlePrimaryAction"
@@ -58,6 +59,7 @@ import { computed, ref, nextTick, watch } from 'vue'
 
 const props = defineProps({
   loading: Boolean,
+  disabled: Boolean,
   hero: Boolean,
   webSearchEnabled: Boolean,
   initialText: { type: String, default: '' },
@@ -105,7 +107,7 @@ function handleInput() {
 
 function handleSend() {
   const text = inputText.value.trim()
-  if (!text || props.loading) return
+  if (!text || props.loading || props.disabled) return
   emit('send', text, { webSearch: props.webSearchEnabled })
   inputText.value = ''
   userEdited.value = false
@@ -116,7 +118,7 @@ function handleSend() {
 }
 
 function handleToggleWebSearch() {
-  if (props.loading) return
+  if (props.loading || props.disabled) return
   emit('toggle-web-search', !props.webSearchEnabled)
 }
 

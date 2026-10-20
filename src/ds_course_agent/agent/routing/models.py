@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from ds_course_agent.courses import CourseContext
 from ds_course_agent.shared.term_queries import ShortTermQuery
 from ds_course_agent.teaching.learner_state import LearnerStateSnapshot, LearnerStateSummary
 from ds_course_agent.teaching.personalization import PersonalizationContext
@@ -117,6 +118,7 @@ class QueryContext:
 
     # 对话历史
     chat_history: list[Any]  # List[BaseMessage]
+
     recent_context: str = ""
 
     # 面向 tool/RAG 的增强查询；默认等于 normalized_query。
@@ -151,6 +153,10 @@ class QueryContext:
 
     # 元数据
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    # Turn-scoped course identity.  Kept at the end to preserve positional
+    # construction of the pre-existing query context contract.
+    course_context: CourseContext | None = None
 
 
 @dataclass(frozen=True)
@@ -217,6 +223,16 @@ class RouteState:
     history: Any | None = None
     personalization_context: PersonalizationContext | None = None
     pending_learning_event: bool = False
+    course_context: CourseContext | None = None
+
+    def __post_init__(self) -> None:
+        """Keep the route projection bound to its query's course context."""
+
+        query_course_context = self.context.course_context
+        if self.course_context is None:
+            self.course_context = query_course_context
+        elif query_course_context is not None and self.course_context != query_course_context:
+            raise ValueError("RouteState course_context must match QueryContext")
 
 
 @dataclass

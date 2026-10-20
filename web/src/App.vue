@@ -8,11 +8,13 @@ import { watch } from 'vue'
 import { useAssessmentStore } from './stores/assessment'
 import { useAuthStore } from './stores/auth'
 import { useChatStore } from './stores/chat'
+import { useCourseStore } from './stores/course'
 import { useProfileStore } from './stores/profile'
 import { useSessionStore } from './stores/session'
 
 const authStore = useAuthStore()
 const chatStore = useChatStore()
+const courseStore = useCourseStore()
 const sessionStore = useSessionStore()
 const assessmentStore = useAssessmentStore()
 const profileStore = useProfileStore()
@@ -30,8 +32,20 @@ watch(
     sessionStore.resetForUser()
     assessmentStore.resetForUser()
     profileStore.resetForUser()
+    courseStore.resetForUser()
   },
   { immediate: true }
+)
+
+watch(
+  () => courseStore.selectedCourseId,
+  () => {
+    chatStore.resetForCourse()
+    sessionStore.resetForCourse()
+    assessmentStore.resetForUser()
+    profileStore.resetForUser()
+  },
+  { flush: 'sync' }
 )
 </script>
 

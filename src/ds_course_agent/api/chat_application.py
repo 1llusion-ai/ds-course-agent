@@ -15,6 +15,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from ds_course_agent.api import chat_sessions, chat_streaming
 from ds_course_agent.api.core_bridge import chat_with_history, stream_chat_with_history, stream_continue_with_history
+from ds_course_agent.api.course_context import require_course
 from ds_course_agent.api.schemas.chat import (
     ChatContinueRequest,
     ChatHistoryResponse,
@@ -23,6 +24,7 @@ from ds_course_agent.api.schemas.chat import (
     ChatResponse,
     ChatStreamRequest,
 )
+from ds_course_agent.api.session_repository import DEFAULT_COURSE_ID
 from ds_course_agent.api.sse import iter_stream_job_events
 from ds_course_agent.api.stream_jobs import ActiveStreamJob, stream_job_registry
 
@@ -121,17 +123,19 @@ _generation_admission = _GenerationAdmission(
 async def send_message(data: ChatRequest, student_id: str) -> ChatResponse:
     """Execute and persist one non-streaming chat turn."""
 
-    chat_sessions.ensure_session_owner(data.session_id, student_id)
+    require_course(data.course_id, ready=True)
+    chat_sessions.ensure_session_owner(data.session_id, student_id, data.course_id)
     lease = await _generation_admission.acquire()
     try:
-        async with chat_sessions.session_operation_guard(data.session_id):
-            is_first_message = chat_sessions.message_count(data.session_id) == 0
+        async with chat_sessions.session_operation_guard(data.session_id, data.course_id):
+            is_first_message = chat_sessions.message_count(data.session_id, data.course_id) == 0
             user_msg = ChatMessage(role="user", content=data.message)
-            appended_user_item = chat_sessions.append_message_locked(data.session_id, user_msg)
+            appended_user_item = chat_sessions.append_message_locked(data.session_id, user_msg, data.course_id)
             chat_sessions.schedule_title_generation(
                 data.session_id,
                 data.message,
                 is_first_message=is_first_message,
+                course_id=data.course_id,
             )
 
             try:
@@ -140,12 +144,14 @@ async def send_message(data: ChatRequest, student_id: str) -> ChatResponse:
                     "session_id": data.session_id,
                     "student_id": student_id,
                 }
+                if data.course_id != DEFAULT_COURSE_ID:
+                    assistant_kwargs["course_id"] = data.course_id
                 if data.web_search:
                     assistant_kwargs["web_search"] = True
                 assistant_result = await run_in_threadpool(chat_with_history, **assistant_kwargs)
             except Exception as exc:
                 logger.error("Agent处理失败: %s", exc, exc_info=True)
-                chat_sessions.remove_message_by_identity(data.session_id, appended_user_item)
+                chat_sessions.remove_message_by_identity(data.session_id, appended_user_item, data.course_id)
                 raise HTTPException(
                     status_code=500,
                     detail={
@@ -185,9 +191,9 @@ async def send_message(data: ChatRequest, student_id: str) -> ChatResponse:
                 if assistant_payload
                 else None,
             )
-            if not chat_sessions.replace_latest_generated_assistant(data.session_id, assistant_msg):
-                chat_sessions.append_message_locked(data.session_id, assistant_msg)
-            return ChatResponse(message=assistant_msg, session_id=data.session_id)
+            if not chat_sessions.replace_latest_generated_assistant(data.session_id, assistant_msg, data.course_id):
+                chat_sessions.append_message_locked(data.session_id, assistant_msg, data.course_id)
+            return ChatResponse(message=assistant_msg, session_id=data.session_id, course_id=data.course_id)
     finally:
         lease.release()
 
@@ -198,7 +204,8 @@ async def stream_message_events(
 ) -> AsyncGenerator[dict[str, Any], None]:
     """Validate stream ownership before returning the lazy event generator."""
 
-    chat_sessions.ensure_session_owner(data.session_id, student_id)
+    require_course(data.course_id, ready=True)
+    chat_sessions.ensure_session_owner(data.session_id, student_id, data.course_id)
     lease = await _generation_admission.acquire()
     return _stream_message_events(data, student_id, lease)
 
@@ -209,7 +216,7 @@ async def _stream_message_events(
     lease: _GenerationLease,
 ) -> AsyncGenerator[dict[str, Any], None]:
     session_id = data.session_id
-    operation_lock = chat_sessions.session_operation_lock(session_id)
+    operation_lock = chat_sessions.session_operation_lock(session_id, data.course_id)
     operation_lock_acquired = False
     await chat_sessions.acquire_threading_lock(operation_lock)
     operation_lock_acquired = True
@@ -226,13 +233,14 @@ async def _stream_message_events(
             "message": "正在生成...",
         }
 
-        is_first_message = chat_sessions.message_count(session_id) == 0
+        is_first_message = chat_sessions.message_count(session_id, data.course_id) == 0
         user_message = ChatMessage(role="user", content=data.message)
-        chat_sessions.append_message_locked(session_id, user_message)
+        chat_sessions.append_message_locked(session_id, user_message, data.course_id)
         chat_sessions.schedule_title_generation(
             session_id,
             data.message,
             is_first_message=is_first_message,
+            course_id=data.course_id,
         )
 
         def event_source():
@@ -241,6 +249,8 @@ async def _stream_message_events(
                 "session_id": session_id,
                 "student_id": student_id,
             }
+            if data.course_id != DEFAULT_COURSE_ID:
+                stream_kwargs["course_id"] = data.course_id
             if data.web_search:
                 stream_kwargs["web_search"] = True
             return stream_chat_with_history(**stream_kwargs)
@@ -248,6 +258,7 @@ async def _stream_message_events(
         job = chat_streaming.launch_stream_worker(
             session_id=session_id,
             student_id=student_id,
+            course_id=data.course_id,
             operation_lock=operation_lock,
             event_source=event_source,
             message_timestamp=datetime.now(),
@@ -270,7 +281,8 @@ async def continue_message_events(
 ) -> AsyncGenerator[dict[str, Any], None]:
     """Validate continuation ownership before returning the lazy event generator."""
 
-    chat_sessions.ensure_session_owner(data.session_id, student_id)
+    require_course(data.course_id, ready=True)
+    chat_sessions.ensure_session_owner(data.session_id, student_id, data.course_id)
     lease = await _generation_admission.acquire()
     return _continue_message_events(data, student_id, lease)
 
@@ -281,7 +293,7 @@ async def _continue_message_events(
     lease: _GenerationLease,
 ) -> AsyncGenerator[dict[str, Any], None]:
     session_id = data.session_id
-    operation_lock = chat_sessions.session_operation_lock(session_id)
+    operation_lock = chat_sessions.session_operation_lock(session_id, data.course_id)
     operation_lock_acquired = False
     await chat_sessions.acquire_threading_lock(operation_lock)
     operation_lock_acquired = True
@@ -298,19 +310,23 @@ async def _continue_message_events(
             "message": "正在继续生成...",
         }
 
-        target_item = chat_sessions.find_stopped_assistant_turn(session_id, data.message_timestamp)
+        target_item = chat_sessions.find_stopped_assistant_turn(session_id, data.message_timestamp, data.course_id)
         base_message = chat_sessions.message_from_dict(target_item)
 
         def event_source():
-            return stream_continue_with_history(
-                partial_content=base_message.content,
-                session_id=session_id,
-                student_id=student_id,
-            )
+            continuation_kwargs: dict[str, Any] = {
+                "partial_content": base_message.content,
+                "session_id": session_id,
+                "student_id": student_id,
+            }
+            if data.course_id != DEFAULT_COURSE_ID:
+                continuation_kwargs["course_id"] = data.course_id
+            return stream_continue_with_history(**continuation_kwargs)
 
         job = chat_streaming.launch_stream_worker(
             session_id=session_id,
             student_id=student_id,
+            course_id=data.course_id,
             operation_lock=operation_lock,
             event_source=event_source,
             message_timestamp=base_message.timestamp,
@@ -331,47 +347,52 @@ async def _continue_message_events(
         lease.release()
 
 
-def get_resume_job(session_id: str, student_id: str) -> ActiveStreamJob:
+def get_resume_job(session_id: str, student_id: str, course_id: str = "data-science-intro") -> ActiveStreamJob:
     """Return the owned active or recently completed stream job for replay."""
 
-    chat_sessions.ensure_session_owner(session_id, student_id)
-    job = stream_job_registry.get_for_owner(session_id, student_id)
+    require_course(course_id)
+    chat_sessions.ensure_session_owner(session_id, student_id, course_id)
+    job = stream_job_registry.get_for_owner(session_id, student_id, course_id)
     if not job:
         raise HTTPException(status_code=404, detail="当前会话没有可恢复的生成流")
     return job
 
 
-def cancel_generation(session_id: str, student_id: str) -> dict[str, Any]:
+def cancel_generation(session_id: str, student_id: str, course_id: str = "data-science-intro") -> dict[str, Any]:
     """Request cancellation for the student's active generation."""
 
-    chat_sessions.ensure_session_owner(session_id, student_id)
-    job = stream_job_registry.get_for_owner(session_id, student_id, active_only=True)
+    require_course(course_id)
+    chat_sessions.ensure_session_owner(session_id, student_id, course_id)
+    job = stream_job_registry.get_for_owner(session_id, student_id, course_id, active_only=True)
     if not job:
         return {"cancelled": False, "session_id": session_id}
     job.cancel_event.set()
     return {"cancelled": True, "session_id": session_id}
 
 
-def get_history(session_id: str, student_id: str) -> ChatHistoryResponse:
+def get_history(session_id: str, student_id: str, course_id: str = "data-science-intro") -> ChatHistoryResponse:
     """Return persisted messages plus any active stream snapshot."""
 
-    chat_sessions.ensure_session_owner(session_id, student_id)
-    raw_messages = chat_sessions.list_messages(session_id)
+    require_course(course_id)
+    chat_sessions.ensure_session_owner(session_id, student_id, course_id)
+    raw_messages = chat_sessions.list_messages(session_id, course_id)
     messages = [chat_sessions.message_from_dict(item) for item in raw_messages]
     return ChatHistoryResponse(
         session_id=session_id,
+        course_id=course_id,
         messages=messages,
         total=len(messages),
-        active_stream=chat_streaming.active_stream_snapshot(session_id, student_id),
+        active_stream=chat_streaming.active_stream_snapshot(session_id, student_id, course_id),
     )
 
 
-async def clear_history(session_id: str, student_id: str) -> dict[str, str]:
+async def clear_history(session_id: str, student_id: str, course_id: str = "data-science-intro") -> dict[str, str]:
     """Delete persisted messages after any active turn for the session finishes."""
 
-    chat_sessions.ensure_session_owner(session_id, student_id)
-    async with chat_sessions.session_operation_guard(session_id):
-        chat_sessions.clear_messages(session_id)
+    require_course(course_id)
+    chat_sessions.ensure_session_owner(session_id, student_id, course_id)
+    async with chat_sessions.session_operation_guard(session_id, course_id):
+        chat_sessions.clear_messages(session_id, course_id)
     return {"message": "聊天记录已清空"}
 
 

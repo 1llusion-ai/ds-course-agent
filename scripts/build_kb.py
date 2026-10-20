@@ -220,6 +220,10 @@ def build_knowledge_base(
         parse_result.file_name,
         parser_source=parse_result.parser_mode,
         page_offset=page_offset,
+        heading_hints={
+            page.page_num: tuple(block.text for block in page.blocks if block.block_type == "SectionHeader")
+            for page in parse_result.pages
+        },
     )
 
     ingest_result = None

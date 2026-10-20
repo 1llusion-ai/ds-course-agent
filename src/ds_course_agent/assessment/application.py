@@ -23,6 +23,7 @@ from ds_course_agent.assessment.records import (
 )
 from ds_course_agent.assessment.repository import AssessmentRepository
 from ds_course_agent.assessment.service import AssessmentService, get_assessment_service
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 
 
 class AssessmentNotFoundError(LookupError):
@@ -68,11 +69,13 @@ class AssessmentApplicationService:
         session_id: str | None = None,
         assignment_id: str | None = None,
         generation_progress: AssessmentGenerationProgress | None = None,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
     ) -> AssessmentSummary:
         """Generate and assign a quiz from agent-selected typed parameters."""
 
+        normalized_course_id = CourseId(course_id)
         if assignment_id is not None:
-            existing = self._repository.get(assignment_id, student_id)
+            existing = self._repository.get(assignment_id, student_id, course_id=normalized_course_id)
             if existing is not None:
                 if existing.session_id != session_id or existing.request != request:
                     raise AssessmentStateError("assignment identity conflicts with the persisted request")
@@ -94,11 +97,12 @@ class AssessmentApplicationService:
             question_ids=tuple(self._id_factory() for _ in quiz.questions),
             status=AssessmentStatus.READY,
             assigned_at=now,
+            course_id=normalized_course_id,
         )
         try:
             self._repository.create(record)
         except sqlite3.IntegrityError:
-            existing = self._repository.get(record.id, student_id)
+            existing = self._repository.get(record.id, student_id, course_id=normalized_course_id)
             if existing is None or existing.request != request or existing.session_id != session_id:
                 raise
             return self._summary(existing)
@@ -108,16 +112,23 @@ class AssessmentApplicationService:
         self,
         student_id: str,
         statuses: Sequence[AssessmentStatus],
+        *,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
     ) -> tuple[AssessmentSummary, ...]:
         """List assessments visible to the current student."""
 
-        return tuple(self._summary(record) for record in self._repository.list_for_student(student_id, statuses))
+        return tuple(
+            self._summary(record)
+            for record in self._repository.list_for_student(student_id, statuses, course_id=course_id)
+        )
 
-    def open(self, assessment_id: str, student_id: str) -> StudentAssessment:
+    def open(
+        self, assessment_id: str, student_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID
+    ) -> StudentAssessment:
         """Start an assigned assessment while preserving its first open time."""
 
         with self._lock:
-            record = self._get(assessment_id, student_id)
+            record = self._get(assessment_id, student_id, course_id=course_id)
             if record.status is AssessmentStatus.READY:
                 record = self._replace(
                     record,
@@ -128,10 +139,12 @@ class AssessmentApplicationService:
                 raise AssessmentStateError("only ready or in-progress assessments can be opened")
         return self._student_projection(record)
 
-    def get(self, assessment_id: str, student_id: str) -> StudentAssessment:
+    def get(
+        self, assessment_id: str, student_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID
+    ) -> StudentAssessment:
         """Return the answer-blind question projection for an active assessment."""
 
-        record = self._get(assessment_id, student_id)
+        record = self._get(assessment_id, student_id, course_id=course_id)
         if record.status not in {AssessmentStatus.READY, AssessmentStatus.IN_PROGRESS}:
             raise AssessmentStateError("assessment questions are no longer active")
         return self._student_projection(record)
@@ -141,11 +154,13 @@ class AssessmentApplicationService:
         assessment_id: str,
         student_id: str,
         submissions: Sequence[AnswerSubmission],
+        *,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
     ) -> AssessmentResult:
         """Idempotently score a complete answer set and persist the terminal result."""
 
         with self._lock:
-            record = self._get(assessment_id, student_id)
+            record = self._get(assessment_id, student_id, course_id=course_id)
             if record.status is AssessmentStatus.SUBMITTED:
                 self._validate_submissions(record, submissions)
                 self._require_same_submission(record, submissions)
@@ -173,10 +188,12 @@ class AssessmentApplicationService:
         self._record_submission(record)
         return self._result(record)
 
-    def result(self, assessment_id: str, student_id: str) -> AssessmentResult:
+    def result(
+        self, assessment_id: str, student_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID
+    ) -> AssessmentResult:
         """Return answer keys and evidence only after a successful submission."""
 
-        record = self._get(assessment_id, student_id)
+        record = self._get(assessment_id, student_id, course_id=course_id)
         if record.status is not AssessmentStatus.SUBMITTED:
             raise AssessmentStateError("assessment result is unavailable before submission")
         return self._result(record)
@@ -185,8 +202,10 @@ class AssessmentApplicationService:
         if self._submission_recorder is not None:
             self._submission_recorder(record)
 
-    def _get(self, assessment_id: str, student_id: str) -> AssessmentRecord:
-        record = self._repository.get(assessment_id, student_id)
+    def _get(
+        self, assessment_id: str, student_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID
+    ) -> AssessmentRecord:
+        record = self._repository.get(assessment_id, student_id, course_id=course_id)
         if record is None:
             raise AssessmentNotFoundError(assessment_id)
         return record
@@ -245,6 +264,7 @@ class AssessmentApplicationService:
             question_count=len(record.question_ids),
             assigned_at=record.assigned_at,
             opened_at=record.opened_at,
+            course_id=record.course_id,
         )
 
     @staticmethod
@@ -259,6 +279,7 @@ class AssessmentApplicationService:
                 StudentQuestion(id=question_id, stem=question.stem, options=tuple(question.options))
                 for question_id, question in zip(record.question_ids, record.quiz.questions, strict=True)
             ),
+            course_id=record.course_id,
         )
 
     @staticmethod
@@ -298,6 +319,7 @@ class AssessmentApplicationService:
             question_count=len(record.question_ids),
             score_percent=round(correct_count * 100 / len(record.question_ids), 1),
             questions=tuple(question_results),
+            course_id=record.course_id,
         )
 
     def _utc_now(self) -> datetime:

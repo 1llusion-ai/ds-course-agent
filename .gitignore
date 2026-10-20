@@ -81,5 +81,7 @@ var/chroma_db/*
 var/logs/*
 var/artifacts/*
 var/cache/*
+var/course_sources/*
+var/chroma_candidates/*
 var/*.sh
 !var/**/.gitkeep

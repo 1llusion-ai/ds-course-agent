@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test'
+import { mockDefaultCourse } from './helpers/courses'
+
+test.beforeEach(async ({ page }) => { await mockDefaultCourse(page) })
 
 const graph = {
   chapters: [
@@ -41,9 +44,9 @@ test('directory overlays the graph while the KC inspector resizes it and remains
   await page.route('**/api/auth/me', route => route.fulfill({
     json: { student_id: 'student', display_name: '测试学生' }
   }))
-  await page.route('**/api/sessions', route => route.fulfill({ json: { sessions: [] } }))
-  await page.route('**/api/profile/summary', route => route.fulfill({ json: {} }))
-  await page.route('**/api/knowledge-map', route => route.fulfill({ json: graph }))
+  await page.route('**/api/sessions?**', route => route.fulfill({ json: { sessions: [] } }))
+  await page.route('**/api/profile/summary?**', route => route.fulfill({ json: {} }))
+  await page.route('**/api/knowledge-map?**', route => route.fulfill({ json: graph }))
 
   await page.goto('/knowledge-map')
   await expect(page.getByRole('heading', { name: '知识地图' })).toBeVisible()

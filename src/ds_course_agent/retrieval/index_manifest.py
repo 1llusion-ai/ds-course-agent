@@ -52,10 +52,10 @@ class PromotedIndexManifest(BaseModel):
     build_seconds: float = Field(ge=0.0)
 
 
-def resolve_manifest_path(settings: Settings) -> Path:
+def resolve_manifest_path(settings: Settings, manifest_path: str | Path | None = None) -> Path:
     """Resolve the configured production manifest without touching the index."""
 
-    configured = str(settings.RAG_INDEX_MANIFEST_PATH or "").strip()
+    configured = str(manifest_path or settings.RAG_INDEX_MANIFEST_PATH or "").strip()
     if configured:
         path = Path(configured)
         return path if path.is_absolute() else PROJECT_ROOT / path
@@ -68,22 +68,38 @@ def resolve_manifest_path(settings: Settings) -> Path:
     )
 
 
-def load_and_validate_manifest(settings: Settings) -> PromotedIndexManifest:
+def load_and_validate_manifest(
+    settings: Settings,
+    *,
+    manifest_path: str | Path | None = None,
+    persist_directory: str | Path | None = None,
+    collection_name: str | None = None,
+    embedding_model: str | None = None,
+    revision: str | None = None,
+) -> PromotedIndexManifest:
     """Load a manifest and validate the configuration-bound identity fields."""
 
-    path = resolve_manifest_path(settings)
+    path = resolve_manifest_path(settings, manifest_path)
     if not path.is_file():
         raise RuntimeError(f"production retrieval index manifest is missing: {path}")
     manifest = PromotedIndexManifest.model_validate_json(path.read_bytes())
+    expected_persist_value = persist_directory or settings.CHROMA_PERSIST_DIR
     expected_persist = (PROJECT_ROOT / manifest.persist_directory).resolve()
-    if expected_persist != Path(settings.CHROMA_PERSIST_DIR).resolve():
+    configured_persist = Path(str(expected_persist_value))
+    if not configured_persist.is_absolute():
+        configured_persist = PROJECT_ROOT / configured_persist
+    if expected_persist != configured_persist.resolve():
         raise RuntimeError("production retrieval manifest persist directory does not match configuration")
-    if manifest.destination_collection != settings.COLLECTION_NAME:
+    expected_collection = str(collection_name or settings.COLLECTION_NAME)
+    if manifest.destination_collection != expected_collection:
         raise RuntimeError("production retrieval manifest collection does not match configuration")
-    if manifest.embedding_model != settings.EMBEDDING_MODEL:
+    expected_embedding_model = str(embedding_model or settings.EMBEDDING_MODEL)
+    if manifest.embedding_model != expected_embedding_model:
         raise RuntimeError("query embedding model does not match the production retrieval index")
     if manifest.embedding_distance != "cosine" or manifest.embedding_query_prefix:
         raise RuntimeError("production retrieval index must use cosine distance and an empty query prefix")
+    if revision is not None and manifest.collection_revision != str(revision):
+        raise RuntimeError("production retrieval manifest revision does not match the course index binding")
     return manifest
 
 
