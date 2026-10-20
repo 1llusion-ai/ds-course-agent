@@ -17,7 +17,8 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from ds_course_agent.courses import CourseCatalog
+from ds_course_agent.courses import CourseCatalog, CourseId
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID
 from ds_course_agent.shared.config_utils import (
     config_bool,
     config_float,
@@ -84,6 +85,11 @@ def course_scope(course_id: str | None) -> Iterator[None]:
         _course_id.reset(token)
 
 
+def get_current_course_id() -> CourseId:
+    """Return the tool call's course identity, using the default only when unbound."""
+    return CourseId(_course_id.get() or DEFAULT_COURSE_ID)
+
+
 def _course_manifest(course_id: str):
     catalog = CourseCatalog.from_directory(PROJECT_ROOT / "data" / "courses")
     manifest = catalog.require(course_id)
@@ -96,8 +102,8 @@ def get_rag_service(course_id: str | None = None) -> RAGService:
     """Return a retrieval service bound to the current course index."""
 
     global _rag_service
-    resolved_course_id = str(course_id or _course_id.get() or "data-science-intro")
-    if resolved_course_id != "data-science-intro":
+    resolved_course_id = str(course_id or get_current_course_id())
+    if resolved_course_id != DEFAULT_COURSE_ID:
         service = _course_rag_services.get(resolved_course_id)
         if service is None:
             from ds_course_agent.retrieval.service import RAGService
@@ -203,6 +209,7 @@ __all__ = [
     "config_value",
     "end_retrieval_trace",
     "get_retrieval_trace",
+    "get_current_course_id",
     "get_rag_service",
     "course_scope",
     "merge_retrieval_sources",

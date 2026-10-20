@@ -11,57 +11,49 @@ import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
 from langchain_core.documents import Document
 from langchain_core.tools import tool
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.courses import CourseCatalog, CourseId
+from ds_course_agent.kb.toc_parser import SectionInfo, TOCParser
 from ds_course_agent.retrieval.term_resolution import CourseTermResolution
+from ds_course_agent.shared.paths import PROJECT_ROOT
 from ds_course_agent.tools._shared import (
     RetrievalTrace,
     _track_retrieval,
     _warn_large_tool_result,
     begin_retrieval_trace,
     end_retrieval_trace,
+    get_current_course_id,
     get_rag_service,
     get_retrieval_trace,
 )
 
 
-def _get_chapter_start_pages() -> dict[str, int]:
-    """Load chapter start pages from the TOC parser when available."""
+@lru_cache(maxsize=32)
+def _cached_source_chapters(course_id: CourseId, revision: str, toc_path: Path) -> dict[str, SectionInfo]:
+    """Cache chapter titles and page coordinates by the complete course binding."""
+    toc = TOCParser(str(toc_path))
+    return {section.number: section for section in toc.sections if section.level == 1 and section.number}
+
+
+def _source_chapters(metadata: dict) -> dict[str, SectionInfo]:
+    """Resolve the source's course before reading any chapter or page metadata."""
+    course_id = metadata.get("course_id") or get_current_course_id()
+    course = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").get(course_id)
+    if course is None or not course.toc_path:
+        return {}
     try:
-        from ds_course_agent.kb.toc_parser import get_toc_parser
-
-        toc = get_toc_parser()
-        mapping: dict[str, int] = {}
-        for section in toc.sections:
-            number = getattr(section, "number", "")
-            page = getattr(section, "page", None)
-            if not isinstance(number, str) or page is None:
-                continue
-            if number.startswith("第") and "章" in number:
-                mapping[number] = int(page)
-        if mapping:
-            return mapping
-    except Exception:
-        pass
-
-    return {
-        "第1章": 1,
-        "第2章": 15,
-        "第3章": 26,
-        "第4章": 51,
-        "第5章": 77,
-        "第6章": 115,
-        "第7章": 139,
-        "第8章": 160,
-        "第9章": 199,
-        "第10章": 211,
-    }
+        return _cached_source_chapters(course.course_id, course.revision, PROJECT_ROOT / course.toc_path)
+    except (OSError, ValueError):
+        # Keep the retrieved source metadata if its own directory cannot be read.
+        return {}
 
 
-_CHAPTER_START_PAGES: dict[str, int] = {}
 _ANSWER_CACHE_LOCK = threading.RLock()
 _ANSWER_CACHE: OrderedDict[str, tuple[float, str]] = OrderedDict()
 
@@ -137,10 +129,8 @@ def _extract_chapter_no(metadata: dict) -> str:
     return ""
 
 
-def _get_absolute_page(doc) -> int | None:
+def _get_absolute_page(doc, *, chapters: dict[str, SectionInfo] | None = None) -> int | None:
     """Convert chunk-local page information into textbook absolute pages."""
-    global _CHAPTER_START_PAGES
-
     metadata = getattr(doc, "metadata", {}) or {}
 
     direct_page = metadata.get("book_page")
@@ -151,12 +141,10 @@ def _get_absolute_page(doc) -> int | None:
     if direct_page is not None:
         return int(direct_page)
 
-    if not _CHAPTER_START_PAGES:
-        _CHAPTER_START_PAGES = _get_chapter_start_pages()
-
     chapter_no = _extract_chapter_no(metadata)
-    chapter_start = _CHAPTER_START_PAGES.get(chapter_no)
-    if chapter_start is None:
+    course_chapters = _source_chapters(metadata) if chapters is None else chapters
+    chapter = course_chapters.get(chapter_no)
+    if chapter is None:
         return None
 
     relative_page = metadata.get("page")
@@ -165,10 +153,10 @@ def _get_absolute_page(doc) -> int | None:
     if relative_page is None:
         return None
 
-    return chapter_start + int(relative_page) - 1
+    return chapter.page + int(relative_page) - 1
 
 
-def _chapter_from_outline_number(metadata: dict) -> tuple[str, str]:
+def _chapter_from_outline_number(metadata: dict, chapters: dict[str, SectionInfo]) -> tuple[str, str]:
     """Infer the chapter from section/subsection numbers when stored metadata drifts."""
     outline = str(metadata.get("subsection_no") or metadata.get("section_no") or "").strip()
     match = re.match(r"^(\d+)\.", outline)
@@ -176,41 +164,16 @@ def _chapter_from_outline_number(metadata: dict) -> tuple[str, str]:
         return "", ""
 
     chapter_no = f"第{int(match.group(1))}章"
-    try:
-        from ds_course_agent.kb.toc_parser import get_toc_parser
-
-        toc = get_toc_parser()
-        for section in toc.sections:
-            if getattr(section, "level", None) != 1:
-                continue
-            if str(getattr(section, "number", "")).strip() == chapter_no:
-                return chapter_no, str(getattr(section, "name", "") or "").strip()
-    except Exception:
-        pass
-
-    fallback_names = {
-        "第1章": "数据思维",
-        "第2章": "数据科学基本知识",
-        "第3章": "Python 语言快速入门",
-        "第4章": "Python 数据分析",
-        "第5章": "数据可视化",
-        "第6章": "监督学习常用算法",
-        "第7章": "无监督学习算法",
-        "第8章": "综合实践",
-        "第9章": "大语言模型及其应用",
-        "第10章": "数据科学竞赛",
-    }
-    return chapter_no, fallback_names.get(chapter_no, "")
+    chapter = chapters.get(chapter_no)
+    return (chapter_no, chapter.name) if chapter is not None else ("", "")
 
 
-def _source_chapter_label(metadata: dict) -> tuple[str, str]:
+def _source_chapter_label(metadata: dict, chapters: dict[str, SectionInfo]) -> tuple[str, str]:
     stored_no = _extract_chapter_no(metadata)
     stored_title = str(metadata.get("chapter") or "").strip()
-    inferred_no, inferred_title = _chapter_from_outline_number(metadata)
+    inferred_no, inferred_title = _chapter_from_outline_number(metadata, chapters)
 
     if inferred_no and inferred_no != stored_no:
-        return inferred_no, inferred_title or stored_title
-    if inferred_no and not stored_no:
         return inferred_no, inferred_title or stored_title
     if inferred_no and inferred_no == stored_no and inferred_title:
         return stored_no, inferred_title
@@ -223,8 +186,9 @@ def build_sources_from_documents(documents) -> list[dict]:
 
     for doc in documents or []:
         metadata = getattr(doc, "metadata", {}) or {}
-        chapter_no, chapter = _source_chapter_label(metadata)
-        abs_page = _get_absolute_page(doc)
+        chapters = _source_chapters(metadata)
+        chapter_no, chapter = _source_chapter_label(metadata, chapters)
+        abs_page = _get_absolute_page(doc, chapters=chapters)
 
         if chapter and chapter_no and abs_page:
             reference = f"《{chapter_no} {chapter}》第{abs_page}页"

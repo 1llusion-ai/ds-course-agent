@@ -555,6 +555,24 @@
   color: #78716c;
 }
 
+.map-message--empty {
+  flex-direction: column;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.map-message--empty h1 {
+  margin: 0;
+  color: inherit;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.map-message--empty p {
+  margin: 0 0 8px;
+  line-height: 1.6;
+}
+
 @media (max-width: 1120px) {
   .map-stage__toolbar {
     padding-inline: 14px;

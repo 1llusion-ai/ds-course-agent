@@ -15,6 +15,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ds_course_agent.courses import CourseCatalog, CourseId, CourseResourceManifest
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID
 from ds_course_agent.shared.paths import PROJECT_ROOT
 from ds_course_agent.teaching.practice import PracticeLevel
 from ds_course_agent.teaching.profile_models import StudentProfile
@@ -212,10 +214,29 @@ def load_knowledge_map(catalog_path: Path, toc_path: Path) -> KnowledgeMap:
     )
 
 
-@lru_cache(maxsize=1)
-def get_knowledge_map() -> KnowledgeMap:
-    """Cache course data only; personal states are projected per request."""
-    return load_knowledge_map(PROJECT_ROOT / "data/knowledge_graph.json", PROJECT_ROOT / "data/目录.json")
+@lru_cache(maxsize=32)
+def _cached_knowledge_map(course_id: CourseId, revision: str, catalog_path: Path, toc_path: Path) -> KnowledgeMap:
+    """Keep graph caches separate by course, resource revision, and file binding."""
+    return load_knowledge_map(catalog_path, toc_path)
+
+
+def get_knowledge_map(course: CourseResourceManifest | None = None) -> KnowledgeMap:
+    """Load only the declared course graph; absent resources produce an empty map.
+
+    Omitting the manifest selects the default course declaration. Personal
+    learning states are never stored in the shared structural cache.
+    """
+    if course is None:
+        course = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(DEFAULT_COURSE_ID)
+    if not course.knowledge_graph_path or not course.toc_path:
+        return KnowledgeMap(course_name=course.display_name, version=course.revision, nodes=(), edges=(), chapters=())
+    graph = _cached_knowledge_map(
+        course.course_id,
+        course.revision,
+        PROJECT_ROOT / course.knowledge_graph_path,
+        PROJECT_ROOT / course.toc_path,
+    )
+    return graph.model_copy(update={"course_name": course.display_name})
 
 
 def overlay_learning_state(graph: KnowledgeMap, profile: StudentProfile) -> KnowledgeMap:

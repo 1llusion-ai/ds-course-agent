@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, Response
 
 from ds_course_agent.api.auth.deps import get_current_student_id
 from ds_course_agent.api.core_bridge import get_memory_core
+from ds_course_agent.api.course_context import require_course
 from ds_course_agent.api.request_quota import enforce_api_request_quota
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 from ds_course_agent.teaching.knowledge_map import KnowledgeMap, get_knowledge_map, overlay_learning_state
 from ds_course_agent.teaching.profile_snapshot_repository import SQLiteProfileReadService
 
@@ -16,10 +18,12 @@ router = APIRouter(dependencies=[Depends(enforce_api_request_quota)])
 @router.get("", response_model=KnowledgeMap)
 async def read_knowledge_map(
     response: Response,
+    course_id: CourseId = CourseId(DEFAULT_COURSE_ID),
     student_id: str = Depends(get_current_student_id),
     memory: SQLiteProfileReadService = Depends(get_memory_core),
 ) -> KnowledgeMap:
-    """Return shared course structure with only the signed-in student's state."""
+    """Return the requested course graph and its authenticated learner state."""
+    course = require_course(course_id)
     response.headers["Cache-Control"] = "private, no-store"
-    memory.aggregate_profile(student_id)
-    return overlay_learning_state(get_knowledge_map(), memory.get_profile(student_id))
+    memory.aggregate_profile(student_id, course_id=course.course_id)
+    return overlay_learning_state(get_knowledge_map(course), memory.get_profile(student_id, course_id=course.course_id))

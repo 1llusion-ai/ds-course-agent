@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from dataclasses import replace
 from graphlib import CycleError
 
 import pytest
 from pydantic import ValidationError
 
+from ds_course_agent.courses import CourseCatalog, CourseId
 from ds_course_agent.shared.paths import PROJECT_ROOT
 from ds_course_agent.teaching.knowledge_map import (
     LearningState,
@@ -22,6 +24,39 @@ from ds_course_agent.teaching.profile_models import ConceptFocus, StudentProfile
 
 CATALOG = PROJECT_ROOT / "data/knowledge_graph.json"
 TOC = PROJECT_ROOT / "data/目录.json"
+
+
+@pytest.mark.parametrize("missing_resource", ["knowledge_graph_path", "toc_path"])
+def test_missing_course_graph_resources_never_fall_back_to_default(missing_resource):
+    default = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require("data-science-intro")
+    course = replace(default, course_id=CourseId("example-course"), display_name="示例课程", **{missing_resource: ""})
+
+    graph = get_knowledge_map(course)
+
+    assert graph.course_name == "示例课程"
+    assert graph.nodes == graph.edges == graph.chapters == ()
+
+
+def test_course_graph_binding_and_revision_separate_shared_structure_caches(tmp_path):
+    default = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require("data-science-intro")
+    path = tmp_path / "knowledge_graph.json"
+    raw = {"course_name": "课程图谱", "version": "1", "concepts": []}
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    first = replace(default, knowledge_graph_path=str(path), revision="revision-a")
+    first_graph = get_knowledge_map(first)
+
+    raw["concepts"] = [{"canonical_id": "digital_identity", "display_name": "数字身份", "chapter": "第1章"}]
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    second = replace(first, course_id=CourseId("digital-literacy"), display_name="数字素养")
+    second_graph = get_knowledge_map(second)
+    revised_graph = get_knowledge_map(replace(first, revision="revision-b"))
+
+    assert not any(node.node_type is NodeType.KC for node in first_graph.nodes)
+    assert second_graph.course_name == "数字素养"
+    assert {node.canonical_id for node in second_graph.nodes if node.node_type is NodeType.KC} == {"digital_identity"}
+    assert revised_graph.nodes == second_graph.nodes
+    assert get_knowledge_map(first).nodes == first_graph.nodes
+    assert all(node.learning_state is LearningState.UNOBSERVED for node in second_graph.nodes)
 
 
 def test_concept_graph_has_closed_curated_relations_and_keeps_sourced_references():

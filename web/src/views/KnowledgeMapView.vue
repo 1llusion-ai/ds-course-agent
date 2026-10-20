@@ -5,6 +5,11 @@
       {{ error }}
       <el-button plain @click="load">重新加载</el-button>
     </div>
+    <div v-else-if="graph && !graph.nodes.length" class="map-message map-message--empty" role="status">
+      <h1>知识地图</h1>
+      <p>{{ graph.course_name }}尚未配置知识图谱。</p>
+      <el-button plain @click="router.push('/chat')">返回课程对话</el-button>
+    </div>
     <div
       v-else-if="graph"
       class="map-workspace"

@@ -4,6 +4,7 @@ RAG Tool 单元测试
 
 import hashlib
 import time
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -11,6 +12,7 @@ import pytest
 from langchain_core.documents import Document
 
 import ds_course_agent.tools.course_rag as course_rag_module
+from ds_course_agent.courses import CourseCatalog
 from ds_course_agent.retrieval.term_resolution import (
     CourseTermIndex,
     CourseTermMatchKind,
@@ -284,6 +286,97 @@ class TestCourseRAGTool:
         }
 
         assert build_sources_from_documents([doc]) == [{"reference": "《第2章 数据科学基本知识》第20页"}]
+
+    @pytest.mark.parametrize(
+        "bound_course,source_course",
+        [("digital-literacy", "digital-literacy"), ("digital-literacy", None), (None, "digital-literacy")],
+    )
+    def test_digital_literacy_aigc_source_keeps_its_own_chapter_title(self, bound_course, source_course):
+        from ds_course_agent.tools._shared import course_scope
+        from ds_course_agent.tools.course_rag import build_sources_from_documents
+
+        document = Document(
+            page_content="AIGC（AI Generated Content，即人工智能生成内容）",
+            metadata={
+                "source": "digital-literacy-course.pdf",
+                "course": "数字素养与技能导论",
+                "chapter": "数字技术通识",
+                "chapter_no": "第5章",
+                "section": "人工智能",
+                "section_no": "5.4",
+                "subsection": "人工智能前沿与大模型技术",
+                "subsection_no": "5.4.4",
+                "heading_path": "第5章 数字技术通识 > 5.4 人工智能 > 5.4.4 人工智能前沿与大模型技术",
+                "book_page": 139,
+                "source_page": 155,
+            },
+        )
+        if source_course is not None:
+            document.metadata["course_id"] = source_course
+
+        with course_scope(bound_course):
+            sources = build_sources_from_documents([document])
+
+        assert sources == [{"reference": "《第5章 数字技术通识》第139页"}]
+
+    def test_source_title_and_relative_page_cache_stay_in_their_course(self):
+        from ds_course_agent.tools.course_rag import build_sources_from_documents
+
+        def document(course_id):
+            return Document(
+                page_content="课程内容",
+                metadata={
+                    "course_id": course_id,
+                    "chapter_no": "第5章",
+                    "chapter": "陈旧章节名",
+                    "section_no": "5.1",
+                    "page": 2,
+                },
+            )
+
+        default = document("data-science-intro")
+        digital = document("digital-literacy")
+
+        assert build_sources_from_documents([default, digital, default]) == [
+            {"reference": "《第5章 数据可视化》第78页"},
+            {"reference": "《第5章 数字技术通识》第124页"},
+        ]
+
+    @pytest.mark.parametrize("toc_path", ["", "var/missing-course-toc.json"])
+    def test_missing_course_toc_keeps_source_metadata_without_default_course_correction(self, monkeypatch, toc_path):
+        from ds_course_agent.tools.course_rag import build_sources_from_documents
+
+        digital = CourseCatalog.from_directory("data/courses").require("digital-literacy")
+        catalog = CourseCatalog([replace(digital, toc_path=toc_path)])
+        monkeypatch.setattr(CourseCatalog, "from_directory", lambda _path: catalog)
+        document = Document(
+            page_content="数字课程教材",
+            metadata={
+                "course_id": "digital-literacy",
+                "chapter_no": "第5章",
+                "chapter": "教材原始章名",
+                "section_no": "5.4",
+                "book_page": 139,
+            },
+        )
+
+        assert build_sources_from_documents([document]) == [{"reference": "《第5章 教材原始章名》第139页"}]
+
+    def test_unknown_source_course_never_uses_default_course_directory(self):
+        from ds_course_agent.tools.course_rag import build_sources_from_documents
+
+        document = Document(
+            page_content="独立课程材料",
+            metadata={
+                "course_id": "unregistered-course",
+                "chapter_no": "第5章",
+                "chapter": "独立课程章节",
+                "section_no": "5.4",
+                "book_page": 139,
+            },
+        )
+
+        assert build_sources_from_documents([document]) == [{"reference": "《第5章 独立课程章节》第139页"}]
 
     @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_tool_tracks_empty_sources_when_no_results(self, mock_get_service):
