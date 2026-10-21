@@ -66,7 +66,14 @@ class _WindowReader:
 
 
 def _page(text: str, page: int = 126) -> SimpleNamespace:
-    return _doc(text, source_id="decision-tree", source_page=page, book_page=page, source="decision-tree.pdf")
+    return _doc(
+        text,
+        source_id="decision-tree",
+        source_page=page,
+        book_page=page,
+        source="decision-tree.pdf",
+        source_page_sha256=hashlib.sha256(text.encode()).hexdigest(),
+    )
 
 
 def test_resolve_identity_and_aliases_without_neighbor_expansion() -> None:
@@ -91,7 +98,7 @@ def test_target_excerpts_exclude_adjacent_apply_and_deduplicate() -> None:
     sources = _select([_doc(unrelated + related), _doc(related)], target)
     assert len(sources) == 1
     assert sources[0].text == related
-    assert not _select([_doc(related), _doc(related)], target, count=2)
+    assert len(_select([_doc(related), _doc(related)], target, count=2)) == 1
 
 
 def test_contents_does_not_count_as_evidence() -> None:
@@ -115,9 +122,7 @@ def test_wrong_chapter_does_not_pass_without_target_and_right_chapter_is_soft_pr
 
 def test_insufficient_or_truncated_evidence_never_calls_generator() -> None:
     retriever = Mock()
-    retriever.retrieve.return_value = SimpleNamespace(
-        documents=[_doc("交叉验证技术是 sklearn 提供的评估工具之一，可用于评估模型性能。")]
-    )
+    retriever.retrieve.return_value = SimpleNamespace(documents=[_doc("交叉验证通过轮换数据划分评估模型，但是在（")])
     generator = Mock()
     with pytest.raises(NoAssessmentEvidence):
         AssessmentService(retriever=retriever, generator=generator).generate(
@@ -223,3 +228,84 @@ def test_legacy_frozen_candidates_fail_closed_under_production_provenance() -> N
         target = resolve_target(GenerateQuestionsRequest(target_kc_id=case["concept_id"], count=2))
         sources = _select([_doc(d["text"], **d["metadata"]) for d in case["documents"]], target, count=2)
         assert not sources, case["concept_id"]
+
+
+def test_captured_combined_target_uses_complete_member_evidence() -> None:
+    fixture = json.loads((Path(__file__).parent / "fixtures/assessment_correlation_evidence.json").read_text())
+    target = resolve_target(
+        GenerateQuestionsRequest(target_kc_id=fixture["target_kc_id"], count=2), course_id=fixture["course_id"]
+    )
+    documents = [_doc(entry["page_content"], **entry["metadata"]) for entry in fixture["documents"]]
+    pages = {
+        page["metadata"]["source_page"]: _doc(page["page_content"], **page["metadata"])
+        for entry in fixture["documents"]
+        for page in entry["window"]
+    }
+
+    class Reader:
+        def read_evidence_window(self, document):
+            center = document.metadata["source_page"]
+            return [pages[number] for number in sorted(pages) if abs(center - number) <= 1]
+
+    sources = _select(documents, target, count=2, evidence_window_reader=Reader())
+    assert sources, "complete combination name is absent; declared textbook members must resolve"
+    assert {member.component_id for member in target.components} == {
+        "correlation_coefficient",
+        "least_squares_regression",
+    }
+    assert "相关系数" not in target.aliases
+    for source in sources:
+        assert source.intervals
+        fragments = []
+        for interval in source.intervals:
+            original = pages[interval.source_page].page_content
+            assert hashlib.sha256(original.encode()).hexdigest() == interval.page_sha256
+            fragments.append(original[interval.start : interval.end])
+        assert "".join(fragments) == source.text.replace("\n", "")
+    assert not _select([documents[0]], target, count=2, evidence_window_reader=_WindowReader([pages[194]]))
+
+
+def test_short_complete_definition_and_single_fact_are_not_sentence_count_gated() -> None:
+    target = AssessmentTarget("median", "中位数", ("中位数",))
+    assert _select([_doc("中位数是有序数列的中间值。")], target, count=2)
+
+
+def test_combination_requires_every_member_in_actual_questions() -> None:
+    from ds_course_agent.assessment.evidence import has_target_coverage, mentions_target
+
+    target = resolve_target(GenerateQuestionsRequest(target_kc_id="dl_5_8_6_1"), course_id="digital-literacy")
+    assert mentions_target("如何解释样本相关系数？", target)
+    assert not has_target_coverage(["相关系数如何解释？", "相关系数的符号如何判断？"], target)
+    assert has_target_coverage(["相关系数如何解释？", "最小二乘法如何拟合直线？"], target)
+
+
+def test_rejected_anchor_does_not_authorize_anaphora() -> None:
+    target = AssessmentTarget("median", "中位数", ("中位数",))
+    malformed = "中位数定义为（残缺内容。它表示有序数列中位于中间位置的数字，可以用于描述集中趋势。"
+    assert not _select([_doc(malformed)], target)
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    ["方差用来描述数值相对平均数的离散程度。", "5.8.7 方差计算。", "\n\n"],
+)
+def test_anaphora_does_not_cross_an_unrelated_sentence_or_section(boundary: str) -> None:
+    target = AssessmentTarget("median", "中位数", ("中位数",))
+    source = _select([_doc(f"中位数是排序后处于中间位置的数值。{boundary}它通过平方偏差进行计算。")], target)[0]
+    assert "中位数" in source.text
+    assert "平方偏差" not in source.text
+
+
+def test_source_window_keeps_printed_page_and_physical_interval_distinct() -> None:
+    target = AssessmentTarget("median", "中位数", ("中位数",))
+    center = "上一段说明。中位数是有序数列的中间值。末尾说明。"
+    neighbor = "上一段说明。中位数在排序后确定，其结果能够反映序列的中间位置。末尾说明。"
+    metadata = _production_metadata(center)
+    metadata["book_page"] = 110
+    pages = [
+        _doc(center, **metadata),
+        _doc(neighbor, **{**_production_metadata(neighbor, 127), "book_page": 111}),
+    ]
+    sources = _select([_doc(center, **metadata)], target, evidence_window_reader=_WindowReader(pages))
+    assert sources[0].page == 110
+    assert {interval.source_page for interval in sources[0].intervals} == {126, 127}

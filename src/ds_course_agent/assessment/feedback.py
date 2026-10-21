@@ -7,13 +7,16 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ds_course_agent.assessment.generation_constraints import AssessmentExposureConstraint, BatchReviewCertificate
 from ds_course_agent.assessment.models import (
     EvidenceSource,
     GeneratedQuestion,
     GeneratedQuiz,
     GenerateQuestionsRequest,
+    ItemReviewCertificate,
     question_slot_id,
 )
+from ds_course_agent.assessment.versioning import AssessmentResourceRevision
 
 
 class AssessmentFailureKind(str, Enum):
@@ -25,6 +28,7 @@ class AssessmentFailureKind(str, Enum):
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
     REVIEWER_UNAVAILABLE = "reviewer_unavailable"
     RETRIEVAL_UNAVAILABLE = "retrieval_unavailable"
+    RESOURCE_CHANGED = "resource_changed"
     UNKNOWN = "unknown"
 
 
@@ -125,6 +129,7 @@ class QuestionRejectionCode(str, Enum):
     ANSWER_NOT_SUPPORTED = "answer_not_supported"
     DIFFICULTY_MISMATCH = "difficulty_mismatch"
     DUPLICATE_STEM = "duplicate_stem"
+    RECENT_ITEM_EXPOSURE = "recent_item_exposure"
     FORMULA_MISMATCH = "formula_mismatch"
     IMPLAUSIBLE_DISTRACTORS = "implausible_distractors"
     INVALID_STRUCTURED_OUTPUT = "invalid_structured_output"
@@ -195,6 +200,7 @@ class QuestionRepairRequest:
     evidence: tuple[EvidenceSource, ...]
     slots: tuple[QuestionRepairSlot, ...]
     accepted_questions: tuple[GeneratedQuestion, ...] = ()
+    exposure: AssessmentExposureConstraint = AssessmentExposureConstraint()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, GenerateQuestionsRequest):
@@ -263,6 +269,7 @@ class AcceptedQuestionProgress(BaseModel):
     slot_id: str = Field(min_length=1)
     slot_index: int = Field(strict=True, ge=0)
     question: GeneratedQuestion
+    review_certificate: ItemReviewCertificate | None = None
 
 
 class PendingQuestionProgress(BaseModel):
@@ -311,17 +318,29 @@ class PendingQuestionProgress(BaseModel):
         )
 
 
+class BatchReviewState(BaseModel):
+    """An outstanding combination gate survives failures independently of slots."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    required: bool = False
+    certificate: BatchReviewCertificate | None = None
+    failure_kind: AssessmentFailureKind | None = None
+
+
 class AssessmentGenerationProgress(BaseModel):
     """Durable, slot-addressed generation state used for exact-count retries."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     request: GenerateQuestionsRequest
+    resource_revision: AssessmentResourceRevision | None = None
     title: str = Field(min_length=1)
     evidence: tuple[EvidenceSource, ...] = Field(min_length=1)
     accepted_slots: tuple[AcceptedQuestionProgress, ...] = ()
     pending_slots: tuple[PendingQuestionProgress, ...] = ()
     repair_round: int = Field(default=0, strict=True, ge=0)
+    exposure: AssessmentExposureConstraint = AssessmentExposureConstraint()
+    batch_review: BatchReviewState = BatchReviewState()
 
     @model_validator(mode="after")
     def _validate_slot_coverage(self) -> AssessmentGenerationProgress:
@@ -352,7 +371,16 @@ class AssessmentGenerationProgress(BaseModel):
 
     @property
     def retryable(self) -> bool:
-        return any(is_assessment_failure_retryable(item.failure_kind) for item in self.pending_slots)
+        return self.repair_round < 4 and (
+            any(is_assessment_failure_retryable(item.failure_kind) for item in self.pending_slots)
+            or (
+                self.batch_review.required
+                and not self.pending_slots
+                and self.batch_review.certificate is None
+                and self.batch_review.failure_kind
+                in {None, AssessmentFailureKind.REVIEWER_UNAVAILABLE, AssessmentFailureKind.PROVIDER_TRANSIENT_FAILURE}
+            )
+        )
 
     @classmethod
     def build(
@@ -364,9 +392,14 @@ class AssessmentGenerationProgress(BaseModel):
         accepted_by_slot: dict[int, GeneratedQuestion],
         pending_by_slot: dict[int, QuestionRejection],
         repair_round: int,
+        resource_revision: AssessmentResourceRevision | None = None,
+        review_certificates: dict[int, ItemReviewCertificate] | None = None,
+        exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
+        batch_review: BatchReviewState = BatchReviewState(),
     ) -> AssessmentGenerationProgress:
         return cls(
             request=request,
+            resource_revision=resource_revision,
             title=title,
             evidence=evidence,
             accepted_slots=tuple(
@@ -374,6 +407,7 @@ class AssessmentGenerationProgress(BaseModel):
                     slot_id=question_slot_id(request.target_kc_id, slot_index),
                     slot_index=slot_index,
                     question=accepted_by_slot[slot_index],
+                    review_certificate=(review_certificates or {}).get(slot_index),
                 )
                 for slot_index in sorted(accepted_by_slot)
             ),
@@ -382,6 +416,8 @@ class AssessmentGenerationProgress(BaseModel):
                 for slot_index, rejection in sorted(pending_by_slot.items())
             ),
             repair_round=repair_round,
+            exposure=exposure,
+            batch_review=batch_review,
         )
 
     @classmethod
@@ -394,7 +430,9 @@ class AssessmentGenerationProgress(BaseModel):
             evidence=tuple(quiz.sources),
             accepted_by_slot=dict(enumerate(quiz.questions)),
             pending_by_slot={},
-            repair_round=0,
+            repair_round=quiz.repair_round,
+            resource_revision=quiz.resource_revision,
+            review_certificates=dict(enumerate(quiz.review_certificates)),
         )
 
     def accepted_questions(self) -> tuple[GeneratedQuestion, ...]:

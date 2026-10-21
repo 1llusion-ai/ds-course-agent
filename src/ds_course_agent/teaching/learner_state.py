@@ -98,6 +98,8 @@ class LearnerStateSnapshot:
     stats: LearnerStats = field(default_factory=LearnerStats)
     provider: str = "rule_based"
     model_version: str = "rules-v1"
+    profile_revision: int | None = None
+    source_event_cursor: str = ""
     practice: Mapping[str, ConceptPractice] = field(default_factory=dict)
     course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
 
@@ -216,6 +218,8 @@ class SQLiteProfileLearnerStateProvider:
             stats=state.stats,
             provider="sqlite_profile_snapshot",
             model_version=f"snapshot-v{snapshot.version}",
+            profile_revision=snapshot.version,
+            source_event_cursor=snapshot.source_event_cursor,
             practice=state.practice,
             course_id=normalized_course_id,
         )

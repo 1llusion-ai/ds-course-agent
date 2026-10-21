@@ -5311,6 +5311,22 @@
             }
           ]
         }
+      ],
+      "assessment_components": [
+        {
+          "component_id": "correlation_coefficient",
+          "anchors": [
+            "相关系数",
+            "样本相关系数"
+          ]
+        },
+        {
+          "component_id": "least_squares_regression",
+          "anchors": [
+            "最小二乘法",
+            "最小二乘回归"
+          ]
+        }
       ]
     },
     {

@@ -14,6 +14,7 @@ from ds_course_agent.assessment.models import (
     QuestionOption,
 )
 from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
+from ds_course_agent.teaching.assessment_assignment import AssessmentPlanContext
 
 
 class AssessmentStatus(str, Enum):
@@ -46,8 +47,10 @@ class AssessmentRecord(BaseModel):
     student_id: str
     session_id: str | None = None
     request: GenerateQuestionsRequest
+    plan_context: AssessmentPlanContext | None = None
     quiz: GeneratedQuiz
     question_ids: tuple[str, ...]
+    item_ids: tuple[str, ...] = ()
     status: AssessmentStatus
     assigned_at: datetime
     opened_at: datetime | None = None
@@ -58,6 +61,8 @@ class AssessmentRecord(BaseModel):
 
     @model_validator(mode="after")
     def _validate_lifecycle(self) -> AssessmentRecord:
+        if self.item_ids and len(self.item_ids) != len(self.question_ids):
+            raise ValueError("stable item identities must cover every question")
         if len(self.question_ids) != len(self.quiz.questions):
             raise ValueError("question_ids must cover every generated question")
         if len(set(self.question_ids)) != len(self.question_ids):

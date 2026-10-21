@@ -22,7 +22,7 @@ from ds_course_agent.assessment.models import (
     GenerateQuestionsRequest,
 )
 
-_SYSTEM_PROMPT = """你是《数据科学导论》的严格测验盲审员，不生成或改写题目。
+_SYSTEM_PROMPT = """你是当前课程的严格测验盲审员，不生成或改写题目。
 你看不到生成器标记的答案和解析，必须只依据教材证据独立作答。对每道题列出所有能被教材证据
 支持为正确答案的选项；每个选项都必须选择一个系统提供的 excerpt_id，不得创造新的编号。
 来源归属由系统根据片段编号确定，不要输出 source_id。不要为了满足单选题格式而只挑一个：如果多个选项都成立，就全部列出；如果没有选项能由

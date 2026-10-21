@@ -55,6 +55,11 @@ class SessionLearningLoop:
         self._lock = RLock()
 
     def schedule(self, student_id: str, session_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID) -> None:
+        """Atomically select and enqueue opportunities within this process."""
+        with self._lock:
+            self._schedule(student_id, session_id, course_id=course_id)
+
+    def _schedule(self, student_id: str, session_id: str, *, course_id: CourseId | str) -> None:
         """Use only this student's session events to schedule canonical course KCs."""
 
         normalized_course_id = CourseId(course_id)
@@ -62,7 +67,7 @@ class SessionLearningLoop:
         events = tuple(
             record.event
             for record in self._event_repository.list_all_for_student(student_id, **scope)
-            if record.event.event_type is EventType.CONCEPT_MENTIONED
+            if record.event.event_type in {EventType.CONCEPT_MENTIONED, EventType.QUESTION_ANSWERED}
         )
         if not events:
             return
@@ -72,14 +77,35 @@ class SessionLearningLoop:
         from ds_course_agent.shared.paths import PROJECT_ROOT
 
         course = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(normalized_course_id)
-        scheduled_kc_ids = {
+        jobs = self._preparations.list_for_student(student_id, **scope)
+        session_jobs = [job for job in jobs if job.session_id == session_id]
+        consumed: dict[str, set[str]] = {}
+        for job in session_jobs:
+            consumed.setdefault(job.request.target_kc_id, set()).add(
+                job.plan_context.opportunity_id if job.plan_context else "initial"
+            )
+        active = {
             job.request.target_kc_id
-            for job in self._preparations.list_for_student(student_id, **scope)
-            if job.session_id == session_id
+            for job in jobs
+            if job.status in {PreparationStatus.QUEUED, PreparationStatus.GENERATING}
         }
-        for plan in planner.plan_session(session_id, events, learner, scheduled_kc_ids=scheduled_kc_ids, course=course):
+        active.update(self._assessments.active_target_kc_ids(student_id, **scope))
+        for plan in planner.plan_session(
+            session_id,
+            events,
+            learner,
+            course=course,
+            consumed_opportunities=consumed,
+            active_kc_ids=active,
+        ):
             job = self._preparations.enqueue(
-                student_id, session_id, plan.display_name, plan.request, plan.source_event_ids, **scope
+                student_id,
+                session_id,
+                plan.display_name,
+                plan.request,
+                plan.source_event_ids,
+                plan_context=plan.context,
+                **scope,
             )
             if job.status is PreparationStatus.QUEUED:
                 self._submit(job)
@@ -158,9 +184,11 @@ class SessionLearningLoop:
                         assignment_id=running.id,
                         generation_progress=running.generation_progress,
                         course_id=running.course_id,
+                        plan_context=running.plan_context,
                     )
                 )
-            self._preparations.transition(running, PreparationStatus.READY, assessment_id=summary.id)
+            with self._lock:
+                self._preparations.transition(running, PreparationStatus.READY, assessment_id=summary.id)
         except Exception as exc:
             failure_kind = getattr(exc, "failure_kind", AssessmentFailureKind.UNKNOWN)
             if not isinstance(failure_kind, AssessmentFailureKind):
@@ -191,8 +219,11 @@ class SessionLearningLoop:
                 failed_slots=failed_slots,
                 failure_codes=failure_codes,
                 generation_progress=generation_progress,
-                retryable=bool(generation_progress and generation_progress.retryable)
-                or is_assessment_failure_retryable(failure_kind),
+                retryable=(
+                    generation_progress.retryable
+                    if generation_progress is not None
+                    else is_assessment_failure_retryable(failure_kind)
+                ),
             )
 
     def close(self) -> None:

@@ -10,6 +10,7 @@ from ds_course_agent.assessment.feedback import AssessmentGenerationProgress
 from ds_course_agent.assessment.models import GenerateQuestionsRequest
 from ds_course_agent.assessment.records import AssessmentSummary
 from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
+from ds_course_agent.teaching.assessment_assignment import AssessmentPlanContext
 
 
 class AssessmentAssignmentService(Protocol):
@@ -24,6 +25,7 @@ class AssessmentAssignmentService(Protocol):
         assignment_id: str | None = None,
         generation_progress: AssessmentGenerationProgress | None = None,
         course_id: CourseId | str = DEFAULT_COURSE_ID,
+        plan_context: AssessmentPlanContext | None = None,
     ) -> AssessmentSummary:
         """Generate, persist, and assign one assessment."""
 
@@ -37,6 +39,7 @@ class AssessmentAssignmentInput:
     session_id: str | None = None
     assignment_id: str | None = None
     generation_progress: AssessmentGenerationProgress | None = None
+    plan_context: AssessmentPlanContext | None = None
     course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
 
 
@@ -58,6 +61,8 @@ class AssessmentAssignmentTool:
             raise ValueError("student_id must be non-empty")
         service = self._service()
         scope = {} if tool_input.course_id == DEFAULT_COURSE_ID else {"course_id": tool_input.course_id}
+        if tool_input.plan_context is not None:
+            scope["plan_context"] = tool_input.plan_context
         if tool_input.generation_progress is None:
             return service.assign(
                 student_id,

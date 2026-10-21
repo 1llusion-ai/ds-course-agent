@@ -19,6 +19,7 @@ from ds_course_agent.assessment.feedback import (
 )
 from ds_course_agent.assessment.models import GenerateQuestionsRequest
 from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
+from ds_course_agent.teaching.assessment_assignment import AssessmentPlanContext
 
 
 class PreparationStatus(str, Enum):
@@ -41,6 +42,7 @@ class AssessmentPreparation(BaseModel):
     display_name: str
     request: GenerateQuestionsRequest
     source_event_ids: tuple[str, ...]
+    plan_context: AssessmentPlanContext | None = None
     status: PreparationStatus = PreparationStatus.QUEUED
     assessment_id: str | None = None
     failure_kind: AssessmentFailureKind | None = None
@@ -108,11 +110,20 @@ class PreparationRepository:
         source_event_ids: tuple[str, ...],
         *,
         course_id: CourseId | str = DEFAULT_COURSE_ID,
+        plan_context: AssessmentPlanContext | None = None,
     ) -> AssessmentPreparation:
         """Schedule at most one automatic assessment per student/session/KC."""
 
         normalized_course_id = CourseId(course_id)
-        identity = "\0".join((student_id, str(normalized_course_id), session_id, request.target_kc_id))
+        identity = "\0".join(
+            (
+                student_id,
+                str(normalized_course_id),
+                session_id,
+                request.target_kc_id,
+                plan_context.opportunity_id if plan_context else "initial",
+            )
+        )
         job = AssessmentPreparation(
             id=hashlib.sha256(identity.encode()).hexdigest(),
             student_id=student_id,
@@ -122,8 +133,34 @@ class PreparationRepository:
             source_event_ids=source_event_ids,
             updated_at=time.time(),
             course_id=normalized_course_id,
+            plan_context=plan_context,
         )
         with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = [
+                AssessmentPreparation.model_validate_json(row["payload_json"])
+                for row in connection.execute(
+                    "SELECT payload_json FROM assessment_preparations WHERE student_id = ? AND course_id = ?",
+                    (student_id, str(normalized_course_id)),
+                )
+            ]
+            active = next(
+                (
+                    item
+                    for item in existing
+                    if item.request.target_kc_id == request.target_kc_id
+                    and item.status in {PreparationStatus.QUEUED, PreparationStatus.GENERATING}
+                ),
+                None,
+            )
+            if active is not None:
+                return active
+            session_jobs = [item for item in existing if item.session_id == session_id]
+            if not any(item.id == job.id for item in session_jobs) and (
+                len(session_jobs) >= 9
+                or sum(item.request.target_kc_id == request.target_kc_id for item in session_jobs) >= 3
+            ):
+                raise ValueError("session practice opportunity budget exhausted")
             connection.execute(
                 "INSERT OR IGNORE INTO assessment_preparations (id, student_id, status, payload_json, course_id) VALUES (?, ?, ?, ?, ?)",
                 (job.id, student_id, job.status.value, job.model_dump_json(), str(normalized_course_id)),

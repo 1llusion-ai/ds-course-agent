@@ -1,101 +1,157 @@
 # Session Learning Loop
 
-The first loop uses observed course conversations and scored single-choice
-practice. KT integration remains behind `LearnerStateProvider`; no mastery
-probability or measured learning gain is claimed by the current rules.
+The loop uses course conversations and server-scored single-choice practice.
+The existing persisted learner profile, exposed through `LearnerStateProvider`,
+remains the only learner-state source. These rules do not estimate mastery
+probability or measured learning gain.
 
-## Behavior
+## Behavior and opportunities
 
-1. `QueryPipeline` maps course questions to canonical KCs. Learning events retain
-   all event-eligible matches, including comparisons involving two concepts.
-2. After a successful teaching answer has been persisted, the shared turn
-   producer schedules practice for that student's session. Scheduling failures
-   are logged independently and do not invalidate the answer.
-3. `AssessmentAssignmentPlanner.plan_session` selects at most three new
-   canonical KCs mentioned in the same student/session. Existing queued,
-   generating, ready, or failed preparations consume this session limit, so
-   repeated mentions and retries do not add another KC. Each selected KC gets
-   exactly two complementary questions: one concept-distinction item and one
-   application-transfer item.
-4. A process-local worker invokes the existing assignment tool. The assessment
-   list shows queued, generating, and failed preparation states. Failed
-   preparation progress retains accepted and pending slots, evidence, and typed
-   failure reasons; retryable failures refill only pending slots. A preparation
-   becomes `READY` only after the exact requested count passes both quality gates,
-   so partial or unreviewed questions are never published.
-5. The authenticated submission API injects `AssessmentEvidenceRecorder` into
-   the assessment application service. The service persists server-scored
-   results before publishing typed `QuestionAnsweredEvent` facts.
-6. The recorder uses stable assessment/question event IDs. Retrying submission
-   or reading its result repairs interrupted evidence publication without
-   double-counting answers. `SQLiteProfileSnapshotRepository` rebuilds the
-   persisted practice profile, exposed to orchestration through
-   `LearnerStateProvider`.
-7. Ordinary grounded concept answers and personalized explanations consume the
-   relevant practice evidence. Guidance affects answer generation, not retrieval
-   queries. The result view offers a return to the originating conversation.
+1. `QueryPipeline` maps course questions to canonical KCs. Successful teaching
+   turns persist `LearningEvent` facts before scheduling practice; scheduling
+   failures do not invalidate the answer.
+2. `AssessmentAssignmentPlanner` reads the current student's course/session
+   mentions, actual scored-answer events, and latest profile. An opportunity is
+   identified by the latest scored event plus resource/policy revision, or an
+   initial opportunity if no answer exists. Repeated mentions or profile revision
+   changes alone cannot create another opportunity. A resource revision change
+   permits a replacement plan, including recovery from an old deterministic
+   insufficient-evidence failure.
+3. Each session is bounded to three distinct KCs, three opportunities per KC and
+   nine preparations in total. Historical failed preparations consume their
+   opportunity, not every future scored opportunity. A queued/generating job or
+   actual READY/IN_PROGRESS assessment protects that student's KC across sessions,
+   including explicit assignments without preparation records.
+4. Each automatic plan requests exactly two complementary questions, one concept
+   distinction and one application transfer, at the profile's recommended level.
+   Trusted `AssessmentPlanContext` freezes the opportunity, profile revision,
+   source-event cursor, resource revision, policy and selection reason. These
+   planning facts are server-owned and are not accepted in client generation input.
+5. The worker uses the existing assignment tool/application service. Complete
+   reviewed content is reused where compatible; only missing slots are generated.
+   READY requires the exact count, both review gates, member coverage and current
+   resources. An opened assessment's question snapshot is never replaced.
+6. Submission persists server scoring before `AssessmentEvidenceRecorder`
+   publishes stable assessment/question event IDs. Submission retries and result
+   reads repair interrupted publication without counting the same scored event
+   twice. The existing profile projection consumes those facts.
+7. Subsequent teaching explanations and the next practice opportunity use that
+   profile. Teaching guidance affects explanation generation, not retrieval queries.
 
-Explicitly requesting another assessment still invokes the existing assignment
-route. It may provide a new practice opportunity at an evidence-informed level.
+Explicit assessment requests use the same application owner. Requests for a KC
+with an active assessment return that existing immutable assessment. Allocation
+is serialized inside the application process; the durable preparation repository
+also uses a SQLite transaction to prevent simultaneous queued/generating jobs
+for the same student/course/KC.
 
-## Evidence And Policy
+## Practice evidence and difficulty
 
-Conversation mentions and self-reported understanding do not advance exercise
-difficulty. Missing practice evidence means unassessed, never low mastery.
+Conversation mentions and self-reported understanding do not advance difficulty.
+Missing practice evidence means unassessed. `ConceptPractice` retains raw answer
+counts, the latest six answers, recent incorrect stems and recent attempts for
+feedback, alongside a separate recommended difficulty and independent-item count.
 
-`ConceptPractice` retains total answers, correct answers, assessment count, the
-latest six answers' aggregate, last answer time, and a recent incorrect stem.
-Raw events retain question/assessment IDs, requested question difficulty,
-selected and correct option IDs, response time, and answer-change count. The
-original question, answer key, and evidence remain in the assessment record.
+Only the first scored exposure of a stable content `item_id` counts as independent
+progression evidence; old records fall back to their question ID. Repeated-item
+answers still update raw counts and recent feedback. The policy advances at most
+one level per scored assessment opportunity:
 
-The first policy is deliberately explicit and replaceable:
+- Two distinct correct items in one opportunity permit basic → intermediate.
+- Advanced requires at least four distinct items across two opportunities, at
+  least three correct among the latest four, including two intermediate/advanced
+  successes, and a new opportunity with two correct distinct items.
+- One error preserves the current recommendation. Two new unconsumed errors
+  among the latest three distinct items, with negative evidence in the current
+  opportunity, lower it by one level. Those errors cannot trigger another drop
+  in a later successful opportunity.
 
-- Any incorrect answer in the latest six: `needs_practice`, basic practice and
-  a concrete explanation of the current question.
-- All recent answers correct: `practiced`; at least two answers permit an
-  intermediate follow-up assessment.
-- At least three recent correct answers across two assessments, including at
-  least two intermediate/advanced items: `ready_for_extension`, permitting an
-  advanced follow-up.
+Any recent raw error retains `needs_practice` feedback even when the independent
+evidence supports an intermediate or advanced recommendation. Thus a repeated
+wrong answer remains visible without manufacturing another independent failure.
+These are explicit teaching heuristics, not calibrated ability/item estimates.
 
-These are teaching heuristics, not calibrated student or item difficulty
-estimates. Correct answers do not prove independence from outside help. A
-single-choice error does not establish a particular misconception. Historical
-clarification/self-report records remain separate from scored practice.
+## Reviewed content and resource identity
 
-## Ownership And Persistence
+Normal successful assignment organically accumulates reviewed content; there is
+no offline bulk generation. Shared items carry stable content IDs, correct-answer
+excerpt certificates, critic operation/objective, original evidence and a resource
+revision. Student assignments, IDs, attempts, answers and profile state stay separate.
+Selection requires matching course, target, graph/TOC digests, corpus/index revision,
+evidence/review policy, difficulty and teaching objective/operation. Active and
+latest-three-assessment items are excluded; unseen items precede older exposures.
+The server-owned `AssessmentExposureConstraint` applies equally to cached content,
+whole-batch drafting, missing-slot editing and retained retry slots. A forbidden
+item becomes a repairable slot rejection. Progress freezes the original plan's
+exclusions; current exposure is refreshed before publication in the same
+student/course scope. Older history outside this bounded window remains eligible
+for review. The author/editor sees only current-KC avoid examples, capped at 4,000
+characters within a 64,000-character full prompt limit; all forbidden identities
+remain enforced even when their examples are omitted.
+
+Identity ignores option labels/order and explanation, plus layout and terminal
+question punctuation. It preserves case, numbers, operators, negation, factorials
+and superscripts. This is a conservative surface deduplication rule; it does not
+claim to detect semantic paraphrases. Contradictory reviewed keys for identical
+content quarantine the shared asset and prevent publication of the conflicting batch.
+
+A complete compatible original batch can be reused without retrieval/model calls.
+A partial match seeds accepted slots and the normal editor fills only the shortfall;
+new items pass both gates. Recombining items from multiple original batches runs
+both gates again for current batch complementarity. `BatchReviewState` persists
+that obligation independently of missing slots, so a retry cannot bypass it.
+Its certificate binds exact slot item IDs, target, difficulty, teaching requirement
+(including operations) and review policy. Composition changes invalidate it.
+A rejected combination keeps compatible slots and sends only rejected slots
+through the same editor/dual-review loop. Individual assets remain reusable in
+other compatible combinations. Reviewer unavailability preserves accepted items
+and an outstanding gate; each failed gate attempt consumes the same lifetime
+budget. Four failed pure gate attempts exhaust retry eligibility.
+Cached evidence must fit the
+same budgets; oversized entries fall back to normal generation. A full cache hit
+that omits a composite target member reserves a missing slot to generate that
+member. Final member coverage uses verified correct-answer excerpts, never a
+combined name copied into the stem.
+
+Resource changes invalidate pending progress and reuse, not historical results.
+Retries retain accepted slots and certificates only with their exact resource
+revision. Repair is bounded to two editor rounds per call and four cumulative recovery
+rounds across retained progress. Failed combination-review attempts also consume
+a cumulative round; there is no separate unbounded gate retry budget. Capped progress is not retryable; stale or unversioned
+progress is rejected before model calls.
+
+## Ownership and persistence
 
 | Owner | Responsibility |
 | --- | --- |
-| `agent/learning_loop.py` | Background orchestration after the completed turn |
-| `teaching/assessment_assignment.py` | Session target selection and difficulty policy |
-| `assessment/preparation.py` | Durable request identity and queue state transitions |
-| `assessment/application.py` | Assignment, answer-blind projection, scoring and callback boundary |
-| `teaching/assessment_evidence.py` | Scored result to learning-event translation |
-| `teaching/practice.py` | Evidence summary and conservative readiness rules |
-| `teaching/practice_guidance.py` | Relevant evidence to explanation guidance |
+| `agent/learning_loop.py` | Completed-turn orchestration and background preparation |
+| `teaching/assessment_assignment.py` | Opportunity, target, objectives and difficulty selection |
+| `assessment/preparation.py` | Durable opportunity identity and queue transitions |
+| `assessment/application.py` | Allocation, immutable assignment, scoring and callbacks |
+| `assessment/items.py` | Shared reviewed content identity, storage and selection |
+| `assessment/versioning.py` | Resource/review identity without opening a corpus/index |
+| `assessment/generation_constraints.py` | Server exposure facts and composition-bound review certificate |
+| `teaching/assessment_evidence.py` | Scored result to learning events |
+| `teaching/practice.py` | Raw feedback and independent progression evidence |
 
-The preparation table shares `ASSESSMENT_DB_PATH` with assessment storage. Learning
-events and profile projections use `APP_DB_PATH` through the public
-`LearningEventRepository` and `LearnerStateProvider` interfaces, with SQLite
-implementations as the runtime default. Each persisted assessment also snapshots
-the full `GenerateQuestionsRequest`, including its teaching requirement, so
-assignment identity checks and retries preserve the original objectives. Runtime
-files remain under `var/` by default. Queue claims use SQLite compare-and-set
-transitions; automatic assignments reuse the preparation ID even after retry.
+Preparations, assignments and reviewed content share `ASSESSMENT_DB_PATH`;
+learning events and profile projections use `APP_DB_PATH`. Runtime files remain
+under `var/`. Existing records load without newly introduced certificates, item
+IDs or planning context; they do not become certified reusable content. Review
+policy `evidence-and-blind-critic/3` invalidates old in-flight progress and assets
+whose combination gate/exposure contract predates this version. Assignment
+snapshots retain their original request and evidence.
 
-The worker runs one generation at a time per application process. Persisted
-queued work resumes when the student's preparation list is read or another
-session turn schedules it. An inactive generating request older than fifteen
-minutes becomes retryable when listed, covering interrupted processes. This is
-not a distributed queue with worker heartbeats; production capacity and recovery
-latency require a separate deployment decision.
+The worker runs one generation at a time per process. Queued work resumes when
+preparations are listed or another turn schedules it. An inactive generating job
+older than fifteen minutes becomes retryable when listed. This is not a distributed
+queue with worker heartbeats or a distributed allocation lock; deployment across
+processes requires a separate concurrency/capacity decision.
 
-## Validation Boundaries
+## Validation boundaries
 
-The closed-loop tests use fixture generation to verify session isolation,
-idempotency, recovery, durable evidence, and subsequent teaching choices.
-Turn tests cover both synchronous and streaming completion. HTTP tests cover
-authenticated projections. Live generation and browser checks must be reported
-separately from fixture-based tests.
+Offline fixtures test evidence provenance, opportunities, profile progression,
+concurrent allocation, deduplication, reuse/shortfall, both review boundaries,
+idempotency and recovery. They do not establish live-provider question quality,
+semantic paraphrase detection or learning effectiveness. The captured correlation
+case replays selection using frozen source pages; no real question batch is
+pregenerated or added to a runtime database/index by this validation.

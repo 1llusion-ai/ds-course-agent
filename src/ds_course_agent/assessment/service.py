@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from threading import RLock
 from typing import Protocol
@@ -25,6 +25,7 @@ from ds_course_agent.assessment.evidence import (
     AssessmentTarget,
     EvidenceDocument,
     EvidenceSelectionDiagnostics,
+    has_target_coverage,
     mentions_target,
     resolve_target,
     select_evidence,
@@ -32,6 +33,7 @@ from ds_course_agent.assessment.evidence import (
 from ds_course_agent.assessment.feedback import (
     AssessmentFailureKind,
     AssessmentGenerationProgress,
+    BatchReviewState,
     OptionFeedback,
     QuestionRejection,
     QuestionRejectionCode,
@@ -42,6 +44,7 @@ from ds_course_agent.assessment.feedback import (
     is_assessment_failure_retryable,
 )
 from ds_course_agent.assessment.formulas import contains_formula, option_formula
+from ds_course_agent.assessment.generation_constraints import AssessmentExposureConstraint, BatchReviewCertificate
 from ds_course_agent.assessment.generator import (
     AssessmentEditorModelCallError,
     AssessmentEditorOutputError,
@@ -51,6 +54,7 @@ from ds_course_agent.assessment.generator import (
     AssessmentModelCallError,
     AssessmentOutputError,
 )
+from ds_course_agent.assessment.items import SelectedItem, item_identity, normalized_item_text
 from ds_course_agent.assessment.models import (
     DIFFICULTY_RULES,
     MAX_QUESTIONS,
@@ -59,6 +63,8 @@ from ds_course_agent.assessment.models import (
     GeneratedQuestion,
     GeneratedQuiz,
     GenerateQuestionsRequest,
+    ItemReviewCertificate,
+    VerifiedExcerptSupport,
     question_slot_id,
 )
 from ds_course_agent.assessment.verifier import (
@@ -67,6 +73,7 @@ from ds_course_agent.assessment.verifier import (
     EvidenceExcerptCatalog,
     EvidenceVerificationVerdict,
 )
+from ds_course_agent.assessment.versioning import AssessmentResourceRevision, assessment_resource_revision
 from ds_course_agent.courses import CourseCatalog, CourseId
 from ds_course_agent.courses.resources import DEFAULT_COURSE_ID
 from ds_course_agent.shared.paths import PROJECT_ROOT
@@ -94,6 +101,12 @@ class AssessmentUnavailableError(RuntimeError):
     """The course evidence retrieval service is unavailable."""
 
     failure_kind = AssessmentFailureKind.RETRIEVAL_UNAVAILABLE
+
+
+class AssessmentResourceChangedError(RuntimeError):
+    """A frozen generation plan can no longer publish against current resources."""
+
+    failure_kind = AssessmentFailureKind.RESOURCE_CHANGED
 
 
 class AssessmentSlotFailureError(AssessmentGenerationError):
@@ -187,11 +200,21 @@ class AssessmentService:
         request: GenerateQuestionsRequest,
         *,
         progress: AssessmentGenerationProgress | None = None,
+        reusable_items: Sequence[SelectedItem] = (),
+        exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
+        refresh_exposure: Callable[[], AssessmentExposureConstraint] | None = None,
     ) -> GeneratedQuiz:
         """Generate one quiz from retrieved documents without invoking RAG answers."""
         trace = new_assessment_trace()
         with trace.stage(AssessmentStage.REQUEST, count=request.count):
-            return self._generate(request, trace, progress=progress)
+            return self._generate(
+                request,
+                trace,
+                progress=progress,
+                reusable_items=reusable_items,
+                exposure=exposure,
+                refresh_exposure=refresh_exposure,
+            )
 
     def _generate(
         self,
@@ -199,11 +222,30 @@ class AssessmentService:
         trace: AssessmentTrace,
         *,
         progress: AssessmentGenerationProgress | None = None,
+        reusable_items: Sequence[SelectedItem] = (),
+        exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
+        refresh_exposure: Callable[[], AssessmentExposureConstraint] | None = None,
     ) -> GeneratedQuiz:
+        if progress is not None and reusable_items:
+            raise ValueError("retry progress and fresh reusable items are mutually exclusive")
+        review_certificates: dict[int, ItemReviewCertificate] = {}
+        exposure = (progress.exposure if progress else AssessmentExposureConstraint()).merge(exposure)
+        batch_review = (
+            progress.batch_review
+            if progress
+            else BatchReviewState(required=len({selected.item.origin_batch for selected in reusable_items}) > 1)
+        )
         if progress is not None and progress.request != request:
             raise ValueError("assessment generation progress does not match the request")
+        resource_revision = assessment_resource_revision(str(self._course_id))
+        if progress is not None and progress.resource_revision != resource_revision:
+            raise AssessmentResourceChangedError("assessment progress requires a new plan for current resources")
         with trace.stage(AssessmentStage.TARGET):
             target = resolve_target(request, course_id=str(self._course_id))
+        if reusable_items and len(reusable_items) == request.count:
+            candidate_progress = self._reusable_progress(request, reusable_items, resource_revision, target)
+            if candidate_progress is not None and candidate_progress.accepted_count == request.count:
+                progress = candidate_progress
         if progress is None:
             try:
                 with trace.stage(AssessmentStage.RETRIEVAL):
@@ -240,12 +282,15 @@ class AssessmentService:
                         diagnostics=diagnostics,
                     )
                 catalog = EvidenceExcerptCatalog.from_sources(sources)
+        if reusable_items and progress is None:
+            progress = self._reusable_progress(request, reusable_items, resource_revision, target, sources)
+        if progress is None:
             title = f"{target.name}练习"
             accepted_by_slot: dict[int, GeneratedQuestion] = {}
             normalized_stems: set[str] = set()
             try:
                 with trace.stage(AssessmentStage.GENERATION, count=request.count):
-                    draft = self._generator.generate_candidates(request, sources)
+                    draft = self._generator.generate_candidates(request, sources, exposure=exposure)
             except AssessmentOutputError:
                 pending = {
                     slot_index: QuestionRejection(
@@ -270,6 +315,9 @@ class AssessmentService:
                     accepted_by_slot=accepted_by_slot,
                     pending_by_slot=pending,
                     repair_round=0,
+                    resource_revision=resource_revision,
+                    exposure=exposure,
+                    batch_review=batch_review,
                 )
                 raise
             else:
@@ -281,6 +329,7 @@ class AssessmentService:
                     target=target,
                     sources=sources,
                     normalized_stems=normalized_stems,
+                    exposure=exposure,
                 )
                 try:
                     quality_accepted, quality_rejected = self._apply_quality_verdicts(
@@ -290,6 +339,7 @@ class AssessmentService:
                         accepted_questions=(),
                         trace=trace,
                         round_index=0,
+                        review_certificates=review_certificates,
                     )
                 except (AssessmentVerificationError, AssessmentCritiqueError) as exc:
                     quality_accepted = []
@@ -321,18 +371,87 @@ class AssessmentService:
             sources = list(progress.evidence)
             catalog = EvidenceExcerptCatalog.from_sources(sources)
             accepted_by_slot = {item.slot_index: item.question for item in progress.accepted_slots}
+            review_certificates = {
+                item.slot_index: item.review_certificate
+                for item in progress.accepted_slots
+                if item.review_certificate is not None
+            }
             normalized_stems = {self._normalize_stem(question.stem) for question in accepted_by_slot.values()}
             pending = {item.slot_index: item.to_rejection() for item in progress.pending_slots}
 
-        for attempt in range(1, self._repair_rounds + 1):
+        repair_round = progress.repair_round if progress else 0
+        call_rounds = 0
+        while True:
+            # Retained/cached accepted slots obey the same current exposure rule
+            # as new drafts and editor output. The original frozen exclusions
+            # survive retry even if recent history changes meanwhile.
+            exposed = {
+                index: QuestionRejection(
+                    (QuestionRejectionCode.RECENT_ITEM_EXPOSURE,),
+                    question,
+                    "此题已出现在当前学生的活跃或近期评估中，请替换为不同内容。",
+                )
+                for index, question in accepted_by_slot.items()
+                if item_identity(question) in exposure.excluded_item_ids
+            }
+            pending.update(exposed)
+            for index in exposed:
+                accepted_by_slot.pop(index)
+                review_certificates.pop(index, None)
+
+            questions = [accepted_by_slot[index] for index in sorted(accepted_by_slot)]
+            expected_certificate = BatchReviewCertificate.for_batch(request, questions, resource_revision.review_policy)
+            if batch_review.required and batch_review.certificate != expected_certificate:
+                batch_review = BatchReviewState(required=True)
+            if not pending and batch_review.required and batch_review.certificate is None:
+                if repair_round >= 4 and call_rounds == 0:
+                    break
+                try:
+                    accepted, rejected = self._apply_quality_verdicts(
+                        list(enumerate(questions)),
+                        request=request,
+                        catalog=catalog,
+                        accepted_questions=(),
+                        trace=trace,
+                        round_index=repair_round,
+                        review_certificates=review_certificates,
+                    )
+                except (AssessmentVerificationError, AssessmentCritiqueError) as exc:
+                    # Preserve individually valid content and the outstanding
+                    # composition gate; a retry reviews it before publication.
+                    repair_round = min(4, repair_round + 1)
+                    batch_review = BatchReviewState(required=True, failure_kind=exc.failure_kind)
+                    break
+                accepted_by_slot = dict(accepted)
+                pending.update(dict(rejected))
+                for index, _ in rejected:
+                    review_certificates.pop(index, None)
+                batch_review = BatchReviewState(
+                    required=True,
+                    certificate=expected_certificate if not rejected else None,
+                )
+
+            if not pending:
+                # Models may have run while another assignment was submitted.
+                # Refresh at the publication boundary, then use this same slot
+                # repair loop if that new exposure invalidates an accepted item.
+                if refresh_exposure is not None:
+                    exposure = exposure.merge(refresh_exposure())
+                    if any(
+                        item_identity(question) in exposure.excluded_item_ids for question in accepted_by_slot.values()
+                    ):
+                        continue
+                break
             repairable = {
-                slot_index: rejection
-                for slot_index, rejection in pending.items()
+                index: rejection
+                for index, rejection in pending.items()
                 if is_assessment_failure_retryable(rejection.failure_kind)
             }
-            if not repairable:
+            if not repairable or call_rounds >= self._repair_rounds or repair_round >= 4:
                 break
-            round_index = (progress.repair_round if progress is not None else 0) + attempt
+            call_rounds += 1
+            repair_round += 1
+            normalized_stems = {self._normalize_stem(question.stem) for question in accepted_by_slot.values()}
             repaired, repair_rejections = self._repair_slots(
                 repairable,
                 request=request,
@@ -342,39 +461,29 @@ class AssessmentService:
                 normalized_stems=normalized_stems,
                 target=target,
                 trace=trace,
-                round_index=round_index,
+                round_index=repair_round,
+                review_certificates=review_certificates,
+                exposure=exposure,
             )
-            for slot_index, question in repaired:
-                accepted_by_slot[slot_index] = question
-                normalized_stems.add(self._normalize_stem(question.stem))
-            next_pending = {
-                slot_index: rejection
-                for slot_index, rejection in pending.items()
-                if slot_index not in {index for index, _ in repaired}
+            accepted_by_slot.update(repaired)
+            pending = {
+                index: rejection for index, rejection in pending.items() if index not in {slot for slot, _ in repaired}
             }
-            next_pending.update(repair_rejections)
-            pending = next_pending
-            self._log_acceptance(trace, round_index, len(repaired), pending)
-
-            # A provider timeout is retriable, but immediately repeating the
-            # same editor call only burns another full client timeout while the
-            # upstream service is unavailable. Preserve progress and let the
-            # preparation retry boundary decide when to try again.
+            pending.update(repair_rejections)
+            self._log_acceptance(trace, repair_round, len(repaired), pending)
             if repair_rejections and all(
                 rejection.failure_kind is AssessmentFailureKind.PROVIDER_TRANSIENT_FAILURE
                 for rejection in repair_rejections.values()
             ):
-                logger.info(
-                    "assessment request_id=%s stage=repair_retry_skipped round=%s reason=provider_transient_failure",
-                    trace.request_id,
-                    round_index,
-                )
                 break
 
-        if pending or len(accepted_by_slot) != request.count:
+        questions = [accepted_by_slot[index] for index in sorted(accepted_by_slot)]
+        expected_certificate = BatchReviewCertificate.for_batch(request, questions, resource_revision.review_policy)
+        unfinished_batch = batch_review.required and batch_review.certificate != expected_certificate
+        if pending or len(accepted_by_slot) != request.count or unfinished_batch:
             reason_text = (
                 ", ".join(dict.fromkeys(code.value for rejection in pending.values() for code in rejection.codes))
-                or "question_count_shortfall"
+                or "batch_review_pending"
             )
             progress_state = AssessmentGenerationProgress.build(
                 request,
@@ -382,16 +491,144 @@ class AssessmentService:
                 evidence=tuple(sources),
                 accepted_by_slot=accepted_by_slot,
                 pending_by_slot=pending,
-                repair_round=(progress.repair_round if progress is not None else 0) + self._repair_rounds,
+                repair_round=repair_round,
+                resource_revision=resource_revision,
+                review_certificates=review_certificates,
+                exposure=exposure,
+                batch_review=batch_review,
             )
-            raise AssessmentSlotFailureError(
+            failure = AssessmentSlotFailureError(
                 f"assessment exact-count preparation failed: {reason_text}",
                 slot_failures=tuple(self._slot_failure(index, pending[index]) for index in sorted(pending)),
                 progress=progress_state,
             )
+            if unfinished_batch and batch_review.failure_kind is not None:
+                failure.failure_kind = batch_review.failure_kind
+            raise failure
 
-        questions = [accepted_by_slot[index] for index in range(request.count)]
-        return GeneratedQuiz(title=title, questions=questions, sources=sources)
+        if len({item_identity(question) for question in questions}) != len(questions):
+            raise AssessmentGenerationError("reviewed assessment contains duplicate content identities")
+        if len(review_certificates) != request.count:
+            raise AssessmentResourceChangedError("accepted progress lacks retained review certificates")
+        supported_texts = [support.text for review in review_certificates.values() for support in review.supports]
+        if not has_target_coverage(supported_texts, target):
+            raise NoAssessmentEvidence("verified correct-answer excerpts do not cover every declared target member")
+        if assessment_resource_revision(str(self._course_id)) != resource_revision:
+            raise AssessmentResourceChangedError("assessment resources changed before publication")
+        return GeneratedQuiz(
+            title=title,
+            questions=questions,
+            sources=sources,
+            resource_revision=resource_revision,
+            review_certificates=tuple(review_certificates[index] for index in range(request.count)),
+            repair_round=repair_round,
+        )
+
+    def _reusable_progress(
+        self,
+        request: GenerateQuestionsRequest,
+        selected_items: Sequence[SelectedItem],
+        revision: AssessmentResourceRevision,
+        target: AssessmentTarget,
+        fresh_sources: Sequence[EvidenceSource] = (),
+    ) -> AssessmentGenerationProgress | None:
+        """Bind reviewed content to new slots while preserving its actual support."""
+        sources = list(fresh_sources)
+        questions = {}
+        reviews = {}
+
+        def source_key(source: EvidenceSource) -> str:
+            return source.model_dump_json(exclude={"id"})
+
+        by_content = {source_key(source): source.id for source in sources}
+        for selected in selected_items:
+            item = selected.item
+            if item.resource_revision != revision or not 0 <= selected.slot_index < request.count:
+                raise AssessmentResourceChangedError("reusable assessment content is incompatible with current plan")
+            candidate_sources = list(sources)
+            candidate_content = dict(by_content)
+            objective = (
+                request.teaching_requirement.objectives[selected.slot_index] if request.teaching_requirement else None
+            )
+            if (
+                item.target_kc_id != request.target_kc_id
+                or item.question.difficulty != request.difficulty
+                or item.review.cognitive_operation not in DIFFICULTY_RULES[request.difficulty].operations
+                or (
+                    objective is not None
+                    and (
+                        item.review.objective_kind != objective.kind
+                        or item.review.cognitive_operation != objective.operation
+                    )
+                )
+            ):
+                continue
+            mapping = {}
+            for source in item.sources:
+                key = source_key(source)
+                if key not in candidate_content:
+                    source_id = f"S{len(candidate_sources) + 1}"
+                    candidate_sources.append(source.model_copy(update={"id": source_id}))
+                    candidate_content[key] = source_id
+                mapping[source.id] = candidate_content[key]
+            if (
+                len(candidate_sources) > MAX_EVIDENCE_SOURCES
+                or sum(len(source.text) for source in candidate_sources) > self._context_max_chars
+            ):
+                continue
+            sources, by_content = candidate_sources, candidate_content
+            questions[selected.slot_index] = item.question.model_copy(
+                update={"source_ids": [mapping[value] for value in item.question.source_ids]}
+            )
+            reviews[selected.slot_index] = item.review.model_copy(
+                update={
+                    "supports": tuple(
+                        support.model_copy(update={"source_id": mapping[support.source_id]})
+                        for support in item.review.supports
+                    )
+                }
+            )
+        if not questions:
+            return None
+        supported = [support.text for review in reviews.values() for support in review.supports]
+        if len(questions) == request.count and not has_target_coverage(supported, target):
+            # A complete cache hit may still omit a member of a composite KC.
+            # Reserve a real generation slot rather than letting reuse create
+            # a deterministic final coverage failure. Retain the other reviewed
+            # slots; the normal editor and both gates fill this missing support.
+            slot = max(questions)
+            questions.pop(slot)
+            reviews.pop(slot)
+        if not questions:
+            return None
+        supported = [support.text for review in reviews.values() for support in review.supports]
+        missing = [
+            member.component_id
+            for member in target.requirements
+            if not has_target_coverage(supported, AssessmentTarget(None, target.name, (), components=(member,)))
+        ]
+        pending = {
+            index: QuestionRejection(
+                (QuestionRejectionCode.QUESTION_COUNT_SHORTFALL,),
+                detail=(
+                    f"保留题目的正确答案证据尚未覆盖这些目标成员：{', '.join(missing)}。补题须覆盖缺失成员。"
+                    if missing
+                    else ""
+                ),
+            )
+            for index in range(request.count)
+            if index not in questions
+        }
+        return AssessmentGenerationProgress.build(
+            request,
+            title="教材练习",
+            evidence=tuple(sources),
+            accepted_by_slot=questions,
+            pending_by_slot=pending,
+            repair_round=0,
+            resource_revision=revision,
+            review_certificates=reviews,
+        )
 
     @staticmethod
     def _log_acceptance(
@@ -418,6 +655,7 @@ class AssessmentService:
         target: AssessmentTarget,
         sources: Sequence[EvidenceSource],
         normalized_stems: set[str],
+        exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
     ) -> tuple[list[tuple[int, GeneratedQuestion]], list[tuple[int, QuestionRejection]]]:
         """Keep deterministic candidates and retain each rejected slot for repair."""
 
@@ -431,6 +669,7 @@ class AssessmentService:
                 target=target,
                 sources=sources,
                 normalized_stems=seen_stems,
+                exposure=exposure,
             )
             if rejection_codes:
                 rejected.append((slot_index, QuestionRejection(rejection_codes, question)))
@@ -441,7 +680,7 @@ class AssessmentService:
 
     @staticmethod
     def _normalize_stem(stem: str) -> str:
-        return " ".join(stem.split()).casefold()
+        return normalized_item_text(stem)
 
     @staticmethod
     def _deterministic_rejection_codes(
@@ -451,9 +690,11 @@ class AssessmentService:
         target: AssessmentTarget,
         sources: Sequence[EvidenceSource],
         normalized_stems: set[str],
+        exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
     ) -> tuple[QuestionRejectionCode, ...]:
         allowed_source_ids = {source.id for source in sources}
         checks = (
+            (QuestionRejectionCode.RECENT_ITEM_EXPOSURE, item_identity(question) in exposure.excluded_item_ids),
             (
                 QuestionRejectionCode.DIFFICULTY_MISMATCH,
                 question.difficulty != request.difficulty,
@@ -476,6 +717,7 @@ class AssessmentService:
         accepted_questions: Sequence[GeneratedQuestion],
         trace: AssessmentTrace,
         round_index: int,
+        review_certificates: dict[int, ItemReviewCertificate] | None = None,
     ) -> tuple[list[tuple[int, GeneratedQuestion]], list[tuple[int, QuestionRejection]]]:
         """Run both independent quality gates over one candidate pool in parallel."""
 
@@ -552,6 +794,9 @@ class AssessmentService:
                 verified_question = question
 
             critique_codes = self._critique_rejection_codes(question, critique)
+            objective = request.teaching_requirement.objectives[slot_index] if request.teaching_requirement else None
+            if objective is not None and critique.cognitive_operation != objective.operation:
+                critique_codes = (*critique_codes, QuestionRejectionCode.LOW_PEDAGOGICAL_VALUE)
             if critique_codes:
                 rejection_codes.extend(critique_codes)
                 detail_parts.append(
@@ -577,6 +822,21 @@ class AssessmentService:
                 )
             else:
                 accepted.append((slot_index, verified_question))
+                if review_certificates is not None:
+                    review_certificates[slot_index] = ItemReviewCertificate(
+                        cognitive_operation=critique.cognitive_operation,
+                        learning_objective=critique.learning_objective,
+                        objective_kind=objective.kind if objective else None,
+                        supports=tuple(
+                            VerifiedExcerptSupport(
+                                source_id=catalog.source_id_for(support.excerpt_id),
+                                text=catalog.excerpt_for(support.excerpt_id).text,
+                            )
+                            for support in verdict.supported_options
+                            if support.option_id == question.correct_option_id
+                            and catalog.source_id_for(support.excerpt_id) in question.source_ids
+                        ),
+                    )
         return accepted, rejected
 
     def _repair_slots(
@@ -591,6 +851,8 @@ class AssessmentService:
         target: AssessmentTarget,
         trace: AssessmentTrace,
         round_index: int,
+        review_certificates: dict[int, ItemReviewCertificate] | None = None,
+        exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
     ) -> tuple[list[tuple[int, GeneratedQuestion]], dict[int, QuestionRejection]]:
         repair_slots = tuple(
             QuestionRepairSlot(
@@ -605,6 +867,7 @@ class AssessmentService:
             evidence=tuple(sources),
             slots=repair_slots,
             accepted_questions=tuple(accepted_questions),
+            exposure=exposure,
         )
         try:
             with trace.stage(AssessmentStage.REPAIR, round_index=round_index, count=len(repair_slots)):
@@ -685,6 +948,7 @@ class AssessmentService:
                 target=target,
                 sources=sources,
                 normalized_stems=candidate_stems,
+                exposure=exposure,
             )
             if deterministic_codes:
                 rejected[slot_index] = QuestionRejection(deterministic_codes, revised)
@@ -702,6 +966,7 @@ class AssessmentService:
                 accepted_questions=accepted_questions,
                 trace=trace,
                 round_index=round_index,
+                review_certificates=review_certificates,
             )
         except (AssessmentVerificationError, AssessmentCritiqueError) as exc:
             rejected.update(

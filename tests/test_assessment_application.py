@@ -24,7 +24,7 @@ class StubGenerator:
     def __init__(self) -> None:
         self.requests: list[GenerateQuestionsRequest] = []
 
-    def generate(self, request: GenerateQuestionsRequest) -> GeneratedQuiz:
+    def generate(self, request: GenerateQuestionsRequest, *, exposure=None, refresh_exposure=None) -> GeneratedQuiz:
         self.requests.append(request)
         return GeneratedQuiz.model_validate(
             {

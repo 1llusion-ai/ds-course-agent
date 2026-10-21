@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from pathlib import Path
 from typing import Any, Protocol
 
 from ds_course_agent.assessment.formulas import analyze_formula_quality
@@ -18,8 +16,11 @@ from ds_course_agent.assessment.models import (
     EvidenceSource,
     FormulaQuality,
     GenerateQuestionsRequest,
+    SourceInterval,
 )
+from ds_course_agent.courses import CourseCatalog
 from ds_course_agent.shared.paths import PROJECT_ROOT
+from ds_course_agent.teaching.knowledge_map import AssessmentComponent, get_knowledge_map
 
 
 class InvalidAssessmentTarget(ValueError):
@@ -40,9 +41,6 @@ class EvidenceWindowReader(Protocol):
         """Return hash-validated source pages around one retrieved document."""
 
 
-MIN_EVIDENCE_SENTENCES = 2
-
-
 @dataclass
 class EvidenceSelectionDiagnostics:
     """Counters explaining why retrieved documents did or did not become evidence."""
@@ -53,7 +51,7 @@ class EvidenceSelectionDiagnostics:
     candidate_sentences: int = 0
     accepted_sentences: int = 0
     accepted_spans: int = 0
-    required_sentences: int = MIN_EVIDENCE_SENTENCES
+    required_sentences: int = 0
     question_count: int = 0
 
     def as_dict(self) -> dict[str, int]:
@@ -78,13 +76,25 @@ class AssessmentTarget:
     aliases: tuple[str, ...]
     chapter: str = ""
     section: str = ""
+    components: tuple[AssessmentComponent, ...] = ()
+
+    @property
+    def requirements(self) -> tuple[AssessmentComponent, ...]:
+        """Every declared member must have factual support and batch coverage."""
+        return self.components or (
+            AssessmentComponent(component_id=self.concept_id or self.name, anchors=self.aliases or (self.name,)),
+        )
 
     @property
     def query(self) -> str:
         """Expand with bounded aliases, never neighboring concepts."""
         normalized_name = _normalized(self.name)
         aliases = tuple(alias for alias in self.aliases if _normalized(alias) != normalized_name)
-        return " ".join((self.name, *aliases[:3]))
+        return " ".join(
+            dict.fromkeys(
+                (self.name, *aliases[:3], *(anchor for member in self.components for anchor in member.anchors[:2]))
+            )
+        )
 
 
 def _normalized(text: str) -> str:
@@ -93,39 +103,28 @@ def _normalized(text: str) -> str:
 
 def resolve_target(
     request: GenerateQuestionsRequest,
-    catalog_path: Path | None = None,
     *,
     course_id: str = "data-science-intro",
 ) -> AssessmentTarget:
-    """Resolve exact catalog identities without model calls or fuzzy guessing."""
-    if catalog_path is None:
-        from ds_course_agent.courses import CourseCatalog
-
-        manifest = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(course_id)
-        if not manifest.knowledge_graph_path:
-            raise InvalidAssessmentTarget(f"course {course_id} has no knowledge graph")
-        path = PROJECT_ROOT / manifest.knowledge_graph_path
-    else:
-        path = catalog_path
-    catalog = json.loads(path.read_text(encoding="utf-8"))
-    for concept in catalog["concepts"]:
-        if concept["canonical_id"] != request.target_kc_id:
-            continue
-        aliases = tuple(dict.fromkeys([concept["display_name"], *concept.get("aliases", [])]))
-        return AssessmentTarget(
-            concept["canonical_id"],
-            concept["display_name"],
-            aliases,
-            concept.get("chapter", ""),
-            concept.get("section", ""),
-        )
+    """Resolve identities through the teaching-owned validated course resources."""
+    manifest = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(course_id)
+    for concept in get_knowledge_map(manifest).nodes:
+        if concept.canonical_id == request.target_kc_id:
+            return AssessmentTarget(
+                concept.canonical_id,
+                concept.display_name,
+                tuple(dict.fromkeys((concept.display_name, *concept.aliases))),
+                concept.chapter,
+                concept.section,
+                concept.assessment_components,
+            )
     raise InvalidAssessmentTarget("unknown course concept")
 
 
 def _anchor_pattern(target: AssessmentTarget) -> re.Pattern[str]:
     patterns = []
     acronyms = re.findall(r"[A-Za-z]{3,}", target.name)
-    for alias in (*target.aliases, *acronyms):
+    for alias in (*target.aliases, *acronyms, *(anchor for member in target.components for anchor in member.anchors)):
         compact = _normalized(alias)
         if not compact:
             continue
@@ -183,64 +182,99 @@ def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+@dataclass(frozen=True)
+class _SourcePage:
+    text: str
+    source_id: str
+    page: int
+    digest: str
+    book_page: int | None
+    offset: int
+
+
+@dataclass(frozen=True)
+class _DocumentWindow:
+    text: str
+    pages: tuple[_SourcePage, ...]
+    starts_complete: bool
+    ends_complete: bool
+
+    def intervals(self, start: int, end: int) -> tuple[SourceInterval, ...]:
+        return tuple(
+            SourceInterval(
+                source_id=page.source_id,
+                source_page=page.page,
+                start=max(start - page.offset, 0),
+                end=min(end - page.offset, len(page.text)),
+                page_sha256=page.digest,
+            )
+            for page in self.pages
+            if start < page.offset + len(page.text) and end > page.offset
+        )
+
+
 def _assemble_document_span(
     document: EvidenceDocument,
     evidence_window_reader: EvidenceWindowReader | None,
-) -> tuple[str, EvidenceCompleteness, bool, bool] | None:
-    """Recover complete-page text from the production provenance contract."""
+) -> _DocumentWindow | None:
+    """Validate every bounded window page before retaining exact original offsets."""
     metadata = document.metadata
     if metadata.get("metadata_schema_version") != "retrieval-provenance/1.0":
         if metadata.get("parser_source") == "marker_v2":
             return None
-        return document.page_content, EvidenceCompleteness.COMPLETE, True, True
-
+        return _DocumentWindow(document.page_content, (), True, True)
     if evidence_window_reader is None:
-        return None
-
-    required = (
-        "source_id",
-        "source_page",
-        "source_char_start",
-        "source_char_end",
-        "source_page_sha256",
-        "source_page_text",
-    )
-    if any(key not in metadata for key in required):
         return None
     try:
         page_text = str(metadata["source_page_text"])
-        start = int(metadata["source_char_start"])
-        end = int(metadata["source_char_end"])
-    except (TypeError, ValueError):
-        return None
-    if not page_text or start < 0 or end <= start or end > len(page_text):
-        return None
-    if _sha256_text(page_text) != str(metadata["source_page_sha256"]):
-        return None
-    if _normalized(page_text[start:end]) != _normalized(document.page_content):
-        selected_intervals = str(metadata.get("selected_source_intervals", ""))
-        if not selected_intervals:
+        start, end = int(metadata["source_char_start"]), int(metadata["source_char_end"])
+        source_id, center = str(metadata["source_id"]), int(metadata["source_page"])
+        if not page_text or start < 0 or end <= start or end > len(page_text):
             return None
-    pages = tuple(evidence_window_reader.read_evidence_window(document))
-    if not pages:
-        return None
-    try:
-        source_id = str(metadata["source_id"])
-        source_page = int(metadata["source_page"])
-        ordered = sorted(pages, key=lambda page: int(page.metadata["source_page"]))
+        if _sha256_text(page_text) != str(metadata["source_page_sha256"]):
+            return None
+        if _normalized(page_text[start:end]) != _normalized(document.page_content):
+            if not metadata.get("selected_source_intervals"):
+                return None
+        pages = sorted(
+            evidence_window_reader.read_evidence_window(document), key=lambda page: int(page.metadata["source_page"])
+        )
+        numbers = [int(page.metadata["source_page"]) for page in pages]
+        if center not in numbers or len(pages) > 3 or any(abs(number - center) > 1 for number in numbers):
+            return None
+        if any(right != left + 1 for left, right in zip(numbers, numbers[1:], strict=False)):
+            return None
+        offset = 0
+        original = []
+        for page, number in zip(pages, numbers, strict=True):
+            if page.metadata["source_id"] != source_id:
+                return None
+            digest = _sha256_text(page.page_content)
+            expected = page.metadata.get("source_page_sha256")
+            if digest != expected:
+                return None
+            original.append(
+                _SourcePage(page.page_content, source_id, number, digest, _source_metadata(page.metadata)[1], offset)
+            )
+            offset += len(page.page_content)
+        return _DocumentWindow("".join(page.text for page in original), tuple(original), False, False)
     except (KeyError, TypeError, ValueError):
         return None
-    if any(page.metadata.get("source_id") != source_id for page in ordered):
-        return None
-    page_numbers = [int(page.metadata["source_page"]) for page in ordered]
-    if source_page not in page_numbers or any(
-        right != left + 1 for left, right in zip(page_numbers, page_numbers[1:], strict=False)
-    ):
-        return None
-    # The target page is normally internal to this three-page window. Dropping
-    # only the outer sentences preserves cross-page continuations without
-    # publishing an unbounded edge fragment.
-    return "".join(page.page_content for page in ordered), EvidenceCompleteness.COMPLETE, False, False
+
+
+def covered_components(text: str, target: AssessmentTarget) -> frozenset[str]:
+    """Locate declared members without promoting their terms to identity aliases."""
+    return frozenset(
+        member.component_id
+        for member in target.requirements
+        if mentions_target(text, AssessmentTarget(None, member.anchors[0], member.anchors))
+    )
+
+
+def has_target_coverage(texts: Sequence[str], target: AssessmentTarget) -> bool:
+    """Require every declared member in the actual assessed batch."""
+    covered = set().union(*(covered_components(text, target) for text in texts))
+    return covered >= {member.component_id for member in target.requirements}
 
 
 def _formula_identity(formula: str) -> str:
@@ -273,7 +307,7 @@ def select_evidence_spans(
     if diagnostics is not None:
         diagnostics.retrieved_documents = len(documents)
         diagnostics.question_count = question_count
-        diagnostics.required_sentences = min(MIN_EVIDENCE_SENTENCES, question_count)
+        diagnostics.required_sentences = 0
     ranked = sorted(
         enumerate(documents),
         key=lambda pair: (
@@ -293,55 +327,71 @@ def select_evidence_spans(
             if diagnostics is not None:
                 diagnostics.contents_documents += 1
             continue
-        assembled = _assemble_document_span(document, evidence_window_reader)
-        if assembled is None:
+        window = _assemble_document_span(document, evidence_window_reader)
+        if window is None:
             if diagnostics is not None:
                 diagnostics.invalid_provenance_documents += 1
             continue
-        text, completeness, starts_complete, ends_complete = assembled
+        sentences = list(re.finditer(r"[^。！？!?；;\n]+[。！？!?；;]?", window.text))
         selected = []
-        text = re.sub(r"(?=\d+(?:\.\d+){2,3}\s*[\u4e00-\u9fff])", "\n", text)
-        sentences = re.split(r"(?<=[。！？!?；;])\s*|\n+", text)
-        for sentence_index, sentence in enumerate(sentences):
-            sentence = re.split(r"输出结果如下\s*[:：]", sentence, maxsplit=1)[0].strip()
-            if sentence_index == 0 and not starts_complete:
+        intervals = []
+        previous_anchor_index = -10
+        previous_sentence_end = 0
+        for index, match in enumerate(sentences):
+            raw = match.group()
+            gap = window.text[previous_sentence_end : match.start()]
+            previous_sentence_end = match.end()
+            sentence = re.split(r"输出结果如下\s*[:：]", raw, maxsplit=1)[0].strip()
+            if index == 0 and not window.starts_complete:
                 continue
-            if sentence_index == len(sentences) - 1 and not ends_complete:
+            if index == len(sentences) - 1 and not window.ends_complete:
                 continue
-            has_terminal = bool(sentence) and sentence[-1] in "。！？!?；;."
-            if not has_terminal and not (sentence_index == len(sentences) - 1 and ends_complete):
-                continue
-            normalized = _normalized(sentence)
-            if pattern.search(sentence) and diagnostics is not None:
+            anchored = bool(pattern.search(sentence))
+            # Only explicit anaphora/conditions extend an anchor, within two
+            # sentences. Adjacency by itself never grants support.
+            continuation = index - previous_anchor_index <= 2 and bool(
+                re.match(r"(?:该|它|其|这|因此|其中|当|如果|通常|在实际)", sentence)
+            )
+            if re.search(r"(?:^|\s)\d+(?:\.\d+){1,3}\s", raw) or re.search(r"\n\s*\n", gap):
+                previous_anchor_index = -10
+                continuation = False
+            if not (anchored or continuation):
+                previous_anchor_index = -10
+            if anchored and diagnostics is not None:
                 diagnostics.candidate_sentences += 1
-            if len(normalized) < 24 or len(sentence) > 1200 or not pattern.search(sentence):
+            normalized = _normalized(sentence)
+            if not (anchored or continuation) or not sentence.endswith(tuple("。！？!?；;.")) or len(sentence) > 1200:
                 continue
             if not _has_balanced_delimiters(sentence):
                 continue
-            sentence_formulas, sentence_formula_quality = analyze_formula_quality(sentence)
-            if sentence_formula_quality is FormulaQuality.MALFORMED:
+            formulas, quality = analyze_formula_quality(sentence)
+            if quality is FormulaQuality.MALFORMED:
                 continue
-            is_duplicate = any(
+            duplicate = any(
                 normalized in old
                 or old in normalized
                 or SequenceMatcher(None, normalized, old, autojunk=False).ratio() >= 0.88
                 for old in seen
             )
-            if is_duplicate and not sentence_formulas:
+            if duplicate and not formulas:
                 continue
             cost = len(sentence) + bool(selected)
             if cost > remaining:
                 continue
+            if anchored:
+                previous_anchor_index = index
             selected.append(sentence)
+            first = match.start() + len(raw) - len(raw.lstrip())
+            intervals.extend(window.intervals(first, first + len(sentence)))
             seen.append(normalized)
+            remaining -= cost
             if diagnostics is not None:
                 diagnostics.accepted_sentences += 1
-            remaining -= cost
         if not selected:
             continue
         selected_text = "\n".join(selected)
-        formulas, formula_quality = analyze_formula_quality(selected_text)
-        if formula_quality is FormulaQuality.MALFORMED:
+        formulas, quality = analyze_formula_quality(selected_text)
+        if quality is FormulaQuality.MALFORMED:
             continue
         source, page = _source_metadata(document.metadata)
         spans.append(
@@ -349,19 +399,27 @@ def select_evidence_spans(
                 id=f"S{len(spans) + 1}",
                 text=selected_text,
                 source=source,
-                page=page,
-                completeness=completeness,
+                page=(
+                    next(
+                        (original.book_page for original in window.pages if original.page == intervals[0].source_page),
+                        None,
+                    )
+                    if intervals
+                    else page
+                ),
+                completeness=EvidenceCompleteness.COMPLETE,
                 formulas=formulas,
-                formula_quality=formula_quality,
+                formula_quality=quality,
+                intervals=tuple(intervals),
+                component_ids=tuple(sorted(covered_components(selected_text, target))),
             )
         )
-        if diagnostics is not None:
-            diagnostics.accepted_spans += 1
         if len(spans) >= max_sources:
             break
     spans = _remove_formula_conflicts(spans)
-    required_sentences = min(MIN_EVIDENCE_SENTENCES, question_count)
-    return spans if spans and len(seen) >= required_sentences else []
+    if diagnostics is not None:
+        diagnostics.accepted_spans = len(spans)
+    return spans if spans and has_target_coverage([span.text for span in spans], target) else []
 
 
 def select_evidence(
@@ -384,4 +442,14 @@ def select_evidence(
         evidence_window_reader=evidence_window_reader,
         diagnostics=diagnostics,
     )
-    return [EvidenceSource(id=span.id, text=span.text, source=span.source, page=span.page) for span in spans]
+    return [
+        EvidenceSource(
+            id=span.id,
+            text=span.text,
+            source=span.source,
+            page=span.page,
+            intervals=span.intervals,
+            component_ids=span.component_ids,
+        )
+        for span in spans
+    ]

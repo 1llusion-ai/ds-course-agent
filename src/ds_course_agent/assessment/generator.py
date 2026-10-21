@@ -43,6 +43,7 @@ from ds_course_agent.assessment.feedback import (
     classify_provider_error,
 )
 from ds_course_agent.assessment.formulas import analyze_formula_quality
+from ds_course_agent.assessment.generation_constraints import AssessmentExposureConstraint
 from ds_course_agent.assessment.models import (
     DIFFICULTY_RULES,
     Difficulty,
@@ -52,7 +53,11 @@ from ds_course_agent.assessment.models import (
     QuizDraft,
 )
 
+MAX_AUTHOR_PROMPT_CHARS = 64_000
+MAX_EXPOSURE_EXAMPLE_CHARS = 4_000
+
 _REPAIR_ACTIONS = {
+    "recent_item_exposure": "更换为当前学生近期和活跃评估未见的题目内容；不能仅重排选项或改解析。",
     "answer_leakage": "消除可凭长度、措辞、语法或题干复现猜中的线索，同时保持四个选项同类同粒度。",
     "answer_ambiguity": "重新审查四个选项，改写或删除任何也能回答题干的选项，确保只有一个选项成立。",
     "multiple_correct_answers": "缩小题干条件或重写选项，使教材证据只支持一个选项；不能把多个成立选项保留为单选题。",
@@ -72,12 +77,12 @@ _REPAIR_ACTIONS = {
     "invalid_structured_output": "重新输出符合 QuizDraft 结构的完整题目，不输出额外字段或自由文本。",
 }
 
-_SYSTEM_PROMPT = """你是《数据科学导论》的教材测验命题助手。
+_SYSTEM_PROMPT = """你是当前课程的教材测验命题助手。
 只依据给出的教材证据生成中文单项选择题，不补充教材外事实。每题必须有四个选项 A、B、C、D，
 且只有一个正确选项。所有选项必须回答同一维度的问题，不能把多个正确性质或等价目标混列为单选答案。
 题干、选项、答案和解析应与请求难度一致。
 同一套题应覆盖不同的知识事实或应用规则；不得换场景、改措辞重复考查同一原理。
-每题题干必须明确写出请求的主题名称或其常用别名，不得转而考查相邻知识点。
+每题须考查目标知识点或其声明成员，允许成员教材术语而不强迫组合全名，不得转而考查相邻知识点。
 题干必须是信息完整、可独立作答的问句或判断任务，不能只写主题名称。
 所有括号必须成对闭合；代码中的字符串参数统一使用单引号，避免结构化输出中的双引号截断。
 四个选项必须属于相同概念类别、抽象粒度和表达形式；错误选项应来自真实常见误解，不能荒谬或无关。
@@ -150,6 +155,8 @@ class AssessmentGenerator:
         self,
         request: GenerateQuestionsRequest,
         sources: list[EvidenceSource],
+        *,
+        exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
     ) -> QuizDraft:
         """Generate a structurally parsed candidate batch without hidden retries.
 
@@ -164,7 +171,7 @@ class AssessmentGenerator:
             raise AssessmentGenerationError("evidence source ids must be unique")
 
         try:
-            messages = self._build_messages(request, sources)
+            messages = self._build_messages(request, sources, exposure=exposure)
         except Exception as exc:
             raise AssessmentGenerationError("assessment message construction failed") from exc
         model = self._resolve_author_model(request, sources)
@@ -312,6 +319,8 @@ class AssessmentGenerator:
     def _build_messages(
         request: GenerateQuestionsRequest,
         sources: list[EvidenceSource],
+        *,
+        exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
     ) -> list[Any]:
         """Build the single model input from the exact bounded evidence sources."""
 
@@ -325,6 +334,7 @@ class AssessmentGenerator:
             f"共享教学要求：{AssessmentGenerator._requirement_text(request)}\n\n"
             f"教材证据：\n{AssessmentGenerator._evidence_text(sources)}"
         )
+        user_prompt = AssessmentGenerator._with_exposure(user_prompt, exposure, _SYSTEM_PROMPT)
         return [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=user_prompt)]
 
     @staticmethod
@@ -382,7 +392,24 @@ class AssessmentGenerator:
             "修订后的题目必须再次满足四个选项、唯一答案、目标主题、请求难度和教材证据约束；"
             "source_ids 只能填写上方证据的编号，不能创造编号。不要把拒绝信息中的推断当作教材结论。"
         )
+        user_prompt = AssessmentGenerator._with_exposure(user_prompt, request.exposure, _SYSTEM_PROMPT)
         return [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=user_prompt)]
+
+    @staticmethod
+    def _with_exposure(user_prompt: str, exposure: AssessmentExposureConstraint, system_prompt: str) -> str:
+        """Budget optional avoid examples within the actual full author/editor cap."""
+        remaining = MAX_AUTHOR_PROMPT_CHARS - len(user_prompt) - len(system_prompt) - 2
+        if remaining < 0:
+            raise AssessmentGenerationError("assessment author/editor prompt exceeds its character budget")
+        header = "当前学生活跃或近期题目（不得重新生成，重排选项也算重复）：\n"
+        budget = min(MAX_EXPOSURE_EXAMPLE_CHARS, remaining)
+        examples = []
+        for question in exposure.excluded_questions:
+            example = {"stem": question.stem, "options": [option.text for option in question.options]}
+            if len(header) + len(json.dumps([*examples, example], ensure_ascii=False)) > budget:
+                continue
+            examples.append(example)
+        return user_prompt + ("\n\n" + header + json.dumps(examples, ensure_ascii=False) if examples else "")
 
     @staticmethod
     def _requirement_text(request: GenerateQuestionsRequest) -> str:

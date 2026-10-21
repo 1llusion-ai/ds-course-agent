@@ -84,6 +84,27 @@ ASSESSMENT_MIGRATIONS = (
             "CREATE INDEX idx_assessments_student_course_status ON assessments(student_id, course_id, status, assigned_at DESC)",
         ),
     ),
+    Migration(
+        version=6,
+        name="persist_trusted_assessment_plan",
+        statements=("ALTER TABLE assessments ADD COLUMN plan_context_json TEXT",),
+    ),
+    Migration(
+        version=7,
+        name="accumulate_reviewed_assessment_content",
+        statements=(
+            "ALTER TABLE assessments ADD COLUMN resource_revision_json TEXT",
+            "ALTER TABLE assessments ADD COLUMN review_certificates_json TEXT",
+            "ALTER TABLE assessment_questions ADD COLUMN item_id TEXT",
+            """CREATE TABLE reviewed_assessment_items (
+                course_id TEXT NOT NULL, target_kc_id TEXT NOT NULL, resource_key TEXT NOT NULL,
+                difficulty TEXT NOT NULL, objective_kind TEXT NOT NULL, operation TEXT NOT NULL,
+                item_id TEXT NOT NULL, answer_text TEXT NOT NULL, payload_json TEXT NOT NULL,
+                created_at REAL NOT NULL, usable INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY(course_id,target_kc_id,resource_key,difficulty,objective_kind,operation,item_id)
+            )""",
+        ),
+    ),
 )
 
 

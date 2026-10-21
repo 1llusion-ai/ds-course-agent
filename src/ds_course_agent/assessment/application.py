@@ -8,7 +8,14 @@ from datetime import datetime, timezone
 from threading import RLock
 from uuid import uuid4
 
-from ds_course_agent.assessment.feedback import AssessmentGenerationProgress
+from ds_course_agent.assessment.feedback import (
+    AssessmentGenerationProgress,
+    BatchReviewState,
+    QuestionRejection,
+    QuestionRejectionCode,
+)
+from ds_course_agent.assessment.generation_constraints import AssessmentExposureConstraint
+from ds_course_agent.assessment.items import ReviewedItemRepository, item_identity
 from ds_course_agent.assessment.models import GenerateQuestionsRequest
 from ds_course_agent.assessment.records import (
     AnswerSubmission,
@@ -22,8 +29,15 @@ from ds_course_agent.assessment.records import (
     StudentQuestion,
 )
 from ds_course_agent.assessment.repository import AssessmentRepository
-from ds_course_agent.assessment.service import AssessmentService, get_assessment_service
+from ds_course_agent.assessment.service import (
+    AssessmentResourceChangedError,
+    AssessmentService,
+    AssessmentSlotFailureError,
+    get_assessment_service,
+)
+from ds_course_agent.assessment.versioning import assessment_resource_revision
 from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
+from ds_course_agent.teaching.assessment_assignment import AssessmentPlanContext
 
 
 class AssessmentNotFoundError(LookupError):
@@ -53,6 +67,7 @@ class AssessmentApplicationService:
         clock: Callable[[], datetime] | None = None,
         id_factory: Callable[[], str] | None = None,
         submission_recorder: Callable[[AssessmentRecord], None] | None = None,
+        reviewed_items: ReviewedItemRepository | None = None,
     ) -> None:
         self._repository = repository or AssessmentRepository()
         self._generator = generator
@@ -60,6 +75,8 @@ class AssessmentApplicationService:
         self._id_factory = id_factory or (lambda: str(uuid4()))
         self._lock = RLock()
         self._submission_recorder = submission_recorder
+        self._reviewed_items = reviewed_items or ReviewedItemRepository(self._repository.path)
+        self._assignment_lock = RLock()
 
     def assign(
         self,
@@ -70,8 +87,32 @@ class AssessmentApplicationService:
         assignment_id: str | None = None,
         generation_progress: AssessmentGenerationProgress | None = None,
         course_id: CourseId | str = DEFAULT_COURSE_ID,
+        plan_context: AssessmentPlanContext | None = None,
     ) -> AssessmentSummary:
-        """Generate and assign a quiz from agent-selected typed parameters."""
+        """Serialize allocation so explicit and automatic requests share one owner."""
+        with self._assignment_lock:
+            return self._assign(
+                student_id,
+                request,
+                session_id=session_id,
+                assignment_id=assignment_id,
+                generation_progress=generation_progress,
+                course_id=course_id,
+                plan_context=plan_context,
+            )
+
+    def _assign(
+        self,
+        student_id: str,
+        request: GenerateQuestionsRequest,
+        *,
+        session_id: str | None,
+        assignment_id: str | None,
+        generation_progress: AssessmentGenerationProgress | None,
+        course_id: CourseId | str,
+        plan_context: AssessmentPlanContext | None,
+    ) -> AssessmentSummary:
+        """Reuse reviewed content, fill missing slots, then publish an immutable batch."""
 
         normalized_course_id = CourseId(course_id)
         if assignment_id is not None:
@@ -80,21 +121,90 @@ class AssessmentApplicationService:
                 if existing.session_id != session_id or existing.request != request:
                     raise AssessmentStateError("assignment identity conflicts with the persisted request")
                 return self._summary(existing)
+        if plan_context is not None and plan_context.resource_revision != assessment_resource_revision(
+            str(normalized_course_id)
+        ):
+            raise AssessmentResourceChangedError("frozen assessment plan uses outdated resources")
+        active = self._repository.list_for_student(
+            student_id, (AssessmentStatus.READY, AssessmentStatus.IN_PROGRESS), course_id=normalized_course_id
+        )
+        existing_active = next(
+            (record for record in active if record.request.target_kc_id == request.target_kc_id), None
+        )
+        if existing_active is not None:
+            return self._summary(existing_active)
         generator = self._generator or get_assessment_service(normalized_course_id)
+        revision = assessment_resource_revision(str(normalized_course_id))
+        reusable = ()
+        exposure = self._exposure(student_id, normalized_course_id, request.target_kc_id)
+        generation_options = {
+            "exposure": exposure,
+            "refresh_exposure": lambda: self._exposure(student_id, normalized_course_id, request.target_kc_id),
+        }
         if generation_progress is None:
-            quiz = generator.generate(request)
+            history = self._repository.list_for_student(
+                student_id, tuple(AssessmentStatus), course_id=normalized_course_id
+            )
+            seen = tuple(identity for record in reversed(history) for identity in record.item_ids)
+            reusable = self._reviewed_items.select(
+                request, revision, excluded_item_ids=exposure.excluded_item_ids, recent_item_ids=seen
+            )
+            quiz = (
+                generator.generate(request, reusable_items=reusable, **generation_options)
+                if reusable
+                else generator.generate(request, **generation_options)
+            )
         else:
-            quiz = generator.generate(request, progress=generation_progress)
+            quiz = generator.generate(request, progress=generation_progress, **generation_options)
         if len(quiz.questions) != request.count:
             raise AssessmentStateError("assessment generation must return the exact requested question count")
+        # Re-read scoped exposure immediately before publication. In-flight
+        # changes are normally repaired inside generation; a later race still
+        # fails closed with the same bounded, resumable slot protocol.
+        exposure = exposure.merge(self._exposure(student_id, normalized_course_id, request.target_kc_id))
+        forbidden = {
+            index: QuestionRejection(
+                (QuestionRejectionCode.RECENT_ITEM_EXPOSURE,),
+                question,
+                "生成期间此题已出现在当前学生的活跃或近期评估中。",
+            )
+            for index, question in enumerate(quiz.questions)
+            if item_identity(question) in exposure.excluded_item_ids
+        }
+        if forbidden:
+            progress = AssessmentGenerationProgress.build(
+                request,
+                title=quiz.title,
+                evidence=tuple(quiz.sources),
+                accepted_by_slot={
+                    index: question for index, question in enumerate(quiz.questions) if index not in forbidden
+                },
+                pending_by_slot=forbidden,
+                repair_round=quiz.repair_round,
+                resource_revision=quiz.resource_revision,
+                review_certificates={
+                    index: review for index, review in enumerate(quiz.review_certificates) if index not in forbidden
+                },
+                exposure=exposure,
+                batch_review=BatchReviewState(required=True),
+            )
+            raise AssessmentSlotFailureError("assessment exposure changed before publication", progress=progress)
+        if plan_context is not None and plan_context.resource_revision != assessment_resource_revision(
+            str(normalized_course_id)
+        ):
+            raise AssessmentResourceChangedError("assessment resources changed before publication")
+        if quiz.resource_revision == revision:
+            self._reviewed_items.accumulate(request, quiz)
         now = self._utc_now()
         record = AssessmentRecord(
             id=assignment_id or self._id_factory(),
             student_id=student_id,
             session_id=session_id,
             request=request,
+            plan_context=plan_context,
             quiz=quiz,
             question_ids=tuple(self._id_factory() for _ in quiz.questions),
+            item_ids=tuple(item_identity(question) for question in quiz.questions),
             status=AssessmentStatus.READY,
             assigned_at=now,
             course_id=normalized_course_id,
@@ -107,6 +217,39 @@ class AssessmentApplicationService:
                 raise
             return self._summary(existing)
         return self._summary(record)
+
+    def _exposure(self, student_id: str, course_id: CourseId, target_kc_id: str) -> AssessmentExposureConstraint:
+        history = self._repository.list_for_student(student_id, tuple(AssessmentStatus), course_id=course_id)
+        records = {
+            record.id: record
+            for record in (
+                *history[:3],
+                *(
+                    record
+                    for record in history
+                    if record.status in {AssessmentStatus.READY, AssessmentStatus.IN_PROGRESS}
+                ),
+            )
+        }
+        questions = tuple(question for record in records.values() for question in record.quiz.questions)
+        return AssessmentExposureConstraint(
+            excluded_item_ids=tuple(sorted({item_identity(question) for question in questions})),
+            excluded_questions=tuple(
+                question
+                for record in records.values()
+                if record.request.target_kc_id == target_kc_id
+                for question in record.quiz.questions
+            ),
+        )
+
+    def active_target_kc_ids(self, student_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID) -> frozenset[str]:
+        """Share active assignment protection with automatic practice scheduling."""
+        return frozenset(
+            record.request.target_kc_id
+            for record in self._repository.list_for_student(
+                student_id, (AssessmentStatus.READY, AssessmentStatus.IN_PROGRESS), course_id=course_id
+            )
+        )
 
     def list_assessments(
         self,

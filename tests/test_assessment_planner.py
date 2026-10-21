@@ -103,13 +103,15 @@ def test_session_planning_counts_existing_preparations_and_ignores_duplicate_men
     planner = AssessmentAssignmentPlanner()
     state = LearnerStateSnapshot(student_id="s1")
 
+    initial = planner.plan_session("session", events, state)
+    consumed = {plan.request.target_kc_id: (plan.context.opportunity_id,) for plan in initial}
     remaining = planner.plan_session(
         "session",
         events + [events[0]],
         state,
-        scheduled_kc_ids=("overfitting", "underfitting"),
+        consumed_opportunities={key: value for key, value in consumed.items() if key != "svm"},
     )
-    exhausted = planner.plan_session("session", events, state, scheduled_kc_ids=("overfitting", "underfitting", "svm"))
+    exhausted = planner.plan_session("session", events, state, consumed_opportunities=consumed)
 
     assert [plan.request.target_kc_id for plan in remaining] == ["svm"]
     assert exhausted == ()

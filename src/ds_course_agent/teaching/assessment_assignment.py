@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+
+from pydantic import BaseModel, ConfigDict
 
 from ds_course_agent.assessment.models import (
     CognitiveOperation,
@@ -15,6 +17,7 @@ from ds_course_agent.assessment.models import (
     TeachingObjectiveKind,
     question_slot_id,
 )
+from ds_course_agent.assessment.versioning import AssessmentResourceRevision, assessment_resource_revision
 from ds_course_agent.teaching.knowledge_map import NodeType, get_knowledge_map
 from ds_course_agent.teaching.learner_state import (
     LearnerStateSnapshot,
@@ -27,6 +30,20 @@ from ds_course_agent.teaching.practice import PracticeLevel
 DEFAULT_ASSESSMENT_QUESTION_COUNT = 5
 SESSION_ASSESSMENT_QUESTION_COUNT = 2
 SESSION_MAX_KC_COUNT = 3
+SESSION_MAX_PREPARATIONS = 9
+KC_MAX_OPPORTUNITIES = 3
+
+
+class AssessmentPlanContext(BaseModel):
+    """Trusted planning facts, separate from the client generation request."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    opportunity_id: str
+    profile_revision: int | None = None
+    source_event_cursor: str = ""
+    resource_revision: AssessmentResourceRevision
+    policy_version: str = "observed-practice/2"
+    selection_reason: str = "course-kc-scored-evidence"
 
 
 @dataclass(frozen=True)
@@ -36,6 +53,7 @@ class SessionAssessmentPlan:
     display_name: str
     request: GenerateQuestionsRequest
     source_event_ids: tuple[str, ...]
+    context: AssessmentPlanContext | None = None
 
 
 class AssessmentAssignmentPlanner:
@@ -47,8 +65,9 @@ class AssessmentAssignmentPlanner:
         events: Sequence[BaseEvent],
         learner_state: LearnerStateSnapshot,
         *,
-        scheduled_kc_ids: Collection[str] = (),
         course: object | None = None,
+        consumed_opportunities: Mapping[str, Collection[str]] | None = None,
+        active_kc_ids: Collection[str] = (),
     ) -> tuple[SessionAssessmentPlan, ...]:
         """Select at most three new canonical KCs from this learner's session.
 
@@ -63,6 +82,7 @@ class AssessmentAssignmentPlanner:
             if (
                 event.session_id != session_id
                 or event.student_id != learner_state.student_id
+                or event.course_id != learner_state.course_id
                 or event.event_type is not EventType.CONCEPT_MENTIONED
             ):
                 continue
@@ -70,8 +90,37 @@ class AssessmentAssignmentPlanner:
             if concept_id in nodes:
                 by_concept[concept_id].append((event_index, event))
 
-        scheduled = {str(concept_id).strip() for concept_id in scheduled_kc_ids if str(concept_id).strip()}
-        available = set(by_concept) - scheduled
+        consumed_opportunities = consumed_opportunities or {}
+        scheduled = set(consumed_opportunities)
+        revision = assessment_resource_revision(str(getattr(course, "course_id", learner_state.course_id)))
+        revision_token = f"{revision.graph_digest[:16]}:{revision.corpus_revision}:{revision.evidence_policy}:{revision.review_policy}"
+        opportunities = {
+            concept_id: max(
+                (
+                    (event.timestamp, event.event_id)
+                    for event in events
+                    if event.student_id == learner_state.student_id
+                    and event.course_id == learner_state.course_id
+                    and event.event_type is EventType.QUESTION_ANSWERED
+                    and event.observation.concept_id == concept_id
+                ),
+                default=(0, "initial"),
+            )[1]
+            + "@"
+            + revision_token
+            for concept_id in by_concept
+        }
+        total = sum(len(items) for items in consumed_opportunities.values())
+        if total >= SESSION_MAX_PREPARATIONS:
+            return ()
+        available = {
+            concept_id
+            for concept_id in by_concept
+            if concept_id not in active_kc_ids
+            and opportunities[concept_id] not in consumed_opportunities.get(concept_id, ())
+            and len(consumed_opportunities.get(concept_id, ())) < KC_MAX_OPPORTUNITIES
+            and (concept_id in scheduled or len(scheduled) < SESSION_MAX_KC_COUNT)
+        }
         selected: list[str] = []
         for weak_spot in (*rank_active_weak_spots(learner_state), *learner_state.pending_weak_spots):
             if weak_spot.concept_id in available and weak_spot.concept_id not in selected:
@@ -83,14 +132,43 @@ class AssessmentAssignmentPlanner:
                 key=lambda item: self._session_event_order(by_concept[item]),
             )
         )
-        selected = selected[: max(0, SESSION_MAX_KC_COUNT - len(scheduled))]
+        remaining_new = max(0, SESSION_MAX_KC_COUNT - len(scheduled))
+        chosen = []
+        for concept_id in selected:
+            if concept_id in scheduled:
+                chosen.append(concept_id)
+            elif remaining_new:
+                chosen.append(concept_id)
+                remaining_new -= 1
+        selected = chosen[
+            : max(0, SESSION_MAX_PREPARATIONS - sum(len(items) for items in (consumed_opportunities or {}).values()))
+        ]
         return tuple(
             SessionAssessmentPlan(
                 display_name=nodes[concept_id].display_name,
                 request=self.plan_for_concept(concept_id, learner_state, count=SESSION_ASSESSMENT_QUESTION_COUNT),
                 source_event_ids=tuple(event.event_id for _, event in by_concept[concept_id]),
+                context=self.plan_context(
+                    learner_state,
+                    opportunity_id=opportunities[concept_id],
+                    course_id=str(getattr(course, "course_id", learner_state.course_id)),
+                ),
             )
             for concept_id in selected
+        )
+
+    @staticmethod
+    def plan_context(
+        learner_state: LearnerStateSnapshot | None, *, opportunity_id: str, course_id: str | None = None
+    ) -> AssessmentPlanContext:
+        """Capture server-owned revisions without granting client control fields."""
+        return AssessmentPlanContext(
+            opportunity_id=opportunity_id,
+            profile_revision=learner_state.profile_revision if learner_state else None,
+            source_event_cursor=learner_state.source_event_cursor if learner_state else "",
+            resource_revision=assessment_resource_revision(
+                course_id or str(learner_state.course_id if learner_state else "data-science-intro")
+            ),
         )
 
     @staticmethod
@@ -190,6 +268,8 @@ class AssessmentAssignmentPlanner:
             return Difficulty.BASIC
         practice = learner_state.practice.get(target_kc_id)
         if practice is not None:
+            if practice.recommended_difficulty is not None:
+                return Difficulty(practice.recommended_difficulty)
             if practice.level is PracticeLevel.READY_FOR_EXTENSION:
                 return Difficulty.ADVANCED
             if practice.level is PracticeLevel.PRACTICED and practice.recent_answered_count >= 2:

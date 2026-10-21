@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from typing import Any, Protocol
+from uuid import uuid4
 
 from ds_course_agent.agent.events import RetrievalEndEvent, TurnEvent
 from ds_course_agent.agent.message_context import build_turn_system_context
@@ -120,6 +121,11 @@ class AssessmentAssignmentRouteHandler(BufferedRouteHandlerMixin):
                     student_id=route_state.student_id,
                     session_id=route_state.session_id,
                     request=request,
+                    plan_context=AssessmentAssignmentPlanner.plan_context(
+                        route_state.learner_state,
+                        opportunity_id=f"explicit:{route_state.session_id}:{uuid4()}",
+                        course_id=str(course_id),
+                    ),
                     course_id=course_id,
                 )
             )

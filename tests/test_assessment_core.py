@@ -369,6 +369,7 @@ def test_service_generates_exact_grounded_quiz_with_server_owned_sources() -> No
         EvidenceSource(
             id="S1",
             text=PCA_EVIDENCE.replace("。PCA", "。\nPCA"),
+            component_ids=("pca",),
             source="chapter-7.pdf",
             page=42,
         )
@@ -597,6 +598,7 @@ def test_quality_verifier_failure_rejects_the_request_without_regeneration() -> 
         retriever=_Retriever([_Document(page_content=PCA_EVIDENCE, metadata={})]),
         generator=AssessmentGenerator(model=model, editor_model=model),
         verifier=FailingVerifier(),
+        critic=_Critic(),
     )
 
     with pytest.raises(AssessmentSlotFailureError) as error:
@@ -615,6 +617,7 @@ def test_service_fails_closed_when_an_injected_verifier_omits_question_coverage(
         retriever=_Retriever([_Document(page_content=PCA_EVIDENCE, metadata={})]),
         generator=AssessmentGenerator(model=model),
         verifier=IncompleteVerifier(),
+        critic=_Critic(),
     )
 
     with pytest.raises(AssessmentSlotFailureError) as error:
@@ -661,6 +664,7 @@ def test_service_validates_excerpt_ids_from_an_injected_verifier_without_repair(
         retriever=_Retriever([_Document(page_content=PCA_EVIDENCE, metadata={})]),
         generator=AssessmentGenerator(model=model),
         verifier=UnknownExcerptVerifier(),
+        critic=_Critic(),
     )
 
     with pytest.raises(AssessmentSlotFailureError) as error:

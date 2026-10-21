@@ -51,11 +51,14 @@ from ds_course_agent.teaching.teaching_memory_writer import TeachingMemoryWriter
 class FixtureGenerator:
     """Generate controlled fixtures without invoking retrieval or an LLM."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, vary_items: bool = False) -> None:
+        self.vary_items = vary_items
         self.requests: list[GenerateQuestionsRequest] = []
         self.progresses = []
 
-    def generate(self, request: GenerateQuestionsRequest, *, progress=None) -> GeneratedQuiz:
+    def generate(
+        self, request: GenerateQuestionsRequest, *, progress=None, exposure=None, refresh_exposure=None
+    ) -> GeneratedQuiz:
         self.requests.append(request)
         self.progresses.append(progress)
         return GeneratedQuiz.model_validate(
@@ -63,7 +66,8 @@ class FixtureGenerator:
                 "title": f"{request.target_kc_id} practice",
                 "questions": [
                     {
-                        "stem": f"Case {index}: which evidence supports this conclusion?",
+                        "stem": f"{request.target_kc_id} Case {index}: which evidence supports this conclusion?"
+                        + (f" Independent example {len(self.requests)}." if self.vary_items else ""),
                         "options": [{"id": label, "text": f"Evidence {label}"} for label in "ABCD"],
                         "correct_option_id": "A",
                         "explanation": "Independent validation supports the conclusion.",
@@ -247,8 +251,8 @@ def test_session_to_assessment_to_profile_to_next_teaching(tmp_path) -> None:
     assert state.practice["overfitting"].level is PracticeLevel.NEEDS_PRACTICE
     assert state.practice["overfitting"].answered_count == 2
     assert [item.question_stem for item in state.practice["overfitting"].recent_attempts] == [
-        "Case 0: which evidence supports this conclusion?",
-        "Case 1: which evidence supports this conclusion?",
+        "overfitting Case 0: which evidence supports this conclusion?",
+        "overfitting Case 1: which evidence supports this conclusion?",
     ]
     assert all(item.selected_option_text == "Evidence B" for item in state.practice["overfitting"].recent_attempts)
     assert all(item.correct_option_text == "Evidence A" for item in state.practice["overfitting"].recent_attempts)
@@ -276,7 +280,7 @@ def test_readiness_uses_answers_and_assessment_diversity_not_mentions(tmp_path) 
     assert planner.plan_for_concept("overfitting", state).difficulty is Difficulty.BASIC
     service = AssessmentApplicationService(
         AssessmentRepository(tmp_path / "db"),
-        FixtureGenerator(),
+        FixtureGenerator(vary_items=True),
         submission_recorder=AssessmentEvidenceRecorder(
             event_repository=event_repository,
             episode_repository=episode_repository,
@@ -298,6 +302,7 @@ def test_readiness_uses_answers_and_assessment_diversity_not_mentions(tmp_path) 
     submit(service, third.id, "B")
     state = provider.get_state("student")
     assert state.practice["overfitting"].level is PracticeLevel.NEEDS_PRACTICE
+    assert planner.plan_for_concept("overfitting", state).difficulty is Difficulty.INTERMEDIATE
 
 
 def test_saved_submission_recovers_evidence_after_recorder_failure(tmp_path) -> None:
@@ -366,7 +371,7 @@ def test_failed_preparation_retry_is_owner_scoped_and_reuses_identity(tmp_path) 
     failed = Event()
 
     class FailOnce(FixtureGenerator):
-        def generate(self, request, *, progress=None):
+        def generate(self, request, *, progress=None, exposure=None, refresh_exposure=None):
             if not failed.is_set():
                 failed.set()
                 raise AssessmentSlotFailureError(
@@ -440,7 +445,9 @@ def test_failed_preparation_persists_progress_and_retry_reuses_it(tmp_path) -> N
             self.requests.clear()
             self.progresses.clear()
 
-        def generate(self, request: GenerateQuestionsRequest, *, progress=None) -> GeneratedQuiz:
+        def generate(
+            self, request: GenerateQuestionsRequest, *, progress=None, exposure=None, refresh_exposure=None
+        ) -> GeneratedQuiz:
             self.calls.append(progress)
             if progress is None:
                 raise AssessmentSlotFailureError(
@@ -508,3 +515,60 @@ def test_failed_preparation_persists_progress_and_retry_reuses_it(tmp_path) -> N
     assert len(generator.calls) == 2
     assert generator.calls[0] is None
     assert generator.calls[1] == generator.progress
+
+
+def test_submitted_session_practice_allows_one_new_scored_opportunity(tmp_path) -> None:
+    path = tmp_path / "app.db"
+    repository = SQLiteLearningEventRepository(path)
+    preparations = PreparationRepository(tmp_path / "assessment.db")
+    generator = FixtureGenerator()
+    service = AssessmentApplicationService(
+        AssessmentRepository(tmp_path / "assessment.db"),
+        generator,
+        submission_recorder=AssessmentEvidenceRecorder(
+            event_repository=repository, episode_repository=SQLiteInteractionEpisodeRepository(path)
+        ),
+    )
+    mention(path, "overfitting", turn_id="first")
+    loop = SessionLearningLoop(preparations, service, repository)
+    loop.schedule("student", "session")
+    loop.close()
+    first = preparations.list_for_student("student")[0]
+    assert first.plan_context.profile_revision is not None
+    submit(service, first.assessment_id)
+    mention(path, "overfitting", turn_id="after-score")
+    second_loop = SessionLearningLoop(preparations, service, repository)
+    second_loop.schedule("student", "session")
+    second_loop.close()
+    jobs = preparations.list_for_student("student")
+    assert len(jobs) == 2
+    assert jobs[1].request.difficulty is Difficulty.INTERMEDIATE
+    assert jobs[1].plan_context.profile_revision > first.plan_context.profile_revision
+    assert jobs[1].plan_context.opportunity_id != first.plan_context.opportunity_id
+    duplicate_loop = SessionLearningLoop(preparations, service, repository)
+    duplicate_loop.schedule("student", "session")
+    duplicate_loop.close()
+    assert len(preparations.list_for_student("student")) == 2
+
+
+def test_explicit_active_assignment_blocks_concurrent_automatic_preparations(tmp_path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    path = tmp_path / "app.db"
+    events = SQLiteLearningEventRepository(path)
+    preparations = PreparationRepository(tmp_path / "assessment.db")
+    service = AssessmentApplicationService(AssessmentRepository(tmp_path / "assessment.db"), FixtureGenerator())
+    request = GenerateQuestionsRequest(target_kc_id="overfitting", count=2)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        assignments = list(
+            executor.map(lambda session: service.assign("student", request, session_id=session), ("a", "b"))
+        )
+    assert assignments[0].id == assignments[1].id
+    opened = service.open(assignments[0].id, "student")
+    mention(path, "overfitting", turn_id="after-explicit")
+    loop = SessionLearningLoop(preparations, service, events)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(lambda _: loop.schedule("student", "session"), range(2)))
+    loop.close()
+    assert not preparations.list_for_student("student")
+    assert service.get(assignments[0].id, "student") == opened

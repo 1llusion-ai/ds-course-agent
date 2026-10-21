@@ -29,6 +29,7 @@ class PracticeObservation:
     selected_option_id: str
     correct_option_id: str
     question_stem: str
+    item_id: str | None = None
     answer_change_count: int | None = None
     selected_option_text: str | None = None
     correct_option_text: str | None = None
@@ -59,6 +60,8 @@ class ConceptPractice:
     level: PracticeLevel
     last_incorrect_stem: str | None
     recent_attempts: tuple[PracticeAttempt, ...] = ()
+    recommended_difficulty: str | None = None
+    effective_answered_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Project the summary for profile persistence."""
@@ -83,19 +86,56 @@ def summarize_practice(observations: list[tuple[float, PracticeObservation]]) ->
     """Summarize one concept, retaining recent errors and conservative progression."""
 
     ordered = sorted(observations, key=lambda item: item[0])
+    # Only the first scored exposure of a stable item is independent evidence.
+    unique: dict[str, PracticeObservation] = {}
+    for _, observation in ordered:
+        unique.setdefault(observation.item_id or observation.question_id, observation)
+    effective = list(unique.values())
     recent = [observation for _, observation in ordered[-6:]]
     latest = recent[-1]
     correct = sum(item.is_correct for item in recent)
-    level = PracticeLevel.NEEDS_PRACTICE
-    if correct == len(recent):
-        level = PracticeLevel.PRACTICED
-        if (
-            len(recent) >= 3
-            and len({item.assessment_id for item in recent}) >= 2
-            and sum(item.difficulty in {"intermediate", "advanced"} for item in recent) >= 2
-        ):
-            level = PracticeLevel.READY_FOR_EXTENSION
+    # Engineering heuristic, not a mastery estimate: at most one step per
+    # scored opportunity. Two correct distinct items advance basic to intermediate;
+    # advanced requires four distinct items across two assessments including two
+    # intermediate/advanced successes. One error never drops the current level;
+    # two errors among the latest three distinct items drop exactly one level.
+    difficulty = 0
+    evidence: list[PracticeObservation] = []
+    batches: dict[str, list[PracticeObservation]] = {}
+    for observation in effective:
+        batches.setdefault(observation.assessment_id, []).append(observation)
+    consumed_errors: set[str] = set()
+    for batch in batches.values():
+        evidence.extend(batch)
+        window = evidence[-4:]
+        new_errors = {
+            item.item_id or item.question_id for item in evidence[-3:] if not item.is_correct
+        } - consumed_errors
+        if len(new_errors) >= 2 and any(not item.is_correct for item in batch):
+            difficulty = max(0, difficulty - 1)
+            consumed_errors.update(new_errors)
+        elif len(batch) >= 2 and all(item.is_correct for item in batch):
+            if difficulty == 0:
+                difficulty = 1
+            elif (
+                len(window) >= 4
+                and sum(item.is_correct for item in window) >= 3
+                and len({item.assessment_id for item in window}) >= 2
+                and sum(item.is_correct and item.difficulty in {"intermediate", "advanced"} for item in window) >= 2
+            ):
+                difficulty = min(2, difficulty + 1)
+    level = (
+        PracticeLevel.NEEDS_PRACTICE
+        if any(not item.is_correct for item in recent)
+        else PracticeLevel.READY_FOR_EXTENSION
+        if difficulty == 2
+        else PracticeLevel.PRACTICED
+        if difficulty == 1
+        else PracticeLevel.NEEDS_PRACTICE
+    )
     return ConceptPractice(
+        recommended_difficulty=("basic", "intermediate", "advanced")[difficulty],
+        effective_answered_count=len(effective),
         concept_id=latest.concept_id,
         display_name=latest.display_name,
         answered_count=len(ordered),

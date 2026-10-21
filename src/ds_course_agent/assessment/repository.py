@@ -13,11 +13,14 @@ from ds_course_agent.assessment.models import (
     EvidenceSource,
     GeneratedQuestion,
     GeneratedQuiz,
+    ItemReviewCertificate,
     QuestionOption,
 )
 from ds_course_agent.assessment.records import AssessmentRecord, AssessmentStatus, StoredAnswer
+from ds_course_agent.assessment.versioning import AssessmentResourceRevision
 from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
 from ds_course_agent.shared.database import connect_sqlite
+from ds_course_agent.teaching.assessment_assignment import AssessmentPlanContext
 
 
 class AssessmentRepository:
@@ -25,6 +28,11 @@ class AssessmentRepository:
 
     def __init__(self, path: str | Path | None = None) -> None:
         self._path = Path(path or config.ASSESSMENT_DB_PATH)
+
+    @property
+    def path(self) -> Path:
+        """Assessment-owned storage binding shared with reviewed content persistence."""
+        return self._path
 
     def init_db(self) -> None:
         migrate_assessment_database(self._path)
@@ -39,8 +47,8 @@ class AssessmentRepository:
                 INSERT INTO assessments (
                     id, student_id, session_id, title, status, assigned_at, opened_at,
                     submitted_at, target_kc_id, difficulty, question_type, requested_count,
-                    teaching_requirement_json, version, course_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    teaching_requirement_json, version, course_id, plan_context_json, resource_revision_json, review_certificates_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 self._assessment_values(record),
             )
@@ -150,6 +158,9 @@ class AssessmentRepository:
             request.teaching_requirement.model_dump_json() if request.teaching_requirement is not None else None,
             record.version,
             str(CourseId(record.course_id)),
+            record.plan_context.model_dump_json() if record.plan_context else None,
+            record.quiz.resource_revision.model_dump_json() if record.quiz.resource_revision else None,
+            json.dumps([review.model_dump(mode="json") for review in record.quiz.review_certificates]),
         )
 
     @staticmethod
@@ -159,8 +170,8 @@ class AssessmentRepository:
             """
             INSERT INTO assessment_questions (
                 id, assessment_id, position, stem, options_json, correct_option_id,
-                explanation, difficulty, source_ids_json, sources_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                explanation, difficulty, source_ids_json, sources_json, item_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 (
@@ -177,6 +188,7 @@ class AssessmentRepository:
                         [sources[source_id].model_dump() for source_id in question.source_ids if source_id in sources],
                         ensure_ascii=False,
                     ),
+                    record.item_ids[position] if record.item_ids else None,
                 )
                 for position, (question_id, question) in enumerate(
                     zip(record.question_ids, record.quiz.questions, strict=True)
@@ -257,8 +269,29 @@ class AssessmentRepository:
             student_id=row["student_id"],
             session_id=row["session_id"],
             request=request,
-            quiz=GeneratedQuiz(title=row["title"], questions=questions, sources=sources),
+            plan_context=(
+                AssessmentPlanContext.model_validate_json(row["plan_context_json"])
+                if row["plan_context_json"]
+                else None
+            ),
+            quiz=GeneratedQuiz(
+                title=row["title"],
+                questions=questions,
+                sources=sources,
+                resource_revision=(
+                    AssessmentResourceRevision.model_validate_json(row["resource_revision_json"])
+                    if row["resource_revision_json"]
+                    else None
+                ),
+                review_certificates=tuple(
+                    ItemReviewCertificate.model_validate(value)
+                    for value in json.loads(row["review_certificates_json"] or "[]")
+                ),
+            ),
             question_ids=tuple(item["id"] for item in question_rows),
+            item_ids=tuple(item["item_id"] for item in question_rows)
+            if all(item["item_id"] for item in question_rows)
+            else (),
             status=AssessmentStatus(row["status"]),
             assigned_at=row["assigned_at"],
             opened_at=row["opened_at"],

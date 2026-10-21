@@ -7,6 +7,8 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from ds_course_agent.assessment.versioning import AssessmentResourceRevision
+
 MAX_KC_ID_LENGTH = 100
 MAX_TITLE_LENGTH = 200
 MIN_STEM_LENGTH = 6
@@ -160,6 +162,23 @@ class ComplementaryQuestionRequirement(BaseModel):
         return self
 
 
+class SourceInterval(BaseModel):
+    """Exact original page interval for one evidence fragment."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    source_id: str = Field(min_length=1)
+    source_page: int = Field(gt=0)
+    start: int = Field(ge=0)
+    end: int = Field(gt=0)
+    page_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+    @model_validator(mode="after")
+    def _validate_interval(self) -> SourceInterval:
+        if self.end <= self.start:
+            raise ValueError("source interval end must follow start")
+        return self
+
+
 class AssessmentEvidenceSpan(BaseModel):
     """Server-owned complete evidence assembled from contiguous source chunks."""
 
@@ -169,6 +188,8 @@ class AssessmentEvidenceSpan(BaseModel):
     text: str = Field(strict=True, min_length=1, max_length=MAX_SOURCE_TEXT_LENGTH)
     source: str | None = Field(default=None, min_length=1, max_length=MAX_SOURCE_REFERENCE_LENGTH)
     page: int | None = Field(default=None, ge=1, le=MAX_SOURCE_PAGE)
+    intervals: tuple[SourceInterval, ...] = ()
+    component_ids: tuple[str, ...] = ()
     completeness: EvidenceCompleteness
     formulas: tuple[str, ...] = ()
     formula_quality: FormulaQuality
@@ -264,6 +285,8 @@ class EvidenceSource(BaseModel):
     text: str = Field(strict=True, min_length=1, max_length=MAX_SOURCE_TEXT_LENGTH)
     source: str | None = Field(default=None, min_length=1, max_length=MAX_SOURCE_REFERENCE_LENGTH)
     page: int | None = Field(default=None, ge=1, le=MAX_SOURCE_PAGE)
+    intervals: tuple[SourceInterval, ...] = ()
+    component_ids: tuple[str, ...] = ()
 
     @field_validator("id", "text", mode="before")
     @classmethod
@@ -370,6 +393,24 @@ class QuizDraft(BaseModel):
         return _strip_nonblank_text(value, field_name="title")
 
 
+class VerifiedExcerptSupport(BaseModel):
+    """Server-selected excerpt actually supporting the verified correct option."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    source_id: str
+    text: str
+
+
+class ItemReviewCertificate(BaseModel):
+    """Retained results of both quality gates, never a generator assertion."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    cognitive_operation: CognitiveOperation
+    learning_objective: str
+    objective_kind: TeachingObjectiveKind | None = None
+    supports: tuple[VerifiedExcerptSupport, ...] = Field(min_length=1)
+
+
 class GeneratedQuiz(BaseModel):
     """Completed grounded quiz with the exact evidence supplied to the model."""
 
@@ -383,6 +424,9 @@ class GeneratedQuiz(BaseModel):
     )
     questions: list[GeneratedQuestion] = Field(min_length=1, max_length=MAX_QUESTIONS)
     sources: list[EvidenceSource] = Field(min_length=1, max_length=MAX_QUESTIONS)
+    resource_revision: AssessmentResourceRevision | None = None
+    review_certificates: tuple[ItemReviewCertificate, ...] = ()
+    repair_round: int = Field(default=0, strict=True, ge=0, le=4)
 
     @field_validator("title", mode="before")
     @classmethod
@@ -391,6 +435,8 @@ class GeneratedQuiz(BaseModel):
 
     @model_validator(mode="after")
     def _validate_source_ids(self) -> GeneratedQuiz:
+        if self.review_certificates and len(self.review_certificates) != len(self.questions):
+            raise ValueError("review certificates must cover every question")
         source_ids = [source.id for source in self.sources]
         if len(set(source_ids)) != len(source_ids):
             raise ValueError("sources must have unique ids")

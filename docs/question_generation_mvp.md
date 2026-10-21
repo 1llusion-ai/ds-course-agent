@@ -2,45 +2,48 @@
 
 ## Scope
 
-An independent, authenticated `POST /api/questions/generate` endpoint produces
-Chinese single-choice practice material from the existing course knowledge
-base. It does not enter the chat agent, alter QueryPipeline, record learning
-events, grade attempts, or persist a question bank. There is no new frontend,
-teacher-role system, generic-agent tool, skill, or multi-agent workflow in this
-slice. Evidence verifier and Item quality critic are two serial internal
-`assessment/` domain components, not agent roles and not inputs to agent
-orchestration.
+Assessment is part of the course teaching loop. Trusted explicit/automatic
+assignment paths call the existing assignment tool and `AssessmentApplicationService`;
+`assessment/` owns grounded generation, review, reuse, assignment and grading.
+Successful scored attempts feed the existing learner profile through typed
+learning events. See [session learning loop](session_learning_loop.md).
 
-The small structured-generation workflow is adapted from AI Mini-Quiz
-Generator. See [attribution and license](third_party/ai-mini-quiz-generator.md).
-No new Gemini, Streamlit, Torch, or model-weight dependency is introduced.
+The student HTTP interface under `/api/assessments` lists preparations/assignments,
+opens answer-blind questions, accepts submissions and returns authorized results.
+There is no public `/api/questions/generate` endpoint. Review certificates
+remain server-side; answer keys appear only in authorized results.
+Shared reviewed content accumulates from normal successful assignments; it is
+not generated in advance and contains no learner identity or attempts.
 
-## Request
+Evidence verifier and Item quality critic are parallel internal domain components,
+not agent roles. The small structured-generation workflow is adapted from AI
+Mini-Quiz Generator; see [attribution and license](third_party/ai-mini-quiz-generator.md).
 
-Use the existing login cookie when calling this endpoint. A request body is:
+## Internal request
+
+The typed server-side generation request is:
 
 ```json
-{"topic": "决策树", "count": 5, "difficulty": "basic"}
+{"target_kc_id": "pca", "count": 2, "difficulty": "basic", "question_type": "single_choice"}
 ```
 
-- `topic`: nonblank text, at most 500 characters.
-- `count`: integer from 1 through 10, default 5.
-- `difficulty`: `basic`, `intermediate`, or `advanced`, default `basic`.
-- `concept_id`: optional canonical ID from `data/knowledge_graph.json`. When
-  supplied, `topic` must match that concept's display name or an exact alias;
-  unknown or conflicting identities return 422. Without an ID, exact topic
-  aliases resolve to the catalog; unrecognized topics use literal matching.
+`target_kc_id` is a canonical ID in the current course's graph. Unknown IDs fail
+before retrieval. Count is a strict integer from 1 through 10 (default 5), and
+difficulty is basic/intermediate/advanced. An optional typed teaching requirement
+must cover the exact target and count. Course identity comes from the trusted
+assignment context. Clients cannot inject opportunity/profile/resource revisions;
+trusted `AssessmentPlanContext` carries those frozen planning facts separately.
 
-The response contains a title, questions, and server-selected textbook sources.
-Each question has four distinct options identified by A/B/C/D, one correct
-option ID, an explanation, difficulty, and source IDs. Answers are intentionally
-included for self-study generation; this endpoint is not a secure exam-taking
-interface.
+A complete internal quiz contains questions, server-selected evidence, resource
+revision and per-item review certificates. Each question has four distinct
+A/B/C/D options, one answer, explanation, difficulty and source IDs. Shared content
+IDs remain stable across separate student assignments and question IDs.
 
 ## Processing
 
 ```text
-authenticated API -> assessment service -> canonical concept and alias query
+trusted assignment -> compatible reviewed content -> reuse accepted slots
+                   -> assessment service -> canonical target and component query
                                        -> expanded textbook candidates
                                        -> target-bearing, deduplicated evidence
                                        -> structured candidate batch
@@ -71,8 +74,8 @@ the candidate; the model cannot override an excerpt's source ownership. A candid
 passes this first gate only when it is on topic and its marked answer is the
 sole supported option. This module owns no pedagogical-quality judgment.
 
-Only evidence-accepted candidates then go to `assessment/critic.py`, the Item
-quality critic. It receives de-identified candidate stems/options, requested
+In parallel, candidates go to `assessment/critic.py`, the Item quality critic.
+It receives de-identified candidate stems/options, requested
 topic, and de-identified previously accepted stems/options. It does
 not receive the answer key, explanation, source ID, excerpt ID, or any textbook
 evidence. It returns one exclusive role per option, option-level parallelism,
@@ -106,13 +109,27 @@ keeps whole target-bearing sentences. Repeated/near-duplicate sentences and
 flattened execution-output tails are removed. Latin anchors have token
 boundaries, while whitespace inside PDF-extracted terms is tolerated.
 
-The current conservative support gate requires at least one distinct sentence
-of 24 non-whitespace characters per requested question, within the evidence
-budget. This is a documented heuristic, not a count of independent facts;
-it can reject short valid evidence or evidence expressed without explicit
-concept names. Sentence matching and deduplication thresholds require broader
-evaluation beyond the five initial cases. Each returned question must mention
-the target name or alias in its stem; absence rejects the batch with 502.
+Preflight checks structural completeness, source provenance and every explicitly
+declared assessment component. It does not infer the number of facts from
+sentence length/count or a semantic keyword list: a short complete definition
+may support multiple genuinely different reviewed items. Composite targets keep
+their display/identity aliases; typed graph `assessment_components` declare
+separate textbook anchors without pretending those members are identity aliases.
+
+Production provenance binds exact source/physical-page/character intervals to
+page hashes. A bounded contiguous three-page window can complete cross-page
+sentences while retaining printed page references and each physical interval.
+Malformed formulas and truncated delimiters are rejected. Only explicit immediate
+anaphora extends an accepted anchor (at most two sentences); an unrelated sentence,
+paragraph or numbered subsection resets it. Legacy non-production documents can
+still lack exact intervals; Marker production documents without valid provenance
+fail closed. These structural rules do not prove semantic factual sufficiency.
+
+Each question must mention the target or a declared member. The final batch must
+cover every declared member through the actual verified correct-answer excerpts;
+repeating a combined name in stems cannot satisfy that check. Semantic entailment
+and pedagogical complementarity remain responsibilities of the existing two
+review gates.
 
 These checks do NOT prove factual correctness, pedagogical quality, calibrated
 difficulty, or that a cited passage entails the answer. Evidence support and
@@ -203,22 +220,54 @@ output. The client timeout is not an end-to-end deadline for retrieval,
 generation, Evidence verification, and criticism; do not advertise it as one.
 
 The historical single-verifier calibration batches took 11.998 s and 13.766 s.
-They do not measure current serial reviewer latency because the current path
-adds the Item quality critic after Evidence verification. When repair is
-required, the worst normal path is generation + Evidence verification + Item
-quality criticism + one repair generation + both review stages; provider timing
+They do not measure the current parallel reviewer path. When repair is
+required, the normal path is generation + both parallel review calls, then a
+batch editor call + both parallel review calls for each bounded round; provider timing
 and rejection rate can make end-to-end latency materially higher.
 
-## Failures
+## Reuse and failures
 
-- 401: authentication required.
-- 422: invalid request or no usable textbook evidence.
-- 502: generation failed or output violated the question contract.
-- 503: retrieval dependency unavailable.
-- 500: unexpected internal failure, with a sanitized response.
+`assessment/items.py` stores only complete double-reviewed content with immutable
+correct-answer excerpt certificates and the current version. Selection matches
+course/target, resource and review policy, difficulty, objective and operation.
+It excludes active/recent assignments, prefers unseen content, then older exposures.
+Identity ignores option order/labels and explanation but preserves meaningful
+math, case, numbers and negation. Conflicting verified answer keys quarantine the
+asset. This rule is conservative surface deduplication, not a semantic similarity
+claim.
 
-Tests replace model and retrieval I/O. Passing those tests demonstrates the
-local contract, not live provider compatibility or generated-question quality.
+Full reuse from one compatible reviewed batch avoids generation/retrieval;
+partial reuse fills only missing slots through the existing editor and both gates.
+Mixed-origin batches repeat both reviews for complementarity. Their outstanding
+batch gate is persisted in progress, with a certificate bound to item composition,
+target, teaching operations, difficulty and policy. A rejected slot enters the
+same bounded repair loop while accepted slots survive; temporary reviewer failure
+retains the unfinished gate and consumes cumulative recovery budget. Oversized cached
+evidence falls back to bounded generation. Composite-member coverage is checked
+before filling cached slots and again against final correct-answer certificates.
+Student-specific assignments, attempts and scores remain isolated. A typed,
+server-only exposure constraint applies to drafting, editing, retained progress
+and publication. Newly exposed items become repairable rejections; original plan
+exclusions survive retries. Publication re-reads current course/student exposure.
+This excludes active and latest-three assignments, not all historical content.
+Only current-KC avoid examples are shown to author/editor models, at most 4,000
+characters within their enforced 64,000-character full prompt cap. Deterministic
+forbidden IDs remain complete when examples are omitted.
+
+Preparation failures expose typed reasons and accepted/pending counts, never
+partial READY questions. Progress retains exact evidence/resource identity and
+certificates. Stale/unversioned progress fails before model calls; repair stops
+after four cumulative recovery rounds across retries (including failed
+combination-review attempts). Deterministic failures require a new
+resource/scored opportunity rather than repeated identical retries. Historical
+results remain readable after resource changes.
+
+HTTP authentication and lifecycle errors are handled by the assessment router:
+401 for authentication, 404 for inaccessible records, 422 for invalid submissions,
+409 for invalid lifecycle/concurrent state and sanitized 500 for unexpected errors.
+Background generation reports typed preparation failures. Tests substitute model
+and retrieval I/O; passing them does not prove live provider compatibility or
+question quality.
 
 ## Verification
 
@@ -236,11 +285,13 @@ PYTHONPATH=src .venv/bin/python benchmarks/assessment_harness.py
 PYTHONPATH=src .venv/bin/python benchmarks/assessment_harness.py --live
 ```
 
-The default run checks evidence selection without any provider call. Four
-concepts have enough retained evidence for two questions; cross-validation is
-expected to be refused because the captured candidates only contain one unique
-brief mention after deduplication. That does not establish that the entire
-textbook lacks a fuller explanation.
+The default run checks evidence selection without a provider call. The original
+five-case fixture records historical outcomes; its cross-validation capture is
+incomplete and remains rejected structurally. Short complete evidence is no longer
+rejected merely because it has fewer sentences than requested questions. The
+minimal combined correlation/regression fixture lives in
+`tests/fixtures/assessment_correlation_evidence.json`; its frozen page window
+checks both declared components and exact source interval reconstruction.
 
 ### Initial MVP
 

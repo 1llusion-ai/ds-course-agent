@@ -13,7 +13,7 @@ from functools import lru_cache
 from graphlib import TopologicalSorter
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ds_course_agent.courses import CourseCatalog, CourseId, CourseResourceManifest
 from ds_course_agent.courses.resources import DEFAULT_COURSE_ID
@@ -69,6 +69,22 @@ class LearningReference(BaseModel):
     sources: tuple[TextbookEvidence, ...] = Field(min_length=1)
 
 
+class AssessmentComponent(BaseModel):
+    """A declared assessable member; anchors locate prose, never grant KC identity."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    component_id: str = Field(min_length=1, max_length=100)
+    anchors: tuple[str, ...] = Field(min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def _validate_anchors(self) -> AssessmentComponent:
+        if not self.component_id.strip() or any(not anchor.strip() for anchor in self.anchors):
+            raise ValueError("assessment component identities and anchors must be nonblank")
+        if len(set(self.anchors)) != len(self.anchors):
+            raise ValueError("assessment anchors must be unique")
+        return self
+
+
 class KnowledgeNode(BaseModel):
     """A concept KC with optional reference material and personal state."""
 
@@ -78,6 +94,7 @@ class KnowledgeNode(BaseModel):
     chapter: str
     section: str = ""
     aliases: tuple[str, ...] = ()
+    assessment_components: tuple[AssessmentComponent, ...] = Field(default=(), max_length=4)
     related_concepts: tuple[str, ...] = ()
     node_type: NodeType = NodeType.KC
     parent_id: str | None = None
@@ -123,6 +140,11 @@ def _validate_structure(nodes: list[KnowledgeNode], edges: list[KnowledgeEdge]) 
     if len(by_id) != len(nodes):
         raise ValueError("Duplicate canonical node IDs")
     for node in nodes:
+        component_ids = [component.component_id for component in node.assessment_components]
+        if len(component_ids) != len(set(component_ids)):
+            raise ValueError(f"Duplicate assessment components for {node.canonical_id}")
+        if node.node_type is not NodeType.KC and component_ids:
+            raise ValueError("Only KCs may declare assessment components")
         if node.parent_id is not None:
             parent = by_id.get(node.parent_id)
             if parent is None or parent.canonical_id == node.canonical_id or parent.chapter != node.chapter:

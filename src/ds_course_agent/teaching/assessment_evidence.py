@@ -39,8 +39,12 @@ class AssessmentEvidenceRecorder:
         concept_id = record.request.target_kc_id
         answers = {answer.question_id: answer for answer in record.answers}
         events = tuple(
-            self._build_event(record, question_id, question, answers[question_id])
-            for question_id, question in zip(record.question_ids, record.quiz.questions, strict=True)
+            self._build_event(
+                record, question_id, question, answers[question_id], record.item_ids[index] if record.item_ids else None
+            )
+            for index, (question_id, question) in enumerate(
+                zip(record.question_ids, record.quiz.questions, strict=True)
+            )
         )
         turn_id = f"assessment:{record.id}"
         self._event_repository.append_many(tuple(LearningEventRecord(event=event, turn_id=turn_id) for event in events))
@@ -72,7 +76,7 @@ class AssessmentEvidenceRecorder:
         self._profile_repository.project(record.student_id, course_id=record.course_id)
 
     @staticmethod
-    def _build_event(record, question_id, question, answer) -> QuestionAnsweredEvent:
+    def _build_event(record, question_id, question, answer, item_id=None) -> QuestionAnsweredEvent:
         option_text = {option.id: option.text for option in question.options}
         return QuestionAnsweredEvent(
             event_id=f"assessment:{record.id}:{question_id}",
@@ -81,6 +85,7 @@ class AssessmentEvidenceRecorder:
             timestamp=record.submitted_at.timestamp(),
             course_id=record.course_id,
             observation=PracticeObservation(
+                item_id=item_id,
                 assessment_id=record.id,
                 question_id=question_id,
                 concept_id=record.request.target_kc_id,

@@ -50,7 +50,7 @@ def _record() -> AssessmentRecord:
 def test_assessment_schema_is_idempotent_and_normalized(tmp_path) -> None:
     path = tmp_path / "assessment.db"
 
-    assert [item.version for item in migrate_assessment_database(path)] == [3, 4, 5]
+    assert [item.version for item in migrate_assessment_database(path)] == [3, 4, 5, 6, 7]
     assert migrate_assessment_database(path) == ()
     assert plan_assessment_database(path).pending == ()
 
@@ -59,8 +59,11 @@ def test_assessment_schema_is_idempotent_and_normalized(tmp_path) -> None:
     with sqlite3.connect(path) as connection:
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         columns = {row[1] for row in connection.execute("PRAGMA table_info(assessments)")}
+        question_columns = {row[1] for row in connection.execute("PRAGMA table_info(assessment_questions)")}
         course_ids = {row[0] for row in connection.execute("SELECT course_id FROM assessments")}
-    assert {"assessments", "assessment_questions", "assessment_answers"} <= tables
+    assert {"assessments", "assessment_questions", "assessment_answers", "reviewed_assessment_items"} <= tables
+    assert {"plan_context_json", "resource_revision_json", "review_certificates_json"} <= columns
+    assert "item_id" in question_columns
     assert "payload_json" not in columns
     assert "teaching_requirement_json" in columns
     assert "course_id" in columns
