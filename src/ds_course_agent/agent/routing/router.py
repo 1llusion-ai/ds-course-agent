@@ -9,8 +9,10 @@ import re
 from typing import Any
 
 import ds_course_agent.shared.config as config
-from ds_course_agent.courses import CourseCatalog
+from ds_course_agent.courses import CourseCatalog, CourseContext, ResolvedCourse
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID
 from ds_course_agent.shared.paths import PROJECT_ROOT
+from ds_course_agent.teaching.course_scope import build_course_scope, matches_course_topic
 from ds_course_agent.teaching.knowledge_mapper import (
     ConceptMatchStrength,
     MatchedConcept,
@@ -147,6 +149,18 @@ class QueryRouter:
         """
         return normalize_query_text(query)
 
+    @staticmethod
+    def resolve_course(course_context: CourseContext | None) -> ResolvedCourse:
+        """Resolve only the selected identity; an unknown explicit ID stays unknown."""
+
+        course_id = DEFAULT_COURSE_ID if course_context is None else course_context.course_id
+        manifest = None
+        try:
+            manifest = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").get(course_id)
+        except (OSError, ValueError, TypeError) as exc:
+            logger.warning("Routing course catalogue unavailable (%s)", type(exc).__name__)
+        return build_course_scope(course_id, manifest)
+
     def route(self, context: QueryContext, *, enricher: Any | None = None) -> RouteDecision:
         """
         根据 QueryContext 进行路由决策
@@ -171,6 +185,10 @@ class QueryRouter:
         Returns:
             RouteDecision
         """
+        expected_course_id = DEFAULT_COURSE_ID if context.course_context is None else context.course_context.course_id
+        if context.course_resources is None or context.course_resources.requested_id != expected_course_id:
+            context.course_resources = self.resolve_course(context.course_context)
+
         for rule in self._rules:
             if enricher is not None:
                 if rule.requires_skills:
@@ -447,7 +465,7 @@ class QueryRouter:
         """判断是否可能是课程相关问题。
 
         不能恒返回 True，否则 GENERIC_AGENT 永远不可达。这里采用保守判断：
-        有课程概念、课程相关意图，或命中数据科学/机器学习常见词汇时才走 RAG。
+        有当前课程概念或课程资源词表依据时才走 RAG。
         """
         query = self._normalize(context.normalized_query)
         is_hyperparameter_concept = self._is_hyperparameter_concept_question(query)
@@ -470,36 +488,7 @@ class QueryRouter:
             }
             return True
 
-        strong_course_keywords = [
-            "数据科学",
-            "数据分析",
-            "机器学习",
-            "深度学习",
-            "测试集",
-            "验证集",
-            "逻辑回归",
-            "线性回归",
-            "回归模型",
-            "聚类",
-            "kmeans",
-            "k-means",
-            "knn",
-            "k近邻",
-            "pca",
-            "主成分分析",
-            "决策树",
-            "随机森林",
-            "svm",
-            "支持向量机",
-            "梯度下降",
-            "过拟合",
-            "欠拟合",
-            "正则化",
-            "交叉验证",
-            "贝叶斯",
-            "神经网络",
-        ]
-        return any(keyword in query for keyword in strong_course_keywords)
+        return matches_course_topic(query, context.course_resources)
 
     def _match_course_concept(self, context: QueryContext) -> MatchedConcept | None:
         """Return a strong concept match from the turn's course graph.
@@ -510,18 +499,11 @@ class QueryRouter:
         another course's routing decisions.
         """
 
-        course_context = getattr(context, "course_context", None)
+        manifest = context.course_manifest
+        if manifest is None or not manifest.is_ready or not manifest.knowledge_graph_path:
+            return None
         try:
-            if course_context is None:
-                mapper = get_knowledge_mapper()
-            else:
-                course_id = getattr(course_context, "course_id", None)
-                if not course_id:
-                    return None
-                manifest = CourseCatalog.from_directory(PROJECT_ROOT / "data" / "courses").require(course_id)
-                if not manifest.is_ready or not manifest.knowledge_graph_path:
-                    return None
-                mapper = get_knowledge_mapper(manifest)
+            mapper = get_knowledge_mapper(manifest)
             matches = mapper.match_question_rules(self._normalize(context.normalized_query))
         except Exception as exc:
             logger.warning(
@@ -569,8 +551,9 @@ class QueryRouter:
         if semantic_router is None:
             return self._deterministic_learning_fallback(context, "semantic_router_unavailable")
 
+        course_name = context.course_name
         try:
-            output = semantic_router.route(context.original_query, context.recent_context)
+            output = semantic_router.route(context.original_query, context.recent_context, course_name=course_name)
         except Exception as exc:
             logger.warning(
                 "Semantic router failed (%s); using deterministic learning fallback",
@@ -582,7 +565,7 @@ class QueryRouter:
             return self._clarification_decision(context, "semantic_router_low_confidence")
         if intent is RouteIntent.NOT_LEARNING:
             context.special_case_response = (
-                "这个问题目前不属于《数据科学导论》课程学习范围。"
+                f"这个问题目前不属于《{course_name}》课程学习范围。"
                 "你可以换成课程概念、代码练习、学习规划或课程安排相关的问题。"
             )
             return RouteDecision(

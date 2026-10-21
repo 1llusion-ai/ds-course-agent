@@ -32,5 +32,25 @@
     "revision": "64549a24cefdd4c934c16d3bdc7fcb92b1d76d16b6754dd4f1bb94f7a6a40f41",
     "embedding_model": "Qwen/Qwen3-Embedding-8B",
     "metadata_schema_version": "retrieval-provenance/1.0"
-  }
+  },
+  "scope_terms": [
+    {
+      "term": "比特币",
+      "section": "5.5.1",
+      "book_page": 148,
+      "source_page": 164
+    },
+    {
+      "term": "Bitcoin",
+      "section": "5.5.1",
+      "book_page": 149,
+      "source_page": 165
+    },
+    {
+      "term": "数字娱乐",
+      "section": "6.4.3",
+      "book_page": 224,
+      "source_page": 240
+    }
+  ]
 }

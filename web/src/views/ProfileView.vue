@@ -170,10 +170,12 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Aim, ArrowDown, ArrowRight, ArrowUp, Calendar, Reading, Refresh, Search, Warning } from '@element-plus/icons-vue'
 
+import { useCourseStore } from '../stores/course'
 import { useProfileStore } from '../stores/profile'
 
 const router = useRouter()
 const profileStore = useProfileStore()
+const courseStore = useCourseStore()
 const loadError = ref('')
 const conceptSearch = ref('')
 const activeProfileTab = ref('all')
@@ -326,16 +328,16 @@ function activityItemTitle(item) {
 }
 
 function askAboutConcept(concept, action) {
-  router.push({ path: '/chat', query: { question: `请帮我${action}“${concept}”，结合我的学习情况进行讲解。` } })
+  router.push({ path: '/chat', query: { course_id: courseStore.selectedCourseId, question: `请帮我${action}“${concept}”，结合我的学习情况进行讲解。` } })
 }
 
 function openKnowledgeMap(item) {
   if (!item?.concept_id) return
-  router.push({ path: '/knowledge-map', query: { concept: item.concept_id } })
+  router.push({ path: '/knowledge-map', query: { course_id: courseStore.selectedCourseId, concept: item.concept_id } })
 }
 
 function askSuggestion(suggestion) {
-  router.push({ path: '/chat', query: { question: `请带我完成这个学习任务：${suggestion}` } })
+  router.push({ path: '/chat', query: { course_id: courseStore.selectedCourseId, question: `请带我完成这个学习任务：${suggestion}` } })
 }
 
 async function loadProfile(showToast = false) {

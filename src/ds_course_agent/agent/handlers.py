@@ -240,13 +240,13 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
         attr, branch = self._ROUTES[intent]
         skill = getattr(agent, attr)
 
-        def invoke_skill(*args):
+        def invoke_skill(*args, **kwargs):
             if callable(skill):
-                return skill(*args)
+                return skill(*args, **kwargs)
             execute_skill = getattr(skill, "execute", None)
             if not callable(execute_skill):
                 raise TypeError(f"Skill '{attr}' must be callable or expose execute()")
-            return execute_skill(*args)
+            return execute_skill(*args, **kwargs)
 
         trace_step("agent.branch", branch=branch)
         if intent == RouteIntent.MISCONCEPTION_REPAIR:
@@ -263,6 +263,7 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
                     session_id,
                     route_state.stream_id or session_id,
                     course_id,
+                    course=context.course_resources,
                 ),
             )
         if intent in {RouteIntent.LEARNING_PATH, RouteIntent.PERSONALIZED_EXPLANATION}:
@@ -276,10 +277,18 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
                     matched_concepts[0].method,
                 )
             skill_args = (question, learner_state, matched_concepts)
-            if intent is RouteIntent.PERSONALIZED_EXPLANATION and route_state.personalization_context is not None:
+            if intent is RouteIntent.PERSONALIZED_EXPLANATION:
                 skill_args += (route_state.personalization_context,)
-            return build_route_result(route_state, invoke_skill(*skill_args))
-        return build_route_result(route_state, invoke_skill(question, student_id, session_id))
+            return build_route_result(
+                route_state,
+                invoke_skill(
+                    *skill_args,
+                    **({"course": context.course_resources} if intent is RouteIntent.PERSONALIZED_EXPLANATION else {}),
+                ),
+            )
+        return build_route_result(
+            route_state, invoke_skill(question, student_id, session_id, course=context.course_resources)
+        )
 
     def stream_execute(self, agent: Any, route_state: RouteState) -> Iterator[str | TurnEvent]:
         if route_state.decision.intent is not RouteIntent.PERSONALIZED_EXPLANATION:
@@ -302,16 +311,13 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
         matched_concepts = route_state.matched_concepts or []
         trace_step("agent.branch", branch="explanation_skill")
         streamed_parts: list[str] = []
-        import inspect
-
-        stream_args = (question, learner_state, matched_concepts)
-        parameters = inspect.signature(stream_skill).parameters.values()
-        accepts_context = (
-            any(parameter.kind is parameter.VAR_POSITIONAL for parameter in parameters) or len(parameters) >= 4
-        )
-        if accepts_context:
-            stream_args += (route_state.personalization_context,)
-        for chunk in stream_skill(*stream_args):
+        for chunk in stream_skill(
+            question,
+            learner_state,
+            matched_concepts,
+            route_state.personalization_context,
+            course=route_state.context.course_resources,
+        ):
             text = str(chunk or "")
             if text:
                 streamed_parts.append(text)
@@ -365,12 +371,12 @@ class GenericAgentRouteHandler:
 
         if decision.execution_mode != ExecutionMode.TOOL_AGENT:
             raise RuntimeError(f"GenericAgentRouteHandler cannot execute {decision.execution_mode.value}")
-        if route_state.course_context is None:
+        if route_state.context.course_resources is None:
             graph_agent = agent.model_runtime.agent_for_tools(list(allowed_tools))
         else:
             graph_agent = agent.model_runtime.agent_for_tools(
                 list(allowed_tools),
-                system_prompt=agent._course_prompt(route_state.course_context),
+                system_prompt=agent._course_prompt(route_state.context.course_resources),
             )
         trace_step(
             "agent.tool_gating",
@@ -390,8 +396,6 @@ class GenericAgentRouteHandler:
         chat_history = route_state.chat_history
         execution_query = agent._route_execution_query(context, decision)
         turn_context = build_turn_system_context(route_state)
-        if route_state.course_context is not None:
-            turn_context = agent._course_prompt(route_state.course_context) + "\n\n" + turn_context
         chat_fn, turn_context, direct_llm, graph_agent = self._chat_callable_and_context(
             agent, route_state, turn_context
         )
@@ -446,8 +450,6 @@ class GenericAgentRouteHandler:
             chat_history = route_state.chat_history
             execution_query = agent._route_execution_query(context, decision)
             turn_context = build_turn_system_context(route_state)
-            if route_state.course_context is not None:
-                turn_context = agent._course_prompt(route_state.course_context) + "\n\n" + turn_context
             chat_fn, turn_context, direct_llm, graph_agent = self._chat_callable_and_context(
                 agent, route_state, turn_context
             )

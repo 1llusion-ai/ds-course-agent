@@ -197,7 +197,7 @@ def web_query_traits(question: str) -> WebQueryTraits:
     )
 
 
-def special_case_response(question: str, *, course_name: str = "数据科学导论") -> str | None:
+def special_case_response(question: str, *, course_name: str = "当前课程") -> str | None:
     """Return deterministic smalltalk/homework/scope responses."""
 
     normalized = normalize_query_text(question)
@@ -209,15 +209,6 @@ def special_case_response(question: str, *, course_name: str = "数据科学导�
         return (
             "抱歉，作为“数字力”导学智能体，我不能直接代写作业或给出标准答案。"
             "但我可以帮你梳理思路、方法和步骤，和你一起把题目拆开。"
-        )
-    # General off-topic coverage lives in scope_guard; keep this legacy fast
-    # path only for deterministic non-web turns before the full router runs.
-    if contains_any(normalized, ("天气", "娱乐新闻", "八卦", "明星", "股价", "体育比分", "电影票房", "政治新闻")):
-        return "抱歉，我主要负责《数据科学导论》课程相关内容，其他话题我就不展开了。"
-    if contains_any(normalized, OUT_OF_SCOPE_TECH_TERMS):
-        return (
-            "抱歉，这个问题不在《数据科学导论》当前课程范围内。"
-            "如果你想，我可以继续帮你回答课程里的数据分析、机器学习和相关基础概念。"
         )
     return None
 

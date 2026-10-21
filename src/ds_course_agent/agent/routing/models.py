@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from ds_course_agent.courses import CourseContext
+from ds_course_agent.courses import CourseContext, CourseResourceManifest, ResolvedCourse
 from ds_course_agent.shared.term_queries import ShortTermQuery
 from ds_course_agent.teaching.learner_state import LearnerStateSnapshot, LearnerStateSummary
 from ds_course_agent.teaching.personalization import PersonalizationContext
@@ -157,6 +157,18 @@ class QueryContext:
     # Turn-scoped course identity.  Kept at the end to preserve positional
     # construction of the pre-existing query context contract.
     course_context: CourseContext | None = None
+    course_resources: ResolvedCourse | None = None
+
+    @property
+    def course_manifest(self) -> CourseResourceManifest | None:
+        """The manifest from the once-resolved turn resources."""
+        return self.course_resources.manifest if self.course_resources is not None else None
+
+    @property
+    def course_name(self) -> str:
+        """Current catalogue identity, or a neutral label when unresolved."""
+
+        return self.course_manifest.display_name if self.course_manifest is not None else "当前课程"
 
 
 @dataclass(frozen=True)

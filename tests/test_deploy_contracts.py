@@ -1,6 +1,21 @@
+import json
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_api_image_includes_shared_and_catalog_course_prompts() -> None:
+    dockerfile = (PROJECT_ROOT / "deploy" / "api.Dockerfile").read_text(encoding="utf-8")
+    prompt_directory = Path("docs/prompts")
+
+    assert "COPY docs/prompts/ ./docs/prompts/" in dockerfile.splitlines()
+    assert (PROJECT_ROOT / prompt_directory / "base_system_prompt.txt").is_file()
+    for manifest_path in (PROJECT_ROOT / "data" / "courses").glob("*.json"):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if prompt_path := manifest.get("prompt_path"):
+            resource = Path(prompt_path)
+            assert resource.is_relative_to(prompt_directory), manifest_path
+            assert (PROJECT_ROOT / resource).is_file(), manifest_path
 
 
 def test_update_script_uses_root_env_file_for_compose_interpolation() -> None:

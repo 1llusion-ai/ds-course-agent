@@ -34,7 +34,7 @@ from ds_course_agent.agent.taxonomy import (
     special_case_response,
 )
 from ds_course_agent.agent.turn_runner import collect_turn_result, iter_turn_events, turn_event_payload
-from ds_course_agent.courses import CourseContext
+from ds_course_agent.courses import CourseContext, ResolvedCourse
 from ds_course_agent.runtime.model_runtime import ModelRuntime, check_ollama_connection
 from ds_course_agent.runtime.model_stream import iter_text_chunks
 from ds_course_agent.shared.llm import get_chat_model
@@ -224,18 +224,12 @@ class AgentService:
         matches = loader.select_candidates(question)
         return {item.skill.key for item in matches}
 
-    def _handle_special_case(self, question: str, *, course_name: str = "数据科学导论") -> str | None:
+    def _handle_special_case(self, question: str, *, course_name: str = "当前课程") -> str | None:
         return special_case_response(question, course_name=course_name)
 
-    def _course_prompt(self, course_context: CourseContext | None) -> str:
-        """Return prompt text for one course without mutating shared runtime state."""
-        if course_context is None:
-            return self.system_prompt
-        from ds_course_agent.courses import CourseCatalog
-        from ds_course_agent.shared.paths import PROJECT_ROOT
-
-        course = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(course_context.course_id)
-        return get_system_prompt(course)
+    def _course_prompt(self, course: ResolvedCourse | None) -> str:
+        """Render the already resolved turn identity without changing runtime state."""
+        return self.system_prompt if course is None else get_system_prompt(course)
 
     def _build_schedule_tool_query(self, question: str) -> str:
         normalized = normalize_query_text(question)
@@ -404,18 +398,18 @@ class AgentService:
         from ds_course_agent.shared.query_trace import trace_span
 
         with trace_span("prepare.concept_map"):
-            course = None
-            if getattr(context, "course_context", None) is not None:
-                from ds_course_agent.courses import CourseCatalog
-                from ds_course_agent.shared.paths import PROJECT_ROOT
-
-                course = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(
-                    context.course_context.course_id
+            resources = getattr(context, "course_resources", None)
+            if resources is not None:
+                course = resources.manifest
+                matched_concepts = (
+                    map_question_to_concepts(user_input, top_k=3, course=course)
+                    if course is not None and course.knowledge_graph_path
+                    else []
                 )
-            if course is None:
-                matched_concepts = map_question_to_concepts(user_input, top_k=3)
+            elif getattr(context, "course_context", None) is not None:
+                matched_concepts = []
             else:
-                matched_concepts = map_question_to_concepts(user_input, top_k=3, course=course)
+                matched_concepts = map_question_to_concepts(user_input, top_k=3)
 
         context.detected_concepts = [
             DetectedConcept(

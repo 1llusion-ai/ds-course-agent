@@ -160,3 +160,110 @@ test('course map caches are isolated across the two course graphs', async ({ pag
   await expect(page.getByRole('button', { name: '数字技术通识' })).toHaveCount(0)
   expect(requestedCourses).toEqual([DEFAULT_COURSE, SECOND_COURSE, DEFAULT_COURSE])
 })
+
+test('map explanation keeps the selected course identity through new chat and SSE', async ({ page }) => {
+  await mockCourses(page)
+  let streamPayload
+  await page.route('**/api/knowledge-map?**', route => route.fulfill({ json: {
+    course_name: '数字素养与技能导论', chapters: [{ chapter: '第7章', title: '数字社会' }],
+    nodes: [{ canonical_id: 'dl_7_1_2', display_name: '数字命运共同体', chapter: '第7章', section: '7.1.2',
+      node_type: 'kc', aliases: [], learning_state: 'unobserved', learning_points: [] }], edges: []
+  } }))
+  await page.route('**/api/sessions', route => route.fulfill({ json: session(route.request().postDataJSON().course_id) }))
+  await page.route('**/api/chat/history/shared-session?**', route => route.fulfill({ json: { messages: [] } }))
+  await page.route('**/api/chat/send/stream', route => {
+    streamPayload = route.request().postDataJSON()
+    return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({
+      type: 'final', message: { role: 'assistant', content: '课程回答', timestamp: '2026-10-20T00:00:00Z' }
+    })}\n\n` })
+  })
+  await page.goto('/chat')
+  await switchCourse(page, SECOND_COURSE)
+  await page.goto('/knowledge-map?concept=dl_7_1_2')
+  await expect(page.getByRole('heading', { name: '数字命运共同体' })).toBeVisible()
+  await page.getByRole('button', { name: '讨论这个概念' }).click()
+  await expect(page.locator('textarea')).toHaveValue('请讲解《数字素养与技能导论》第7章 7.1.2 节的「数字命运共同体」，用一个简单例子帮助我理解。')
+  await page.getByRole('button', { name: '发送消息' }).click()
+  await expect.poll(() => streamPayload?.course_id).toBe(SECOND_COURSE)
+  expect(streamPayload.message).toContain('《数字素养与技能导论》第7章 7.1.2 节')
+})
+
+test('alternating map explanation and practice actions use each course resource', async ({ page }) => {
+  await mockCourses(page)
+  const fixtures = {
+    [DEFAULT_COURSE]: { name: '数据科学导论', chapter: '第1章', section: '1.1', concept: '数据思维' },
+    [SECOND_COURSE]: { name: '数字素养与技能导论', chapter: '第7章', section: '7.1.2', concept: '数字命运共同体' },
+    [FOURTH_COURSE]: { name: '统计学', chapter: '第3章', section: '3.2', concept: '抽样分布' }
+  }
+  const payloads = []
+  await page.route('**/api/knowledge-map?**', route => {
+    const id = new URL(route.request().url()).searchParams.get('course_id')
+    const data = fixtures[id]
+    return route.fulfill({ json: {
+      course_name: data.name, chapters: [{ chapter: data.chapter, title: data.concept }],
+      nodes: [{ canonical_id: 'same-concept-id', display_name: data.concept, chapter: data.chapter, section: data.section,
+        node_type: 'kc', aliases: [], learning_state: 'unobserved', learning_points: [] }], edges: []
+    } })
+  })
+  await page.route('**/api/sessions', route => route.fulfill({ json: session(route.request().postDataJSON().course_id) }))
+  await page.route('**/api/chat/history/shared-session?**', route => route.fulfill({ json: { messages: [] } }))
+  await page.route('**/api/chat/send/stream', route => {
+    const data = route.request().postDataJSON()
+    payloads.push(data)
+    return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({
+      type: 'final', message: { role: 'assistant', content: `${data.course_id} 回答`, timestamp: '2026-10-20T00:00:00Z' }
+    })}\n\n` })
+  })
+  await page.goto('/chat')
+  await expect(page.getByText('这门课程有哪些核心概念？', { exact: true })).toBeVisible()
+  await expect(page.getByText('逻辑回归为什么能做分类？', { exact: true })).toHaveCount(0)
+  for (const [index, id] of [SECOND_COURSE, DEFAULT_COURSE, FOURTH_COURSE, SECOND_COURSE].entries()) {
+    await switchCourse(page, id)
+    await page.goto(`/knowledge-map?concept=same-concept-id&course_id=${id}`)
+    const data = fixtures[id]
+    await expect(page.getByRole('heading', { name: data.concept })).toBeVisible()
+    const practice = index % 2 === 1
+    await page.getByRole('button', { name: practice ? '做一道理解题' : '讨论这个概念' }).click()
+    await expect(page).toHaveURL(new RegExp(`course_id=${id}`))
+    const context = `《${data.name}》${data.chapter} ${data.section} 节的「${data.concept}」`
+    await expect(page.locator('textarea')).toHaveValue(practice
+      ? `请围绕${context}出一道理解题，引导我思考，先不要给出答案。`
+      : `请讲解${context}，用一个简单例子帮助我理解。`)
+    await page.getByRole('button', { name: '发送消息' }).click()
+    await expect.poll(() => payloads.length).toBe(index + 1)
+    expect(payloads[index]).toMatchObject({ course_id: id, session_id: 'shared-session' })
+    expect(payloads[index].message).toContain(context)
+    await expect(page.getByText(`${id} 回答`, { exact: true })).toBeVisible()
+  }
+  await switchCourse(page, DEFAULT_COURSE)
+  await page.goto(`/chat?question=${encodeURIComponent('数字素养旧问题')}&course_id=${SECOND_COURSE}`)
+  await expect(page.locator('textarea')).toHaveValue('')
+})
+
+test('late map responses cannot supply a question after switching courses', async ({ page }) => {
+  await mockCourses(page)
+  let releaseLateMap
+  let lateMapStarted = false
+  await page.route('**/api/knowledge-map?**', async route => {
+    const courseId = new URL(route.request().url()).searchParams.get('course_id')
+    if (courseId === SECOND_COURSE) {
+      lateMapStarted = true
+      await new Promise(resolve => { releaseLateMap = resolve })
+    }
+    const concept = courseId === SECOND_COURSE ? '数字命运共同体' : '数据思维'
+    await route.fulfill({ json: { course_name: courseId === SECOND_COURSE ? '数字素养与技能导论' : '数据科学导论',
+      chapters: [{ chapter: '第1章', title: concept }], nodes: [{ canonical_id: 'shared-node', display_name: concept,
+        chapter: '第1章', section: '1.1', node_type: 'kc', aliases: [], learning_state: 'unobserved', learning_points: [] }], edges: []
+    } })
+  })
+  await page.goto('/chat')
+  await switchCourse(page, SECOND_COURSE)
+  await page.getByRole('button', { name: /知识地图/ }).click()
+  await expect.poll(() => lateMapStarted).toBe(true)
+  await switchCourse(page, DEFAULT_COURSE)
+  await page.goto('/knowledge-map?concept=shared-node')
+  await expect(page.getByRole('heading', { name: '数据思维' })).toBeVisible()
+  releaseLateMap()
+  await page.getByRole('button', { name: '讨论这个概念' }).click()
+  await expect(page.locator('textarea')).toHaveValue('请讲解《数据科学导论》第1章 1.1 节的「数据思维」，用一个简单例子帮助我理解。')
+})

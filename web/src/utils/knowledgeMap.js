@@ -64,8 +64,8 @@ export function sceneGraphData(graph) {
   return { nodes, links: graph.edges.map(edge => ({ source: edge.source, target: edge.target, kind: edge.relation_type })) }
 }
 
-export function questionForNode(node, practice = false) {
-  const context = `《数据科学导论（案例版）》${node.chapter}${node.section ? ` ${node.section} 节` : ''}的「${node.display_name}」`
+export function questionForNode(node, courseName, practice = false) {
+  const context = `《${courseName || '当前课程'}》${node.chapter}${node.section ? ` ${node.section} 节` : ''}的「${node.display_name}」`
   return practice
     ? `请围绕${context}出一道理解题，引导我思考，先不要给出答案。`
     : `请讲解${context}，用一个简单例子帮助我理解。`

@@ -1062,7 +1062,7 @@ def test_skill_route_handler_dispatches_by_intent(intent, skill_attr):
     )
     calls = []
 
-    def skill(*args):
+    def skill(*args, **kwargs):
         calls.append(args)
         return f"{intent.value} answer"
 
@@ -1076,7 +1076,11 @@ def test_skill_route_handler_dispatches_by_intent(intent, skill_attr):
     assert result.intent is intent
     assert calls
     if learner_state is not None:
-        assert calls == [("什么是过拟合？", learner_state, [])]
+        assert (
+            calls == [("什么是过拟合？", learner_state, [], None)]
+            if intent is RouteIntent.PERSONALIZED_EXPLANATION
+            else calls == [("什么是过拟合？", learner_state, [])]
+        )
 
 
 def test_personalized_skill_object_uses_stream_method():
@@ -1095,7 +1099,7 @@ def test_personalized_skill_object_uses_stream_method():
         def execute(self, *_args):
             raise AssertionError("streaming route must not call execute()")
 
-        def stream(self, question, snapshot, matched_concepts):
+        def stream(self, question, snapshot, matched_concepts, personalization_context, *, course=None):
             assert (question, snapshot, matched_concepts) == ("什么是过拟合？", learner_state, [])
             yield "第一段"
             yield "第二段"

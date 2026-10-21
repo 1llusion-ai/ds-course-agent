@@ -14,6 +14,8 @@ from typing import Literal
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.agent.routing.utils import normalize_query_text
+from ds_course_agent.courses import ResolvedCourse
+from ds_course_agent.teaching.course_scope import matches_course_topic
 
 ScopeAction = Literal["allow", "bridge", "refuse"]
 
@@ -74,7 +76,11 @@ def _matches_any(text: str, patterns: tuple[str, ...]) -> bool:
     return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
 
 
-def _scope_response(*, category: str, bridge_hint: str = "", course_name: str = "数据科学导论") -> str:
+def _matches_any_text(texts: tuple[str, ...], patterns: tuple[str, ...]) -> bool:
+    return any(_matches_any(text, patterns) for text in texts)
+
+
+def _scope_response(*, category: str, bridge_hint: str = "", course_name: str = "当前课程") -> str:
     redirect = bridge_hint or f"如果你想从《{course_name}》的课程概念、教材或学习实践角度分析这个主题，我可以继续帮你。"
     return (
         f"这个问题偏通用事实查询，不属于“数字力”导学智能体的《{course_name}》课程回答范围，"
@@ -85,7 +91,7 @@ def _scope_response(*, category: str, bridge_hint: str = "", course_name: str = 
 
 _ACADEMIC_INTEGRITY_RESPONSE = (
     "抱歉，我不能帮助伪造实验结果、代写作业答案或规避课程平台检测。"
-    "这些请求会破坏学术诚信，也不利于真正掌握数据科学方法。\n\n"
+    "这些请求会破坏学术诚信，也不利于真正掌握课程知识。\n\n"
     "我可以帮你把题目拆成分析步骤、设计真实实验方案、解释指标含义，"
     "或根据你已有结果一起检查哪里需要改进。"
 )
@@ -103,7 +109,17 @@ _SAFETY_BOUNDARY_RULES = (
         confidence=0.98,
         reason="request asks for direct homework/exam answers or copying",
         required_term_groups=(
-            ("标准答案", "直接给答案", "直接把", "照抄", "代写作业", "帮我写作业", "考试答案"),
+            (
+                "标准答案",
+                "直接给答案",
+                "直接写作业",
+                "直接写答案",
+                "直接把",
+                "照抄",
+                "代写作业",
+                "帮我写作业",
+                "考试答案",
+            ),
             ("作业", "考试", "测验", "题目", "答案"),
         ),
         response=_ACADEMIC_INTEGRITY_RESPONSE,
@@ -171,71 +187,13 @@ _LEARNING_TERMS = (
     "项目",
     "代码",
     "编程",
-    "python",
-    "pandas",
-    "numpy",
-    "sklearn",
-    "sql",
-    "数据",
-    "数据集",
-    "数据科学",
-    "数据分析",
-    "机器学习",
-    "深度学习",
-    "人工智能",
-    "大模型",
-    "llm",
-    "agent",
-    "rag",
-    "gpt",
-    "openai",
-    "claude",
-    "gemini",
-    "算法",
-    "模型",
-    "统计",
-    "概率",
-    "可视化",
-    "分类",
-    "回归",
-    "聚类",
-    "神经网络",
-    "强化学习",
-    "nlp",
-    "transformer",
-    "微调",
-    "训练",
-    "评估",
-    "特征",
-    "损失函数",
-    "梯度",
-    "过拟合",
-    "欠拟合",
-    "svm",
-    "pca",
-    "cnn",
-    "rnn",
-    "gan",
-    "vae",
-    "ppo",
-    "dapo",
-    "dpo",
-    "grpo",
-    "gspo",
-    "rlhf",
-    "edu",
-    "tutor",
     "course",
     "learning",
     "teaching",
     "education",
-    "dataset",
-    "data science",
-    "machine learning",
-    "deep learning",
-    "reinforcement learning",
     "open source",
 )
+
 
 _DATA_ANALYSIS_BRIDGE_TERMS = (
     "数据",
@@ -343,11 +301,53 @@ _GENERAL_FACT_PATTERNS = (
 )
 
 
+# Intent patterns separate requested services from lessons about the same topic.
+# A passing mention of risk never cancels a live quote or buying recommendation.
+_MARKET_QUOTE_PATTERNS = (
+    r"(今天|今日|现在|实时|最新|当前).*(多少钱|行情|价格|股价|币价|报价)[？?。!！\s]*$",
+    r"(行情|价格|股价|币价|报价)(是|为)?(多少|怎么样|查询)",
+    r"(今天|今日|现在|实时|最新|当前).*多少钱",
+    r"(查询|查一下|查查|看看|告诉我|给我).*(今天|今日|现在|实时|最新|当前).*(行情|价格|股价|币价|报价)",
+    r"\b(what(?:'s|\s+is|\s+are)|show\s+me|tell\s+me|give\s+me|check|look\s+up)\b"
+    r".*\b(current|latest|live|real[ -]?time|today(?:'s)?)\b.*\b(price|quote|value)\b",
+    r"\bwhat(?:'s|\s+is|\s+are)\b.*\b(price|quote|value)\b.*\b(now|today|currently)\b",
+    r"\b(current|latest|live|real[ -]?time|today(?:'s)?)\b.*\b(price|quote|value)\b[\s?!.,]*$",
+    r"\b(price|quote|value)\s+(right\s+)?(now|today|currently)\b",
+    r"\bhow\s+much\b.*\bworth\b.*\b(now|today|currently)\b",
+    r"\bhow\s+much\s+is\b.*\b(now|today|currently)\b",
+)
+_INVESTMENT_SERVICE_PATTERNS = (
+    r"(推荐|建议|帮我选)(股票|基金|(比特|加密|数字货|虚拟货)?币|投资)",
+    r"(推荐|建议)(现在|今天|目前)?(值得|适合)?(买入|卖出|购买|投资)",
+    r"(股票|基金|币|投资)(的)?(投资|买入|卖出|买卖时机)?推荐",
+    r"(股票|基金|币)(现在|今天|目前|到底)?(该不该买|值得买|买入|卖出|买卖时机)",
+    r"\b(recommend|suggest)\s+(an?\s+|some\s+|the\s+)?(stock|fund|bitcoin|crypto|investment)s?\b",
+    r"\b(recommend|suggest)\s+(buying|selling|investing)\b",
+    r"\b(recommend|suggest)\s+(that\s+)?(i|we)\s+(buy|sell|invest)\b",
+)
+_RISK_EDUCATION_PATTERNS = (
+    r"(如何|怎样|怎么).*(防范|识别|辨别).*(骗局|诈骗|虚假|投资推荐)",
+    r"(讲解|解释|学习|分析).*(风险|危害|骗局)",
+    r"(风险|危害).*(有哪些|是什么|如何)",
+)
+_DIRECT_INVESTMENT_PATTERNS = (
+    r"(请|帮我|给我|顺便|然后|再).*(推荐|买入|卖出|该不该买)",
+    r"(该不该买|值得买|买卖时机)",
+)
+_INVESTMENT_DECISION_PATTERNS = (
+    r"(买|卖)(入|出)?.*(股票|基金|币).*(合适吗|好吗|好不好|可以吗|值得吗|划算吗)",
+    r"(应该|应不应该|要不要|该不该|能不能|是否应该)(现在|今天)?(买|卖).*(股票|基金|币)",
+    r"\b(should|shall|can)\s+(i|we)\s+(buy|sell|invest)\b.*\b(stock|fund|bitcoin|crypto|investment)s?\b",
+    r"\b(is|would)\s+(now|today)\b.*\b(good|right)\s+time\b.*\b(buy|sell|invest)\b"
+    r".*\b(stock|fund|bitcoin|crypto|investment)s?\b",
+)
+
+
 def assess_query_scope(
     question: str,
     *,
     web_search_requested: bool = False,
-    course_name: str = "数据科学导论",
+    course: ResolvedCourse | None = None,
 ) -> ScopeDecision:
     """Classify whether a user turn is within the teaching assistant scope.
 
@@ -355,6 +355,8 @@ def assess_query_scope(
     subject is sports, politics, weather, etc.  For example, "詹姆斯多大了" is
     blocked, while "用 Python 分析 NBA 球员年龄分布" is allowed.
     """
+
+    course_name = course.display_name if course is not None else "当前课程"
 
     if not _enabled():
         return ScopeDecision("allow", "disabled", 1.0, "scope guard disabled")
@@ -395,6 +397,26 @@ def assess_query_scope(
             safety_rule.response,
         )
 
+    # Coverage never overrides privacy/integrity, or a request for a general
+    # commercial service. Learning about investment risks is still in scope.
+    intent_texts = (compact_lowered, lowered)
+    investment_decision = _matches_any_text(intent_texts, _INVESTMENT_DECISION_PATTERNS)
+    investment_request = investment_decision or _matches_any_text(intent_texts, _INVESTMENT_SERVICE_PATTERNS)
+    quote_request = _matches_any_text(intent_texts, _MARKET_QUOTE_PATTERNS)
+    risk_education = _matches_any_text(intent_texts, _RISK_EDUCATION_PATTERNS)
+    direct_investment = investment_decision or _matches_any_text(intent_texts, _DIRECT_INVESTMENT_PATTERNS)
+    if quote_request or (investment_request and (not risk_education or direct_investment)):
+        return ScopeDecision(
+            "refuse",
+            "non_learning_service",
+            0.95,
+            "requests live market quotes or investment recommendations",
+            _scope_response(category="non_learning_service", course_name=course_name),
+        )
+
+    if matches_course_topic(raw, course):
+        return ScopeDecision("allow", "course_topic", 0.94, "matches selected course coverage")
+
     has_learning_signal = _contains_any(compact_lowered, _LEARNING_TERMS) or _contains_any(lowered, _LEARNING_TERMS)
     has_bridge_signal = _contains_any(compact_lowered, _DATA_ANALYSIS_BRIDGE_TERMS) or _contains_any(
         lowered, _DATA_ANALYSIS_BRIDGE_TERMS
@@ -404,9 +426,9 @@ def assess_query_scope(
     if has_learning_signal or has_bridge_signal:
         return ScopeDecision(
             "allow",
-            "course_or_data_science",
+            "learning_task",
             0.92,
-            "contains course/data-science/programming/research signal",
+            "contains learning/programming/research or data-analysis task framing",
         )
 
     politics_hit = _contains_any(compact_lowered, _POLITICS_GENERAL_TERMS) or _contains_any(

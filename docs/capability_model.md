@@ -139,3 +139,14 @@ Not good as standalone skills:
 - concept ranking
 - retrieval fusion
 - source formatting
+
+## Teaching skill course context
+
+Shared code-review, misconception-handling and personalized-explanation entrypoints
+receive keyword-only `course: ResolvedCourse | None` from `SkillRouteHandler`.
+Prompt identity uses that immutable catalogue result; a resolved failure remains
+neutral. Misconception matching reuses its manifest instead of resolving its ID
+again. Personalized explanation sync/stream share the explicit question, learner
+state, concept matches, personalization context and course interface; handlers do
+not inspect signatures. Existing turn-scoped retrieval binding remains the sole
+RAG course selector. These changes add no tools or new capability entrypoints.

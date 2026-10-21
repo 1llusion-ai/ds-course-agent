@@ -19,6 +19,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+from ds_course_agent.courses import ResolvedCourse
 from ds_course_agent.teaching.knowledge_mapper import map_question_to_concepts
 from ds_course_agent.tools.course_rag import course_rag_tool
 from ds_course_agent.tools.misconception import record_misconception_event
@@ -43,7 +44,9 @@ def _call_llm(prompt: str) -> str:
 # ---- Internal misconception detector (NOT a public tool) ----
 
 
-def _build_classification_prompt(user_question: str, matched_concepts: list) -> str:
+def _build_classification_prompt(
+    user_question: str, matched_concepts: list, *, course: ResolvedCourse | None = None
+) -> str:
     concept_info = ""
     if matched_concepts:
         lines = []
@@ -56,7 +59,7 @@ def _build_classification_prompt(user_question: str, matched_concepts: list) -> 
     else:
         concept_info = "（无匹配知识点）"
 
-    return f"""你是“数字力”导学智能体，面向《数据科学导论》课程，负责判断学生是否存在错误认知。
+    return f"""你是“数字力”导学智能体，面向《{course.display_name if course is not None else "当前课程"}》课程，负责判断学生是否存在错误认知。
 
 学生问题：{user_question}
 
@@ -66,13 +69,13 @@ def _build_classification_prompt(user_question: str, matched_concepts: list) -> 
 请根据以下标准，对学生的问题进行三分类：
 
 A. 正常疑问 — 学生只是在正常询问，没有错误前提。
-   例子："PCA是什么？" "神经网络为什么会过拟合？"
+   例子："这个概念是什么？" "教材中的这个过程为什么会发生？"
 
 B. 试探性错误假设 — 学生带有不确定性、确认式或试探性的错误猜测，语气犹豫、不确定。
-   例子："kNN不是无监督算法吗？" "PCA应该算监督学习吧？" "我以为正则化就是降维？"
+   例子："这两个概念应该相同吧？" "我以为这个条件总是成立，是这样吗？"
 
 C. 明确错误认知 — 学生明确断言一个错误概念，语气肯定，或者重复犯同一类错误。
-   例子："kNN就是无监督算法。" "LDA是无监督算法啊。" "正则化和降维是一个东西。" "过拟合说明模型很强。"
+   例子：学生将教材中不同的两个概念明确断言为同一个东西，或将有条件的结论说成无条件成立。
 
 补充规则：若学生是陈述句（例如“X是Y啊/呀/呢”）且核心命题错误，应判为 C，而不是 A。
 
@@ -174,12 +177,14 @@ def _quick_classify(user_question: str) -> dict[str, Any] | None:
     return None
 
 
-def misconception_detector(user_question: str, matched_concepts: list) -> dict[str, Any]:
+def misconception_detector(
+    user_question: str, matched_concepts: list, *, course: ResolvedCourse | None = None
+) -> dict[str, Any]:
     """Internal LLM step — not a public tool."""
     quick = _quick_classify(user_question)
     if quick is not None:
         return quick
-    prompt = _build_classification_prompt(user_question, matched_concepts)
+    prompt = _build_classification_prompt(user_question, matched_concepts, course=course)
     raw = _call_llm(prompt)
     return _parse_classification_result(raw)
 
@@ -187,10 +192,10 @@ def misconception_detector(user_question: str, matched_concepts: list) -> dict[s
 # ---- Answer generators ----
 
 
-def _generate_normal_answer(user_question: str, knowledge: str) -> str:
+def _generate_normal_answer(user_question: str, knowledge: str, *, course: ResolvedCourse | None = None) -> str:
     if knowledge and knowledge != "无相关资料" and len(knowledge) > 30:
         return f"{knowledge}"
-    prompt = f"""你是“数字力”导学智能体，负责《数据科学导论》课程辅导。请回答学生的问题。
+    prompt = f"""你是“数字力”导学智能体，负责《{course.display_name if course is not None else "当前课程"}》课程辅导。请回答学生的问题。
 
 学生问题：{user_question}
 
@@ -203,8 +208,10 @@ def _generate_gentle_correction_answer(
     misconception_text: str,
     correct_answer: str,
     evidence: str,
+    *,
+    course: ResolvedCourse | None = None,
 ) -> str:
-    prompt = f"""你是“数字力”导学智能体，负责《数据科学导论》课程辅导。学生提出了一个带有试探性错误假设的问题，请温和地纠正并解释。
+    prompt = f"""你是“数字力”导学智能体，负责《{course.display_name if course is not None else "当前课程"}》课程辅导。学生提出了一个带有试探性错误假设的问题，请温和地纠正并解释。
 
 学生问题：{user_question}
 
@@ -228,8 +235,10 @@ def _generate_direct_correction_answer(
     misconception_text: str,
     correct_answer: str,
     evidence: str,
+    *,
+    course: ResolvedCourse | None = None,
 ) -> str:
-    prompt = f"""你是“数字力”导学智能体，负责《数据科学导论》课程辅导。学生明确表达了一个错误认知，请直接纠正并解释。
+    prompt = f"""你是“数字力”导学智能体，负责《{course.display_name if course is not None else "当前课程"}》课程辅导。学生明确表达了一个错误认知，请直接纠正并解释。
 
 学生问题：{user_question}
 
@@ -302,6 +311,8 @@ def execute(
     session_id: str,
     turn_id: str = "0",
     course_id: str = "data-science-intro",
+    *,
+    course: ResolvedCourse | None = None,
 ) -> str:
     """
     Main entrypoint for misconception-handling skill.
@@ -313,10 +324,19 @@ def execute(
         turn_id: 对话轮次（用于画像追溯）
     """
     # Step 1: 获取概念候选
-    matched_concepts = map_question_to_concepts(user_question, top_k=3, course=course_id)
+    if course is not None:
+        course_id = str(course.requested_id)
+        manifest = course.manifest
+        matched_concepts = (
+            map_question_to_concepts(user_question, top_k=3, course=manifest)
+            if manifest is not None and manifest.knowledge_graph_path
+            else []
+        )
+    else:
+        matched_concepts = map_question_to_concepts(user_question, top_k=3, course=course_id)
 
     # Step 2: 内部 LLM 分类
-    result = misconception_detector(user_question, matched_concepts)
+    result = misconception_detector(user_question, matched_concepts, course=course)
     classification = result["classification"]
     misconception_text = result["misconception_text"]
     correct_answer = result["correct_answer"]
@@ -329,7 +349,7 @@ def execute(
             knowledge = course_rag_tool.invoke(user_question) or ""
         except Exception:
             pass
-        return _generate_normal_answer(user_question, knowledge)
+        return _generate_normal_answer(user_question, knowledge, course=course)
 
     # Step 3: B/C 分支都需要取证据
     try:
@@ -351,6 +371,7 @@ def execute(
             misconception_text=misconception_text,
             correct_answer=correct_answer,
             evidence=source_evidence,
+            course=course,
         )
         _call_record_event(
             session_id=session_id,
@@ -374,6 +395,7 @@ def execute(
         misconception_text=misconception_text,
         correct_answer=correct_answer,
         evidence=source_evidence,
+        course=course,
     )
     _call_record_event(
         session_id=session_id,

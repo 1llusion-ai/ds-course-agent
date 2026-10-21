@@ -140,3 +140,16 @@ Use `var/` for local runtime state:
 - `var/cache/`
 
 Legacy root-level runtime directories may exist locally from older runs, but new defaults point to `var/`.
+
+### Course scope ownership
+
+`courses/resources.py` owns the immutable `ResolvedCourse` and sourced
+`CourseScopeTerm` contracts without domain imports. `teaching/course_scope.py`
+builds coverage using the public knowledge-map/mapper interfaces, preserving the
+mapper's alias policy. It depends only on courses and teaching resource owners;
+agent scope/routing and research consume the resulting typed value. QueryPipeline
+prepares it once; `agent/message_context.py` renders course instructions for
+model-backed turns and skills receive the value explicitly. This replaces the
+shared default-subject scope/strong-word lists and literal course-name prompt
+replacement. Contract/third-course tests prevent reintroducing another owner or
+borrowing default resources when an explicit course resource is absent.

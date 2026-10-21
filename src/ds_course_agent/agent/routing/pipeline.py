@@ -181,21 +181,14 @@ class QueryPipeline:
             student_id=student_id,
         )
 
-        # Product-scope guard 强于显式联网开关：课程助教可为学习/数据科学任务
+        # Product-scope guard 强于显式联网开关：课程助教可为当前课程学习任务
         # 检索外部资源，但不应沦为体育/娱乐/政治/天气/股票等通用搜索引擎。
-        course_name = "数据科学导论"
-        if course_context is not None:
-            from ds_course_agent.courses import CourseCatalog
-            from ds_course_agent.shared.paths import PROJECT_ROOT
-
-            course_name = (
-                CourseCatalog.from_directory(PROJECT_ROOT / "data/courses")
-                .require(course_context.course_id)
-                .display_name
-            )
+        router = get_router()
+        course_resources = router.resolve_course(course_context)
+        course_name = course_resources.display_name
         with trace_span("prepare.scope_guard"):
             scope_decision = _scope_guard.assess_query_scope(
-                user_input, web_search_requested=web_search, course_name=course_name
+                user_input, web_search_requested=web_search, course=course_resources
             )
         trace_step(
             "scope_guard.result",
@@ -211,13 +204,7 @@ class QueryPipeline:
             if web_search:
                 special_case_response = None
             else:
-                special_case_handler = agent._handle_special_case
-                try:
-                    signature(special_case_handler).bind(user_input, course_name=course_name)
-                except TypeError:
-                    special_case_response = special_case_handler(user_input)
-                else:
-                    special_case_response = special_case_handler(user_input, course_name=course_name)
+                special_case_response = agent._handle_special_case(user_input, course_name=course_name)
         else:
             special_case_response = scope_decision.response
 
@@ -230,6 +217,7 @@ class QueryPipeline:
                 chat_history=chat_history,
             )
         context.course_context = course_context
+        context.course_resources = course_resources
         # 类型化路由控制信号（Contract 2）：不走 metadata，规则表直接读 typed 字段。
         context.web_search_requested = bool(web_search)
         context.special_case_response = special_case_response
@@ -238,7 +226,7 @@ class QueryPipeline:
 
         enricher = _LazyEnricher(agent, context, user_input, student_id)
         with trace_span("prepare.router"):
-            decision = get_router().route(context, enricher=enricher)
+            decision = router.route(context, enricher=enricher)
 
         with trace_span("prepare.learning_enrichment"):
             enricher.apply_plan(decision.enrichment)

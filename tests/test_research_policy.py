@@ -95,7 +95,7 @@ def test_sync_response_preparation_uses_shared_response_adapters(monkeypatch) ->
 
     pipeline = WebResearchPipeline()
     route_state = SimpleNamespace(
-        context=SimpleNamespace(original_query="What is PCA?"),
+        context=SimpleNamespace(original_query="What is PCA?", course_resources=None),
         chat_history=[],
         learner_state=None,
         skill_candidate_keys=set(),
@@ -105,7 +105,7 @@ def test_sync_response_preparation_uses_shared_response_adapters(monkeypatch) ->
     sources = [{"url": "https://example.com/result"}]
     results = [{"href": "https://example.com/result", "name": "Result"}]
 
-    monkeypatch.setattr(pipeline, "_web_search_scope_response", lambda question: None)
+    monkeypatch.setattr(pipeline, "_web_search_scope_response", lambda question, **kwargs: None)
     monkeypatch.setattr(pipeline, "_invoke_search_web", lambda search_web, question, **kwargs: response)
     sources_adapter = _recording_method(monkeypatch, pipeline, "_response_sources", sources)
     results_adapter = _recording_method(monkeypatch, pipeline, "_response_results", results)

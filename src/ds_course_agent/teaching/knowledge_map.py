@@ -115,6 +115,7 @@ class KnowledgeMap(BaseModel):
     nodes: tuple[KnowledgeNode, ...]
     edges: tuple[KnowledgeEdge, ...]
     chapters: tuple[ChapterSummary, ...]
+    scope_titles: tuple[str, ...] = Field(default=(), exclude=True)
 
 
 def _validate_structure(nodes: list[KnowledgeNode], edges: list[KnowledgeEdge]) -> None:
@@ -158,6 +159,15 @@ def load_knowledge_map(catalog_path: Path, toc_path: Path) -> KnowledgeMap:
     raw = json.loads(catalog_path.read_text(encoding="utf-8"))
     nodes = [KnowledgeNode.model_validate(item) for item in raw["concepts"]]
     toc = json.loads(toc_path.read_text(encoding="utf-8"))
+
+    def titles(items):
+        for item in items:
+            title = re.sub(r"^(?:第\s*\d+\s*章|\d+(?:\.\d+)*[.、]?)\s*", "", str(item.get("title", ""))).strip()
+            if title:
+                yield title
+            yield from titles(item.get("children", []))
+
+    scope_titles = tuple(titles(toc["toc"]))
     chapters = []
     for item in toc["toc"]:
         # ``course-toc/1.0`` keeps the chapter number separate from the
@@ -217,6 +227,7 @@ def load_knowledge_map(catalog_path: Path, toc_path: Path) -> KnowledgeMap:
         nodes=tuple(nodes),
         edges=tuple(edges),
         chapters=tuple(chapters),
+        scope_titles=scope_titles,
     )
 
 

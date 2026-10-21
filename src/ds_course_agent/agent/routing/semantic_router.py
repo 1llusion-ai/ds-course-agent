@@ -36,7 +36,7 @@ _LEARNING_INTENT_VALUES = (
 ALLOWED_LEARNING_INTENTS = frozenset(RouteIntent(value) for value in _LEARNING_INTENT_VALUES)
 _NEEDS_CLARIFICATION_INTENT = RouteIntent("needs_clarification")
 
-_SYSTEM_PROMPT = """你是《数据科学导论》助教的学习意图分类器。
+_SYSTEM_PROMPT = """你是《{course_name}》助教的学习意图分类器。
 只根据当前问题和最近上下文选择一个意图，不回答问题。
 
 可选意图：
@@ -50,8 +50,8 @@ _SYSTEM_PROMPT = """你是《数据科学导论》助教的学习意图分类器
 - learning_path：要求安排学习、复习顺序或学习计划
 - misconception_repair：用户表达了需要纠正的具体错误理解
 - personalized_explanation：明确要求结合个人学习状态重新讲解
-- open_learning：属于课程或数据科学学习，但不适合前述具体意图
-- not_learning：请求不属于课程学习或数据科学学习
+- open_learning：属于当前课程学习，但不适合前述具体意图
+- not_learning：请求不属于当前课程学习
 - needs_clarification：信息不足，无法可靠判断用户目标
 
 confidence 必须在 0 到 1 之间。只有确实需要用户补充信息时，
@@ -103,15 +103,17 @@ class LearningSemanticRouter:
         self._transport_cooldown_seconds = max(0.0, float(transport_cooldown_seconds))
         self._transport_cooldown_until: dict[str, float] = {}
 
-    def route(self, query: str, recent_context: str = "") -> LearningRouteOutput:
+    def route(self, query: str, recent_context: str = "", *, course_name: str) -> LearningRouteOutput:
         """Return a validated learning intent or a fail-closed clarification result.
 
         ``SemanticRouterUnavailable`` deliberately escapes: callers must be able
         to distinguish a model that is genuinely uncertain from router
         infrastructure that failed before producing any output.
+        ``course_name`` comes from the selected manifest on each call; this
+        shared router never retains a turn's course identity.
         """
 
-        messages = self._build_messages(query, recent_context)
+        messages = self._build_messages(query, recent_context, course_name=course_name)
         try:
             return self._invoke(messages)
         except SemanticRouterUnavailable:
@@ -208,13 +210,13 @@ class LearningSemanticRouter:
             return
         self._transport_cooldown_until[method] = time.monotonic() + self._transport_cooldown_seconds
 
-    def _build_messages(self, query: str, recent_context: str) -> list[Any]:
+    def _build_messages(self, query: str, recent_context: str, *, course_name: str) -> list[Any]:
         normalized_query = str(query or "").strip()
         compact_context = self._compact_recent_context(recent_context)
         context_section = compact_context if compact_context else "（无）"
         user_prompt = f"当前问题：\n{normalized_query}\n\n最近上下文：\n{context_section}"
         return [
-            SystemMessage(content=_SYSTEM_PROMPT),
+            SystemMessage(content=_SYSTEM_PROMPT.replace("{course_name}", course_name)),
             HumanMessage(content=user_prompt),
         ]
 

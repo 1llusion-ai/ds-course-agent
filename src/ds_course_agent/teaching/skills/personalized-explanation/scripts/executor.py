@@ -12,6 +12,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+from ds_course_agent.courses import ResolvedCourse
 from ds_course_agent.runtime.model_stream import extract_model_text, iter_text_chunks
 from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
 from ds_course_agent.teaching.personalization import PersonalizationContext
@@ -72,6 +73,8 @@ class PersonalizedExplanationSkill:
         learner_state: LearnerStateSnapshot,
         matched_concepts: Sequence[Any],
         personalization_context: PersonalizationContext | None = None,
+        *,
+        course: ResolvedCourse | None = None,
     ) -> str:
         matched_concepts = list(matched_concepts)
 
@@ -89,6 +92,7 @@ class PersonalizedExplanationSkill:
             strategy=strategy,
             knowledge=evidence.context if evidence.has_results else "",
             personalization_context=personalization_context,
+            course=course,
         )
         from ds_course_agent.shared.query_trace import trace_span
 
@@ -103,6 +107,8 @@ class PersonalizedExplanationSkill:
         learner_state: LearnerStateSnapshot,
         matched_concepts: Sequence[Any],
         personalization_context: PersonalizationContext | None = None,
+        *,
+        course: ResolvedCourse | None = None,
     ):
         """Stream a personalized explanation while preserving its teaching context."""
         matched_concepts = list(matched_concepts)
@@ -122,6 +128,7 @@ class PersonalizedExplanationSkill:
             strategy=strategy,
             knowledge=evidence.context if evidence.has_results else "",
             personalization_context=personalization_context,
+            course=course,
         )
         scaffold = self._build_scaffold(strategy, matched_concepts)
         if scaffold:
@@ -186,6 +193,8 @@ class PersonalizedExplanationSkill:
         strategy: TeachingStrategy,
         knowledge: str,
         personalization_context: PersonalizationContext | None = None,
+        *,
+        course: ResolvedCourse | None = None,
     ) -> str:
         concept_info = "\n".join(
             f"- {item.display_name}（匹配方式：{item.method}，分数：{item.score:.2f}）" for item in matched_concepts
@@ -207,7 +216,7 @@ class PersonalizedExplanationSkill:
         has_valid_knowledge = bool(knowledge and knowledge != "无相关资料" and len(knowledge) > 50)
 
         if has_valid_knowledge:
-            return f"""你是“数字力”导学智能体，负责《数据科学导论》课程辅导。请严格基于教材资料回答问题。
+            return f"""你是“数字力”导学智能体，负责《{course.display_name if course is not None else "当前课程"}》课程辅导。请严格基于教材资料回答问题。
 
 当前问题：
 {question}
@@ -237,7 +246,7 @@ class PersonalizedExplanationSkill:
 7. 只能根据“教学策略”中明确列出的逐题证据评价测验表现；没有证据时必须说明无法判断，禁止自行推断答题内容或掌握情况。
 """
 
-        return f"""你是“数字力”导学智能体，负责《数据科学导论》课程辅导。
+        return f"""你是“数字力”导学智能体，负责《{course.display_name if course is not None else "当前课程"}》课程辅导。
 
 当前问题：
 {question}
@@ -283,8 +292,7 @@ class PersonalizedExplanationSkill:
             if knowledge and knowledge != "无相关资料" and len(knowledge) > 50:
                 return f"根据课程资料，我先给你一版基础说明：\n\n{knowledge}"
             return (
-                "抱歉，我暂时没有在课程资料里找到足够直接的内容。"
-                "你可以换一个更具体的课程术语再问我，比如直接说 PCA、SVM、过拟合、交叉验证。"
+                "抱歉，我暂时没有在课程资料里找到足够直接的内容。你可以从当前课程的知识地图选择一个具体知识点再问我。"
             )
         except Exception as exc:
             return f"抱歉，检索课程资料时出了点问题，请稍后重试。({str(exc)[:80]})"
@@ -294,14 +302,22 @@ def explain(
     question: str,
     learner_state: LearnerStateSnapshot,
     matched_concepts: Sequence[Any],
+    personalization_context: PersonalizationContext | None = None,
+    *,
+    course: ResolvedCourse | None = None,
 ) -> str:
-    return PersonalizedExplanationSkill().execute(question, learner_state, matched_concepts)
+    return PersonalizedExplanationSkill().execute(
+        question, learner_state, matched_concepts, personalization_context, course=course
+    )
 
 
 def execute(
     question: str,
     learner_state: LearnerStateSnapshot,
     matched_concepts: Sequence[Any],
+    personalization_context: PersonalizationContext | None = None,
+    *,
+    course: ResolvedCourse | None = None,
 ) -> str:
     """Claude-style skill entrypoint."""
-    return explain(question, learner_state, matched_concepts)
+    return explain(question, learner_state, matched_concepts, personalization_context, course=course)

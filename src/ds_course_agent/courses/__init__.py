@@ -8,6 +8,8 @@ from ds_course_agent.courses.resources import (
     CourseResolver,
     CourseResourceManifest,
     CourseResourceStatus,
+    CourseScopeTerm,
+    ResolvedCourse,
 )
 
 __all__ = [
@@ -18,4 +20,6 @@ __all__ = [
     "CourseResourceManifest",
     "CourseResolver",
     "CourseResourceStatus",
+    "CourseScopeTerm",
+    "ResolvedCourse",
 ]

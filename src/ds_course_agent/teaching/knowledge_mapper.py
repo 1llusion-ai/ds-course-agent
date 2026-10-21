@@ -273,6 +273,23 @@ class KnowledgeGraph:
         # 加载离线 embedding cache（请求链路默认不在线预计算）
         self._precompute_embeddings()
 
+    def scope_vocabulary(self) -> tuple[str, ...]:
+        """Return only independently meaningful graph names and aliases.
+
+        Contextual/supporting aliases such as 分类 must not assert course
+        coverage by themselves. The same alias policy governs routing and scope.
+        """
+        return tuple(
+            sorted(
+                {
+                    spec.text
+                    for specs in self.alias_specs.values()
+                    for spec in specs
+                    if spec.policy.independently_emits_match
+                }
+            )
+        )
+
     def _normalize_text(self, text: str) -> str:
         """删除中文词间标点，同时保留代码标点形成的 token 边界。"""
         text = text.lower()
@@ -839,6 +856,8 @@ def get_knowledge_mapper(course: Any | None = None) -> KnowledgeMapper:
             manifest = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(course)
             graph_path = manifest.knowledge_graph_path or None
             revision = manifest.revision
+        if graph_path is None:
+            raise ValueError(f"course knowledge graph unavailable: {key}")
     cache_key = (key, revision, str(graph_path or ""))
     mapper = _knowledge_mappers.get(cache_key)
     if mapper is None:

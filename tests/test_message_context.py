@@ -43,6 +43,7 @@ def test_build_turn_system_context_combines_typed_turn_state() -> None:
         progress=LearnerProgress(current_chapter="第6章", covered_chapters=("第5章",)),
     )
     route_state = SimpleNamespace(
+        context=SimpleNamespace(course_resources=None),
         learner_state=learner_state,
         skill_candidate_keys={"personalized-explanation"},
         matched_concepts=[SimpleNamespace(concept_id="decision_tree", display_name="决策树", chapter="第6章")],

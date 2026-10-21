@@ -53,6 +53,13 @@ version. Package ownership and migration status remain authoritative in
 - Enrichment is declared by `EnrichmentPlan` and evaluated only when required.
 - Semantic routing is the explicit fallback after deterministic rules, not an
   extra branch hidden in callers.
+- Routing course identity comes from the selected catalogue manifest, carried
+  as an immutable typed `QueryContext.course_resources: ResolvedCourse` preparation fact matching
+  `course_context.course_id`. The scope guard, semantic classification prompt
+  and out-of-course response share its display name and teaching-built coverage. Resolution failure is retained for the whole turn rather than reparsed. Research scope checks and teaching-skill prompts consume the same explicit value. Only an omitted course
+  selects the default manifest; an unknown or unavailable identity stays
+  neutral. Shared semantic routers receive the name explicitly per call and
+  never store request-scoped course identity.
 
 ## Contract 5: One Turn Entry
 
@@ -91,3 +98,25 @@ version. Package ownership and migration status remain authoritative in
 Any change to these contracts must update the relevant invariant tests in the
 same task. Compatibility shims are not an acceptable substitute for migrating
 all callers.
+
+## Course coverage and student actions
+
+- `courses/` owns `ResolvedCourse` and `CourseScopeTerm` data contracts only;
+  `teaching/course_scope.py` builds coverage through `get_knowledge_map` and the
+  mapper's public alias-policy vocabulary. No other course graph is consulted
+  when the selected resources are absent. Contextual aliases alone grant no scope.
+- `agent/scope_guard.py` owns scope and safety decisions. Academic integrity and
+  privacy rules precede course coverage; market quote/investment-service requests
+  cannot become learning requests solely by mentioning a course topic. Legal
+  analysis and risk education remain allowed. `taxonomy` does not reapply a
+  second subject blacklist after the scope guard.
+- `scope_terms` is a typed manifest array of textbook topics with `term`,
+  `section`, `book_page`, `source_page`. It fills coverage gaps where a topic is
+  mentioned inside textbook prose but has no graph KC/TOC title. It never creates
+  concept identity, learner events, or synonyms. Missing declarations add no scope.
+- Shared prompts render `{{course_name}}`/`{{course_description}}`; only the
+  selected manifest's `prompt_path` contributes subject-specific instructions.
+- Knowledge-map actions use the loaded graph's course name and node chapter/
+  section, carry its captured `course_id` into chat, and reject late graph loads
+  or a question tied to another selected course. Profile actions use the same
+  course query binding. Chat creation and SSE preserve the captured course ID.

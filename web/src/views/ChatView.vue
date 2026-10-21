@@ -211,7 +211,10 @@ import { domainFromUrl, faviconUrl, isExternalUrl } from '../utils/url'
 
 const appShell = inject('ds-course-agent.app-shell', null)
 const route = useRoute()
-const mapQuestion = computed(() => typeof route.query.question === 'string' ? route.query.question.slice(0, 2000) : '')
+const mapQuestion = computed(() => {
+  if (route.query.course_id && route.query.course_id !== courseStore.selectedCourseId) return ''
+  return typeof route.query.question === 'string' ? route.query.question.slice(0, 2000) : ''
+})
 const router = useRouter()
 const messagesContainer = ref(null)
 const messagesList = ref(null)
@@ -252,10 +255,10 @@ const webSearchHint = computed(() => (
 ))
 
 const starterPrompts = [
-  '逻辑回归为什么能做分类？',
-  'K-means 的基本步骤是什么？',
-  '帮我区分过拟合和欠拟合',
-  '请用 Python 演示一次交叉验证'
+  '这门课程有哪些核心概念？',
+  '请结合教材解释一个课程中的实际案例',
+  '帮我梳理当前课程的学习重点',
+  '围绕我最近学习的知识点出一道理解题'
 ]
 
 function messageKey(message, index) {

@@ -120,6 +120,37 @@ class CourseIndexBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class CourseScopeTerm:
+    """Textbook topic absent from graph/TOC titles; never a concept alias."""
+
+    term: str
+    section: str
+    book_page: int
+    source_page: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.term, str) or not isinstance(self.section, str):
+            raise TypeError("scope term and section must be text")
+        _required_text(self.term, "scope term")
+        _required_text(self.section, "scope section")
+        if any(type(page) is not int or page <= 0 for page in (self.book_page, self.source_page)):
+            raise ValueError("scope term pages must be positive integers")
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> CourseScopeTerm:
+        _reject_unknown(payload, {"term", "section", "book_page", "source_page"})
+        return cls(**payload)
+
+    def to_dict(self) -> dict[str, str | int]:
+        return {
+            "term": self.term,
+            "section": self.section,
+            "book_page": self.book_page,
+            "source_page": self.source_page,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class CourseResourceManifest:
     """Versioned declaration of all resources owned by one course."""
 
@@ -135,10 +166,15 @@ class CourseResourceManifest:
     index: CourseIndexBinding | None = None
     resource_metadata: Mapping[str, Any] = field(default_factory=dict)
     schema_version: str = _MANIFEST_SCHEMA
+    scope_terms: tuple[CourseScopeTerm, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.course_id, CourseId):
             object.__setattr__(self, "course_id", CourseId(str(self.course_id)))
+        if not isinstance(self.scope_terms, tuple) or any(
+            not isinstance(term, CourseScopeTerm) for term in self.scope_terms
+        ):
+            raise TypeError("scope_terms must be a tuple of CourseScopeTerm")
         _required_text(self.display_name, "display_name")
         _required_text(self.description, "description")
         _revision(self.revision)
@@ -183,11 +219,15 @@ class CourseResourceManifest:
                 "schedule_path",
                 "index",
                 "resource_metadata",
+                "scope_terms",
             },
         )
         raw_index = payload.get("index")
         if raw_index is not None and not isinstance(raw_index, Mapping):
             raise TypeError("index must be an object or null")
+        raw_terms = payload.get("scope_terms", [])
+        if not isinstance(raw_terms, list) or any(not isinstance(term, Mapping) for term in raw_terms):
+            raise TypeError("scope_terms must be an array of objects")
         raw_metadata = payload.get("resource_metadata", {})
         if not isinstance(raw_metadata, Mapping):
             raise TypeError("resource_metadata must be an object")
@@ -204,6 +244,7 @@ class CourseResourceManifest:
             schedule_path=payload.get("schedule_path", ""),
             index=CourseIndexBinding.from_dict(raw_index) if raw_index is not None else None,
             resource_metadata=dict(raw_metadata),
+            scope_terms=tuple(CourseScopeTerm.from_dict(term) for term in raw_terms),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -220,7 +261,41 @@ class CourseResourceManifest:
             "schedule_path": self.schedule_path,
             "index": self.index.to_dict() if self.index is not None else None,
             "resource_metadata": dict(self.resource_metadata),
+            "scope_terms": [term.to_dict() for term in self.scope_terms],
         }
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedCourse:
+    """One turn's immutable catalogue result, including explicit resolution failure.
+
+    Teaching builds scope vocabulary from the selected course resources. An empty
+    vocabulary grants no extra scope; it never borrows another course's graph.
+    """
+
+    requested_id: CourseId
+    manifest: CourseResourceManifest | None = None
+    scope_terms: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.requested_id, CourseId):
+            object.__setattr__(self, "requested_id", CourseId(self.requested_id))
+        if self.manifest is not None and not isinstance(self.manifest, CourseResourceManifest):
+            raise TypeError("manifest must be CourseResourceManifest or None")
+        if not isinstance(self.scope_terms, tuple) or any(
+            not isinstance(term, str) or not term.strip() for term in self.scope_terms
+        ):
+            raise TypeError("scope_terms must be a tuple of non-empty text")
+        if self.manifest is None and self.scope_terms:
+            raise ValueError("unresolved courses cannot declare scope vocabulary")
+        if self.manifest is not None and not self.manifest.is_ready and self.scope_terms:
+            raise ValueError("unready courses cannot declare resolved scope vocabulary")
+        if self.manifest is not None and self.manifest.course_id != self.requested_id:
+            raise ValueError("resolved manifest must match requested course")
+
+    @property
+    def display_name(self) -> str:
+        return self.manifest.display_name if self.manifest is not None else "当前课程"
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,5 +414,7 @@ __all__ = [
     "CourseResourceManifest",
     "CourseResolver",
     "CourseResourceStatus",
+    "CourseScopeTerm",
+    "ResolvedCourse",
     "DEFAULT_COURSE_ID",
 ]

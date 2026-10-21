@@ -523,7 +523,13 @@ class TestChatWithHistory:
         assert result.execution_mode.value == "direct_model"
         invoke_call = llm.invoke.call_args
         messages = invoke_call[0][0]
-        assert len(messages) == 3
+        assert len(messages) == 4
+        assert "《数据科学导论》" in messages[0].content
+        assert [message.content for message in messages[1:]] == [
+            "previous question",
+            "previous answer",
+            "请用 Python 演示交叉验证",
+        ]
 
     @pytest.mark.skip(reason="covered by test_agent_grounded_fallback")
     @pytest.mark.skip(reason="covered by test_agent_grounded_fallback")
@@ -745,8 +751,10 @@ class TestAgentShortTermMemory:
 
         monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: FakeHistory())
         monkeypatch.setattr("ds_course_agent.agent.service.get_memory_core", lambda: FakeMemory())
-        monkeypatch.setattr("ds_course_agent.agent.service.map_question_to_concepts", lambda question, top_k=3: [])
-        monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
+        monkeypatch.setattr(
+            "ds_course_agent.agent.service.map_question_to_concepts", lambda question, top_k=3, *, course=None: []
+        )
+        monkeypatch.setattr(service, "_handle_special_case", lambda question, *, course_name: None)
         monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
         state = service._prepare_query_route("继续讲", "session-1", "student-1")
 

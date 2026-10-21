@@ -212,7 +212,7 @@ class _HarnessSemanticRouter:
     def configure(self, payload: dict[str, Any] | None) -> None:
         self._payload = dict(payload) if payload else None
 
-    def route(self, query: str, recent_context: str = "") -> _SemanticOutput:
+    def route(self, query: str, recent_context: str = "", *, course_name: str) -> _SemanticOutput:
         del query, recent_context
         from ds_course_agent.agent.routing import RouteIntent
 
@@ -271,10 +271,10 @@ class _OfflineRouteService:
         del messages, location, metadata
 
     @staticmethod
-    def _handle_special_case(question: str) -> str | None:
+    def _handle_special_case(question: str, *, course_name: str) -> str | None:
         from ds_course_agent.agent.taxonomy import special_case_response
 
-        return special_case_response(question)
+        return special_case_response(question, course_name=course_name)
 
     def _enrich_skills(self, context: Any, user_input: str) -> set[str]:
         from ds_course_agent.teaching.skill_system import get_skill_loader

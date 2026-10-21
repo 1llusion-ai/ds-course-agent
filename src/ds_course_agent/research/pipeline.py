@@ -49,7 +49,7 @@ class WebResearchPipeline(WebResearchPolicy):
         chat_history = route_state.chat_history
 
         trace_step("agent.branch", branch="web_search")
-        scope_response = self._web_search_scope_response(question)
+        scope_response = self._web_search_scope_response(question, course=context.course_resources)
         if scope_response:
             trace_step("web_search.scope_blocked", status="blocked", reason="teaching_scope")
             return PreparedWebAnswer(fallback=scope_response)
@@ -241,7 +241,7 @@ class WebResearchPipeline(WebResearchPolicy):
 
         trace_step("agent.branch", branch="web_search")
 
-        scope_response = self._web_search_scope_response(question)
+        scope_response = self._web_search_scope_response(question, course=context.course_resources)
         if scope_response:
             trace_step("web_search.scope_blocked", status="blocked", reason="teaching_scope")
             event = self._stream_progress_event(

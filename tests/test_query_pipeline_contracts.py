@@ -36,7 +36,7 @@ class _SemanticRouterStub:
         )
         self.calls = []
 
-    def route(self, query: str, recent_context: str = "") -> _SemanticOutput:
+    def route(self, query: str, recent_context: str = "", *, course_name: str) -> _SemanticOutput:
         self.calls.append((query, recent_context))
         return self.output
 

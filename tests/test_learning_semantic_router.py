@@ -69,7 +69,7 @@ def test_semantic_router_returns_valid_structured_output():
         }
     )
 
-    result = LearningSemanticRouter(model=model).route("比较逻辑回归和 SVM")
+    result = LearningSemanticRouter(model=model).route("比较逻辑回归和 SVM", course_name="测试课程")
 
     assert result == LearningRouteOutput(
         intent=RouteIntent.COMPARISON,
@@ -86,7 +86,7 @@ def test_semantic_router_parses_valid_json_when_structured_output_is_unavailable
         AIMessage(content=('```json\n{"intent":"code_explanation","confidence":0.88,"needs_clarification":false}\n```'))
     )
 
-    result = LearningSemanticRouter(model=model).route("解释这段代码")
+    result = LearningSemanticRouter(model=model).route("解释这段代码", course_name="测试课程")
 
     assert result.intent is RouteIntent.CODE_EXPLANATION
     assert result.confidence == 0.88
@@ -115,7 +115,7 @@ def test_semantic_router_parses_valid_json_when_structured_output_is_unavailable
     ],
 )
 def test_semantic_router_rejects_invalid_or_non_learning_output(invalid_output):
-    result = LearningSemanticRouter(model=_StructuredModel(invalid_output)).route("测试问题")
+    result = LearningSemanticRouter(model=_StructuredModel(invalid_output)).route("测试问题", course_name="测试课程")
 
     assert result.intent is RouteIntent.NEEDS_CLARIFICATION
     assert result.confidence == 0.0
@@ -127,7 +127,7 @@ def test_semantic_router_reports_unavailable_when_all_transports_fail(error):
     model = _StructuredModel(error=error)
 
     with pytest.raises(SemanticRouterUnavailable) as exc_info:
-        LearningSemanticRouter(model=model).route("这个怎么理解？")
+        LearningSemanticRouter(model=model).route("这个怎么理解？", course_name="测试课程")
 
     message = str(exc_info.value)
     assert "function_calling" in message
@@ -172,7 +172,9 @@ def test_semantic_router_falls_back_from_function_calling_to_json_schema():
         }
     )
 
-    result = LearningSemanticRouter(model=model, transport_cooldown_seconds=0).route("DIKW 是什么")
+    result = LearningSemanticRouter(model=model, transport_cooldown_seconds=0).route(
+        "DIKW 是什么", course_name="测试课程"
+    )
 
     assert result.intent is RouteIntent.CONCEPT_QA
     assert model.methods == ["function_calling", "json_schema"]
@@ -195,7 +197,7 @@ def test_semantic_router_tries_the_next_transport_when_output_is_invalid():
         }
     )
 
-    result = LearningSemanticRouter(model=model).route("DIKW 是什么")
+    result = LearningSemanticRouter(model=model).route("DIKW 是什么", course_name="测试课程")
 
     assert result.intent is RouteIntent.CONCEPT_QA
     assert model.methods == ["function_calling", "json_schema"]
@@ -211,7 +213,7 @@ def test_semantic_router_falls_back_to_plain_json_when_structured_methods_are_un
         }
     )
 
-    result = LearningSemanticRouter(model=model).route("那它为什么会这样？")
+    result = LearningSemanticRouter(model=model).route("那它为什么会这样？", course_name="测试课程")
 
     assert result.intent is RouteIntent.FOLLOW_UP
     assert result.confidence == 0.84
@@ -232,8 +234,8 @@ def test_semantic_router_cools_down_a_timed_out_transport():
     )
     router = LearningSemanticRouter(model=model, transport_cooldown_seconds=300)
 
-    router.route("第一个问题")
-    router.route("第二个问题")
+    router.route("第一个问题", course_name="测试课程")
+    router.route("第二个问题", course_name="测试课程")
 
     assert model.methods == ["function_calling", "json_schema", "json_schema"]
 
@@ -251,6 +253,7 @@ def test_semantic_router_sends_current_query_with_compact_recent_context():
     result = LearningSemanticRouter(model=model, recent_context_max_chars=60).route(
         "那它为什么会这样？",
         recent_context,
+        course_name="测试课程",
     )
 
     assert result.intent is RouteIntent.FOLLOW_UP

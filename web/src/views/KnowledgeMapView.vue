@@ -242,6 +242,8 @@ const route = useRoute()
 const router = useRouter()
 const courseStore = useCourseStore()
 const graph = ref(null)
+const graphCourseId = ref(null)
+let loadVersion = 0
 const loading = ref(true)
 const error = ref('')
 const notice = ref('')
@@ -325,22 +327,42 @@ function handleDocumentKeydown(event) {
 }
 
 async function load() {
+  const version = ++loadVersion
+  const courseId = courseStore.selectedCourseId
+  graph.value = null
+  graphCourseId.value = null
+  selectedId.value = ''
+  chapter.value = ''
   loading.value = true
   error.value = ''
   try {
-    graph.value = await knowledgeMapApi.get(courseStore.selectedCourseId)
-    if (typeof route.query.concept === 'string') selectNode(route.query.concept)
-  } catch { error.value = '知识图谱暂时无法加载，请稍后重试。' }
-  finally { loading.value = false }
+    const value = await knowledgeMapApi.get(courseId)
+    if (version !== loadVersion || courseId !== courseStore.selectedCourseId) return
+    graph.value = value
+    graphCourseId.value = courseId
+    if ((!route.query.course_id || route.query.course_id === courseId) && typeof route.query.concept === 'string') selectNode(route.query.concept)
+  } catch {
+    if (version === loadVersion) error.value = '知识图谱暂时无法加载，请稍后重试。'
+  } finally {
+    if (version === loadVersion) loading.value = false
+  }
 }
 
-function ask(practice) { router.push({ path: '/chat', query: { question: questionForNode(selectedNode.value, practice) } }) }
-watch(() => route.query.concept, value => { if (graph.value && typeof value === 'string') selectNode(value) })
+function ask(practice) {
+  if (!selectedNode.value || graphCourseId.value !== courseStore.selectedCourseId) return
+  const courseName = graph.value.course_name || courseStore.currentCourse?.display_name || '当前课程'
+  router.push({ path: '/chat', query: {
+    question: questionForNode(selectedNode.value, courseName, practice), course_id: graphCourseId.value
+  } })
+}
+watch(() => courseStore.selectedCourseId, load)
+watch(() => route.query.concept, value => { if (graphCourseId.value === courseStore.selectedCourseId && (!route.query.course_id || route.query.course_id === graphCourseId.value) && typeof value === 'string') selectNode(value) })
 onMounted(() => {
   document.addEventListener('keydown', handleDocumentKeydown)
   load()
 })
 onBeforeUnmount(() => {
+  loadVersion += 1
   document.removeEventListener('keydown', handleDocumentKeydown)
 })
 </script>

@@ -26,6 +26,8 @@ COPY scripts/ ./scripts/
 
 # Runtime inputs and local state directories.
 COPY data/ ./data/
+# Shared teaching template and catalog-selected course supplements.
+COPY docs/prompts/ ./docs/prompts/
 RUN mkdir -p var/chroma_db var/chat_history var/logs var/artifacts var/cache
 
 EXPOSE 8000

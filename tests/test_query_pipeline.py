@@ -34,7 +34,7 @@ class _SemanticRouterStub:
         self.outputs = outputs or {}
         self.calls: list[tuple[str, str]] = []
 
-    def route(self, query: str, recent_context: str = "") -> _SemanticOutput:
+    def route(self, query: str, recent_context: str = "", *, course_name: str) -> _SemanticOutput:
         self.calls.append((query, recent_context))
         return self.outputs.get(
             query,
@@ -51,7 +51,7 @@ class _FailingSemanticRouter:
         self.error = error or RuntimeError("provider unavailable")
         self.calls: list[tuple[str, str]] = []
 
-    def route(self, query: str, recent_context: str = "") -> _SemanticOutput:
+    def route(self, query: str, recent_context: str = "", *, course_name: str) -> _SemanticOutput:
         self.calls.append((query, recent_context))
         raise self.error
 
@@ -641,7 +641,7 @@ def _make_pipeline_service(monkeypatch, semantic: _SemanticRouterStub):
     monkeypatch.setattr("ds_course_agent.shared.history.get_history", lambda session_id: FakeHistory())
     monkeypatch.setattr("ds_course_agent.agent.service.get_memory_core", lambda: FakeMemory())
     monkeypatch.setattr("ds_course_agent.agent.routing.pipeline.warn_context_budget", lambda *args, **kwargs: None)
-    monkeypatch.setattr(service, "_handle_special_case", lambda question: None)
+    monkeypatch.setattr(service, "_handle_special_case", lambda question, *, course_name: None)
     monkeypatch.setattr(service, "_select_skill_candidates", lambda question: set())
     return service
 
@@ -665,7 +665,7 @@ class TestQueryPipelineEnrichment:
         monkeypatch.setattr(service, "_select_skill_candidates", lambda question: {"personalized-explanation"})
         monkeypatch.setattr(
             "ds_course_agent.agent.service.map_question_to_concepts",
-            lambda question, top_k=3: [match],
+            lambda question, top_k=3, *, course=None: [match],
         )
 
         state = service._prepare_query_route(
@@ -685,7 +685,7 @@ class TestQueryPipelineEnrichment:
         service = _make_pipeline_service(monkeypatch, semantic)
         calls = {"concepts": 0, "profile": 0}
 
-        def fail_concepts(question, top_k=3):
+        def fail_concepts(question, top_k=3, *, course=None):
             calls["concepts"] += 1
             return []
 
@@ -718,7 +718,7 @@ class TestQueryPipelineEnrichment:
             event_eligible=True,
         )
 
-        def concept_map(question, top_k=3):
+        def concept_map(question, top_k=3, *, course=None):
             calls["concepts"] += 1
             return [match]
 
@@ -744,7 +744,7 @@ class TestQueryPipelineEnrichment:
         service = _make_pipeline_service(monkeypatch, semantic)
         calls = {"concepts": 0}
 
-        def concept_map(question, top_k=3):
+        def concept_map(question, top_k=3, *, course=None):
             calls["concepts"] += 1
             return []
 
@@ -782,7 +782,7 @@ class TestQueryPipelineEnrichment:
 
         monkeypatch.setattr(
             "ds_course_agent.agent.service.map_question_to_concepts",
-            lambda question, top_k=3: matches,
+            lambda question, top_k=3, *, course=None: matches,
         )
         state = service._prepare_query_route("什么是过拟合？", "session", "student")
 

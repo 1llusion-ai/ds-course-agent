@@ -14,6 +14,7 @@ from ds_course_agent.agent.taxonomy import (
     domain_matches,
     web_query_traits,
 )
+from ds_course_agent.courses import ResolvedCourse
 from ds_course_agent.research.models import adapt_search_result
 from ds_course_agent.shared.config_utils import config_bool, config_float, config_int
 
@@ -328,7 +329,7 @@ class WebResearchPolicy:
             "- 如果搜索结果不足或互相矛盾，请明确说明不确定性，不要编造来源。"
         )
 
-    def _web_search_scope_response(self, question: str) -> str | None:
+    def _web_search_scope_response(self, question: str, *, course: ResolvedCourse | None = None) -> str | None:
         """Return a polite refusal when explicit web search is outside scope."""
 
         if not config_bool("WEB_SEARCH_TEACHING_SCOPE_ENABLED", True):
@@ -336,7 +337,7 @@ class WebResearchPolicy:
 
         from ds_course_agent.agent.scope_guard import assess_query_scope
 
-        decision = assess_query_scope(question, web_search_requested=True)
+        decision = assess_query_scope(question, web_search_requested=True, course=course)
         if decision.allowed:
             return None
         return decision.response
