@@ -618,23 +618,17 @@ class KnowledgeMapper:
             if subtype_aliases and alias_spec.normalized_text not in residual:
                 candidates.pop(cid)
 
-    def map_question(self, question: str, top_k: int = 3, embedding_threshold: float = 0.82) -> list[MatchedConcept]:
-        """
-        三层匹配策略：
-        1. 别名精确匹配（含归一化）
-        2. 正则规则匹配
-        3. Embedding语义匹配（兜底）
+    def match_question_rules(self, question: str) -> list[MatchedConcept]:
+        """Return deterministic alias/regex matches without query embeddings.
 
-        Args:
-            question: 用户问题
-            top_k: 返回最大匹配数
-            embedding_threshold: embedding匹配阈值
-
-        Returns:
-            MatchedConcept列表，按score降序
+        This is the routing-safe subset of :meth:`map_question`: it only reads
+        the course graph's alias and regex indexes, so callers on the routing
+        path cannot trigger a network embedding call or depend on an offline
+        vector cache.
         """
-        matches = []
-        matched_ids = set()
+
+        matches: list[MatchedConcept] = []
+        matched_ids: set[str] = set()
 
         # ===== Layer 1: 别名精确匹配 =====
         normalized = self.graph._normalize_text(question)
@@ -685,6 +679,27 @@ class KnowledgeMapper:
                     )
                 )
                 matched_ids.add(cid)
+
+        matches.sort(key=lambda concept: concept.score, reverse=True)
+        return matches
+
+    def map_question(self, question: str, top_k: int = 3, embedding_threshold: float = 0.82) -> list[MatchedConcept]:
+        """
+        三层匹配策略：
+        1. 别名精确匹配（含归一化）
+        2. 正则规则匹配
+        3. Embedding语义匹配（兜底）
+
+        Args:
+            question: 用户问题
+            top_k: 返回最大匹配数
+            embedding_threshold: embedding匹配阈值
+
+        Returns:
+            MatchedConcept列表，按score降序
+        """
+        matches = self.match_question_rules(question)
+        matched_ids = {match.concept_id for match in matches}
 
         # ===== Layer 3: Embedding语义匹配（兜底）=====
         # 主请求链路采用 offline-first 策略：

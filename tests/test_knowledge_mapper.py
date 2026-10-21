@@ -59,6 +59,20 @@ def test_question_mapping(question, expected_ids, note):
         assert expected_id in actual_ids, f"{note}: {question} -> {actual_ids}"
 
 
+def test_match_question_rules_does_not_use_embeddings(monkeypatch):
+    mapper = knowledge_mapper.get_knowledge_mapper()
+
+    def fail_embed(text):
+        raise AssertionError(f"match_question_rules must not embed: {text}")
+
+    monkeypatch.setattr(mapper, "_embed_text", fail_embed)
+
+    matches = mapper.match_question_rules("DIKW金字塔模型是什么?")
+
+    assert [match.concept_id for match in matches] == ["dikw_pyramid"]
+    assert matches[0].method == "exact_alias"
+
+
 def run_regression_test():
     """运行回归测试"""
     test_cases = QUESTION_CASES

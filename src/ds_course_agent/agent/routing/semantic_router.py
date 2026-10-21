@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Mapping
 from typing import Any
 
@@ -54,7 +55,17 @@ _SYSTEM_PROMPT = """你是《数据科学导论》助教的学习意图分类器
 - needs_clarification：信息不足，无法可靠判断用户目标
 
 confidence 必须在 0 到 1 之间。只有确实需要用户补充信息时，
-needs_clarification 才为 true。严格按给定结构输出。"""
+needs_clarification 才为 true。严格按给定结构输出。
+若无法使用结构化输出，只输出一个 JSON 对象，不要 Markdown 代码块：
+{"intent": "concept_qa", "confidence": 0.9, "needs_clarification": false}"""
+
+
+class SemanticRouterUnavailable(RuntimeError):
+    """Raised when every transport fails before the router can produce output."""
+
+
+class SemanticRouterInvalidOutput(ValueError):
+    """Raised when a transport responded but its payload is not a valid route."""
 
 
 class LearningRouteOutput(BaseModel):
@@ -77,44 +88,125 @@ class LearningRouteOutput(BaseModel):
 class LearningSemanticRouter:
     """Classify ambiguous learning candidates without granting execution rights."""
 
-    def __init__(self, model: Any | None = None, *, recent_context_max_chars: int | None = None) -> None:
+    def __init__(
+        self,
+        model: Any | None = None,
+        *,
+        recent_context_max_chars: int | None = None,
+        transport_cooldown_seconds: float = 300.0,
+    ) -> None:
         self._model = model if model is not None else get_router_model()
         configured_limit = (
             config.ROUTER_RECENT_CONTEXT_MAX_CHARS if recent_context_max_chars is None else recent_context_max_chars
         )
         self._recent_context_max_chars = max(0, int(configured_limit))
+        self._transport_cooldown_seconds = max(0.0, float(transport_cooldown_seconds))
+        self._transport_cooldown_until: dict[str, float] = {}
 
     def route(self, query: str, recent_context: str = "") -> LearningRouteOutput:
-        """Return a validated learning intent or a fail-closed clarification result."""
+        """Return a validated learning intent or a fail-closed clarification result.
+
+        ``SemanticRouterUnavailable`` deliberately escapes: callers must be able
+        to distinguish a model that is genuinely uncertain from router
+        infrastructure that failed before producing any output.
+        """
 
         messages = self._build_messages(query, recent_context)
         try:
-            raw_output = self._invoke(messages)
-            return self._validate_output(raw_output)
+            return self._invoke(messages)
+        except SemanticRouterUnavailable:
+            raise
+        except SemanticRouterInvalidOutput as exc:
+            logger.warning("Learning semantic router returned invalid output (%s); degrading to clarification", exc)
+            return self._clarification_output()
         except Exception as exc:
             logger.warning("Learning semantic router degraded to clarification after %s", type(exc).__name__)
             return self._clarification_output()
 
-    def _invoke(self, messages: list[Any]) -> Any:
+    def _invoke(self, messages: list[Any]) -> LearningRouteOutput:
+        failures: list[str] = []
+        produced_output = False
         structured_factory = getattr(self._model, "with_structured_output", None)
-        if callable(structured_factory):
-            try:
-                structured_model = structured_factory(LearningRouteOutput, method="json_schema")
-            except (AttributeError, NotImplementedError, TypeError):
-                structured_model = None
 
-            if structured_model is not None:
-                structured_invoke = getattr(structured_model, "invoke", None)
-                if callable(structured_invoke):
-                    try:
-                        return structured_invoke(messages)
-                    except (AttributeError, NotImplementedError):
-                        pass
+        if callable(structured_factory):
+            for method in ("function_calling", "json_schema"):
+                if self._transport_is_cooling(method):
+                    failures.append(f"{method}:cooldown")
+                    continue
+                try:
+                    structured_model = structured_factory(LearningRouteOutput, method=method)
+                    structured_invoke = getattr(structured_model, "invoke", None)
+                    if not callable(structured_invoke):
+                        failures.append(f"{method}:no_invoke")
+                        continue
+                    raw_output = structured_invoke(messages)
+                except Exception as exc:
+                    self._record_transport_failure(method, exc)
+                    failures.append(f"{method}:{type(exc).__name__}")
+                    logger.warning(
+                        "Semantic router transport %s failed with %s",
+                        method,
+                        type(exc).__name__,
+                    )
+                    continue
+                if raw_output is None:
+                    failures.append(f"{method}:empty")
+                    continue
+                produced_output = True
+                try:
+                    return self._validate_output(raw_output)
+                except SemanticRouterInvalidOutput as exc:
+                    failures.append(f"{method}:invalid")
+                    logger.warning(
+                        "Semantic router transport %s returned invalid output (%s)",
+                        method,
+                        exc,
+                    )
 
         invoke = getattr(self._model, "invoke", None)
-        if not callable(invoke):
-            raise TypeError("router model does not provide invoke()")
-        return invoke(messages)
+        if callable(invoke):
+            if self._transport_is_cooling("plain"):
+                failures.append("plain:cooldown")
+            else:
+                try:
+                    raw_output = invoke(messages)
+                except Exception as exc:
+                    self._record_transport_failure("plain", exc)
+                    failures.append(f"plain:{type(exc).__name__}")
+                    logger.warning("Semantic router transport plain failed with %s", type(exc).__name__)
+                else:
+                    if raw_output is None:
+                        failures.append("plain:empty")
+                    else:
+                        produced_output = True
+                        try:
+                            return self._validate_output(raw_output)
+                        except SemanticRouterInvalidOutput as exc:
+                            failures.append("plain:invalid")
+                            logger.warning("Semantic router transport plain returned invalid output (%s)", exc)
+
+        detail = ", ".join(failures)
+        if produced_output:
+            raise SemanticRouterInvalidOutput(f"all semantic router transports returned invalid output: {detail}")
+        if not failures:
+            raise SemanticRouterUnavailable("router model does not provide a usable transport")
+        raise SemanticRouterUnavailable(f"all semantic router transports failed: {detail}")
+
+    def _transport_is_cooling(self, method: str) -> bool:
+        until = self._transport_cooldown_until.get(method)
+        if until is None:
+            return False
+        if time.monotonic() >= until:
+            self._transport_cooldown_until.pop(method, None)
+            return False
+        return True
+
+    def _record_transport_failure(self, method: str, exc: Exception) -> None:
+        if self._transport_cooldown_seconds <= 0:
+            return
+        if "timeout" not in type(exc).__name__.lower() and not isinstance(exc, TimeoutError):
+            return
+        self._transport_cooldown_until[method] = time.monotonic() + self._transport_cooldown_seconds
 
     def _build_messages(self, query: str, recent_context: str) -> list[Any]:
         normalized_query = str(query or "").strip()
@@ -137,19 +229,22 @@ class LearningSemanticRouter:
 
     @staticmethod
     def _validate_output(raw_output: Any) -> LearningRouteOutput:
-        if isinstance(raw_output, LearningRouteOutput):
-            return raw_output
-        if isinstance(raw_output, BaseModel):
-            payload = raw_output.model_dump()
-            if {"intent", "confidence", "needs_clarification"} <= payload.keys():
-                return LearningRouteOutput.model_validate(payload)
-        if isinstance(raw_output, Mapping):
-            return LearningRouteOutput.model_validate(dict(raw_output))
+        try:
+            if isinstance(raw_output, LearningRouteOutput):
+                return raw_output
+            if isinstance(raw_output, BaseModel):
+                payload = raw_output.model_dump()
+                if {"intent", "confidence", "needs_clarification"} <= payload.keys():
+                    return LearningRouteOutput.model_validate(payload)
+            if isinstance(raw_output, Mapping):
+                return LearningRouteOutput.model_validate(dict(raw_output))
 
-        content = message_content_text(raw_output).strip()
-        if not content:
-            raise ValueError("router model returned empty output")
-        return LearningRouteOutput.model_validate_json(_strip_json_fence(content))
+            content = message_content_text(raw_output).strip()
+            if not content:
+                raise ValueError("router model returned empty output")
+            return LearningRouteOutput.model_validate_json(_strip_json_fence(content))
+        except Exception as exc:
+            raise SemanticRouterInvalidOutput(str(exc)) from exc
 
     @staticmethod
     def _clarification_output() -> LearningRouteOutput:
@@ -190,4 +285,6 @@ __all__ = [
     "get_learning_semantic_router",
     "LearningRouteOutput",
     "LearningSemanticRouter",
+    "SemanticRouterInvalidOutput",
+    "SemanticRouterUnavailable",
 ]

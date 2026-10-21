@@ -11,6 +11,7 @@ from ds_course_agent.agent.routing.models import RouteIntent
 from ds_course_agent.agent.routing.semantic_router import (
     LearningRouteOutput,
     LearningSemanticRouter,
+    SemanticRouterUnavailable,
 )
 from ds_course_agent.shared import llm as llm_module
 from ds_course_agent.shared.config.schema import Settings
@@ -76,7 +77,7 @@ def test_semantic_router_returns_valid_structured_output():
         needs_clarification=False,
     )
     assert model.schema is LearningRouteOutput
-    assert model.structured_kwargs == {"method": "json_schema"}
+    assert model.structured_kwargs == {"method": "function_calling"}
     assert model.direct_invoke_called is False
 
 
@@ -122,15 +123,119 @@ def test_semantic_router_rejects_invalid_or_non_learning_output(invalid_output):
 
 
 @pytest.mark.parametrize("error", [TimeoutError("timed out"), RuntimeError("provider failed")])
-def test_semantic_router_fails_closed_on_timeout_or_model_error(error):
+def test_semantic_router_reports_unavailable_when_all_transports_fail(error):
     model = _StructuredModel(error=error)
 
-    result = LearningSemanticRouter(model=model).route("这个怎么理解？")
+    with pytest.raises(SemanticRouterUnavailable) as exc_info:
+        LearningSemanticRouter(model=model).route("这个怎么理解？")
 
-    assert result.intent is RouteIntent.NEEDS_CLARIFICATION
-    assert result.confidence == 0.0
-    assert result.needs_clarification is True
+    message = str(exc_info.value)
+    assert "function_calling" in message
+    assert "json_schema" in message
+    assert model.direct_invoke_called is True
+
+
+class _MethodAwareModel:
+    def __init__(self, outcomes: dict[str, Any]) -> None:
+        self.outcomes = outcomes
+        self.methods: list[str] = []
+        self.direct_invoke_called = False
+
+    def with_structured_output(self, schema, **kwargs):
+        del schema
+        method = kwargs["method"]
+        self.methods.append(method)
+        outcome = self.outcomes.get(method)
+        if outcome is None:
+            raise NotImplementedError(method)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return _Runnable(response=outcome)
+
+    def invoke(self, messages):
+        self.direct_invoke_called = True
+        outcome = self.outcomes.get("plain")
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+def test_semantic_router_falls_back_from_function_calling_to_json_schema():
+    model = _MethodAwareModel(
+        {
+            "function_calling": TimeoutError("timed out"),
+            "json_schema": {
+                "intent": "concept_qa",
+                "confidence": 0.9,
+                "needs_clarification": False,
+            },
+        }
+    )
+
+    result = LearningSemanticRouter(model=model, transport_cooldown_seconds=0).route("DIKW 是什么")
+
+    assert result.intent is RouteIntent.CONCEPT_QA
+    assert model.methods == ["function_calling", "json_schema"]
     assert model.direct_invoke_called is False
+
+
+def test_semantic_router_tries_the_next_transport_when_output_is_invalid():
+    model = _MethodAwareModel(
+        {
+            "function_calling": {
+                "intent": "current_datetime",
+                "confidence": 0.9,
+                "needs_clarification": False,
+            },
+            "json_schema": {
+                "intent": "concept_qa",
+                "confidence": 0.9,
+                "needs_clarification": False,
+            },
+        }
+    )
+
+    result = LearningSemanticRouter(model=model).route("DIKW 是什么")
+
+    assert result.intent is RouteIntent.CONCEPT_QA
+    assert model.methods == ["function_calling", "json_schema"]
+    assert model.direct_invoke_called is False
+
+
+def test_semantic_router_falls_back_to_plain_json_when_structured_methods_are_unavailable():
+    model = _MethodAwareModel(
+        {
+            "function_calling": NotImplementedError("unsupported"),
+            "json_schema": NotImplementedError("unsupported"),
+            "plain": AIMessage(content='{"intent":"follow_up","confidence":0.84,"needs_clarification":false}'),
+        }
+    )
+
+    result = LearningSemanticRouter(model=model).route("那它为什么会这样？")
+
+    assert result.intent is RouteIntent.FOLLOW_UP
+    assert result.confidence == 0.84
+    assert model.methods == ["function_calling", "json_schema"]
+    assert model.direct_invoke_called is True
+
+
+def test_semantic_router_cools_down_a_timed_out_transport():
+    model = _MethodAwareModel(
+        {
+            "function_calling": TimeoutError("timed out"),
+            "json_schema": {
+                "intent": "concept_qa",
+                "confidence": 0.9,
+                "needs_clarification": False,
+            },
+        }
+    )
+    router = LearningSemanticRouter(model=model, transport_cooldown_seconds=300)
+
+    router.route("第一个问题")
+    router.route("第二个问题")
+
+    assert model.methods == ["function_calling", "json_schema", "json_schema"]
 
 
 def test_semantic_router_sends_current_query_with_compact_recent_context():

@@ -339,12 +339,16 @@ def _match_grounded_learning(router: Any, context: QueryContext) -> bool:
 
 def _build_grounded_learning(router: Any, context: QueryContext) -> RouteDecision:
     intent = RouteIntent.COMPARISON if "comparison" in context.detected_intents else RouteIntent.CONCEPT_QA
+    reasons = ["课程相关知识问答"]
+    concept_match = context.metadata.get("course_concept_match")
+    if isinstance(concept_match, dict) and concept_match.get("display_name"):
+        reasons.append(f"课程概念词表命中: {concept_match['display_name']}")
     return RouteDecision(
         family=RouteFamily.LEARNING,
         intent=intent,
         execution_mode=ExecutionMode.GROUNDED_GENERATION,
         confidence=0.80,
-        reasons=["课程相关知识问答"],
+        reasons=reasons,
         retrieval_policy=RetrievalPolicy.REQUIRED,
         executor_key="course_rag",
         enrichment=EnrichmentPlan(

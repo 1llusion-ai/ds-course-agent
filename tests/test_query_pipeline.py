@@ -19,6 +19,7 @@ from ds_course_agent.agent.routing import (
     get_preprocessor,
 )
 from ds_course_agent.agent.routing.router import QueryRouter
+from ds_course_agent.courses import CourseContext
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,16 @@ class _SemanticRouterStub:
                 needs_clarification=True,
             ),
         )
+
+
+class _FailingSemanticRouter:
+    def __init__(self, error: Exception | None = None):
+        self.error = error or RuntimeError("provider unavailable")
+        self.calls: list[tuple[str, str]] = []
+
+    def route(self, query: str, recent_context: str = "") -> _SemanticOutput:
+        self.calls.append((query, recent_context))
+        raise self.error
 
 
 def _context(query: str, *, history: list | None = None) -> QueryContext:
@@ -400,7 +411,7 @@ class TestSemanticRouterFallback:
         assert len(semantic.calls) == 1
 
     def test_semantic_comparison_uses_grounded_policy(self):
-        query = "监督学习和无监督学习有什么区别？"
+        query = "这两种方法有什么区别？"
         router, semantic = _router({query: _SemanticOutput(RouteIntent.COMPARISON, 0.93)})
 
         decision = router.route(_context(query))
@@ -450,6 +461,125 @@ class TestSemanticRouterFallback:
         assert decision.intent is RouteIntent.REFUSAL
         assert decision.execution_mode is ExecutionMode.STATIC_RESPONSE
         assert len(semantic.calls) == 1
+
+    def test_semantic_router_infrastructure_failure_routes_concept_question_to_rag(self):
+        query = "什么是马尔可夫链？"
+        semantic = _FailingSemanticRouter()
+        context = _context(query)
+
+        decision = QueryRouter(semantic_router=semantic).route(context)
+
+        _assert_route(
+            decision,
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.CONCEPT_QA,
+            mode=ExecutionMode.GROUNDED_GENERATION,
+            policy=RetrievalPolicy.REQUIRED,
+        )
+        assert len(semantic.calls) == 1
+        assert "semantic_router_unavailable" in decision.reasons
+
+    def test_semantic_router_infrastructure_failure_keeps_ambiguous_query_in_clarification(self):
+        query = "这个怎么弄"
+        semantic = _FailingSemanticRouter(TimeoutError("timed out"))
+        context = _context(query)
+
+        decision = QueryRouter(semantic_router=semantic).route(context)
+
+        _assert_route(
+            decision,
+            family=RouteFamily.BOUNDARY,
+            intent=RouteIntent.NEEDS_CLARIFICATION,
+            mode=ExecutionMode.STATIC_RESPONSE,
+            policy=RetrievalPolicy.DISABLED,
+        )
+        assert len(semantic.calls) == 1
+        assert context.special_case_response
+
+    def test_semantic_router_infrastructure_failure_respects_scope_guard(self):
+        query = "什么是马尔可夫链？"
+        context = _context(query)
+        context.scope_action = "deny"
+        semantic = _FailingSemanticRouter()
+
+        decision = QueryRouter(semantic_router=semantic).route(context)
+
+        assert decision.family is RouteFamily.BOUNDARY
+        assert decision.intent is RouteIntent.NEEDS_CLARIFICATION
+
+
+class TestCourseConceptVocabulary:
+    def test_dikw_question_uses_course_graph_before_semantic_router(self):
+        query = "DIKW金字塔模型是什么?"
+        router, semantic = _router()
+        context = _context(query)
+
+        decision = router.route(context)
+
+        _assert_route(
+            decision,
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.CONCEPT_QA,
+            mode=ExecutionMode.GROUNDED_GENERATION,
+            policy=RetrievalPolicy.REQUIRED,
+        )
+        assert semantic.calls == []
+        assert context.metadata["course_concept_match"]["concept_id"] == "dikw_pyramid"
+        assert any("DIKW" in reason for reason in decision.reasons)
+
+    def test_explicit_course_only_uses_its_own_graph(self):
+        query = "DIKW金字塔模型是什么?"
+        router, semantic = _router({query: _SemanticOutput(RouteIntent.CONCEPT_QA, 0.9)})
+        context = _context(query)
+        context.course_context = CourseContext(course_id="digital-literacy")
+
+        decision = router.route(context)
+
+        _assert_route(
+            decision,
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.CONCEPT_QA,
+            mode=ExecutionMode.GROUNDED_GENERATION,
+            policy=RetrievalPolicy.REQUIRED,
+        )
+        assert len(semantic.calls) == 1
+        assert "course_concept_match" not in context.metadata
+
+    def test_digital_literacy_graph_matches_its_own_dikw_concept(self):
+        query = "DIKW数据价值层次是什么"
+        router, semantic = _router()
+        context = _context(query)
+        context.course_context = CourseContext(course_id="digital-literacy")
+
+        decision = router.route(context)
+
+        _assert_route(
+            decision,
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.CONCEPT_QA,
+            mode=ExecutionMode.GROUNDED_GENERATION,
+            policy=RetrievalPolicy.REQUIRED,
+        )
+        assert semantic.calls == []
+        assert context.metadata["course_concept_match"]["concept_id"] == "dl_2_1_2"
+
+    def test_unknown_course_falls_back_without_raising(self):
+        query = "DIKW金字塔模型是什么?"
+        router, semantic = _router({query: _SemanticOutput(RouteIntent.CONCEPT_QA, 0.9)})
+        context = _context(query)
+        context.course_context = CourseContext(course_id="missing-course")
+
+        decision = router.route(context)
+
+        _assert_route(
+            decision,
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.CONCEPT_QA,
+            mode=ExecutionMode.GROUNDED_GENERATION,
+            policy=RetrievalPolicy.REQUIRED,
+        )
+        assert len(semantic.calls) == 1
+        assert "course_concept_match" not in context.metadata
 
 
 class _NoopHooks:

@@ -9,6 +9,13 @@ import re
 from typing import Any
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.courses import CourseCatalog
+from ds_course_agent.shared.paths import PROJECT_ROOT
+from ds_course_agent.teaching.knowledge_mapper import (
+    ConceptMatchStrength,
+    MatchedConcept,
+    get_knowledge_mapper,
+)
 
 from .models import ExecutionMode, QueryContext, RouteDecision, RouteFamily, RouteIntent
 from .policy import build_learning_decision
@@ -111,6 +118,8 @@ _DIRECT_CODE_EXAMPLE_CUES = [
     "给我一段",
     "用python",
 ]
+
+_CODE_INTENTS = frozenset({"code_request", "python_execution", "code_review"})
 
 
 def _has_hyperparameter_domain_cue(query: str) -> bool:
@@ -448,6 +457,18 @@ class QueryRouter:
 
         if is_hyperparameter_concept:
             return True
+        if assignment_concept_without_course_signal:
+            return False
+
+        concept_match = self._match_course_concept(context)
+        if concept_match is not None:
+            context.metadata["course_concept_match"] = {
+                "concept_id": concept_match.concept_id,
+                "display_name": concept_match.display_name,
+                "method": concept_match.method,
+                "score": concept_match.score,
+            }
+            return True
 
         strong_course_keywords = [
             "数据科学",
@@ -478,9 +499,45 @@ class QueryRouter:
             "贝叶斯",
             "神经网络",
         ]
-        if assignment_concept_without_course_signal:
-            return False
         return any(keyword in query for keyword in strong_course_keywords)
+
+    def _match_course_concept(self, context: QueryContext) -> MatchedConcept | None:
+        """Return a strong concept match from the turn's course graph.
+
+        The course graph is the source of truth for each course's vocabulary.
+        When a turn declares a course, only that course's graph is consulted:
+        falling back to the default graph would leak one course's concepts into
+        another course's routing decisions.
+        """
+
+        course_context = getattr(context, "course_context", None)
+        try:
+            if course_context is None:
+                mapper = get_knowledge_mapper()
+            else:
+                course_id = getattr(course_context, "course_id", None)
+                if not course_id:
+                    return None
+                manifest = CourseCatalog.from_directory(PROJECT_ROOT / "data" / "courses").require(course_id)
+                if not manifest.is_ready or not manifest.knowledge_graph_path:
+                    return None
+                mapper = get_knowledge_mapper(manifest)
+            matches = mapper.match_question_rules(self._normalize(context.normalized_query))
+        except Exception as exc:
+            logger.warning(
+                "Course concept vocabulary unavailable (%s); using keyword fallback",
+                type(exc).__name__,
+            )
+            return None
+
+        for match in matches:
+            if (
+                match.method in {"exact_alias", "regex_rule"}
+                and match.match_strength == ConceptMatchStrength.STRONG
+                and match.routing_eligible
+            ):
+                return match
+        return None
 
     def _is_hyperparameter_concept_question(self, query: str) -> bool:
         """Detect natural-language ML hyperparameter questions with ``name=value``.
@@ -510,9 +567,16 @@ class QueryRouter:
                 semantic_router = None
 
         if semantic_router is None:
-            return self._clarification_decision(context, "semantic_router_unavailable")
+            return self._deterministic_learning_fallback(context, "semantic_router_unavailable")
 
-        output = semantic_router.route(context.original_query, context.recent_context)
+        try:
+            output = semantic_router.route(context.original_query, context.recent_context)
+        except Exception as exc:
+            logger.warning(
+                "Semantic router failed (%s); using deterministic learning fallback",
+                type(exc).__name__,
+            )
+            return self._deterministic_learning_fallback(context, "semantic_router_unavailable")
         intent = output.intent
         if float(output.confidence) < float(config.ROUTER_MIN_CONFIDENCE):
             return self._clarification_decision(context, "semantic_router_low_confidence")
@@ -539,6 +603,27 @@ class QueryRouter:
             reasons=["learning semantic router"],
             requires_course_grounding=self._explicit_course_grounding_requested(context.normalized_query),
         )
+
+    def _deterministic_learning_fallback(self, context: QueryContext, reason: str) -> RouteDecision:
+        """Use course RAG when the semantic router infrastructure failed.
+
+        This never widens the scope guard's decision: it only handles turns the
+        scope guard already allowed and that carry an explicit concept-question
+        cue. Code requests keep their own paths and stay out of this fallback.
+        """
+
+        intents = set(context.detected_intents or [])
+        if (
+            context.scope_action == "allow"
+            and _has_concept_question_cue(self._normalize(context.normalized_query))
+            and not intents.intersection(_CODE_INTENTS)
+        ):
+            return build_learning_decision(
+                RouteIntent.CONCEPT_QA,
+                confidence=0.60,
+                reasons=[reason, "concept_question_deterministic_fallback"],
+            )
+        return self._clarification_decision(context, reason)
 
     def _clarification_decision(self, context: QueryContext, reason: str) -> RouteDecision:
         context.special_case_response = (
