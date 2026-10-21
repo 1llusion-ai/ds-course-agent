@@ -12,6 +12,7 @@ import pytest
 
 from ds_course_agent.assessment.evidence import (
     AssessmentTarget,
+    EvidenceSelectionDiagnostics,
     InvalidAssessmentTarget,
     resolve_target,
     select_evidence,
@@ -309,3 +310,93 @@ def test_source_window_keeps_printed_page_and_physical_interval_distinct() -> No
     sources = _select([_doc(center, **metadata)], target, evidence_window_reader=_WindowReader(pages))
     assert sources[0].page == 110
     assert {interval.source_page for interval in sources[0].intervals} == {126, 127}
+
+
+def test_captured_cloud_model_prose_keeps_exact_text_and_provenance() -> None:
+    fixture = json.loads((Path(__file__).parent / "fixtures/assessment_cloud_models_evidence.json").read_text())
+    entry = fixture["documents"][0]
+    original = json.dumps(entry, ensure_ascii=False, sort_keys=True)
+    page = entry["window"][0]
+    page_text = page["page_content"]
+    target = resolve_target(
+        GenerateQuestionsRequest(target_kc_id=fixture["target_kc_id"], count=2), course_id=fixture["course_id"]
+    )
+    diagnostics = EvidenceSelectionDiagnostics()
+
+    sources = select_evidence(
+        [_doc(entry["page_content"], **entry["metadata"])],
+        target,
+        max_sources=3,
+        max_chars=6000,
+        question_count=2,
+        evidence_window_reader=_WindowReader([_doc(page_text, **page["metadata"])]),
+        diagnostics=diagnostics,
+    )
+
+    assert len(sources) == 1, "the captured complete prose must be usable despite mixed round-bracket widths"
+    assert diagnostics.accepted_sentences == 2
+    source = sources[0]
+    assert source.text == page_text[331:457] + "\n" + page_text[457:521]
+    assert source.page == 127
+    assert [(interval.source_page, interval.start, interval.end) for interval in source.intervals] == [
+        (143, 331, 457),
+        (143, 457, 521),
+    ]
+    assert {interval.page_sha256 for interval in source.intervals} == {
+        "d74c631e67e1ceb589f38698a371eae2f069fa86beb8793bdad291bd3c9e64b5"
+    }
+    assert hashlib.sha256(page_text.encode()).hexdigest() == source.intervals[0].page_sha256
+    assert all(interval.source_id == "digital-literacy-course.pdf" for interval in source.intervals)
+    assert json.dumps(entry, ensure_ascii=False, sort_keys=True) == original
+
+
+def test_minimal_actual_cloud_model_definition_is_publishable() -> None:
+    sentence = (
+        "IaaS 将计算、存储资源等基础设施作为服务出租，PaaS 将平台作为服务出租，而 SaaS 把软件作为服务出租（图 5-4)。"
+    )
+    assert len(sentence) == 64
+    target = resolve_target(GenerateQuestionsRequest(target_kc_id="dl_5_2_1_1"), course_id="digital-literacy")
+    sources = _select([_doc(sentence)], target, count=2)
+    assert len(sources) == 1
+    assert sources[0].text == sentence
+
+
+@pytest.mark.parametrize(
+    "brackets", ["（取中间位置)", "(取中间位置）", "（取[中间]位置)", "（取中间位置）", "(取中间位置)"]
+)
+def test_prose_round_bracket_width_equivalence_is_course_independent(brackets: str) -> None:
+    target = AssessmentTarget("median", "中位数", ("中位数",))
+    sentence = f"中位数是有序数列的中间值{brackets}，可以描述数据的集中趋势。"
+    assert _select([_doc(sentence)], target)[0].text == sentence
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    ["（缺少闭括号", "孤立闭括号)", "（错误[嵌套)]", "（不同类型]", "[不同类型）", "［方括号宽度]"],
+)
+def test_prose_round_bracket_equivalence_still_rejects_structural_corruption(corruption: str) -> None:
+    target = AssessmentTarget("median", "中位数", ("中位数",))
+    assert not _select([_doc(f"中位数用于描述有序数据的中间位置{corruption}。")], target)
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [r"$G_r(D,a)=\frac{G(D | a}{H_a(D)}$", "$f（x)=x$", "$f(x）=x$"],
+)
+def test_prose_round_bracket_equivalence_does_not_relax_formula_quality(formula: str) -> None:
+    target = AssessmentTarget(None, "增益率", ("增益率",))
+    assert not _select([_doc(f"增益率的定义为 {formula}，用于选择划分属性。")], target)
+
+
+@pytest.mark.parametrize("delimiters", [("", ""), ("$", "$"), (r"\(", r"\)"), (r"\[", r"\]")])
+@pytest.mark.parametrize(
+    ("formula", "valid"), [("f(x)=x", True), ("f（x）=x", True), ("f（x)=x", False), ("f(x）=x", False)]
+)
+def test_function_evidence_keeps_formula_bracket_widths_strict(delimiters, formula, valid) -> None:
+    opening, closing = delimiters
+    sentence = f"函数的定义为 {opening}{formula}{closing}，用于表示输入与输出的对应关系。"
+    target = AssessmentTarget(None, "函数", ("函数",))
+    sources = _select([_doc(sentence)], target)
+    assert bool(sources) is valid
+    if valid:
+        assert sources[0].text == sentence

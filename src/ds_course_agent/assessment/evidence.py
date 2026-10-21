@@ -166,10 +166,11 @@ def _source_metadata(metadata: Mapping[str, Any]) -> tuple[str | None, int | Non
 
 
 def _has_balanced_delimiters(text: str) -> bool:
-    pairs = {"(": ")", "[": "]", "{": "}", "（": "）", "【": "】", "《": "》"}
+    """Treat round-bracket widths alike only in the prose validation view."""
+    pairs = {"(": ")", "[": "]", "{": "}", "【": "】", "《": "》"}
     closers = set(pairs.values())
     stack: list[str] = []
-    for character in text:
+    for character in text.translate(str.maketrans("（）", "()")):
         if character in pairs:
             stack.append(pairs[character])
         elif character in closers:

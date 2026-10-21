@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from ds_course_agent.courses import CourseCatalog, CourseId
 from ds_course_agent.shared.paths import PROJECT_ROOT
 
-EVIDENCE_POLICY_VERSION = "target-coverage/2"
+EVIDENCE_POLICY_VERSION = "target-coverage/3"
 REVIEW_POLICY_VERSION = "evidence-and-blind-critic/3"
 
 

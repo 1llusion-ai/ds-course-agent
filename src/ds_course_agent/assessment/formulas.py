@@ -8,7 +8,9 @@ from collections.abc import Iterable
 from ds_course_agent.assessment.models import FormulaQuality
 
 _DELIMITED_FORMULA = re.compile(r"\$([^$\n]+)\$|\\\((.+?)\\\)|\\\[(.+?)\\\]", re.DOTALL)
-_EQUATION_LHS = re.compile(r"([A-Za-z\\][A-Za-z0-9_\\]*(?:\([^()\n]{1,100}\))?)\s*$")
+# Recognize both round-bracket widths without repairing the extracted tokens.
+# Strict pairing remains the responsibility of _balanced_formula.
+_EQUATION_LHS = re.compile(r"([A-Za-z\\][A-Za-z0-9_\\]*(?:[(（][^()（）\n]{1,100}[)）])?)\s*$")
 
 
 def _balanced_formula(text: str) -> bool:
@@ -78,7 +80,7 @@ def extract_formulas(text: str) -> tuple[str, ...]:
 def analyze_formula_quality(text: str) -> tuple[tuple[str, ...], FormulaQuality]:
     """Return normalized formulas and fail closed on malformed math structure."""
     formulas = extract_formulas(text)
-    looks_like_formula = bool(re.search(r"\\(?:frac|sum|sqrt)\b|\$|[A-Za-z]\s*\([^\n]{0,80}=", text))
+    looks_like_formula = bool(re.search(r"\\(?:frac|sum|sqrt)\b|\$|[A-Za-z]\s*[(（][^\n]{0,80}=", text))
     if looks_like_formula and (not _balanced_formula(text) or not formulas):
         return (), FormulaQuality.MALFORMED
     if not formulas:

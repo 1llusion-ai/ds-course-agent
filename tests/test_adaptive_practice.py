@@ -96,6 +96,59 @@ def test_generation_request_rejects_client_planning_facts():
             GenerateQuestionsRequest.model_validate({"target_kc_id": "pca", field: "spoofed"})
 
 
+def test_evidence_policy_change_replans_nonretryable_failure_without_mutating_history(tmp_path, monkeypatch):
+    import ds_course_agent.teaching.assessment_assignment as assignment
+    from ds_course_agent.assessment.feedback import AssessmentFailureKind
+    from ds_course_agent.assessment.preparation import PreparationRepository, PreparationStatus
+    from ds_course_agent.assessment.versioning import assessment_resource_revision
+
+    current = assessment_resource_revision("data-science-intro")
+    assert current.evidence_policy == "target-coverage/3"
+    legacy = current.model_copy(update={"evidence_policy": "target-coverage/2"})
+    planner = AssessmentAssignmentPlanner()
+    state = LearnerStateSnapshot(student_id="s")
+    mention = build_concept_mentioned_event("session", "s", "pca", "PCA", "第7章", "concept_qa", 1, "PCA")
+    with monkeypatch.context() as patch:
+        patch.setattr(assignment, "assessment_resource_revision", lambda _course: legacy)
+        old_plan = planner.plan_session("session", [mention], state)[0]
+    repository = PreparationRepository(tmp_path / "assessment.db")
+    queued = repository.enqueue(
+        "s",
+        "session",
+        old_plan.display_name,
+        old_plan.request,
+        old_plan.source_event_ids,
+        plan_context=old_plan.context,
+    )
+    running = repository.transition(queued, PreparationStatus.GENERATING)
+    failed = repository.transition(
+        running, PreparationStatus.FAILED, failure_kind=AssessmentFailureKind.INSUFFICIENT_EVIDENCE, retryable=False
+    )
+    consumed = {"pca": (failed.plan_context.opportunity_id,)}
+    new_plan = planner.plan_session("session", [mention], state, consumed_opportunities=consumed)[0]
+    assert new_plan.context.resource_revision == current
+    assert new_plan.context.opportunity_id != failed.plan_context.opportunity_id
+    fresh = repository.enqueue(
+        "s",
+        "session",
+        new_plan.display_name,
+        new_plan.request,
+        new_plan.source_event_ids,
+        plan_context=new_plan.context,
+    )
+    assert fresh.id != failed.id
+    assert fresh.status is PreparationStatus.QUEUED
+    assert fresh.generation_progress is None
+    assert repository.get(failed.id, "s") == failed
+    assert failed.status is PreparationStatus.FAILED and not failed.retryable
+    assert not planner.plan_session(
+        "session",
+        [mention],
+        state,
+        consumed_opportunities={"pca": (failed.plan_context.opportunity_id, fresh.plan_context.opportunity_id)},
+    )
+
+
 def test_unversioned_or_stale_progress_cannot_reach_retrieval_or_models():
     from unittest.mock import Mock
 
@@ -125,6 +178,11 @@ def test_unversioned_or_stale_progress_cannot_reach_retrieval_or_models():
     stale = progress.model_copy(update={"resource_revision": current.model_copy(update={"graph_digest": "stale"})})
     with pytest.raises(AssessmentResourceChangedError):
         service.generate(request, progress=stale)
+    old_policy = progress.model_copy(
+        update={"resource_revision": current.model_copy(update={"evidence_policy": "target-coverage/2"})}
+    )
+    with pytest.raises(AssessmentResourceChangedError):
+        service.generate(request, progress=old_policy)
     assert not progress.model_copy(update={"repair_round": 4}).retryable
     retriever.retrieve.assert_not_called()
     generator.generate_candidates.assert_not_called()

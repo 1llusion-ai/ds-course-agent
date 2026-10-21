@@ -119,6 +119,15 @@ separate textbook anchors without pretending those members are identity aliases.
 Production provenance binds exact source/physical-page/character intervals to
 page hashes. A bounded contiguous three-page window can complete cross-page
 sentences while retaining printed page references and each physical interval.
+Prose completeness treats fullwidth and halfwidth round brackets as the same
+pairing class only in its validation view; source text, hashes and intervals
+remain exact. Missing, crossed or different-type delimiters still fail.
+Formula recognition and extraction include both round-bracket widths in bare
+function equations as well as explicitly delimited math. Extracted tokens retain
+their original widths: the formula quality gate accepts matching widths and
+rejects mixed pairs, without repairing mathematical source text. Evidence policy
+`target-coverage/3` gives prior failed opportunities a new resource identity and
+prevents reuse of old-policy progress and reviewed items.
 Malformed formulas and truncated delimiters are rejected. Only explicit immediate
 anaphora extends an accepted anchor (at most two sentences); an unrelated sentence,
 paragraph or numbered subsection resets it. Legacy non-production documents can

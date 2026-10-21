@@ -1,0 +1,35 @@
+{
+  "course_id": "digital-literacy",
+  "target_kc_id": "dl_5_2_1_1",
+  "origin": "Actual assessment context 20261021/135230_361725_rag_context_1e72250c8116.txt, matched verbatim to bound index; source page reconstructed from read-only metadata. Only the relevant retrieved chunk and physical page 143 are retained.",
+  "documents": [
+    {
+      "page_content": "5.2.1 云计算基本概念背景知识云计算实现了通过互联网提供可伸缩的、廉价的分布式计算能力，用户只需要在具备互联网接入条件的地方就可以随时随地获得各类所需的数字技术资源。云计算代表了以虚拟化技术为核心、以低成本为目标、动态可伸缩的网络应用基础设施，是近十年来最有代表性的网络计算技术与模式。云计算主要包括三种典型的服务模式：基础设施即服务（Infrastructure as a Service,IaaS)，平台即服务（Platform as a Service,PaaS）和软件即服务（Software asa Service,SaaS)。IaaS 将计算、存储资源等基础设施作为服务出租，PaaS 将平台作为服务出租，而 SaaS 把软件作为服务出租（图 5-4)。图 5-4 云计算的服务模式所谓的云即提供的服务，根据服务的对象可以分为以下三类：(1) 公有云，面向所有的用户。只要是注册付费的用户都可以使用，典型的公有云服务商有 Amazon 和阿里巴巴。(2) 私有云，只为特定用户提供服务，比如企业自建的云环境，只能为内部网络用户提供服务。相比公有云，私有云可以更好保证数据的安全性。(3) 混合云，可以理解为公有云和私有云的混合搭配应用。",
+      "metadata": {
+        "metadata_schema_version": "retrieval-provenance/1.0",
+        "source": "digital-literacy-course.pdf",
+        "source_id": "digital-literacy-course.pdf",
+        "source_page": 143,
+        "book_page": 127,
+        "source_char_start": 186,
+        "source_char_end": 712,
+        "source_page_sha256": "d74c631e67e1ceb589f38698a371eae2f069fa86beb8793bdad291bd3c9e64b5",
+        "source_page_text": "表 5-2 大数据在各个领域的应用领域大数据应用制造利用工业大数据提升制造业水平，优化生产计划，优化供应链汽车无人驾驶汽车，自动导航互联网个性化推荐，针对性广告投送能源优化电网运行，优化电力需求响应，保障电网运行安全物流优化物流网络，提高物流效率，降低物流成本交通智能交通，优化交通线规划体育预测比赛结果，选拔代表银行信贷风险预测，出台客户个性化挽留策略\n5.2 云计算\n5.2.1 云计算基本概念背景知识云计算实现了通过互联网提供可伸缩的、廉价的分布式计算能力，用户只需要在具备互联网接入条件的地方就可以随时随地获得各类所需的数字技术资源。云计算代表了以虚拟化技术为核心、以低成本为目标、动态可伸缩的网络应用基础设施，是近十年来最有代表性的网络计算技术与模式。云计算主要包括三种典型的服务模式：基础设施即服务（Infrastructure as a Service,IaaS)，平台即服务（Platform as a Service,PaaS）和软件即服务（Software asa Service,SaaS)。IaaS 将计算、存储资源等基础设施作为服务出租，PaaS 将平台作为服务出租，而 SaaS 把软件作为服务出租（图 5-4)。图 5-4 云计算的服务模式所谓的云即提供的服务，根据服务的对象可以分为以下三类：(1) 公有云，面向所有的用户。只要是注册付费的用户都可以使用，典型的公有云服务商有 Amazon 和阿里巴巴。(2) 私有云，只为特定用户提供服务，比如企业自建的云环境，只能为内部网络用户提供服务。相比公有云，私有云可以更好保证数据的安全性。(3) 混合云，可以理解为公有云和私有云的混合搭配应用。",
+        "chunk_id": "digital-literacy-course.pdf_476f65e8",
+        "chunk_type": "semantic"
+      },
+      "window": [
+        {
+          "page_content": "表 5-2 大数据在各个领域的应用领域大数据应用制造利用工业大数据提升制造业水平，优化生产计划，优化供应链汽车无人驾驶汽车，自动导航互联网个性化推荐，针对性广告投送能源优化电网运行，优化电力需求响应，保障电网运行安全物流优化物流网络，提高物流效率，降低物流成本交通智能交通，优化交通线规划体育预测比赛结果，选拔代表银行信贷风险预测，出台客户个性化挽留策略\n5.2 云计算\n5.2.1 云计算基本概念背景知识云计算实现了通过互联网提供可伸缩的、廉价的分布式计算能力，用户只需要在具备互联网接入条件的地方就可以随时随地获得各类所需的数字技术资源。云计算代表了以虚拟化技术为核心、以低成本为目标、动态可伸缩的网络应用基础设施，是近十年来最有代表性的网络计算技术与模式。云计算主要包括三种典型的服务模式：基础设施即服务（Infrastructure as a Service,IaaS)，平台即服务（Platform as a Service,PaaS）和软件即服务（Software asa Service,SaaS)。IaaS 将计算、存储资源等基础设施作为服务出租，PaaS 将平台作为服务出租，而 SaaS 把软件作为服务出租（图 5-4)。图 5-4 云计算的服务模式所谓的云即提供的服务，根据服务的对象可以分为以下三类：(1) 公有云，面向所有的用户。只要是注册付费的用户都可以使用，典型的公有云服务商有 Amazon 和阿里巴巴。(2) 私有云，只为特定用户提供服务，比如企业自建的云环境，只能为内部网络用户提供服务。相比公有云，私有云可以更好保证数据的安全性。(3) 混合云，可以理解为公有云和私有云的混合搭配应用。",
+          "metadata": {
+            "source": "digital-literacy-course.pdf",
+            "source_id": "digital-literacy-course.pdf",
+            "source_page": 143,
+            "book_page": 127,
+            "source_page_sha256": "d74c631e67e1ceb589f38698a371eae2f069fa86beb8793bdad291bd3c9e64b5"
+          }
+        }
+      ]
+    }
+  ]
+}

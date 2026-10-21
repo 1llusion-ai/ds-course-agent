@@ -86,6 +86,19 @@ def test_reviewed_content_is_shared_but_active_assignments_are_student_scoped(tm
     assert not assets.select(request, revision, excluded_item_ids=a.item_ids)
 
 
+def test_old_evidence_policy_assets_are_not_selected_for_current_resources(tmp_path):
+    model = _StructuredModel(_quiz_payload(2, Difficulty.BASIC))
+    generator, _ = _service_with_model(model, documents=[_Document(page_content=PCA_EVIDENCE, metadata={})])
+    request = GenerateQuestionsRequest(target_kc_id="pca", count=2)
+    quiz = generator.generate(request)
+    current = quiz.resource_revision
+    legacy = current.model_copy(update={"evidence_policy": "target-coverage/2"})
+    assets = ReviewedItemRepository(tmp_path / "assessment.db")
+    assets.accumulate(request, quiz.model_copy(update={"resource_revision": legacy}))
+    assert assets.select(request, legacy)
+    assert not assets.select(request, current)
+
+
 def test_missing_slot_only_is_generated_and_reviewed(tmp_path):
     class Editor:
         def __init__(self):
