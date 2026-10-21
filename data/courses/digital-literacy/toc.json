@@ -8,9 +8,9 @@
     "kind": "local_pdf",
     "type": "local_pdf",
     "path": "var/course_sources/digital-literacy-course.pdf",
-    "sha256": null,
-    "status": "placeholder",
-    "placeholder": true
+    "sha256": "7c516f878df0e9b2457ed8734f7867c59a2713109dc6a089fda4ff5b364e3109",
+    "status": "verified",
+    "placeholder": false
   },
   "known_anomalies": [
     "目录首章存在错误书签。",

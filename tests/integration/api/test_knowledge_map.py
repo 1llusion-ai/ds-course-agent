@@ -94,14 +94,16 @@ def test_map_aggregates_new_learning_events_before_overlay(client, map_memory, m
     assert nodes["missing_values"]["learning_state"] == "recent"
 
 
-def test_course_without_graph_does_not_show_default_course_nodes(client, map_memory):
+def test_digital_literacy_graph_shows_only_its_own_course_nodes(client, map_memory):
     response = client.get("/api/knowledge-map?course_id=digital-literacy", headers={"x-test-student-id": "alice"})
 
     assert response.status_code == 200
     assert response.json()["course_name"] == "数字素养与技能导论"
-    assert response.json()["nodes"] == []
-    assert response.json()["edges"] == []
-    assert response.json()["chapters"] == []
+    assert len(response.json()["chapters"]) == 8
+    assert response.json()["nodes"]
+    assert response.json()["edges"]
+    assert any(node["canonical_id"] == "dl_5_4_4" for node in response.json()["nodes"])
+    assert all(node["canonical_id"].startswith(("dl_", "chapter:")) for node in response.json()["nodes"])
 
 
 @pytest.mark.parametrize("course_id", ["unknown-course", "../../bad"])

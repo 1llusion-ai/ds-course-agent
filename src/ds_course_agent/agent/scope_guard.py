@@ -74,10 +74,10 @@ def _matches_any(text: str, patterns: tuple[str, ...]) -> bool:
     return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
 
 
-def _scope_response(*, category: str, bridge_hint: str = "") -> str:
-    redirect = bridge_hint or "如果你想从数据科学、AI、编程、论文、开源项目或课程学习角度分析这个主题，我可以继续帮你。"
+def _scope_response(*, category: str, bridge_hint: str = "", course_name: str = "数据科学导论") -> str:
+    redirect = bridge_hint or f"如果你想从《{course_name}》的课程概念、教材或学习实践角度分析这个主题，我可以继续帮你。"
     return (
-        "这个问题偏通用事实查询，不属于“数字力”导学智能体的《数据科学导论》课程回答范围，"
+        f"这个问题偏通用事实查询，不属于“数字力”导学智能体的《{course_name}》课程回答范围，"
         "所以本次不进行通用联网搜索，也不直接展开回答。\n\n"
         f"{redirect}"
     )
@@ -343,7 +343,12 @@ _GENERAL_FACT_PATTERNS = (
 )
 
 
-def assess_query_scope(question: str, *, web_search_requested: bool = False) -> ScopeDecision:
+def assess_query_scope(
+    question: str,
+    *,
+    web_search_requested: bool = False,
+    course_name: str = "数据科学导论",
+) -> ScopeDecision:
     """Classify whether a user turn is within the teaching assistant scope.
 
     The guard deliberately allows bridgeable data-science framings even when the
@@ -368,7 +373,7 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
             "smalltalk",
             0.99,
             "greeting",
-            "你好！我是“数字力”导学智能体，当前辅导《数据科学导论》课程，可以帮你查课程资料、解释概念、分析代码或寻找课程相关论文/项目。",
+            f"你好！我是“数字力”导学智能体，当前辅导《{course_name}》课程，可以帮你查课程资料、解释概念、分析代码或寻找课程相关论文/项目。",
         )
 
     if normalized in _THANKS_TERMS or compact_lowered in _THANKS_TERMS:
@@ -377,7 +382,7 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
             "smalltalk",
             0.99,
             "thanks",
-            "不客气。如果还有《数据科学导论》课程相关问题，可以继续问我。",
+            f"不客气。如果还有《{course_name}》课程相关问题，可以继续问我。",
         )
 
     safety_rule = _match_safety_boundary((normalized, compact_lowered, lowered))
@@ -417,6 +422,7 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
             "general political/current-office fact query",
             _scope_response(
                 category="politics_general_fact",
+                course_name=course_name,
                 bridge_hint="如果你想分析历任总统年龄、任期、选举数据或做可视化项目，我可以帮你设计数据分析方案。",
             ),
         )
@@ -432,6 +438,7 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
             "sports/celebrity general fact query",
             _scope_response(
                 category="sports_or_celebrity_fact",
+                course_name=course_name,
                 bridge_hint="如果你想分析球员年龄分布、比赛数据、薪资数据或做体育数据科学项目，我可以继续帮你。",
             ),
         )
@@ -443,7 +450,7 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
             "off_topic_general",
             0.90,
             "explicit off-topic keyword without data-science framing",
-            _scope_response(category="off_topic_general"),
+            _scope_response(category="off_topic_general", course_name=course_name),
         )
 
     if web_search_requested and _matches_any(compact_lowered, _GENERAL_FACT_PATTERNS):
@@ -452,7 +459,7 @@ def assess_query_scope(question: str, *, web_search_requested: bool = False) -> 
             "general_fact_search",
             0.78,
             "web search requested for likely general fact query",
-            _scope_response(category="general_fact_search"),
+            _scope_response(category="general_fact_search", course_name=course_name),
         )
 
     return ScopeDecision("allow", "unknown_or_course_possible", 0.55, "no high-confidence out-of-scope signal")

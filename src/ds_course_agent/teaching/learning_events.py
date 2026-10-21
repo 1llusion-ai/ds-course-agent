@@ -279,6 +279,7 @@ def build_misconception_event(
     source_evidence: str = "",
     raw_user_question: str = "",
     turn_id: str = "0",
+    course_id: CourseId | str = DEFAULT_COURSE_ID,
 ) -> MisconceptionEvent:
     return MisconceptionEvent(
         event_id=create_event_id(),
@@ -295,4 +296,5 @@ def build_misconception_event(
             "raw_user_question": raw_user_question,
             "turn_id": turn_id,
         },
+        course_id=CourseId(course_id),
     )

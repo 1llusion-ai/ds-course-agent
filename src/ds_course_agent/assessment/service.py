@@ -67,6 +67,9 @@ from ds_course_agent.assessment.verifier import (
     EvidenceExcerptCatalog,
     EvidenceVerificationVerdict,
 )
+from ds_course_agent.courses import CourseCatalog, CourseId
+from ds_course_agent.courses.resources import DEFAULT_COURSE_ID
+from ds_course_agent.shared.paths import PROJECT_ROOT
 
 DEFAULT_EVIDENCE_TOP_K = 3
 MAX_EVIDENCE_SOURCES = MAX_QUESTIONS
@@ -157,6 +160,7 @@ class AssessmentService:
         evidence_top_k: int = DEFAULT_EVIDENCE_TOP_K,
         context_max_chars: int | None = None,
         repair_rounds: int = MAX_REPAIR_ROUNDS,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
     ) -> None:
         if isinstance(evidence_top_k, bool) or not isinstance(evidence_top_k, int):
             raise ValueError("evidence_top_k must be an integer")
@@ -168,6 +172,7 @@ class AssessmentService:
             raise ValueError(f"repair_rounds must be between 0 and {MAX_REPAIR_ROUNDS}")
 
         self._retriever = retriever
+        self._course_id = CourseId(course_id)
         self._retriever_lock = RLock()
         self._generator = generator or AssessmentGenerator()
         self._editor = editor or self._generator
@@ -198,7 +203,7 @@ class AssessmentService:
         if progress is not None and progress.request != request:
             raise ValueError("assessment generation progress does not match the request")
         with trace.stage(AssessmentStage.TARGET):
-            target = resolve_target(request)
+            target = resolve_target(request, course_id=str(self._course_id))
         if progress is None:
             try:
                 with trace.stage(AssessmentStage.RETRIEVAL):
@@ -801,15 +806,23 @@ class AssessmentService:
     def _get_retriever(self) -> EvidenceRetriever:
         """Lazily construct the existing RAG service only when no test double is injected."""
 
-        if self._retriever is None:
-            with self._retriever_lock:
-                if self._retriever is None:
-                    try:
-                        from ds_course_agent.retrieval.service import RAGService
+        if self._retriever is not None:
+            return self._retriever
+        with self._retriever_lock:
+            if self._retriever is None:
+                try:
+                    manifest = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(self._course_id)
+                    from ds_course_agent.retrieval.service import RAGService
 
+                    if self._course_id == DEFAULT_COURSE_ID:
                         self._retriever = RAGService()
-                    except Exception as exc:
-                        raise AssessmentUnavailableError("course evidence retrieval is unavailable") from exc
+                    else:
+                        self._retriever = RAGService(
+                            index_binding=manifest.index_binding,
+                            course_name=manifest.display_name,
+                        )
+                except Exception as exc:
+                    raise AssessmentUnavailableError("course evidence retrieval is unavailable") from exc
         return self._retriever
 
     @staticmethod
@@ -823,17 +836,28 @@ class AssessmentService:
 
 
 _assessment_service: AssessmentService | None = None
+_assessment_services_by_course: dict[str, AssessmentService] = {}
 _assessment_service_lock = RLock()
 
 
-def get_assessment_service() -> AssessmentService:
+def get_assessment_service(course_id: CourseId | str = DEFAULT_COURSE_ID) -> AssessmentService:
     """Return the process-local assessment service without initializing external clients."""
 
     global _assessment_service
+    normalized_course_id = str(CourseId(course_id))
+    if normalized_course_id != DEFAULT_COURSE_ID:
+        service = _assessment_services_by_course.get(normalized_course_id)
+        if service is None:
+            with _assessment_service_lock:
+                service = _assessment_services_by_course.get(normalized_course_id)
+                if service is None:
+                    service = AssessmentService(course_id=normalized_course_id)
+                    _assessment_services_by_course[normalized_course_id] = service
+        return service
     if _assessment_service is None:
         with _assessment_service_lock:
             if _assessment_service is None:
-                _assessment_service = AssessmentService()
+                _assessment_service = AssessmentService(course_id=DEFAULT_COURSE_ID)
     return _assessment_service
 
 

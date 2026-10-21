@@ -91,9 +91,22 @@ def _normalized(text: str) -> str:
     return re.sub(r"\s+", "", text).casefold()
 
 
-def resolve_target(request: GenerateQuestionsRequest, catalog_path: Path | None = None) -> AssessmentTarget:
+def resolve_target(
+    request: GenerateQuestionsRequest,
+    catalog_path: Path | None = None,
+    *,
+    course_id: str = "data-science-intro",
+) -> AssessmentTarget:
     """Resolve exact catalog identities without model calls or fuzzy guessing."""
-    path = catalog_path or PROJECT_ROOT / "data" / "knowledge_graph.json"
+    if catalog_path is None:
+        from ds_course_agent.courses import CourseCatalog
+
+        manifest = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(course_id)
+        if not manifest.knowledge_graph_path:
+            raise InvalidAssessmentTarget(f"course {course_id} has no knowledge graph")
+        path = PROJECT_ROOT / manifest.knowledge_graph_path
+    else:
+        path = catalog_path
     catalog = json.loads(path.read_text(encoding="utf-8"))
     for concept in catalog["concepts"]:
         if concept["canonical_id"] != request.target_kc_id:

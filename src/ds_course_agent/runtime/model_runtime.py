@@ -66,7 +66,7 @@ class ModelRuntime:
         self.tool_registry = tool_registry
         self.system_prompt = system_prompt
         self._fallback = fallback
-        self._agent_cache_by_tools: dict[tuple[str, ...], Any] = {}
+        self._agent_cache_by_tools: dict[tuple[tuple[str, ...], str], Any] = {}
 
     def chat(
         self,
@@ -111,7 +111,7 @@ class ModelRuntime:
             empty_reason="direct_empty_response",
         )
 
-    def agent_for_tools(self, allowed_tools: list[str]) -> Any:
+    def agent_for_tools(self, allowed_tools: list[str], system_prompt: str | None = None) -> Any:
         """Return a cached graph agent bound to exactly the requested tool subset."""
 
         if not allowed_tools:
@@ -123,17 +123,22 @@ class ModelRuntime:
             )
 
         tool_names = tuple(sorted(allowed_tools))
-        cached = self._agent_cache_by_tools.get(tool_names)
+        resolved_prompt = self.system_prompt if system_prompt is None else str(system_prompt)
+        cache_key = (tool_names, resolved_prompt)
+        cached = self._agent_cache_by_tools.get(cache_key)
         if cached is not None:
             return cached
 
         tools = self.tool_registry.as_langchain_tools_for(tool_names)
-        graph_agent = self._create_agent(tools)
-        self._agent_cache_by_tools[tool_names] = graph_agent
+        if resolved_prompt == self.system_prompt:
+            graph_agent = self._create_agent(tools)
+        else:
+            graph_agent = self._create_agent(tools, system_prompt=resolved_prompt)
+        self._agent_cache_by_tools[cache_key] = graph_agent
         return graph_agent
 
-    def _create_agent(self, tools: list[Any]) -> Any:
-        return create_agent(model=self.llm, tools=tools, system_prompt=self.system_prompt)
+    def _create_agent(self, tools: list[Any], *, system_prompt: str | None = None) -> Any:
+        return create_agent(model=self.llm, tools=tools, system_prompt=system_prompt or self.system_prompt)
 
     def _retry_policy(self) -> RetryPolicy:
         """Return the one runtime retry budget for a model call."""

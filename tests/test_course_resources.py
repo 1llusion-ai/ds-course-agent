@@ -56,8 +56,9 @@ def test_declared_catalog_contains_the_two_supported_courses() -> None:
         assert entry["physical_page_end"] + toc["page_offset"] == entry["book_page_end"]
     assert toc["source"]["type"] == "local_pdf"
     assert toc["source"]["path"] == "var/course_sources/digital-literacy-course.pdf"
-    assert toc["source"]["sha256"] is None
-    assert toc["source"]["placeholder"] is True
+    assert toc["source"]["sha256"] == digital_literacy.resource_metadata["source"]["sha256"]
+    assert toc["source"]["status"] == "verified"
+    assert toc["source"].get("placeholder") is False
     assert toc["known_anomalies"] == [
         "目录首章存在错误书签。",
         "目录漏列 6.4.2，但正文中存在该小节。",

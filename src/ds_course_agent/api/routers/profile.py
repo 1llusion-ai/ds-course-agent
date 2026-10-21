@@ -11,7 +11,7 @@ from fastapi.concurrency import run_in_threadpool
 from pypdf import PdfReader
 
 from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
-from ds_course_agent.kb.toc_parser import get_toc_parser
+from ds_course_agent.kb.toc_parser import TOCParser, get_toc_parser
 from ds_course_agent.tools.course_rag import build_sources_from_documents, get_rag_service
 
 from ..auth.deps import get_current_student_id
@@ -83,17 +83,37 @@ def _sorted_recent_concepts(profile):
     )
 
 
-@lru_cache(maxsize=1)
-def _get_concept_catalog():
-    catalog_path = DATA_DIR / "knowledge_graph.json"
+def _call_course_scoped(function, *args, course_id: CourseId):
+    """Invoke a course-aware helper while preserving the legacy default call shape."""
+    if course_id == DEFAULT_COURSE_ID:
+        return function(*args)
+    return function(*args, course_id)
+
+
+@lru_cache(maxsize=16)
+def _get_concept_catalog(course_id: CourseId = DEFAULT_COURSE_ID):
+    if course_id == DEFAULT_COURSE_ID:
+        catalog_path = DATA_DIR / "knowledge_graph.json"
+    else:
+        from ds_course_agent.courses import CourseCatalog
+
+        manifest = CourseCatalog.from_directory(DATA_DIR / "courses").require(course_id)
+        if not manifest.knowledge_graph_path:
+            return {}
+        catalog_path = PROJECT_ROOT / manifest.knowledge_graph_path
     with open(catalog_path, encoding="utf-8") as handle:
         data = json.load(handle)
     return {item["canonical_id"]: item for item in data.get("concepts", []) if item.get("canonical_id")}
 
 
-@lru_cache(maxsize=1)
-def _get_cached_toc():
-    return get_toc_parser()
+@lru_cache(maxsize=16)
+def _get_cached_toc(course_id: CourseId = DEFAULT_COURSE_ID):
+    if course_id == DEFAULT_COURSE_ID:
+        return get_toc_parser()
+    from ds_course_agent.courses import CourseCatalog
+
+    manifest = CourseCatalog.from_directory(DATA_DIR / "courses").require(course_id)
+    return TOCParser(str(PROJECT_ROOT / manifest.toc_path))
 
 
 @lru_cache(maxsize=16)
@@ -153,8 +173,8 @@ def _build_distinction_summary(labels: list[str], related_names: list[str], chap
     )
 
 
-def _find_toc_section(concept: dict):
-    toc = _get_cached_toc()
+def _find_toc_section(concept: dict, course_id: CourseId = DEFAULT_COURSE_ID):
+    toc = _get_cached_toc(course_id)
     chapter_no = concept.get("chapter")
     section_no = concept.get("section")
     display_name = _normalize_text(concept.get("display_name"))
@@ -205,8 +225,10 @@ def _clean_pdf_excerpt(raw_text: str, concept: dict, section_info) -> str | None
     return text[:360]
 
 
-def _extract_textbook_excerpt_from_pdf(concept: dict) -> tuple[str | None, list[dict]]:
-    chapter_info, section_info = _find_toc_section(concept)
+def _extract_textbook_excerpt_from_pdf(
+    concept: dict, course_id: CourseId = DEFAULT_COURSE_ID
+) -> tuple[str | None, list[dict]]:
+    chapter_info, section_info = _find_toc_section(concept, course_id)
     if chapter_info is None:
         return None, []
 
@@ -245,9 +267,11 @@ def _build_concept_summary(concept: dict, related_concepts: list[RelatedConcept]
     )
 
 
-def _retrieve_textbook_excerpt_with_rag(concept: dict) -> tuple[str | None, list[dict]]:
+def _retrieve_textbook_excerpt_with_rag(
+    concept: dict, course_id: CourseId = DEFAULT_COURSE_ID
+) -> tuple[str | None, list[dict]]:
     query = f"{concept['display_name']} 是什么"
-    result = get_rag_service().retrieve(query, top_k=2)
+    result = get_rag_service(str(course_id)).retrieve(query, top_k=2)
     sources = build_sources_from_documents(result.documents)
     if not result.documents:
         return None, sources
@@ -256,12 +280,14 @@ def _retrieve_textbook_excerpt_with_rag(concept: dict) -> tuple[str | None, list
     return excerpt[:320], sources
 
 
-def _retrieve_distinction_excerpt_with_rag(labels: list[str]) -> tuple[str | None, list[dict]]:
+def _retrieve_distinction_excerpt_with_rag(
+    labels: list[str], course_id: CourseId = DEFAULT_COURSE_ID
+) -> tuple[str | None, list[dict]]:
     if len(labels) < 2:
         return None, []
 
     query = f"{labels[0]} 和 {labels[1]} 的区别"
-    result = get_rag_service().retrieve(query, top_k=2)
+    result = get_rag_service(str(course_id)).retrieve(query, top_k=2)
     sources = build_sources_from_documents(result.documents)
     if not result.documents:
         return None, sources
@@ -367,8 +393,11 @@ async def resolve_weak_spot(
 
 
 @router.get("/concepts/{concept_id}", response_model=ConceptDetail)
-async def get_concept_detail(concept_id: str):
-    catalog = _get_concept_catalog()
+async def get_concept_detail(
+    concept_id: str,
+    course_id: CourseId = Query(default=DEFAULT_COURSE_ID),
+):
+    catalog = _call_course_scoped(_get_concept_catalog, course_id=course_id)
     concept = catalog.get(concept_id)
     if concept_id.startswith("distinction::"):
         payload = _decode_distinction_payload(concept_id)
@@ -409,7 +438,12 @@ async def get_concept_detail(concept_id: str):
         sources = []
         try:
             rag_excerpt, rag_sources = await asyncio.wait_for(
-                run_in_threadpool(_retrieve_distinction_excerpt_with_rag, labels),
+                run_in_threadpool(
+                    _call_course_scoped,
+                    _retrieve_distinction_excerpt_with_rag,
+                    labels,
+                    course_id=course_id,
+                ),
                 timeout=1.8,
             )
             if rag_excerpt:
@@ -447,17 +481,37 @@ async def get_concept_detail(concept_id: str):
     sources = []
 
     try:
-        textbook_excerpt, sources = await run_in_threadpool(
-            _extract_textbook_excerpt_from_pdf,
-            concept,
-        )
+        if course_id != DEFAULT_COURSE_ID and concept.get("learning_points"):
+            point = concept["learning_points"][0]
+            source = point.get("sources", [{}])[0]
+            textbook_excerpt = source.get("quote")
+            sources = [
+                {
+                    "reference": source.get("source_id", "digital-literacy-course.pdf"),
+                    "book_page": source.get("book_page"),
+                    "source_page": source.get("source_page"),
+                    "quote": source.get("quote", ""),
+                }
+            ]
+        else:
+            textbook_excerpt, sources = await run_in_threadpool(
+                _call_course_scoped,
+                _extract_textbook_excerpt_from_pdf,
+                concept,
+                course_id=course_id,
+            )
     except Exception:
         textbook_excerpt, sources = None, []
 
     if not textbook_excerpt:
         try:
             textbook_excerpt, rag_sources = await asyncio.wait_for(
-                run_in_threadpool(_retrieve_textbook_excerpt_with_rag, concept),
+                run_in_threadpool(
+                    _call_course_scoped,
+                    _retrieve_textbook_excerpt_with_rag,
+                    concept,
+                    course_id=course_id,
+                ),
                 timeout=2.5,
             )
             if rag_sources:

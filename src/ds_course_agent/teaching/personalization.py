@@ -144,6 +144,7 @@ class SQLiteLearnerMemoryRetriever:
             event_repository = SQLiteLearningEventRepository(getattr(episode_repository, "_path", None))
         self._episode_repository = episode_repository
         self._event_repository = event_repository
+        self._uses_default_related_resolver = related_concept_resolver is None
         self._related_concept_resolver = related_concept_resolver or self._default_related_concepts
 
     def retrieve(
@@ -174,7 +175,7 @@ class SQLiteLearnerMemoryRetriever:
                 dict.fromkeys(
                     related_id
                     for concept_id in concepts
-                    for related_id in self._related_concept_resolver(concept_id)
+                    for related_id in self._related_concept_resolver_for_course(concept_id, learner_state.course_id)
                     if related_id not in concepts
                 )
             )
@@ -281,6 +282,13 @@ class SQLiteLearnerMemoryRetriever:
         from ds_course_agent.teaching.knowledge_mapper import get_knowledge_mapper
 
         return get_knowledge_mapper().get_related_concept_ids(concept_id)
+
+    def _related_concept_resolver_for_course(self, concept_id: str, course_id) -> Sequence[str]:
+        if not self._uses_default_related_resolver:
+            return self._related_concept_resolver(concept_id)
+        from ds_course_agent.teaching.knowledge_mapper import get_knowledge_mapper
+
+        return get_knowledge_mapper(course_id).get_related_concept_ids(concept_id)
 
 
 __all__ = [

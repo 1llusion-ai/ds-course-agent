@@ -20,10 +20,14 @@ def record_misconception_event(
     source_evidence: str = "",
     raw_user_question: str = "",
     turn_id: str = "0",
+    course_id: str = "data-science-intro",
 ) -> str:
     """记录学生 misconception 事件到学习画像。"""
+    import ds_course_agent.shared.config as config
+    from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
+    from ds_course_agent.teaching.learning_event_repository import LearningEventRecord, SQLiteLearningEventRepository
     from ds_course_agent.teaching.learning_events import build_misconception_event
-    from ds_course_agent.teaching.memory_core import record_event
+    from ds_course_agent.teaching.profile_snapshot_repository import SQLiteProfileSnapshotRepository
 
     normalized_bucket = target_bucket if target_bucket in ("pending_weakness", "weakness") else "weakness"
 
@@ -39,8 +43,23 @@ def record_misconception_event(
         source_evidence=source_evidence,
         raw_user_question=raw_user_question,
         turn_id=turn_id,
+        course_id=CourseId(course_id),
     )
-    record_event(event)
+    normalized_course_id = CourseId(course_id)
+    if normalized_course_id == DEFAULT_COURSE_ID:
+        # The default course still supports the pre-SQLite MemoryCore path for
+        # existing callers. New courses use the course-partitioned repository
+        # below, so their events cannot enter the default learner state.
+        from ds_course_agent.teaching.memory_core import record_event
+
+        record_event(event)
+    else:
+        repository = SQLiteLearningEventRepository(config.APP_DB_PATH)
+        repository.append(LearningEventRecord(event=event, turn_id=turn_id))
+        SQLiteProfileSnapshotRepository(config.APP_DB_PATH).project(
+            student_id,
+            course_id=normalized_course_id,
+        )
     return json.dumps(
         {"success": True, "event_id": event.event_id, "target_bucket": normalized_bucket},
         ensure_ascii=False,

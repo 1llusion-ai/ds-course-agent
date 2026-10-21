@@ -111,14 +111,22 @@ test('catalog additions appear automatically and ready courses can send', async 
   await expect(selector).toHaveValue(FOURTH_COURSE)
 })
 
-test('course map caches are isolated and a course without a graph shows its own empty state', async ({ page }) => {
+test('course map caches are isolated across the two course graphs', async ({ page }) => {
   await mockCourses(page)
   const requestedCourses = []
   await page.route('**/api/knowledge-map?**', route => {
     const courseId = new URL(route.request().url()).searchParams.get('course_id')
     requestedCourses.push(courseId)
     return route.fulfill({ json: courseId === SECOND_COURSE
-      ? { course_name: '数字素养', version: '1', nodes: [], edges: [], chapters: [] }
+      ? {
+          course_name: '数字素养', version: '1',
+          chapters: [{ chapter: '第5章', title: '数字技术通识' }],
+          nodes: [{
+            canonical_id: 'dl_5_4_4', display_name: 'AIGC、生成式人工智能与大语言模型', chapter: '第5章',
+            node_type: 'kc', aliases: ['AIGC'], learning_state: 'unobserved', learning_points: []
+          }],
+          edges: [{ source: 'dl_5_4_4', target: 'chapter:5', relation_type: 'part_of' }]
+        }
       : {
           course_name: '数据科学导论', version: '1',
           chapters: [{ chapter: '第1章', title: '数据科学基础' }],
@@ -137,16 +145,18 @@ test('course map caches are isolated and a course without a graph shows its own 
 
   await switchCourse(page, SECOND_COURSE)
   await page.getByRole('button', { name: /知识地图/ }).click()
-  await expect(page.getByText('数字素养尚未配置知识图谱。', { exact: true })).toBeVisible()
-  await expect(page.locator('.map-workspace')).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: '知识地图' })).toBeVisible()
+  await expect(page.locator('.map-workspace')).toBeVisible()
+  await page.getByRole('button', { name: '打开知识目录' }).click()
+  await expect(page.getByRole('button', { name: '数字技术通识' })).toBeVisible()
   await expect(page.getByRole('button', { name: '数据科学基础' })).toHaveCount(0)
-  await page.getByRole('button', { name: '返回课程对话' }).click()
+  await page.goto('/chat')
   await expect(page).toHaveURL(/\/chat$/)
 
   await switchCourse(page, DEFAULT_COURSE)
   await page.getByRole('button', { name: /知识地图/ }).click()
   await page.getByRole('button', { name: '打开知识目录' }).click()
   await expect(page.getByRole('button', { name: '数据科学基础' })).toBeVisible()
-  await expect(page.getByText('数字素养尚未配置知识图谱。', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '数字技术通识' })).toHaveCount(0)
   expect(requestedCourses).toEqual([DEFAULT_COURSE, SECOND_COURSE, DEFAULT_COURSE])
 })

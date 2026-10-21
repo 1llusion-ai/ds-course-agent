@@ -49,7 +49,7 @@ def build_strategy(
 
     from ds_course_agent.teaching.knowledge_mapper import get_knowledge_mapper
 
-    mapper = get_knowledge_mapper()
+    mapper = get_knowledge_mapper(getattr(learner_state, "course_id", None))
     target_ids = [item.concept_id for item in matched_concepts]
     related_names: list[str] = []
 

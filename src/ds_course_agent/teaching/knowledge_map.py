@@ -160,10 +160,16 @@ def load_knowledge_map(catalog_path: Path, toc_path: Path) -> KnowledgeMap:
     toc = json.loads(toc_path.read_text(encoding="utf-8"))
     chapters = []
     for item in toc["toc"]:
-        match = re.match(r"第\s*(\d+)\s*章\s*(.*)", item["title"])
-        if match is None:
-            continue
-        number, title = match.groups()
+        # ``course-toc/1.0`` keeps the chapter number separate from the
+        # display title; legacy data-science TOCs use ``第N章 标题``.
+        if item.get("kind") == "chapter" and item.get("number") is not None:
+            number = str(item["number"])
+            title = str(item.get("title") or "").strip()
+        else:
+            match = re.match(r"第\s*(\d+)\s*章\s*(.*)", str(item.get("title") or ""))
+            if match is None:
+                continue
+            number, title = match.groups()
         chapter = f"第{number}章"
         chapter_id = f"chapter:{number}"
         components = [node for node in nodes if node.chapter == chapter and node.node_type is NodeType.KC]

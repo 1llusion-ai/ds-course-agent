@@ -197,14 +197,14 @@ def web_query_traits(question: str) -> WebQueryTraits:
     )
 
 
-def special_case_response(question: str) -> str | None:
+def special_case_response(question: str, *, course_name: str = "数据科学导论") -> str | None:
     """Return deterministic smalltalk/homework/scope responses."""
 
     normalized = normalize_query_text(question)
     if any(pattern == normalized or normalized.startswith(pattern) for pattern in GREETING_TERMS):
-        return "你好！我是“数字力”导学智能体，当前辅导《数据科学导论》课程，有课程相关的问题可以随时问我。"
+        return f"你好！我是“数字力”导学智能体，当前辅导《{course_name}》课程，有课程相关的问题可以随时问我。"
     if contains_any(normalized, THANKS_TERMS) and len(normalized) <= 12:
-        return "不客气，你如果还有《数据科学导论》课程相关的问题，可以继续问我。"
+        return f"不客气，你如果还有《{course_name}》课程相关的问题，可以继续问我。"
     if contains_any(normalized, HOMEWORK_ANSWER_TERMS):
         return (
             "抱歉，作为“数字力”导学智能体，我不能直接代写作业或给出标准答案。"

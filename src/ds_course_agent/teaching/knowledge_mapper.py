@@ -221,6 +221,8 @@ class KnowledgeGraph:
     def __init__(self, graph_path: str | None = None):
         if graph_path is None:
             graph_path = PROJECT_ROOT / "data" / "knowledge_graph.json"
+        elif not Path(graph_path).is_absolute():
+            graph_path = PROJECT_ROOT / graph_path
 
         with open(graph_path, encoding="utf-8") as f:
             data = json.load(f)
@@ -803,15 +805,31 @@ class KnowledgeMapper:
 
 
 # 全局单例
-_knowledge_mapper: KnowledgeMapper | None = None
+_knowledge_mappers: dict[tuple[str, str, str], KnowledgeMapper] = {}
 
 
-def get_knowledge_mapper() -> KnowledgeMapper:
-    """获取知识点映射器单例"""
-    global _knowledge_mapper
-    if _knowledge_mapper is None:
-        _knowledge_mapper = KnowledgeMapper()
-    return _knowledge_mapper
+def get_knowledge_mapper(course: Any | None = None) -> KnowledgeMapper:
+    """Return the mapper bound to one course resource declaration."""
+    if course is None:
+        key = "data-science-intro"
+        graph_path = None
+        revision = ""
+    else:
+        key = str(getattr(course, "course_id", course))
+        graph_path = getattr(course, "knowledge_graph_path", None) or None
+        revision = str(getattr(course, "revision", "") or "")
+        if graph_path is None and isinstance(course, str):
+            from ds_course_agent.courses import CourseCatalog
+
+            manifest = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(course)
+            graph_path = manifest.knowledge_graph_path or None
+            revision = manifest.revision
+    cache_key = (key, revision, str(graph_path or ""))
+    mapper = _knowledge_mappers.get(cache_key)
+    if mapper is None:
+        mapper = KnowledgeMapper(graph=KnowledgeGraph(graph_path=graph_path))
+        _knowledge_mappers[cache_key] = mapper
+    return mapper
 
 
 def _clone_matched_concepts(matches: tuple[MatchedConcept, ...]) -> list[MatchedConcept]:
@@ -862,14 +880,17 @@ def map_question_cache_info() -> CacheInfo:
     return _map_question_to_concepts_cached.cache_info()
 
 
-def map_question_to_concepts(question: str, top_k: int = 3) -> list[MatchedConcept]:
+def map_question_to_concepts(question: str, top_k: int = 3, course: Any | None = None) -> list[MatchedConcept]:
     """
     便捷函数：将问题映射到知识点
 
     Returns:
         MatchedConcept列表，按匹配分数降序
     """
-    mapper = get_knowledge_mapper()
+    # Keep the legacy no-argument factory call for the default course so
+    # existing integrations can replace the singleton factory without having
+    # to accept the newly optional course parameter.
+    mapper = get_knowledge_mapper() if course is None else get_knowledge_mapper(course)
     if not config.QUERY_CACHE_ENABLED:
         return mapper.map_question(question, top_k)
 

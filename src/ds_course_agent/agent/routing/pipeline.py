@@ -183,8 +183,20 @@ class QueryPipeline:
 
         # Product-scope guard 强于显式联网开关：课程助教可为学习/数据科学任务
         # 检索外部资源，但不应沦为体育/娱乐/政治/天气/股票等通用搜索引擎。
+        course_name = "数据科学导论"
+        if course_context is not None:
+            from ds_course_agent.courses import CourseCatalog
+            from ds_course_agent.shared.paths import PROJECT_ROOT
+
+            course_name = (
+                CourseCatalog.from_directory(PROJECT_ROOT / "data/courses")
+                .require(course_context.course_id)
+                .display_name
+            )
         with trace_span("prepare.scope_guard"):
-            scope_decision = _scope_guard.assess_query_scope(user_input, web_search_requested=web_search)
+            scope_decision = _scope_guard.assess_query_scope(
+                user_input, web_search_requested=web_search, course_name=course_name
+            )
         trace_step(
             "scope_guard.result",
             action=scope_decision.action,
@@ -196,7 +208,16 @@ class QueryPipeline:
         if scope_decision.allowed:
             # 用户显式点击联网开关时，视为 turn 级模式选择，不让通用 special-case
             # /off-topic guard 抢走该路径。
-            special_case_response = None if web_search else agent._handle_special_case(user_input)
+            if web_search:
+                special_case_response = None
+            else:
+                special_case_handler = agent._handle_special_case
+                try:
+                    signature(special_case_handler).bind(user_input, course_name=course_name)
+                except TypeError:
+                    special_case_response = special_case_handler(user_input)
+                else:
+                    special_case_response = special_case_handler(user_input, course_name=course_name)
         else:
             special_case_response = scope_decision.response
 

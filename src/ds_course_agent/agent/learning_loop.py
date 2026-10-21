@@ -68,12 +68,16 @@ class SessionLearningLoop:
             return
         learner = self._learner_state_provider.get_state(student_id, **scope)
         planner = AssessmentAssignmentPlanner()
+        from ds_course_agent.courses import CourseCatalog
+        from ds_course_agent.shared.paths import PROJECT_ROOT
+
+        course = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(normalized_course_id)
         scheduled_kc_ids = {
             job.request.target_kc_id
             for job in self._preparations.list_for_student(student_id, **scope)
             if job.session_id == session_id
         }
-        for plan in planner.plan_session(session_id, events, learner, scheduled_kc_ids=scheduled_kc_ids):
+        for plan in planner.plan_session(session_id, events, learner, scheduled_kc_ids=scheduled_kc_ids, course=course):
             job = self._preparations.enqueue(
                 student_id, session_id, plan.display_name, plan.request, plan.source_event_ids, **scope
             )
@@ -143,16 +147,19 @@ class SessionLearningLoop:
         if running is None:
             return
         try:
-            summary = self._assignment_tool.invoke(
-                AssessmentAssignmentInput(
-                    student_id=running.student_id,
-                    request=running.request,
-                    session_id=running.session_id,
-                    assignment_id=running.id,
-                    generation_progress=running.generation_progress,
-                    course_id=running.course_id,
+            from ds_course_agent.tools._shared import course_scope
+
+            with course_scope(str(running.course_id)):
+                summary = self._assignment_tool.invoke(
+                    AssessmentAssignmentInput(
+                        student_id=running.student_id,
+                        request=running.request,
+                        session_id=running.session_id,
+                        assignment_id=running.id,
+                        generation_progress=running.generation_progress,
+                        course_id=running.course_id,
+                    )
                 )
-            )
             self._preparations.transition(running, PreparationStatus.READY, assessment_id=summary.id)
         except Exception as exc:
             failure_kind = getattr(exc, "failure_kind", AssessmentFailureKind.UNKNOWN)

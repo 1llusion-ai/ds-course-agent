@@ -8,12 +8,23 @@ _PROMPT_DIR = PROJECT_ROOT / "docs" / "prompts"
 _SYSTEM_PROMPT_PATH = _PROMPT_DIR / "system_prompt.txt"
 
 
-def get_system_prompt() -> str:
+def get_system_prompt(course=None) -> str:
     """Load the base system prompt and append inline teaching skill instructions."""
-    if _SYSTEM_PROMPT_PATH.exists():
-        base_prompt = _SYSTEM_PROMPT_PATH.read_text(encoding="utf-8").strip()
+    if course is not None and getattr(course, "prompt_path", ""):
+        prompt_path = PROJECT_ROOT / course.prompt_path
+    else:
+        prompt_path = _SYSTEM_PROMPT_PATH
+    if prompt_path.exists():
+        base_prompt = prompt_path.read_text(encoding="utf-8").strip()
     else:
         base_prompt = _get_default_prompt().strip()
+
+    if course is not None:
+        course_name = str(getattr(course, "display_name", "")).strip()
+        if course_name:
+            base_prompt = base_prompt.replace("《数据科学导论》", f"《{course_name}》")
+            base_prompt = base_prompt.replace("数据科学导论", course_name)
+            base_prompt = base_prompt.replace("数据科学基础知识", f"{course_name}课程基础知识")
 
     registry = get_skill_registry()
     skill_section = registry.build_skills_prompt_section().strip()

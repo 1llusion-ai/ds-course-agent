@@ -80,7 +80,7 @@ class AssessmentApplicationService:
                 if existing.session_id != session_id or existing.request != request:
                     raise AssessmentStateError("assignment identity conflicts with the persisted request")
                 return self._summary(existing)
-        generator = self._generator or get_assessment_service()
+        generator = self._generator or get_assessment_service(normalized_course_id)
         if generation_progress is None:
             quiz = generator.generate(request)
         else:

@@ -263,6 +263,7 @@ def _call_record_event(
     raw_user_question: str,
     turn_id: str,
     target_bucket: str,
+    course_id: str,
 ) -> None:
     """Call record_misconception_event tool, swallow errors."""
     try:
@@ -279,6 +280,7 @@ def _call_record_event(
                 "raw_user_question": raw_user_question,
                 "turn_id": turn_id,
                 "target_bucket": target_bucket,
+                "course_id": course_id,
             }
         )
         # Log result for debugging
@@ -299,6 +301,7 @@ def execute(
     student_id: str,
     session_id: str,
     turn_id: str = "0",
+    course_id: str = "data-science-intro",
 ) -> str:
     """
     Main entrypoint for misconception-handling skill.
@@ -310,7 +313,7 @@ def execute(
         turn_id: 对话轮次（用于画像追溯）
     """
     # Step 1: 获取概念候选
-    matched_concepts = map_question_to_concepts(user_question, top_k=3)
+    matched_concepts = map_question_to_concepts(user_question, top_k=3, course=course_id)
 
     # Step 2: 内部 LLM 分类
     result = misconception_detector(user_question, matched_concepts)
@@ -361,6 +364,7 @@ def execute(
             raw_user_question=user_question,
             turn_id=turn_id,
             target_bucket="pending_weakness",
+            course_id=course_id,
         )
         return answer
 
@@ -383,5 +387,6 @@ def execute(
         raw_user_question=user_question,
         turn_id=turn_id,
         target_bucket="weakness",
+        course_id=course_id,
     )
     return answer

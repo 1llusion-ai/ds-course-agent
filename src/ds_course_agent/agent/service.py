@@ -224,8 +224,18 @@ class AgentService:
         matches = loader.select_candidates(question)
         return {item.skill.key for item in matches}
 
-    def _handle_special_case(self, question: str) -> str | None:
-        return special_case_response(question)
+    def _handle_special_case(self, question: str, *, course_name: str = "数据科学导论") -> str | None:
+        return special_case_response(question, course_name=course_name)
+
+    def _course_prompt(self, course_context: CourseContext | None) -> str:
+        """Return prompt text for one course without mutating shared runtime state."""
+        if course_context is None:
+            return self.system_prompt
+        from ds_course_agent.courses import CourseCatalog
+        from ds_course_agent.shared.paths import PROJECT_ROOT
+
+        course = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(course_context.course_id)
+        return get_system_prompt(course)
 
     def _build_schedule_tool_query(self, question: str) -> str:
         normalized = normalize_query_text(question)
@@ -394,7 +404,18 @@ class AgentService:
         from ds_course_agent.shared.query_trace import trace_span
 
         with trace_span("prepare.concept_map"):
-            matched_concepts = map_question_to_concepts(user_input, top_k=3)
+            course = None
+            if getattr(context, "course_context", None) is not None:
+                from ds_course_agent.courses import CourseCatalog
+                from ds_course_agent.shared.paths import PROJECT_ROOT
+
+                course = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(
+                    context.course_context.course_id
+                )
+            if course is None:
+                matched_concepts = map_question_to_concepts(user_input, top_k=3)
+            else:
+                matched_concepts = map_question_to_concepts(user_input, top_k=3, course=course)
 
         context.detected_concepts = [
             DetectedConcept(

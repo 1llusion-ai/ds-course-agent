@@ -48,6 +48,7 @@ class AssessmentAssignmentPlanner:
         learner_state: LearnerStateSnapshot,
         *,
         scheduled_kc_ids: Collection[str] = (),
+        course: object | None = None,
     ) -> tuple[SessionAssessmentPlan, ...]:
         """Select at most three new canonical KCs from this learner's session.
 
@@ -57,7 +58,7 @@ class AssessmentAssignmentPlanner:
         """
 
         by_concept: defaultdict[str, list[tuple[int, BaseEvent]]] = defaultdict(list)
-        nodes = {node.canonical_id: node for node in get_knowledge_map().nodes if node.node_type is NodeType.KC}
+        nodes = {node.canonical_id: node for node in get_knowledge_map(course).nodes if node.node_type is NodeType.KC}
         for event_index, event in enumerate(events):
             if (
                 event.session_id != session_id
@@ -103,10 +104,12 @@ class AssessmentAssignmentPlanner:
         self,
         matched_concepts: Sequence[object],
         learner_state: LearnerStateSnapshot | None,
+        *,
+        course: object | None = None,
     ) -> GenerateQuestionsRequest:
         """Build the generation request from agent-owned learning policy."""
 
-        target_kc_id = self._target_kc_id(matched_concepts, learner_state)
+        target_kc_id = self._target_kc_id(matched_concepts, learner_state, course=course)
         return self.plan_for_concept(target_kc_id, learner_state)
 
     def plan_for_concept(
@@ -158,6 +161,8 @@ class AssessmentAssignmentPlanner:
     def _target_kc_id(
         matched_concepts: Sequence[object],
         learner_state: LearnerStateSnapshot | None,
+        *,
+        course: object | None = None,
     ) -> str:
         for concept in matched_concepts:
             concept_id = str(getattr(concept, "concept_id", "") or "").strip()
@@ -173,7 +178,7 @@ class AssessmentAssignmentPlanner:
             if recent:
                 return recent[0].concept_id
         fallback = next(
-            (node.canonical_id for node in get_knowledge_map().nodes if node.node_type is NodeType.KC), None
+            (node.canonical_id for node in get_knowledge_map(course).nodes if node.node_type is NodeType.KC), None
         )
         if fallback is None:
             raise ValueError("course knowledge map contains no KC nodes")

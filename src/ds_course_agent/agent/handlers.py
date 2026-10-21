@@ -103,12 +103,24 @@ class AssessmentAssignmentRouteHandler(BufferedRouteHandlerMixin):
 
         trace_step("agent.branch", branch="assessment_assignment")
         try:
-            request = AssessmentAssignmentPlanner().plan(route_state.matched_concepts, route_state.learner_state)
+            from ds_course_agent.courses import CourseCatalog
+            from ds_course_agent.shared.paths import PROJECT_ROOT
+
+            course_id = (
+                route_state.course_context.course_id if route_state.course_context is not None else "data-science-intro"
+            )
+            course = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").require(course_id)
+            request = AssessmentAssignmentPlanner().plan(
+                route_state.matched_concepts, route_state.learner_state, course=course
+            )
             registry = agent.tool_registry
             tool = registry.get("assign_assessment_tool").tool
             summary = tool.invoke(
                 AssessmentAssignmentInput(
-                    student_id=route_state.student_id, session_id=route_state.session_id, request=request
+                    student_id=route_state.student_id,
+                    session_id=route_state.session_id,
+                    request=request,
+                    course_id=course_id,
                 )
             )
         except Exception as exc:
@@ -238,7 +250,21 @@ class SkillRouteHandler(BufferedRouteHandlerMixin):
 
         trace_step("agent.branch", branch=branch)
         if intent == RouteIntent.MISCONCEPTION_REPAIR:
-            return build_route_result(route_state, invoke_skill(question, student_id, session_id, "0"))
+            course_id = (
+                str(route_state.course_context.course_id)
+                if route_state.course_context is not None
+                else "data-science-intro"
+            )
+            return build_route_result(
+                route_state,
+                invoke_skill(
+                    question,
+                    student_id,
+                    session_id,
+                    route_state.stream_id or session_id,
+                    course_id,
+                ),
+            )
         if intent in {RouteIntent.LEARNING_PATH, RouteIntent.PERSONALIZED_EXPLANATION}:
             learner_state = route_state.learner_state
             if learner_state is None:
@@ -339,7 +365,13 @@ class GenericAgentRouteHandler:
 
         if decision.execution_mode != ExecutionMode.TOOL_AGENT:
             raise RuntimeError(f"GenericAgentRouteHandler cannot execute {decision.execution_mode.value}")
-        graph_agent = agent.model_runtime.agent_for_tools(list(allowed_tools))
+        if route_state.course_context is None:
+            graph_agent = agent.model_runtime.agent_for_tools(list(allowed_tools))
+        else:
+            graph_agent = agent.model_runtime.agent_for_tools(
+                list(allowed_tools),
+                system_prompt=agent._course_prompt(route_state.course_context),
+            )
         trace_step(
             "agent.tool_gating",
             family=decision.family.value,
@@ -358,6 +390,8 @@ class GenericAgentRouteHandler:
         chat_history = route_state.chat_history
         execution_query = agent._route_execution_query(context, decision)
         turn_context = build_turn_system_context(route_state)
+        if route_state.course_context is not None:
+            turn_context = agent._course_prompt(route_state.course_context) + "\n\n" + turn_context
         chat_fn, turn_context, direct_llm, graph_agent = self._chat_callable_and_context(
             agent, route_state, turn_context
         )
@@ -412,6 +446,8 @@ class GenericAgentRouteHandler:
             chat_history = route_state.chat_history
             execution_query = agent._route_execution_query(context, decision)
             turn_context = build_turn_system_context(route_state)
+            if route_state.course_context is not None:
+                turn_context = agent._course_prompt(route_state.course_context) + "\n\n" + turn_context
             chat_fn, turn_context, direct_llm, graph_agent = self._chat_callable_and_context(
                 agent, route_state, turn_context
             )

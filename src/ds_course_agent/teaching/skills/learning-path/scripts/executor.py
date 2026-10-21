@@ -42,7 +42,7 @@ class LearningPathSkill:
         learner_state: LearnerStateSnapshot,
         matched_concepts: Sequence[Any],
     ) -> str:
-        mapper = get_knowledge_mapper()
+        mapper = get_knowledge_mapper(getattr(learner_state, "course_id", None))
 
         plan = build_learning_path_plan(
             question=question,
