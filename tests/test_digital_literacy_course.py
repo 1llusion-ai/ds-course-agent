@@ -8,6 +8,8 @@ import json
 from collections import Counter
 from graphlib import TopologicalSorter
 
+import pytest
+
 from ds_course_agent.agent.prompt import get_system_prompt
 from ds_course_agent.api.routers.profile import get_concept_detail
 from ds_course_agent.assessment.evidence import resolve_target
@@ -87,13 +89,16 @@ def test_digital_literacy_prerequisites_follow_mechanisms_and_form_a_dag() -> No
         ("dl_5_3_1_2", "dl_5_6_1_1"),  # Sensor acquisition before real-time digital-twin mapping.
         ("dl_5_4_3_2", "dl_5_4_4_1"),  # Neural-network learning before generative training.
         ("dl_5_8_1_1", "dl_5_8_2_1"),  # Events/probability before conditional-probability calculation.
-        ("dl_6_3_2_1", "dl_6_3_5_1"),  # Identify sensitive data before applying stricter consent.
+        ("dl_6_2_1_1", "dl_6_2_2"),  # Security objectives before selecting data-protection controls.
         ("dl_3_3_1_1", "dl_3_3_2"),  # Video properties before diagnosing playback quality.
     }
     assert required <= prerequisites
     assert not {(target, source) for source, target in required}.intersection(prerequisites)
     assert ("dl_2_2_2", "dl_2_3_1") not in prerequisites  # Source quality is not retrieval mechanics.
     assert ("dl_8_2_1", "dl_8_2_3") not in prerequisites  # Chapter order is not a prerequisite.
+    assert ("dl_6_3_2_1", "dl_6_3_5_1") not in prerequisites  # QR risk is not a consent-law definition.
+    assert ("dl_2_3_1", "dl_2_3_2") not in prerequisites  # Helpful model knowledge is not mandatory tool training.
+    assert ("dl_3_2_1_1", "dl_3_2_2") not in prerequisites  # Basic editing need not await representation theory.
     sorter = TopologicalSorter()
     for source, target in prerequisites:
         sorter.add(target, source)
@@ -104,6 +109,97 @@ def test_digital_literacy_prerequisites_follow_mechanisms_and_form_a_dag() -> No
         and "真实" in edge.rationale
         for edge in graph.edges
     )
+
+
+def test_digital_literacy_corrected_concepts_have_precise_textbook_evidence() -> None:
+    nodes = {node.canonical_id: node for node in get_knowledge_map(_digital_literacy_course()).nodes}
+    four_layers = nodes["dl_5_3_1_1"]
+    assert all(layer in four_layers.display_name for layer in ("感知", "网络", "运算", "应用", "四层"))
+    assert "运算层" in four_layers.summary
+    assert "四层" in four_layers.learning_points[0].objective
+
+    # These excerpts identify the actual mechanism and its exact textbook/PDF page,
+    # rather than accepting a nearby paragraph from the same section as evidence.
+    expected_sources = {
+        "dl_5_3_1_1": [(130, 146, "感知层、网络层、运算层、应用层"), (131, 147, "数据存储、管理和分析平台")],
+        "dl_2_2_3_1": [(41, 57, "检索、浏览、创建、复制、移动和删除")],
+        "dl_4_4_1_1": [(117, 133, "验证个人进行各种在线数字活动时的身份"), (116, 132, "实名用户")],
+        "dl_6_2_2_1": [
+            (214, 230, "与原始数据分开存储"),
+            (214, 230, "另一个节点可以接管其任务"),
+            (215, 231, "密文方式存储"),
+        ],
+        "dl_6_3_5_1": [(218, 234, "诈骗分子通过二维码渠道获得我们的身份信息")],
+        "dl_6_4_2_1": [(222, 238, '"信息茧房"是指'), (222, 238, "加重群体极化")],
+    }
+    for cid, expected in expected_sources.items():
+        point = nodes[cid].learning_points[0]
+        assert point.title == nodes[cid].display_name
+        assert point.objective and point.question
+        assert len(point.sources) == len(expected)
+        for evidence, (book_page, source_page, text) in zip(point.sources, expected, strict=True):
+            assert evidence.book_page == book_page
+            assert evidence.source_page == source_page
+            assert text in evidence.quote
+
+    assert "备份、容错与加密" in nodes["dl_6_2_2_1"].display_name
+    assert "扫码" in nodes["dl_6_3_5_1"].learning_points[0].question
+    assert "群体极化" in nodes["dl_6_4_2_1"].learning_points[0].objective
+    for cid, unsupported in {
+        "dl_4_4_1_1": ("多因素",),
+        "dl_6_2_2_1": ("数据脱敏", "访问控制与数据脱敏"),
+        "dl_6_3_5_1": ("最小必要", "单独同意"),
+        "dl_6_4_2_1": ("网络欺凌与沉迷风险应对",),
+    }.items():
+        assert all(term not in alias for alias in nodes[cid].aliases for term in unsupported)
+
+
+def test_blockchain_copyright_application_connects_licensing_and_legal_protection() -> None:
+    graph = get_knowledge_map(_digital_literacy_course())
+    application = next(node for node in graph.nodes if node.canonical_id == "dl_5_5_2_1")
+    copyright_evidence = next(
+        source for source in application.learning_points[0].sources if "数字版权全生命周期管理" in source.quote
+    )
+    assert (copyright_evidence.book_page, copyright_evidence.source_page) == (150, 166)
+    assert "鉴权" in copyright_evidence.quote and "确权" in copyright_evidence.quote
+    assert "司法取证" in copyright_evidence.quote
+    for target in ("dl_4_3_1", "dl_8_2_2"):
+        edge = next(edge for edge in graph.edges if {edge.source, edge.target} == {"dl_5_5_2_1", target})
+        assert edge.relation_type.value == "related_to"
+        assert "版权" in edge.rationale
+        assert "确权" in edge.rationale or "取证" in edge.rationale
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("信息茧房是什么", "dl_6_4_2_1"),
+        ("数据库加密是什么", "dl_6_2_2_1"),
+        ("二维码收集个人信息风险是什么", "dl_6_3_5_1"),
+        ("政务平台实名注册是什么", "dl_4_4_1_1"),
+        ("物联网四层架构是什么", "dl_5_3_1_1"),
+        ("Windows资源管理器是什么", "dl_2_2_3_1"),
+        ("DIKW是什么", "dl_2_1_2"),
+        ("DIKW体系是什么", "dl_2_1_2"),
+    ],
+)
+def test_corrected_course_terms_match_without_embeddings(question: str, expected: str) -> None:
+    matches = get_knowledge_mapper("digital-literacy").match_question_rules(question)
+    assert matches and matches[0].concept_id == expected
+
+
+@pytest.mark.parametrize(
+    ("question", "incorrect_id"),
+    [
+        ("多因素身份认证是什么", "dl_4_4_1_1"),
+        ("访问控制与数据脱敏是什么", "dl_6_2_2_1"),
+        ("最小必要与单独同意原则是什么", "dl_6_3_5_1"),
+        ("网络欺凌与沉迷风险应对是什么", "dl_6_4_2_1"),
+    ],
+)
+def test_removed_unsupported_aliases_do_not_force_wrong_course_concepts(question: str, incorrect_id: str) -> None:
+    matches = get_knowledge_mapper("digital-literacy").match_question_rules(question)
+    assert incorrect_id not in {match.concept_id for match in matches}
 
 
 def test_digital_literacy_related_projection_serves_mapper_and_concept_detail() -> None:

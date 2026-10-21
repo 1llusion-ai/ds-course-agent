@@ -528,7 +528,12 @@ class TestCourseConceptVocabulary:
         assert any("DIKW" in reason for reason in decision.reasons)
 
     def test_explicit_course_only_uses_its_own_graph(self):
-        query = "DIKW金字塔模型是什么?"
+        query = "标签索引与位置索引是什么?"
+        default_router, _ = _router()
+        default_context = _context(query)
+        default_router.route(default_context)
+        assert default_context.metadata["course_concept_match"]["concept_id"] == "loc_iloc"
+
         router, semantic = _router({query: _SemanticOutput(RouteIntent.CONCEPT_QA, 0.9)})
         context = _context(query)
         context.course_context = CourseContext(course_id="digital-literacy")
@@ -544,6 +549,25 @@ class TestCourseConceptVocabulary:
         )
         assert len(semantic.calls) == 1
         assert "course_concept_match" not in context.metadata
+
+    @pytest.mark.parametrize(("course_id", "expected"), [(None, "dikw_pyramid"), ("digital-literacy", "dl_2_1_2")])
+    def test_shared_dikw_question_uses_selected_course_graph(self, course_id, expected):
+        router, semantic = _router()
+        context = _context("DIKW金字塔模型是什么?")
+        if course_id is not None:
+            context.course_context = CourseContext(course_id=course_id)
+
+        decision = router.route(context)
+
+        _assert_route(
+            decision,
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.CONCEPT_QA,
+            mode=ExecutionMode.GROUNDED_GENERATION,
+            policy=RetrievalPolicy.REQUIRED,
+        )
+        assert semantic.calls == []
+        assert context.metadata["course_concept_match"]["concept_id"] == expected
 
     def test_digital_literacy_graph_matches_its_own_dikw_concept(self):
         query = "DIKW数据价值层次是什么"

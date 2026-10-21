@@ -12,11 +12,16 @@
 概念映射、主动测验、自动练习、学习路径、个性化讲解和纠错流程均使用当前课程的图谱、目录、
 检索器和学习状态。数字素养图谱包含 8 个章节节点和 208 个原子知识点节点；每个知识点都有
 教材页码和 PDF 页码证据。知识点从正文定义、机制、方法和可观察技能中划分，并保留目录小节
-作为定位字段。已逐章逐知识点审阅并补全 243 条知识点间语义边（88 条 prerequisite、149 条 related、6 条
+作为定位字段。已逐章逐知识点审阅并补全 244 条知识点间语义边（83 条 prerequisite、155 条 related、6 条
 confusable），另有 208 条章节归属 part_of 边；两者分开统计。8 章均达到知识点语义覆盖
 100%，没有语义孤立点，先修关系为 DAG。每条语义边的具体教学理由、两端教材正文与书页/PDF
 页集合见 `var/artifacts/digital-literacy-knowledge-graph/relations_audit.json`。关系类别和教学理由
 以 `relations` 为准；`related_concepts` 仅保留 related_to 的双向投影，供现有详情和教学推荐使用。
+Astra独立审查后已修正物联网四层架构与6处名称/证据错配，补区块链版权应用正文及两条跨章关系，
+并补DIKW教材别名；208个canonical ID保留，8个节点内容有显式修正。修正清单和逐字段差异见
+`var/artifacts/digital-literacy-knowledge-graph/astra_node_changes.json`，不再声称节点内容全部未变。
+检索模型→工具、位图矢量→桌面编辑等建议关系降为related；验收增加精确quote/页码、错误别名
+不误路由、区块链版权联系和共享DIKW双课程归属。Astra复审已确认原报告阻断项闭环；其余未修改节点仍需后续逐条内容抽查。
 
 ## 阶段 0：契约与资源登记
 
@@ -111,7 +116,7 @@ confusable），另有 208 条章节归属 part_of 边；两者分开统计。8 
   Qwen/Qwen3-Embedding-8B、4096 维、cosine 距离，教材页码为 PDF 页码减 16；
   全部文档通过 `ChunkProvenance` 校验。已绑定独立知识图谱
   `data/courses/digital-literacy/knowledge_graph.json` 和目录，课程 revision 已更新，索引
-  revision 保持不变。图谱当前为 208 个知识点、243 条语义关系边及 208 条章节归属边。当前没有独立课程提示词和
+  revision 保持不变。图谱当前为 208 个知识点、244 条语义关系边及 208 条章节归属边。当前没有独立课程提示词和
   日程，运行时使用显式课程身份生成课程提示词；
   `ready` 表示教材检索问答和本轮教学闭环均可用。
 - 人工智能导论已移除；此前只有未就绪声明，没有教材、索引或学生数据。后续取得教材时按新增
