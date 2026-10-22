@@ -386,7 +386,11 @@ class AssessmentService:
             pending = {item.slot_index: item.to_rejection() for item in progress.pending_slots}
 
         repair_round = progress.repair_round if progress else 0
-        call_rounds = 0
+        # Reviewer recovery and rejected-slot editing have independent retry
+        # budgets. A transient critic outage must not consume the only editor
+        # attempt for a malformed repair response in the same generation.
+        review_attempts = 0
+        repair_attempts = 0
         while True:
             # Retained/cached accepted slots obey the same current exposure rule
             # as new drafts and editor output. The original frozen exclusions
@@ -416,7 +420,7 @@ class AssessmentService:
             if batch_review.required and batch_review.certificate != expected_certificate:
                 batch_review = BatchReviewState(required=True)
             if not pending and batch_review.required and batch_review.certificate is None:
-                if repair_round >= 4 and call_rounds == 0:
+                if repair_round >= 4 and review_attempts == 0 and repair_attempts == 0:
                     break
                 try:
                     accepted, rejected = self._apply_quality_verdicts(
@@ -465,9 +469,9 @@ class AssessmentService:
                 and is_assessment_failure_retryable(rejection.failure_kind)
             }
             if review_pending:
-                if call_rounds >= self._repair_rounds or repair_round >= 4:
+                if review_attempts >= self._repair_rounds or repair_round >= 4:
                     break
-                call_rounds += 1
+                review_attempts += 1
                 repair_round += 1
                 try:
                     reviewed, review_rejections = self._apply_quality_verdicts(
@@ -508,9 +512,9 @@ class AssessmentService:
                 for index, rejection in pending.items()
                 if is_assessment_failure_retryable(rejection.failure_kind)
             }
-            if not repairable or call_rounds >= self._repair_rounds or repair_round >= 4:
+            if not repairable or repair_attempts >= self._repair_rounds or repair_round >= 4:
                 break
-            call_rounds += 1
+            repair_attempts += 1
             repair_round += 1
             normalized_stems = {self._normalize_stem(question.stem) for question in accepted_by_slot.values()}
             repaired, repair_rejections = self._repair_slots(

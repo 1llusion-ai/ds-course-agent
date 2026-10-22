@@ -712,6 +712,50 @@ def test_item_quality_rejections_trigger_one_bounded_repair(
     assert expected_rejection in model.message_batches[1][-1].content
 
 
+def test_reviewer_recovery_does_not_consume_editor_retry_budget() -> None:
+    initial = _quiz_payload(1, Difficulty.BASIC)
+    repaired = _question_payload(8, Difficulty.BASIC)
+    initial_question = GeneratedQuestion.model_validate(initial["questions"][0])
+
+    class ReviewerOutageThenRejects(_Critic):
+        def critique_batch(self, request, questions, accepted_questions=()):
+            if len(self.calls) == 0:
+                self.calls.append((list(questions), list(accepted_questions)))
+                raise AssessmentCritiqueError("temporary critic outage")
+            if len(self.calls) == 1:
+                rejected = _critique_payload(0, initial_question)
+                rejected["pedagogical_defects"] = ["tautology"]
+                rejected["pedagogically_useful"] = False
+                rejected["reason"] = "The item needs a more transferable distinction."
+                result = (ItemCritique.model_validate(rejected),)
+            else:
+                result = (
+                    ItemCritique.model_validate(
+                        _critique_payload(0, GeneratedQuestion.model_validate(repaired))
+                    ),
+                )
+            self.calls.append((list(questions), list(accepted_questions)))
+            return result
+
+    model = _StructuredModel(
+        responses=[
+            initial,
+            {"revisions": []},  # malformed editor response; the next editor call must still be allowed
+            _repair_batch_payload(repaired, 0),
+        ]
+    )
+    service, _ = _service_with_model(
+        model,
+        critic=ReviewerOutageThenRejects(),
+        documents=[_Document(page_content=PCA_EVIDENCE, metadata={})],
+    )
+
+    quiz = service.generate(GenerateQuestionsRequest(target_kc_id="pca", count=1))
+
+    assert quiz.questions == [GeneratedQuestion.model_validate(repaired)]
+    assert model.invoke_count == 3
+
+
 def test_quality_verifier_failure_rejects_the_request_without_regeneration() -> None:
     class FailingVerifier:
         def verify(self, *args: Any, **kwargs: Any) -> tuple[EvidenceVerificationVerdict, ...]:
