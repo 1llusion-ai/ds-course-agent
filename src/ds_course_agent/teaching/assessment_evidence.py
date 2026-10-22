@@ -40,7 +40,12 @@ class AssessmentEvidenceRecorder:
         answers = {answer.question_id: answer for answer in record.answers}
         events = tuple(
             self._build_event(
-                record, question_id, question, answers[question_id], record.item_ids[index] if record.item_ids else None
+                record,
+                index,
+                question_id,
+                question,
+                answers[question_id],
+                record.item_ids[index] if record.item_ids else None,
             )
             for index, (question_id, question) in enumerate(
                 zip(record.question_ids, record.quiz.questions, strict=True)
@@ -76,7 +81,7 @@ class AssessmentEvidenceRecorder:
         self._profile_repository.project(record.student_id, course_id=record.course_id)
 
     @staticmethod
-    def _build_event(record, question_id, question, answer, item_id=None) -> QuestionAnsweredEvent:
+    def _build_event(record, index, question_id, question, answer, item_id=None) -> QuestionAnsweredEvent:
         option_text = {option.id: option.text for option in question.options}
         return QuestionAnsweredEvent(
             event_id=f"assessment:{record.id}:{question_id}",
@@ -96,6 +101,17 @@ class AssessmentEvidenceRecorder:
                 selected_option_id=answer.selected_option_id,
                 correct_option_id=question.correct_option_id,
                 question_stem=question.stem,
+                cognitive_operation=(
+                    record.quiz.review_certificates[index].cognitive_operation.value
+                    if index < len(record.quiz.review_certificates)
+                    else None
+                ),
+                objective_kind=(
+                    record.quiz.review_certificates[index].objective_kind.value
+                    if index < len(record.quiz.review_certificates)
+                    and record.quiz.review_certificates[index].objective_kind is not None
+                    else None
+                ),
                 answer_change_count=answer.answer_change_count,
                 selected_option_text=option_text.get(answer.selected_option_id),
                 correct_option_text=option_text.get(question.correct_option_id),

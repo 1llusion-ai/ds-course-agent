@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pydantic import BaseModel, ConfigDict
 
 from ds_course_agent.assessment.models import (
+    AssessmentLearnerEvidence,
+    AssessmentPracticeError,
     CognitiveOperation,
     ComplementaryQuestionRequirement,
     Difficulty,
@@ -204,19 +206,74 @@ class AssessmentAssignmentPlanner:
             target_kc_id=target_kc_id,
             difficulty=difficulty,
             count=count,
+            learner_evidence=self._learner_evidence(target_kc_id, learner_state),
             teaching_requirement=(
-                self._complementary_requirement(target_kc_id, difficulty)
+                self._complementary_requirement(target_kc_id, difficulty, learner_state)
                 if count == SESSION_ASSESSMENT_QUESTION_COUNT
                 else None
             ),
         )
 
     @staticmethod
-    def _complementary_requirement(target_kc_id: str, difficulty: Difficulty) -> ComplementaryQuestionRequirement:
+    def _learner_evidence(
+        target_kc_id: str, learner_state: LearnerStateSnapshot | None
+    ) -> AssessmentLearnerEvidence | None:
+        """Project relevant recorded facts; never infer mastery from interaction counts."""
+        if learner_state is None:
+            return None
+        practice = learner_state.practice.get(target_kc_id)
+        focus = learner_state.recent_concepts.get(target_kc_id)
+        clarifications = max(
+            (
+                spot.clarification_count
+                for spot in (*learner_state.weak_spot_candidates, *learner_state.pending_weak_spots)
+                if spot.concept_id == target_kc_id
+            ),
+            default=0,
+        )
+        errors = tuple(
+            AssessmentPracticeError(
+                question_stem=item.question_stem,
+                selected_option_text=item.selected_option_text,
+                correct_option_text=item.correct_option_text,
+                cognitive_operation=(
+                    CognitiveOperation(item.cognitive_operation)
+                    if item.cognitive_operation in {operation.value for operation in CognitiveOperation}
+                    else None
+                ),
+            )
+            for item in (practice.recent_attempts if practice else ())
+            if not item.is_correct
+        )[-2:]
+        return AssessmentLearnerEvidence(
+            course_id=str(learner_state.course_id),
+            target_kc_id=target_kc_id,
+            answered_count=practice.answered_count if practice else 0,
+            correct_count=practice.correct_count if practice else 0,
+            effective_answered_count=practice.effective_answered_count if practice else 0,
+            recent_answered_count=practice.recent_answered_count if practice else 0,
+            recent_correct_count=practice.recent_correct_count if practice else 0,
+            mention_count=focus.mention_count if focus else 0,
+            clarification_count=clarifications,
+            recent_errors=errors,
+        )
+
+    @staticmethod
+    def _complementary_requirement(
+        target_kc_id: str, difficulty: Difficulty, learner_state: LearnerStateSnapshot | None = None
+    ) -> ComplementaryQuestionRequirement:
         operation = CognitiveOperation.ANALYSIS if difficulty is Difficulty.ADVANCED else CognitiveOperation.APPLICATION
         distinction_operation = (
             CognitiveOperation.ANALYSIS if difficulty is Difficulty.ADVANCED else CognitiveOperation.INTERPRETATION
         )
+        practice = learner_state.practice.get(target_kc_id) if learner_state is not None else None
+        focus = practice.last_incorrect_operation if practice is not None else None
+        distinction_objective = "区分目标知识点与最容易混淆的概念、条件或适用边界。"
+        transfer_objective = "把目标知识点迁移到新的具体情境并判断结果或方法选择。"
+        if focus == CognitiveOperation.INTERPRETATION.value:
+            distinction_objective += "优先澄清学生最近答错的关系解释或适用边界。"
+        elif focus == CognitiveOperation.APPLICATION.value:
+            transfer_objective += "优先修复学生最近答错的情境迁移或方法选择。"
         return ComplementaryQuestionRequirement(
             target_kc_id=target_kc_id,
             objectives=(
@@ -224,13 +281,13 @@ class AssessmentAssignmentPlanner:
                     slot_id=question_slot_id(target_kc_id, 0),
                     kind=TeachingObjectiveKind.CONCEPT_DISTINCTION,
                     operation=distinction_operation,
-                    objective="区分目标知识点与最容易混淆的概念、条件或适用边界。",
+                    objective=distinction_objective,
                 ),
                 QuestionObjective(
                     slot_id=question_slot_id(target_kc_id, 1),
                     kind=TeachingObjectiveKind.APPLICATION_TRANSFER,
                     operation=operation,
-                    objective="把目标知识点迁移到新的具体情境并判断结果或方法选择。",
+                    objective=transfer_objective,
                 ),
             ),
         )

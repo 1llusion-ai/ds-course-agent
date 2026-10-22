@@ -105,6 +105,25 @@ ASSESSMENT_MIGRATIONS = (
             )""",
         ),
     ),
+    Migration(
+        version=8,
+        name="persist_bounded_assessment_learner_evidence",
+        statements=(
+            "ALTER TABLE assessments ADD COLUMN learner_evidence_json TEXT",
+            """CREATE TABLE reviewed_assessment_items_by_task (
+                course_id TEXT NOT NULL, target_kc_id TEXT NOT NULL, resource_key TEXT NOT NULL,
+                difficulty TEXT NOT NULL, objective_kind TEXT NOT NULL, operation TEXT NOT NULL,
+                item_id TEXT NOT NULL, task_fingerprint TEXT NOT NULL, answer_text TEXT NOT NULL,
+                payload_json TEXT NOT NULL, created_at REAL NOT NULL, usable INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY(course_id,target_kc_id,resource_key,difficulty,objective_kind,operation,item_id,task_fingerprint)
+            )""",
+            """INSERT INTO reviewed_assessment_items_by_task
+                SELECT course_id,target_kc_id,resource_key,difficulty,objective_kind,operation,item_id,
+                       '',answer_text,payload_json,created_at,usable FROM reviewed_assessment_items""",
+            "DROP TABLE reviewed_assessment_items",
+            "ALTER TABLE reviewed_assessment_items_by_task RENAME TO reviewed_assessment_items",
+        ),
+    ),
 )
 
 

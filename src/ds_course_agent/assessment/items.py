@@ -100,7 +100,9 @@ class ReviewedItemRepository:
         connection = connect_sqlite(self._path)
         try:
             connection.execute("BEGIN IMMEDIATE")
-            for question, review in zip(quiz.questions, quiz.review_certificates, strict=True):
+            for index, (question, review) in enumerate(zip(quiz.questions, quiz.review_certificates, strict=True)):
+                if review.task_fingerprint != request.task_fingerprint(index):
+                    raise ValueError("review certificate is detached from the assigned task")
                 identity = item_identity(question)
                 rows = connection.execute(
                     "SELECT answer_text FROM reviewed_assessment_items WHERE course_id=? AND target_kc_id=? AND resource_key=? AND item_id=?",
@@ -131,8 +133,8 @@ class ReviewedItemRepository:
                 kind = review.objective_kind.value if review.objective_kind else ""
                 connection.execute(
                     "INSERT OR IGNORE INTO reviewed_assessment_items "
-                    "(course_id,target_kc_id,resource_key,difficulty,objective_kind,operation,item_id,answer_text,payload_json,created_at,usable) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,1)",
+                    "(course_id,target_kc_id,resource_key,difficulty,objective_kind,operation,item_id,task_fingerprint,answer_text,payload_json,created_at,usable) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,1)",
                     (
                         str(revision.course_id),
                         request.target_kc_id,
@@ -141,6 +143,7 @@ class ReviewedItemRepository:
                         kind,
                         review.cognitive_operation.value,
                         identity,
+                        review.task_fingerprint,
                         answer_identity(question),
                         item.model_dump_json(),
                         time.time(),
@@ -182,7 +185,7 @@ class ReviewedItemRepository:
         )
         selected = []
         for index in range(request.count):
-            objective = request.teaching_requirement.objectives[index] if request.teaching_requirement else None
+            objective = request.objective_for_slot(index)
             candidate = next(
                 (
                     item
@@ -191,6 +194,7 @@ class ReviewedItemRepository:
                     and item.resource_revision == revision
                     and item.target_kc_id == request.target_kc_id
                     and item.review.cognitive_operation in DIFFICULTY_RULES[request.difficulty].operations
+                    and item.review.task_fingerprint == request.task_fingerprint(index)
                     and (
                         objective is None
                         or (

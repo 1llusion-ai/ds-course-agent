@@ -99,6 +99,37 @@ def test_old_evidence_policy_assets_are_not_selected_for_current_resources(tmp_p
     assert not assets.select(request, current)
 
 
+def test_reuse_keeps_distinct_task_certificates_for_the_same_question(tmp_path):
+    from ds_course_agent.assessment.models import AssessmentLearnerEvidence, AssessmentPracticeError
+
+    def request_for(stem):
+        return GenerateQuestionsRequest(
+            target_kc_id="pca",
+            count=1,
+            learner_evidence=AssessmentLearnerEvidence(
+                course_id="data-science-intro",
+                target_kc_id="pca",
+                answered_count=1,
+                effective_answered_count=1,
+                recent_answered_count=1,
+                recent_errors=(AssessmentPracticeError(question_stem=stem),),
+            ),
+        )
+
+    first = request_for("学生先前把 PCA 方差解释反了？")
+    second = request_for("学生先前把 PCA 正交关系解释反了？")
+    model = _StructuredModel(_quiz_payload(1, Difficulty.BASIC))
+    service, _ = _service_with_model(model, documents=[_Document(PCA_EVIDENCE)])
+    assets = ReviewedItemRepository(tmp_path / "assessments.db")
+    quiz = service.generate(first)
+    assets.accumulate(first, quiz)
+    assert assets.select(first, quiz.resource_revision)
+    assert not assets.select(second, quiz.resource_revision)
+    assets.accumulate(second, service.generate(second))
+    assert assets.select(first, quiz.resource_revision)
+    assert assets.select(second, quiz.resource_revision)
+
+
 def test_missing_slot_only_is_generated_and_reviewed(tmp_path):
     class Editor:
         def __init__(self):
@@ -175,8 +206,10 @@ def test_full_combination_name_cannot_fake_correct_answer_member_coverage():
         critic=_Critic(),
         course_id="digital-literacy",
     )
-    with pytest.raises(NoAssessmentEvidence, match="correct-answer excerpts"):
+    service._repair_rounds = 0
+    with pytest.raises(AssessmentGenerationError, match="target_coverage_gap") as failed:
         service.generate(request)
+    assert failed.value.progress.accepted_count == 1
 
 
 def test_oversized_reuse_falls_back_to_normal_bounded_generation():
@@ -233,7 +266,8 @@ def test_mixed_reviewed_batches_exhausted_repair_retains_good_slots():
     assert failed.value.progress.batch_review.certificate is None
 
 
-def test_incomplete_composite_cache_generates_only_missing_member():
+@pytest.mark.parametrize("reuse", [False, True])
+def test_incomplete_composite_batch_repairs_only_missing_member(reuse):
     target = "dl_5_8_6_1"
     request = GenerateQuestionsRequest(target_kc_id=target, count=2)
     payload = _quiz_payload(2, Difficulty.BASIC)
@@ -298,9 +332,15 @@ def test_incomplete_composite_cache_generates_only_missing_member():
     model.responses.append(other_payload)
     other = service.generate(request)
     second = selected_item(other, slot=1, target=target)
-    result = service.generate(request, reusable_items=(first, second))
+    if reuse:
+        result = service.generate(request, reusable_items=(first, second))
+    else:
+        incomplete = {**payload, "questions": [dict(payload["questions"][0]), dict(payload["questions"][0])]}
+        incomplete["questions"][1]["stem"] = "如何判断相关系数的绝对值所表示的含义？"
+        model.responses.append(incomplete)
+        result = service.generate(request)
     assert len(result.questions) == 2
-    assert model.invoke_count == 2
+    assert model.invoke_count == (2 if reuse else 3)
     assert len(editor.requests) == 1
     assert [slot.slot_index for slot in editor.requests[0].slots] == [1]
     assert "least_squares_regression" in editor.requests[0].slots[0].rejection.detail

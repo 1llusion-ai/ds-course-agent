@@ -44,6 +44,7 @@ from ds_course_agent.assessment.service import (
     NoAssessmentEvidence,
     get_assessment_service,
 )
+from ds_course_agent.assessment.task_context import AssessmentTaskContext
 from ds_course_agent.assessment.verifier import (
     AssessmentEvidenceVerifier,
     AssessmentVerificationError,
@@ -58,6 +59,10 @@ PCA_EVIDENCE = (
     "PCA 通过将原始数据投影到主要变化方向来减少特征维度并保留数据的主要信息。"
     "PCA 的各个主成分之间相互正交，通常按照能够解释的方差大小进行排序。"
 )
+
+
+def _task(request: GenerateQuestionsRequest, *, course_id: str = "data-science-intro") -> AssessmentTaskContext:
+    return AssessmentTaskContext(request=request, target=resolve_target(request, course_id=course_id))
 
 
 @dataclass
@@ -453,6 +458,125 @@ def test_quality_gates_run_in_parallel_over_the_same_candidate_pool() -> None:
     assert len(quiz.questions) == 2
     assert {name for name, _ in gate_inputs} == {"verifier", "critic"}
     assert len({pool_id for _, pool_id in gate_inputs}) == 1
+
+
+# Captured from an isolated real-provider replay on 2026-10-22. The target
+# terms occur in the options; both stems were rejected before either blind review.
+_CLOUD_SCENARIO_STEMS = (
+    "在云计算的三种典型服务模式中，哪种模式将软件直接作为服务出租给用户，用户无需关注底层基础设施或平台的维护？",
+    "某企业希望快速部署一个在线协作软件，但不想自行购买服务器、安装操作系统或配置开发环境，应选择哪种云计算服务模式？",
+)
+_CLOUD_EVIDENCE = "IaaS 将计算、存储资源等基础设施作为服务出租，PaaS 将平台作为服务出租，而 SaaS 把软件作为服务出租。"
+
+
+def _cloud_scenario_question(stem: str) -> GeneratedQuestion:
+    return GeneratedQuestion(
+        stem=stem,
+        options=[
+            QuestionOption(id="A", text="基础设施即服务（IaaS）"),
+            QuestionOption(id="B", text="平台即服务（PaaS）"),
+            QuestionOption(id="C", text="软件即服务（SaaS）"),
+            QuestionOption(id="D", text="数据即服务（DaaS）"),
+        ],
+        correct_option_id="C",
+        explanation="SaaS 把软件作为服务出租。",
+        difficulty=Difficulty.BASIC,
+        source_ids=["S1"],
+    )
+
+
+def _cloud_scenario_service(
+    question: GeneratedQuestion,
+    verifier: _Verifier,
+    critic: _Critic,
+) -> AssessmentService:
+    model = _StructuredModel({"title": "云计算服务模型", "questions": [question.model_dump(mode="json")]})
+    return AssessmentService(
+        retriever=_Retriever([_Document(_CLOUD_EVIDENCE)]),
+        generator=AssessmentGenerator(model=model),
+        verifier=verifier,
+        critic=critic,
+        repair_rounds=0,
+        course_id="digital-literacy",
+    )
+
+
+@pytest.mark.parametrize("stem", _CLOUD_SCENARIO_STEMS)
+def test_captured_scenario_with_topic_options_reaches_both_blind_reviews(stem: str) -> None:
+    question = _cloud_scenario_question(stem)
+    verifier, critic = _Verifier(), _Critic()
+    service = _cloud_scenario_service(question, verifier, critic)
+
+    quiz = service.generate(GenerateQuestionsRequest(target_kc_id="dl_5_2_1_1", count=1))
+
+    assert quiz.questions[0].stem == stem
+    assert verifier.calls == [[question]]
+    assert critic.calls == [([question], [])]
+    assert len(quiz.review_certificates) == 1
+
+
+@pytest.mark.parametrize("correct_option_id", ["A", "C"])
+def test_topic_prefilter_does_not_depend_on_marked_answer(correct_option_id: str) -> None:
+    question = _cloud_scenario_question(_CLOUD_SCENARIO_STEMS[0]).model_copy(
+        update={
+            "options": [
+                QuestionOption(id=option.id, text="IaaS" if option.id == "B" else f"资源类别{option.id}")
+                for option in _cloud_scenario_question(_CLOUD_SCENARIO_STEMS[0]).options
+            ],
+            "correct_option_id": correct_option_id,
+        }
+    )
+    verifier, critic = _Verifier(), _Critic()
+    service = _cloud_scenario_service(question, verifier, critic)
+
+    service.generate(GenerateQuestionsRequest(target_kc_id="dl_5_2_1_1", count=1))
+
+    assert verifier.calls == [[question]]
+    assert critic.calls == [([question], [])]
+
+
+@pytest.mark.parametrize("gate", ["verifier", "critic"])
+def test_topic_option_alone_cannot_bypass_independent_reviews(gate: str) -> None:
+    question = _cloud_scenario_question("在以下选项中，哪一项是法国的首都？")
+    verdict = {
+        "question_index": 0,
+        "supported_options": [{"option_id": "C", "excerpt_id": "E1"}],
+        "on_topic": gate != "verifier",
+        "answer_explanation": "当前问题与云计算服务模式无关。",
+    }
+    critique = _critique_payload(0, question)
+    critique["pedagogically_useful"] = gate != "critic"
+    verifier, critic = _Verifier([[verdict]]), _Critic([[critique]])
+    service = _cloud_scenario_service(question, verifier, critic)
+
+    with pytest.raises(AssessmentSlotFailureError) as error:
+        service.generate(GenerateQuestionsRequest(target_kc_id="dl_5_2_1_1", count=1))
+
+    expected = QuestionRejectionCode.OFF_TOPIC if gate == "verifier" else QuestionRejectionCode.LOW_PEDAGOGICAL_VALUE
+    assert expected in error.value.progress.pending_slots[0].rejection_codes
+    assert verifier.calls == [[question]]
+    assert critic.calls == [([question], [])]
+    assert error.value.progress.accepted_count == 0
+
+
+def test_topic_in_explanation_or_evidence_cannot_admit_an_unrelated_question() -> None:
+    question = _cloud_scenario_question("在以下选项中，哪一项是法国的首都？").model_copy(
+        update={
+            "options": [
+                QuestionOption(id=key, text=city)
+                for key, city in zip("ABCD", ("巴黎", "伦敦", "柏林", "罗马"), strict=True)
+            ]
+        }
+    )
+    verifier, critic = _Verifier(), _Critic()
+    service = _cloud_scenario_service(question, verifier, critic)
+
+    with pytest.raises(AssessmentSlotFailureError) as error:
+        service.generate(GenerateQuestionsRequest(target_kc_id="dl_5_2_1_1", count=1))
+
+    assert error.value.progress.pending_slots[0].rejection_codes == (QuestionRejectionCode.OFF_TOPIC,)
+    assert verifier.calls == []
+    assert critic.calls == []
 
 
 def test_service_repairs_only_rejected_questions_and_preserves_accepted_questions() -> None:

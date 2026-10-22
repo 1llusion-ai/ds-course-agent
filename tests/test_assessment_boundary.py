@@ -8,7 +8,7 @@ import pytest
 PACKAGE = Path(__file__).resolve().parents[1] / "src" / "ds_course_agent"
 
 
-@pytest.mark.parametrize("module", ["items", "versioning", "generation_constraints"])
+@pytest.mark.parametrize("module", ["items", "versioning", "generation_constraints", "task_context"])
 def test_reviewed_content_owners_do_not_import_orchestration_or_live_dependencies(module: str) -> None:
     allowed = {"assessment", "courses", "shared"}
     violations = []

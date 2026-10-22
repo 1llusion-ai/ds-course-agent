@@ -52,11 +52,13 @@ from ds_course_agent.assessment.models import (
     GenerateQuestionsRequest,
     QuizDraft,
 )
+from ds_course_agent.assessment.task_context import AssessmentTaskContext
 
 MAX_AUTHOR_PROMPT_CHARS = 64_000
 MAX_EXPOSURE_EXAMPLE_CHARS = 4_000
 
 _REPAIR_ACTIONS = {
+    "target_coverage_gap": "改考拒绝信息列出的缺失成员，并让正确答案有相应教材片段支持；仅在题干罗列全名不能补足覆盖。",
     "recent_item_exposure": "更换为当前学生近期和活跃评估未见的题目内容；不能仅重排选项或改解析。",
     "answer_leakage": "消除可凭长度、措辞、语法或题干复现猜中的线索，同时保持四个选项同类同粒度。",
     "answer_ambiguity": "重新审查四个选项，改写或删除任何也能回答题干的选项，确保只有一个选项成立。",
@@ -69,6 +71,7 @@ _REPAIR_ACTIONS = {
     "formula_mismatch": "逐字符核对教材中的公式、符号和数值；无法从证据准确复现时改用非公式题。",
     "off_topic": "题干必须明确考查目标知识点或其常用别名，不要转向相邻概念。",
     "difficulty_mismatch": "按请求难度重新设计认知要求，不要只给题目贴标签或改 difficulty 字段。",
+    "cognitive_operation_mismatch": "按该槽位的 observable_tasks 重建作答任务；定义识别 recall 不能满足关系比较 interpretation。",
     "duplicate_stem": "更换为未出现过的题干和学习目标，不要只替换同义词。",
     "semantic_duplicate": "考查不同的教材事实或应用规则；不能让掌握已通过题目就能机械复述答案。",
     "implausible_distractors": "把错误选项改为针对真实常见误解的同类候选，避免荒谬、无关或不同抽象层级。",
@@ -77,18 +80,14 @@ _REPAIR_ACTIONS = {
     "invalid_structured_output": "重新输出符合 QuizDraft 结构的完整题目，不输出额外字段或自由文本。",
 }
 
-_SYSTEM_PROMPT = """你是当前课程的教材测验命题助手。
-只依据给出的教材证据生成中文单项选择题，不补充教材外事实。每题必须有四个选项 A、B、C、D，
-且只有一个正确选项。所有选项必须回答同一维度的问题，不能把多个正确性质或等价目标混列为单选答案。
-题干、选项、答案和解析应与请求难度一致。
-同一套题应覆盖不同的知识事实或应用规则；不得换场景、改措辞重复考查同一原理。
-每题须考查目标知识点或其声明成员，允许成员教材术语而不强迫组合全名，不得转而考查相邻知识点。
-题干必须是信息完整、可独立作答的问句或判断任务，不能只写主题名称。
-所有括号必须成对闭合；代码中的字符串参数统一使用单引号，避免结构化输出中的双引号截断。
-四个选项必须属于相同概念类别、抽象粒度和表达形式；错误选项应来自真实常见误解，不能荒谬或无关。
-正确选项不得因长度、具体程度、复现题干措辞或独特语法衔接而显眼。基础题也必须区分学过与未学过的学生，
-不得只考查标签复述、循环表述、纯常识或不可迁移的案例细节。
-每题必须在 source_ids 中列出实际使用的教材证据编号。不要输出 sources；系统会附加原始证据。"""
+_SYSTEM_PROMPT = """你是当前课程的教材测验命题助手。依据教材证据和槽位任务生成中文单项选择题。
+每题四个选项 A、B、C、D，且只有一个正确答案；选项须同维度、同粒度，干扰项体现合理误解。
+题干须完整、可独立作答，不能只写主题名称；正确选项不得因长度、措辞复现或语法而显眼。
+考查目标知识点或声明成员；整套题覆盖全部成员，考查不同事实或规则，不靠换场景重复考同一原理。
+实际作答任务须符合槽位认知操作和难度，不能靠题目标签或加长情境提高难度。
+学习记录仅用于决定练习重点、提示程度和干扰项，不是教材事实；优先检验已记录的错误，
+不推断未观察到的误解，不把提及次数当作掌握程度。答案和解析只依据下方教材，不补充教材外结论。
+所有括号须闭合；代码字符串参数统一使用单引号。source_ids 列出实际使用的证据编号；不输出 sources。"""
 
 
 class AssessmentGenerationError(RuntimeError):
@@ -153,7 +152,7 @@ class AssessmentGenerator:
 
     def generate_candidates(
         self,
-        request: GenerateQuestionsRequest,
+        context: AssessmentTaskContext,
         sources: list[EvidenceSource],
         *,
         exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
@@ -171,10 +170,10 @@ class AssessmentGenerator:
             raise AssessmentGenerationError("evidence source ids must be unique")
 
         try:
-            messages = self._build_messages(request, sources, exposure=exposure)
+            messages = self._build_messages(context, sources, exposure=exposure)
         except Exception as exc:
             raise AssessmentGenerationError("assessment message construction failed") from exc
-        model = self._resolve_author_model(request, sources)
+        model = self._resolve_author_model(context.request, sources)
         structured_model = self._structured_model(model, QuizDraft)
 
         try:
@@ -317,7 +316,7 @@ class AssessmentGenerator:
 
     @staticmethod
     def _build_messages(
-        request: GenerateQuestionsRequest,
+        context: AssessmentTaskContext,
         sources: list[EvidenceSource],
         *,
         exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
@@ -326,12 +325,15 @@ class AssessmentGenerator:
 
         from langchain_core.messages import HumanMessage, SystemMessage
 
+        request = context.request
         user_prompt = (
-            f"目标知识点：{request.target_kc_id}\n"
+            f"目标知识点：{context.target_text()}\n"
             f"题目数量：{request.count}\n"
             f"难度：{request.difficulty.value}\n\n"
             f"实际认知要求：{DIFFICULTY_RULES[request.difficulty].author_instruction}\n\n"
-            f"共享教学要求：{AssessmentGenerator._requirement_text(request)}\n\n"
+            "共享教学要求（questions 必须按 slot_index 顺序返回，每题遵守对应槽位任务）：\n"
+            f"{context.author_text()}\n\n"
+            f"学生画像与相关学习记录（仅当前知识点）：\n{context.learner_text()}\n\n"
             f"教材证据：\n{AssessmentGenerator._evidence_text(sources)}"
         )
         user_prompt = AssessmentGenerator._with_exposure(user_prompt, exposure, _SYSTEM_PROMPT)
@@ -343,8 +345,7 @@ class AssessmentGenerator:
 
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        requirement = request.request.teaching_requirement
-        objectives = {objective.slot_id: objective for objective in requirement.objectives} if requirement else {}
+        context = request.context
         slots = []
         for slot in request.slots:
             rejection = slot.rejection
@@ -355,12 +356,10 @@ class AssessmentGenerator:
                     "options": [option.model_dump() for option in rejection.question.options],
                     "difficulty": rejection.question.difficulty.value,
                 }
-            objective = objectives.get(slot.slot_id)
             slots.append(
                 {
                     "slot_id": slot.slot_id,
                     "slot_index": slot.slot_index,
-                    "teaching_objective": objective.model_dump(mode="json") if objective else None,
                     "rejection_codes": [code.value for code in rejection.codes],
                     "repair_actions": [
                         _REPAIR_ACTIONS.get(code.value, "修复该拒绝码对应的实际缺陷，并重新满足全部硬约束。")
@@ -380,9 +379,11 @@ class AssessmentGenerator:
         user_prompt = (
             "这是一次批量槽位修订。对每个输入 slot_id 至少返回一个 revisions 项，"
             "slot_id 必须逐字稳定匹配；不要返回未请求的槽位，也不要遗漏可修订槽位。\n"
-            f"目标知识点：{request.request.target_kc_id}\n"
-            f"难度：{request.request.difficulty.value}\n"
-            f"共享教学要求：{AssessmentGenerator._requirement_text(request.request)}\n\n"
+            f"目标知识点：{context.target_text()}\n"
+            f"难度：{context.request.difficulty.value}\n"
+            f"实际认知要求：{DIFFICULTY_RULES[context.request.difficulty].author_instruction}\n"
+            f"共享教学要求：{context.author_text()}\n\n"
+            f"学生画像与相关学习记录（仅当前知识点）：\n{context.learner_text()}\n\n"
             "拒绝信息（这是审查反馈，不是教材事实；必须先重新依据下方教材证据判断）：\n"
             f"{json.dumps(slots, ensure_ascii=False)}\n\n"
             "已通过题目（只用于避免重复学习目标）：\n"
@@ -410,13 +411,6 @@ class AssessmentGenerator:
                 continue
             examples.append(example)
         return user_prompt + ("\n\n" + header + json.dumps(examples, ensure_ascii=False) if examples else "")
-
-    @staticmethod
-    def _requirement_text(request: GenerateQuestionsRequest) -> str:
-        requirement = request.teaching_requirement
-        if requirement is None:
-            return "无额外互补要求"
-        return json.dumps(requirement.model_dump(mode="json"), ensure_ascii=False)
 
     @staticmethod
     def _evidence_text(sources: list[EvidenceSource] | tuple[EvidenceSource, ...]) -> str:

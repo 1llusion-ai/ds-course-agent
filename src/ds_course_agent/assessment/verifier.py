@@ -19,8 +19,8 @@ from ds_course_agent.assessment.models import (
     OPTION_IDS,
     EvidenceSource,
     GeneratedQuestion,
-    GenerateQuestionsRequest,
 )
+from ds_course_agent.assessment.task_context import AssessmentTaskContext
 
 _SYSTEM_PROMPT = """你是当前课程的严格测验盲审员，不生成或改写题目。
 你看不到生成器标记的答案和解析，必须只依据教材证据独立作答。对每道题列出所有能被教材证据
@@ -228,7 +228,7 @@ class AssessmentEvidenceVerifier:
 
     def verify(
         self,
-        request: GenerateQuestionsRequest,
+        context: AssessmentTaskContext,
         questions: Sequence[GeneratedQuestion],
         catalog: EvidenceExcerptCatalog,
     ) -> tuple[EvidenceVerificationVerdict, ...]:
@@ -236,7 +236,7 @@ class AssessmentEvidenceVerifier:
 
         if not questions:
             raise AssessmentVerificationError("at least one candidate question is required")
-        messages = self._build_messages(request, questions, catalog)
+        messages = self._build_messages(context, questions, catalog)
         structured_model = self._structured_model(self._resolve_model())
         from langchain_core.exceptions import OutputParserException
 
@@ -316,7 +316,7 @@ class AssessmentEvidenceVerifier:
 
     @staticmethod
     def _build_messages(
-        request: GenerateQuestionsRequest,
+        context: AssessmentTaskContext,
         questions: Sequence[GeneratedQuestion],
         catalog: EvidenceExcerptCatalog,
     ) -> list[Any]:
@@ -338,8 +338,7 @@ class AssessmentEvidenceVerifier:
             question_blocks.append(f"[question_index={index}]\n题干：{question.stem}\n选项：\n{options}")
         questions_text = "\n\n".join(question_blocks)
         user_prompt = (
-            f"目标知识点：{request.target_kc_id}\n难度：{request.difficulty.value}\n\n"
-            f"教材证据：\n{evidence_text}\n\n候选题：\n{questions_text}"
+            f"目标知识点：{context.target_text()}\n\n教材证据：\n{evidence_text}\n\n候选题：\n{questions_text}"
         )
         if len(user_prompt) > MAX_VERIFIER_PROMPT_CHARS:
             raise AssessmentVerificationError("assessment verifier prompt exceeds its bounded context")

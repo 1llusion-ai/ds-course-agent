@@ -33,6 +33,8 @@ class PracticeObservation:
     answer_change_count: int | None = None
     selected_option_text: str | None = None
     correct_option_text: str | None = None
+    cognitive_operation: str | None = None
+    objective_kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,8 @@ class PracticeAttempt:
     is_correct: bool
     selected_option_text: str | None = None
     correct_option_text: str | None = None
+    cognitive_operation: str | None = None
+    objective_kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,7 @@ class ConceptPractice:
     recent_attempts: tuple[PracticeAttempt, ...] = ()
     recommended_difficulty: str | None = None
     effective_answered_count: int = 0
+    last_incorrect_operation: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Project the summary for profile persistence."""
@@ -146,12 +151,18 @@ def summarize_practice(observations: list[tuple[float, PracticeObservation]]) ->
         last_answered_at=ordered[-1][0],
         level=level,
         last_incorrect_stem=next((item.question_stem for item in reversed(recent) if not item.is_correct), None),
+        last_incorrect_operation=next(
+            (item.cognitive_operation for item in reversed(recent) if not item.is_correct and item.cognitive_operation),
+            None,
+        ),
         recent_attempts=tuple(
             PracticeAttempt(
                 question_stem=item.question_stem,
                 is_correct=item.is_correct,
                 selected_option_text=item.selected_option_text,
                 correct_option_text=item.correct_option_text,
+                cognitive_operation=item.cognitive_operation,
+                objective_kind=item.objective_kind,
             )
             for item in recent[-3:]
         ),

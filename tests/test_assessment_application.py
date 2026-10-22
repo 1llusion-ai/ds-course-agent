@@ -91,10 +91,14 @@ def test_assignment_parameters_are_internal_and_persisted(lifecycle) -> None:
 
 
 def test_assignment_round_trips_teaching_requirement_and_reuses_same_id(tmp_path) -> None:
+    from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
+
     generator = StubGenerator()
     repository = AssessmentRepository(tmp_path / "assessment.db")
     service = AssessmentApplicationService(repository=repository, generator=generator)
-    request = AssessmentAssignmentPlanner().plan_for_concept("svm", None, count=2)
+    request = AssessmentAssignmentPlanner().plan_for_concept(
+        "svm", LearnerStateSnapshot(student_id="student-1"), count=2
+    )
 
     first = service.assign("student-1", request, session_id="session-1", assignment_id="assessment-1")
     restored = repository.get(first.id, "student-1")

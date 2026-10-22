@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict
@@ -49,7 +50,7 @@ class BatchReviewCertificate(BaseModel):
         questions: Sequence[GeneratedQuestion],
         review_policy: str,
     ) -> BatchReviewCertificate:
-        requirement = request.teaching_requirement.model_dump_json() if request.teaching_requirement else ""
+        requirement = json.dumps([request.task_fingerprint(index) for index in range(request.count)])
         return cls(
             slot_item_ids=tuple(item_identity(question) for question in questions),
             target_kc_id=request.target_kc_id,

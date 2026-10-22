@@ -16,6 +16,7 @@ from ds_course_agent.assessment.models import (
     ItemReviewCertificate,
     question_slot_id,
 )
+from ds_course_agent.assessment.task_context import AssessmentTaskContext
 from ds_course_agent.assessment.versioning import AssessmentResourceRevision
 
 
@@ -36,6 +37,7 @@ RETRYABLE_FAILURE_KINDS = frozenset(
     {
         AssessmentFailureKind.QUESTION_SLOT_FAILURE,
         AssessmentFailureKind.PROVIDER_TRANSIENT_FAILURE,
+        AssessmentFailureKind.REVIEWER_UNAVAILABLE,
         AssessmentFailureKind.RETRIEVAL_UNAVAILABLE,
     }
 )
@@ -127,6 +129,7 @@ class QuestionRejectionCode(str, Enum):
     ANSWER_LEAKAGE = "answer_leakage"
     ANSWER_AMBIGUITY = "answer_ambiguity"
     ANSWER_NOT_SUPPORTED = "answer_not_supported"
+    COGNITIVE_OPERATION_MISMATCH = "cognitive_operation_mismatch"
     DIFFICULTY_MISMATCH = "difficulty_mismatch"
     DUPLICATE_STEM = "duplicate_stem"
     RECENT_ITEM_EXPOSURE = "recent_item_exposure"
@@ -141,6 +144,7 @@ class QuestionRejectionCode(str, Enum):
     REVIEWER_UNAVAILABLE = "reviewer_unavailable"
     SEMANTIC_DUPLICATE = "semantic_duplicate"
     SOURCE_MISMATCH = "source_mismatch"
+    TARGET_COVERAGE_GAP = "target_coverage_gap"
     UNCERTAIN_EVIDENCE = "uncertain_evidence"
     UNKNOWN_SOURCE = "unknown_source"
     UNKNOWN_EVIDENCE_REFERENCE = "unknown_evidence_reference"
@@ -196,15 +200,15 @@ class QuestionRepairSlot:
 class QuestionRepairRequest:
     """One batch repair request with one shared evidence snapshot."""
 
-    request: GenerateQuestionsRequest
+    context: AssessmentTaskContext
     evidence: tuple[EvidenceSource, ...]
     slots: tuple[QuestionRepairSlot, ...]
     accepted_questions: tuple[GeneratedQuestion, ...] = ()
     exposure: AssessmentExposureConstraint = AssessmentExposureConstraint()
 
     def __post_init__(self) -> None:
-        if not isinstance(self.request, GenerateQuestionsRequest):
-            raise TypeError("repair request must use GenerateQuestionsRequest")
+        if not isinstance(self.context, AssessmentTaskContext):
+            raise TypeError("repair request must use AssessmentTaskContext")
         if not self.evidence:
             raise ValueError("repair evidence must not be empty")
         if any(not isinstance(source, EvidenceSource) for source in self.evidence):
@@ -217,9 +221,11 @@ class QuestionRepairRequest:
         slot_ids = [slot.slot_id for slot in self.slots]
         if len(set(slot_ids)) != len(slot_ids):
             raise ValueError("repair slot ids must be unique")
-        expected_ids = {question_slot_id(self.request.target_kc_id, slot_index) for slot_index in slot_indices}
-        if set(slot_ids) != expected_ids:
-            raise ValueError("repair slot ids must be stable ids for the requested KC and slot indexes")
+        for slot in self.slots:
+            if not 0 <= slot.slot_index < self.context.request.count:
+                raise ValueError("repair slot index is outside the requested count")
+            if slot.slot_id != question_slot_id(self.context.request.target_kc_id, slot.slot_index):
+                raise ValueError("repair slot id must match its own slot index")
 
 
 class QuestionRepairResult(BaseModel):
@@ -355,10 +361,9 @@ class AssessmentGenerationProgress(BaseModel):
         expected_indexes = set(range(self.request.count))
         if set(accepted_indexes) | set(pending_indexes) != expected_indexes:
             raise ValueError("generation progress must cover every requested slot")
-        expected_ids = {question_slot_id(self.request.target_kc_id, index) for index in expected_indexes}
-        actual_ids = {item.slot_id for item in (*self.accepted_slots, *self.pending_slots)}
-        if actual_ids != expected_ids:
-            raise ValueError("generation progress must use stable slot ids")
+        for item in (*self.accepted_slots, *self.pending_slots):
+            if item.slot_id != question_slot_id(self.request.target_kc_id, item.slot_index):
+                raise ValueError("generation progress slot id must match its own slot index")
         return self
 
     @property
@@ -372,7 +377,8 @@ class AssessmentGenerationProgress(BaseModel):
     @property
     def retryable(self) -> bool:
         return self.repair_round < 4 and (
-            any(is_assessment_failure_retryable(item.failure_kind) for item in self.pending_slots)
+            bool(self.pending_slots)
+            and all(is_assessment_failure_retryable(item.failure_kind) for item in self.pending_slots)
             or (
                 self.batch_review.required
                 and not self.pending_slots

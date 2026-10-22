@@ -4676,6 +4676,29 @@
             }
           ]
         }
+      ],
+      "assessment_components": [
+        {
+          "component_id": "iaas",
+          "anchors": [
+            "IaaS",
+            "基础设施即服务"
+          ]
+        },
+        {
+          "component_id": "paas",
+          "anchors": [
+            "PaaS",
+            "平台即服务"
+          ]
+        },
+        {
+          "component_id": "saas",
+          "anchors": [
+            "SaaS",
+            "软件即服务"
+          ]
+        }
       ]
     },
     {

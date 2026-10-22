@@ -24,6 +24,7 @@ from ds_course_agent.assessment.verifier import (
     EvidenceVerificationBatch,
     EvidenceVerificationVerdict,
 )
+from tests.test_assessment_core import _task
 
 
 class _Runnable:
@@ -97,7 +98,7 @@ def test_verifier_uses_structured_output_and_server_owned_excerpts() -> None:
     source = EvidenceSource(id="S1", text="PCA 通过投影保留主要变化方向来降低特征维度。")
 
     verdicts = verifier.verify(
-        GenerateQuestionsRequest(target_kc_id="pca", count=1),
+        _task(GenerateQuestionsRequest(target_kc_id="pca", count=1)),
         [_question()],
         _catalog(source),
     )
@@ -128,7 +129,7 @@ def test_verifier_fails_closed_on_incomplete_or_duplicate_coverage(payload: dict
     source = EvidenceSource(id="S1", text="PCA 通过投影保留主要变化方向来降低特征维度。")
 
     with pytest.raises(AssessmentVerificationError):
-        verifier.verify(GenerateQuestionsRequest(target_kc_id="pca"), [_question()], _catalog(source))
+        verifier.verify(_task(GenerateQuestionsRequest(target_kc_id="pca")), [_question()], _catalog(source))
 
 
 @pytest.mark.parametrize("field", ["on_topic"])
@@ -185,7 +186,7 @@ def test_verifier_rejects_removed_free_text_quote_contract() -> None:
 
     with pytest.raises(AssessmentVerificationError):
         AssessmentEvidenceVerifier(model=_Model({"verdicts": [payload]})).verify(
-            GenerateQuestionsRequest(target_kc_id="pca"), [_question()], _catalog(source)
+            _task(GenerateQuestionsRequest(target_kc_id="pca")), [_question()], _catalog(source)
         )
 
 
@@ -249,7 +250,7 @@ def test_verifier_prompt_hides_candidate_and_accepted_answers_and_explanations()
         EvidenceSource(id="S2", text="UNDECLARED_SOURCE_SENTINEL"),
     ]
 
-    verifier.verify(GenerateQuestionsRequest(target_kc_id="pca"), [candidate], _catalog(*sources))
+    verifier.verify(_task(GenerateQuestionsRequest(target_kc_id="pca")), [candidate], _catalog(*sources))
 
     assert model.messages is not None
     prompt = model.messages[-1].content
@@ -269,7 +270,7 @@ def test_verifier_rejects_an_oversized_prompt_before_model_call() -> None:
     )
 
     with pytest.raises(AssessmentVerificationError):
-        verifier.verify(GenerateQuestionsRequest(target_kc_id="pca"), [_question()], catalog)
+        verifier.verify(_task(GenerateQuestionsRequest(target_kc_id="pca")), [_question()], catalog)
     assert model.invoke_count == 0
 
 
@@ -279,7 +280,7 @@ def test_verifier_provider_failure_is_not_retried() -> None:
     source = EvidenceSource(id="S1", text="PCA 通过投影保留主要变化方向来降低特征维度。")
 
     with pytest.raises(AssessmentVerifierModelCallError) as error:
-        verifier.verify(GenerateQuestionsRequest(target_kc_id="pca"), [_question()], _catalog(source))
+        verifier.verify(_task(GenerateQuestionsRequest(target_kc_id="pca")), [_question()], _catalog(source))
     assert error.value.failure_kind is AssessmentFailureKind.PROVIDER_TRANSIENT_FAILURE
     assert model.invoke_count == 1
     assert _question().difficulty is Difficulty.BASIC

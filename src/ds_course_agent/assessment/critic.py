@@ -17,8 +17,8 @@ from ds_course_agent.assessment.models import (
     OPTION_IDS,
     CognitiveOperation,
     GeneratedQuestion,
-    GenerateQuestionsRequest,
 )
+from ds_course_agent.assessment.task_context import AssessmentTaskContext
 
 MAX_CRITIC_PROMPT_CHARS = 24_000
 MAX_OPTION_CRITIQUE_REASON_LENGTH = 400
@@ -193,7 +193,7 @@ class AssessmentQualityCritic:
 
     def critique_batch(
         self,
-        request: GenerateQuestionsRequest,
+        context: AssessmentTaskContext,
         questions: Sequence[GeneratedQuestion],
         accepted_questions: Sequence[GeneratedQuestion] = (),
     ) -> tuple[ItemCritique, ...]:
@@ -201,7 +201,7 @@ class AssessmentQualityCritic:
 
         if not questions:
             raise AssessmentCritiqueError("at least one candidate question is required")
-        messages = self._build_messages(request, questions, accepted_questions)
+        messages = self._build_messages(context, questions, accepted_questions)
         structured_model = self._structured_model(self._resolve_model(), len(questions))
         from langchain_core.exceptions import OutputParserException
 
@@ -312,7 +312,7 @@ class AssessmentQualityCritic:
 
     @staticmethod
     def _build_messages(
-        request: GenerateQuestionsRequest,
+        context: AssessmentTaskContext,
         questions: Sequence[GeneratedQuestion],
         accepted_questions: Sequence[GeneratedQuestion],
     ) -> list[Any]:
@@ -329,7 +329,7 @@ class AssessmentQualityCritic:
             accepted_blocks.append(f"题干：{question.stem}\n选项：\n{options}")
         accepted_text = "\n\n".join(accepted_blocks) or "无"
         user_prompt = (
-            f"目标知识点：{request.target_kc_id}\n\n候选题：\n{questions_text}\n\n此前已通过题目：\n{accepted_text}"
+            f"目标知识点：{context.target_text()}\n\n候选题：\n{questions_text}\n\n此前已通过题目：\n{accepted_text}"
         )
         if len(user_prompt) > MAX_CRITIC_PROMPT_CHARS:
             raise AssessmentCritiqueError("assessment critic prompt exceeds its bounded context")

@@ -70,6 +70,42 @@ evidence supports an intermediate or advanced recommendation. Thus a repeated
 wrong answer remains visible without manufacturing another independent failure.
 These are explicit teaching heuristics, not calibrated ability/item estimates.
 
+## Assessment model context
+
+`teaching/assessment_assignment.py` owns the projection from `LearnerStateSnapshot`
+to the bounded `AssessmentLearnerEvidence` generation input. It includes only the
+selected course/KC's scored totals, independent-item count, recent counts,
+mention/clarification counts and at most two recent incorrect attempts. Each
+attempt retains the recorded stem, selected/correct option text and observed
+cognitive operation when available. Missing evidence stays unknown. Student IDs,
+unrelated KCs and raw conversation transcripts are excluded. Mentions and
+clarifications do not increase the recommended difficulty. The immutable request,
+including this evidence, survives preparation retries and assignment persistence.
+
+`assessment/task_context.py` owns the resolved model context. The author and editor
+receive the canonical target, explicit members, course learning objectives,
+ordered slot tasks, shared operation rules, difficulty scaffolding and the learner
+projection. Shared rules appear once per prompt. Recorded errors guide practice
+focus and distractors; they cannot supply textbook facts. The evidence verifier
+and quality critic receive the target's lexical scope without the learner
+projection, requested cognitive labels or author answer/analysis. Thus an author's
+request for interpretation cannot turn a recall item into an accepted item merely
+by labeling it.
+
+The normal conversational path still renders the learner summary and bounded
+relevant memory into system context, followed by history messages and the current
+user input (`agent/message_context.py`, `runtime/messages.py`). Assessment generation
+uses its own bounded projection instead of concatenating that full conversation.
+
+Correct-answer excerpt coverage is checked inside the shared repair loop for both
+fresh and reused batches. An uncovered member reserves one replacement slot while
+preserving as much already-covered content as possible. This is a content repair
+when the selected evidence supports the missing member; retrieval without adequate
+member evidence still fails before authoring. A reviewer outage preserves the
+candidate for review without rewriting it, obeys the per-call/lifetime retry budget
+and leaves unrelated content rejection codes intact. Permanent provider errors do
+not trigger another reviewer call.
+
 ## Reviewed content and resource identity
 
 Normal successful assignment organically accumulates reviewed content; there is
@@ -87,6 +123,21 @@ student/course scope. Older history outside this bounded window remains eligible
 for review. The author/editor sees only current-KC avoid examples, capped at 4,000
 characters within a 64,000-character full prompt limit; all forbidden identities
 remain enforced even when their examples are omitted.
+
+Review certificates additionally bind the concrete slot objective and recorded
+error focus through a task fingerprint. Counts and learner identity are excluded
+from this fingerprint so compatible tasks remain shareable. Different task
+certificates can coexist for the same content identity. The shared bank retains
+the fingerprint, not the learner's raw mistake records. This binds reuse to the
+task under which both gates accepted the item; it does not independently establish
+that an item remedies a particular misconception or measures learning gain.
+Assessment database migration 8 preserves existing content while extending the
+certificate key and persisting the bounded learner projection on assignments.
+
+`benchmarks/assessment_task_harness.py` validates fixed cognitive cases offline by
+default. Its optional provider mode evaluates critic classification only; neither
+passing synthetic regression tests nor matching these labels establishes actual
+generation success rates. The authored annotations still require teacher review.
 
 Identity ignores option labels/order and explanation, plus layout and terminal
 question punctuation. It preserves case, numbers, operators, negation, factorials

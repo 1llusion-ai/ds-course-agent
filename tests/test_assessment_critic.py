@@ -21,6 +21,7 @@ from ds_course_agent.assessment.models import (
     GeneratedQuestion,
     GenerateQuestionsRequest,
 )
+from tests.test_assessment_core import _task
 
 
 class _Runnable:
@@ -123,7 +124,7 @@ def _human_prompt(model: _Model) -> str:
 def test_critic_uses_json_schema_structured_output() -> None:
     model = _Model({"critiques": [_critique_payload()]})
 
-    critiques = AssessmentQualityCritic(model=model).critique_batch(_request(), [_question()])
+    critiques = AssessmentQualityCritic(model=model).critique_batch(_task(_request()), [_question()])
 
     assert [critique.question_index for critique in critiques] == [0]
     assert model.schema["properties"]["critiques"]["minItems"] == 1
@@ -179,7 +180,7 @@ def test_critic_observes_operation_without_seeing_requested_or_candidate_difficu
     prompts = []
     for difficulty in Difficulty:
         request = GenerateQuestionsRequest(target_kc_id="pca", count=1, difficulty=difficulty)
-        critic.critique_batch(request, [candidate.model_copy(update={"difficulty": difficulty})])
+        critic.critique_batch(_task(request), [candidate.model_copy(update={"difficulty": difficulty})])
         prompts.append(_human_prompt(model))
 
     assert len(set(prompts)) == 1
@@ -205,7 +206,7 @@ def test_critic_fails_closed_on_incomplete_or_duplicate_question_coverage(payloa
     critic = AssessmentQualityCritic(model=model)
 
     with pytest.raises(AssessmentCritiqueError, match="incomplete question coverage"):
-        critic.critique_batch(_request(), [_question(0), _question(1)])
+        critic.critique_batch(_task(_request()), [_question(0), _question(1)])
 
     assert model.invoke_count == 1
 
@@ -290,7 +291,7 @@ def test_critic_prompt_hides_answers_explanations_source_ids_and_textbook_eviden
         source_ids=["TEXTBOOK_EVIDENCE_SENTINEL"],
     )
 
-    AssessmentQualityCritic(model=model).critique_batch(_request(), [candidate])
+    AssessmentQualityCritic(model=model).critique_batch(_task(_request()), [candidate])
 
     prompt = _human_prompt(model)
     assert "CANDIDATE_STEM" in prompt
@@ -312,7 +313,7 @@ def test_critic_projects_accepted_questions_to_stems_and_options_only() -> None:
         source_ids=["ACCEPTED_SOURCE_ID_SECRET"],
     )
 
-    AssessmentQualityCritic(model=model).critique_batch(_request(), [_question()], [accepted])
+    AssessmentQualityCritic(model=model).critique_batch(_task(_request()), [_question()], [accepted])
 
     prompt = _human_prompt(model)
     assert "ACCEPTED_STEM" in prompt
@@ -331,7 +332,7 @@ def test_critic_rejects_an_oversized_prompt_before_model_call() -> None:
     accepted_questions = [_large_question(index + MAX_QUESTIONS) for index in range(MAX_QUESTIONS)]
 
     with pytest.raises(AssessmentCritiqueError, match="bounded context"):
-        AssessmentQualityCritic(model=model).critique_batch(_request(), questions, accepted_questions)
+        AssessmentQualityCritic(model=model).critique_batch(_task(_request()), questions, accepted_questions)
 
     assert model.schema is None
     assert model.invoke_count == 0
@@ -341,7 +342,7 @@ def test_critic_provider_failure_fails_closed_without_retry() -> None:
     model = _Model(error=TimeoutError("provider timeout"))
 
     with pytest.raises(AssessmentCriticModelCallError, match="pedagogical critique failed") as error:
-        AssessmentQualityCritic(model=model).critique_batch(_request(), [_question()])
+        AssessmentQualityCritic(model=model).critique_batch(_task(_request()), [_question()])
 
     assert error.value.failure_kind is AssessmentFailureKind.PROVIDER_TRANSIENT_FAILURE
     assert model.invoke_count == 1
@@ -356,7 +357,7 @@ def test_critic_normalizes_duplicate_set_like_findings() -> None:
     ]
 
     critiques = AssessmentQualityCritic(model=_Model({"critiques": [payload]})).critique_batch(
-        _request(), [_question()]
+        _task(_request()), [_question()]
     )
 
     assert [item.value for item in critiques[0].pedagogical_defects] == ["weak_distractors"]
@@ -402,7 +403,7 @@ def test_real_critic_adapter_sends_bounded_schema_without_reviewing_history() ->
             http_client=client,
             max_retries=0,
         )
-        verdicts = AssessmentQualityCritic(model=model).critique_batch(_request(), [_question()], [_question(1)])
+        verdicts = AssessmentQualityCritic(model=model).critique_batch(_task(_request()), [_question()], [_question(1)])
 
     assert len(requests) == 1
     schema = requests[0]["response_format"]["json_schema"]["schema"]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from enum import Enum
 
@@ -219,8 +221,44 @@ DIFFICULTY_RULES = {
 }
 
 
+class AssessmentPracticeError(BaseModel):
+    """A scored mistake, kept as observed facts rather than an inferred misconception."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    question_stem: str = Field(min_length=1, max_length=MAX_STEM_LENGTH)
+    selected_option_text: str | None = Field(default=None, max_length=MAX_OPTION_TEXT_LENGTH)
+    correct_option_text: str | None = Field(default=None, max_length=MAX_OPTION_TEXT_LENGTH)
+    cognitive_operation: CognitiveOperation | None = None
+
+
+class AssessmentLearnerEvidence(BaseModel):
+    """Bounded, course/KC-scoped facts assembled only by the teaching planner."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    course_id: str = Field(min_length=1, max_length=100)
+    target_kc_id: str = Field(min_length=1, max_length=MAX_KC_ID_LENGTH)
+    answered_count: int = Field(default=0, ge=0)
+    correct_count: int = Field(default=0, ge=0)
+    effective_answered_count: int = Field(default=0, ge=0)
+    recent_answered_count: int = Field(default=0, ge=0)
+    recent_correct_count: int = Field(default=0, ge=0)
+    mention_count: int = Field(default=0, ge=0)
+    clarification_count: int = Field(default=0, ge=0)
+    recent_errors: tuple[AssessmentPracticeError, ...] = Field(default=(), max_length=2)
+
+    @model_validator(mode="after")
+    def _validate_counts(self) -> AssessmentLearnerEvidence:
+        if self.correct_count > self.answered_count or self.effective_answered_count > self.answered_count:
+            raise ValueError("practice counts must not exceed scored answers")
+        if self.recent_correct_count > self.recent_answered_count or self.recent_answered_count > self.answered_count:
+            raise ValueError("recent counts must describe a subset of scored answers")
+        return self
+
+
 class GenerateQuestionsRequest(BaseModel):
-    """Validated input for one grounded quiz-generation request."""
+    """Server-assembled input for generation; not an HTTP or model tool schema."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -229,6 +267,7 @@ class GenerateQuestionsRequest(BaseModel):
     difficulty: Difficulty = Difficulty.BASIC
     question_type: AssessmentQuestionType = AssessmentQuestionType.SINGLE_CHOICE
     teaching_requirement: ComplementaryQuestionRequirement | None = None
+    learner_evidence: AssessmentLearnerEvidence | None = None
 
     @field_validator("target_kc_id", mode="before")
     @classmethod
@@ -237,12 +276,35 @@ class GenerateQuestionsRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_teaching_requirement(self) -> GenerateQuestionsRequest:
+        if self.learner_evidence is not None and self.learner_evidence.target_kc_id != self.target_kc_id:
+            raise ValueError("learner evidence target must match target_kc_id")
         if self.teaching_requirement is not None:
             if self.teaching_requirement.target_kc_id != self.target_kc_id:
                 raise ValueError("teaching requirement target must match target_kc_id")
             if self.count != len(self.teaching_requirement.objectives):
                 raise ValueError("teaching requirement must cover the exact requested question count")
         return self
+
+    def objective_for_slot(self, slot_index: int) -> QuestionObjective | None:
+        """Resolve by stable slot identity, independent of objective tuple order."""
+        if not 0 <= slot_index < self.count:
+            raise ValueError("question slot is outside the requested count")
+        if self.teaching_requirement is None:
+            return None
+        slot_id = question_slot_id(self.target_kc_id, slot_index)
+        return next(objective for objective in self.teaching_requirement.objectives if objective.slot_id == slot_id)
+
+    def task_fingerprint(self, slot_index: int) -> str:
+        """Bind reuse to the concrete goal and error focus, independent of learner identity/counts."""
+        objective = self.objective_for_slot(slot_index)
+        errors = self.learner_evidence.recent_errors if self.learner_evidence else ()
+        if objective is None and not errors:
+            return ""
+        payload = {
+            "objective": objective.model_dump(mode="json", exclude={"slot_id"}) if objective else None,
+            "recent_errors": [error.model_dump(mode="json", exclude_none=True) for error in errors],
+        }
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 
 class QuestionOption(BaseModel):
@@ -408,6 +470,7 @@ class ItemReviewCertificate(BaseModel):
     cognitive_operation: CognitiveOperation
     learning_objective: str
     objective_kind: TeachingObjectiveKind | None = None
+    task_fingerprint: str = Field(default="", pattern=r"^(?:[a-f0-9]{64})?$")
     supports: tuple[VerifiedExcerptSupport, ...] = Field(min_length=1)
 
 

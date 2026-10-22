@@ -9,10 +9,12 @@ from pathlib import Path
 import ds_course_agent.shared.config as config
 from ds_course_agent.assessment.database import migrate_assessment_database
 from ds_course_agent.assessment.models import (
+    AssessmentLearnerEvidence,
     ComplementaryQuestionRequirement,
     EvidenceSource,
     GeneratedQuestion,
     GeneratedQuiz,
+    GenerateQuestionsRequest,
     ItemReviewCertificate,
     QuestionOption,
 )
@@ -47,8 +49,9 @@ class AssessmentRepository:
                 INSERT INTO assessments (
                     id, student_id, session_id, title, status, assigned_at, opened_at,
                     submitted_at, target_kc_id, difficulty, question_type, requested_count,
-                    teaching_requirement_json, version, course_id, plan_context_json, resource_revision_json, review_certificates_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    teaching_requirement_json, version, course_id, plan_context_json, resource_revision_json, review_certificates_json,
+                    learner_evidence_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 self._assessment_values(record),
             )
@@ -161,6 +164,7 @@ class AssessmentRepository:
             record.plan_context.model_dump_json() if record.plan_context else None,
             record.quiz.resource_revision.model_dump_json() if record.quiz.resource_revision else None,
             json.dumps([review.model_dump(mode="json") for review in record.quiz.review_certificates]),
+            request.learner_evidence.model_dump_json() if request.learner_evidence else None,
         )
 
     @staticmethod
@@ -251,8 +255,6 @@ class AssessmentRepository:
                 "SELECT * FROM assessment_answers WHERE assessment_id = ? ORDER BY question_id", (row["id"],)
             ).fetchall()
         )
-        from ds_course_agent.assessment.models import GenerateQuestionsRequest
-
         requirement_json = row["teaching_requirement_json"] if "teaching_requirement_json" in row.keys() else None
         teaching_requirement = (
             ComplementaryQuestionRequirement.model_validate_json(requirement_json) if requirement_json else None
@@ -263,6 +265,11 @@ class AssessmentRepository:
             count=row["requested_count"],
             question_type=row["question_type"],
             teaching_requirement=teaching_requirement,
+            learner_evidence=(
+                AssessmentLearnerEvidence.model_validate_json(row["learner_evidence_json"])
+                if row["learner_evidence_json"]
+                else None
+            ),
         )
         return AssessmentRecord(
             id=row["id"],

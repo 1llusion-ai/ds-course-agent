@@ -67,6 +67,7 @@ from ds_course_agent.assessment.models import (
     VerifiedExcerptSupport,
     question_slot_id,
 )
+from ds_course_agent.assessment.task_context import AssessmentTaskContext
 from ds_course_agent.assessment.verifier import (
     AssessmentEvidenceVerifier,
     AssessmentVerificationError,
@@ -118,7 +119,9 @@ class AssessmentSlotFailureError(AssessmentGenerationError):
         failures = tuple(slot_failures)
         super().__init__(message, slot_failures=failures, progress=progress)
         failure_kinds = {failure.failure_kind for failure in failures}
-        if len(failure_kinds) == 1:
+        if AssessmentFailureKind.PROVIDER_PERMANENT_FAILURE in failure_kinds:
+            self.failure_kind = AssessmentFailureKind.PROVIDER_PERMANENT_FAILURE
+        elif len(failure_kinds) == 1:
             self.failure_kind = next(iter(failure_kinds))
 
 
@@ -140,7 +143,7 @@ class EvidenceVerifier(Protocol):
 
     def verify(
         self,
-        request: GenerateQuestionsRequest,
+        context: AssessmentTaskContext,
         questions: Sequence[GeneratedQuestion],
         catalog: EvidenceExcerptCatalog,
     ) -> tuple[EvidenceVerificationVerdict, ...]:
@@ -152,7 +155,7 @@ class ItemQualityCritic(Protocol):
 
     def critique_batch(
         self,
-        request: GenerateQuestionsRequest,
+        context: AssessmentTaskContext,
         questions: Sequence[GeneratedQuestion],
         accepted_questions: Sequence[GeneratedQuestion] = (),
     ) -> tuple[ItemCritique, ...]:
@@ -241,7 +244,10 @@ class AssessmentService:
         if progress is not None and progress.resource_revision != resource_revision:
             raise AssessmentResourceChangedError("assessment progress requires a new plan for current resources")
         with trace.stage(AssessmentStage.TARGET):
+            if request.learner_evidence is not None and request.learner_evidence.course_id != str(self._course_id):
+                raise ValueError("assessment learner evidence must belong to the current course")
             target = resolve_target(request, course_id=str(self._course_id))
+            task_context = AssessmentTaskContext(request=request, target=target)
         if reusable_items and len(reusable_items) == request.count:
             candidate_progress = self._reusable_progress(request, reusable_items, resource_revision, target)
             if candidate_progress is not None and candidate_progress.accepted_count == request.count:
@@ -290,7 +296,7 @@ class AssessmentService:
             normalized_stems: set[str] = set()
             try:
                 with trace.stage(AssessmentStage.GENERATION, count=request.count):
-                    draft = self._generator.generate_candidates(request, sources, exposure=exposure)
+                    draft = self._generator.generate_candidates(task_context, sources, exposure=exposure)
             except AssessmentOutputError:
                 pending = {
                     slot_index: QuestionRejection(
@@ -334,7 +340,7 @@ class AssessmentService:
                 try:
                     quality_accepted, quality_rejected = self._apply_quality_verdicts(
                         structurally_accepted,
-                        request=request,
+                        context=task_context,
                         catalog=catalog,
                         accepted_questions=(),
                         trace=trace,
@@ -399,6 +405,12 @@ class AssessmentService:
                 accepted_by_slot.pop(index)
                 review_certificates.pop(index, None)
 
+            if not pending and len(accepted_by_slot) == request.count:
+                pending.update(self._coverage_rejections(accepted_by_slot, review_certificates, target))
+                for index in pending:
+                    accepted_by_slot.pop(index)
+                    review_certificates.pop(index, None)
+
             questions = [accepted_by_slot[index] for index in sorted(accepted_by_slot)]
             expected_certificate = BatchReviewCertificate.for_batch(request, questions, resource_revision.review_policy)
             if batch_review.required and batch_review.certificate != expected_certificate:
@@ -409,7 +421,7 @@ class AssessmentService:
                 try:
                     accepted, rejected = self._apply_quality_verdicts(
                         list(enumerate(questions)),
-                        request=request,
+                        context=task_context,
                         catalog=catalog,
                         accepted_questions=(),
                         trace=trace,
@@ -442,6 +454,55 @@ class AssessmentService:
                     ):
                         continue
                 break
+            # A reviewer outage leaves the exact candidate intact. Re-run the
+            # independent gates after recovery; do not spend an editor round
+            # rewriting content that has not received a content defect.
+            review_pending = {
+                index: rejection
+                for index, rejection in pending.items()
+                if QuestionRejectionCode.REVIEWER_UNAVAILABLE in rejection.codes
+                and rejection.question is not None
+                and is_assessment_failure_retryable(rejection.failure_kind)
+            }
+            if review_pending:
+                if call_rounds >= self._repair_rounds or repair_round >= 4:
+                    break
+                call_rounds += 1
+                repair_round += 1
+                try:
+                    reviewed, review_rejections = self._apply_quality_verdicts(
+                        [(index, rejection.question) for index, rejection in sorted(review_pending.items())],
+                        context=task_context,
+                        catalog=catalog,
+                        accepted_questions=tuple(accepted_by_slot[index] for index in sorted(accepted_by_slot)),
+                        trace=trace,
+                        round_index=repair_round,
+                        review_certificates=review_certificates,
+                    )
+                except (AssessmentVerificationError, AssessmentCritiqueError) as exc:
+                    pending.update(
+                        {
+                            index: QuestionRejection(
+                                (QuestionRejectionCode.REVIEWER_UNAVAILABLE,),
+                                rejection.question,
+                                f"独立质量门不可用（{type(exc).__name__}）。",
+                                rejection.option_feedback,
+                                exc.failure_kind,
+                            )
+                            for index, rejection in review_pending.items()
+                        }
+                    )
+                    # Yield durable candidates after another outage rather
+                    # than repeatedly hitting an unavailable provider.
+                    break
+                for index, question in reviewed:
+                    accepted_by_slot[index] = question
+                pending = {index: rejection for index, rejection in pending.items() if index not in review_pending}
+                pending.update(dict(review_rejections))
+                self._log_acceptance(trace, repair_round, len(reviewed), pending)
+                continue
+            if any(QuestionRejectionCode.REVIEWER_UNAVAILABLE in rejection.codes for rejection in pending.values()):
+                break
             repairable = {
                 index: rejection
                 for index, rejection in pending.items()
@@ -454,12 +515,11 @@ class AssessmentService:
             normalized_stems = {self._normalize_stem(question.stem) for question in accepted_by_slot.values()}
             repaired, repair_rejections = self._repair_slots(
                 repairable,
-                request=request,
+                context=task_context,
                 sources=sources,
                 catalog=catalog,
                 accepted_questions=tuple(accepted_by_slot[index] for index in sorted(accepted_by_slot)),
                 normalized_stems=normalized_stems,
-                target=target,
                 trace=trace,
                 round_index=repair_round,
                 review_certificates=review_certificates,
@@ -547,12 +607,11 @@ class AssessmentService:
                 raise AssessmentResourceChangedError("reusable assessment content is incompatible with current plan")
             candidate_sources = list(sources)
             candidate_content = dict(by_content)
-            objective = (
-                request.teaching_requirement.objectives[selected.slot_index] if request.teaching_requirement else None
-            )
+            objective = request.objective_for_slot(selected.slot_index)
             if (
                 item.target_kc_id != request.target_kc_id
                 or item.question.difficulty != request.difficulty
+                or item.review.task_fingerprint != request.task_fingerprint(selected.slot_index)
                 or item.review.cognitive_operation not in DIFFICULTY_RULES[request.difficulty].operations
                 or (
                     objective is not None
@@ -590,13 +649,10 @@ class AssessmentService:
             )
         if not questions:
             return None
-        supported = [support.text for review in reviews.values() for support in review.supports]
-        if len(questions) == request.count and not has_target_coverage(supported, target):
-            # A complete cache hit may still omit a member of a composite KC.
-            # Reserve a real generation slot rather than letting reuse create
-            # a deterministic final coverage failure. Retain the other reviewed
-            # slots; the normal editor and both gates fill this missing support.
-            slot = max(questions)
+        coverage_rejections = (
+            self._coverage_rejections(questions, reviews, target) if len(questions) == request.count else {}
+        )
+        for slot in coverage_rejections:
             questions.pop(slot)
             reviews.pop(slot)
         if not questions:
@@ -619,6 +675,7 @@ class AssessmentService:
             for index in range(request.count)
             if index not in questions
         }
+        pending.update(coverage_rejections)
         return AssessmentGenerationProgress.build(
             request,
             title="教材练习",
@@ -629,6 +686,41 @@ class AssessmentService:
             resource_revision=revision,
             review_certificates=reviews,
         )
+
+    @staticmethod
+    def _coverage_rejections(
+        questions: dict[int, GeneratedQuestion],
+        reviews: dict[int, ItemReviewCertificate],
+        target: AssessmentTarget,
+    ) -> dict[int, QuestionRejection]:
+        """Reserve one replaceable slot for uncovered members, for both cache and fresh batches."""
+        if set(questions) != set(reviews):
+            return {}
+        supported = [support.text for review in reviews.values() for support in review.supports]
+        if not questions or has_target_coverage(supported, target):
+            return {}
+
+        def missing_without(index: int) -> tuple[str, ...]:
+            remaining = [
+                support.text for slot, review in reviews.items() if slot != index for support in review.supports
+            ]
+            return tuple(
+                member.component_id
+                for member in target.requirements
+                if not has_target_coverage(remaining, AssessmentTarget(None, target.name, (), components=(member,)))
+            )
+
+        # Preserve the largest already-covered member set. Ties replace the
+        # later slot to keep previously accepted ordering stable.
+        slot = min(questions, key=lambda index: (len(missing_without(index)), -index))
+        missing = missing_without(slot)
+        return {
+            slot: QuestionRejection(
+                (QuestionRejectionCode.TARGET_COVERAGE_GAP,),
+                questions[slot],
+                f"保留题目的正确答案证据尚未覆盖这些目标成员：{', '.join(missing)}。改题须覆盖缺失成员，不能仅罗列名称。",
+            )
+        }
 
     @staticmethod
     def _log_acceptance(
@@ -693,6 +785,9 @@ class AssessmentService:
         exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
     ) -> tuple[QuestionRejectionCode, ...]:
         allowed_source_ids = {source.id for source in sources}
+        # Topic anchors may occur in the choices of a scenario question. Keep
+        # this prefilter answer-blind; the independent reviews decide relevance.
+        question_text = "\n".join((question.stem, *(option.text for option in question.options)))
         checks = (
             (QuestionRejectionCode.RECENT_ITEM_EXPOSURE, item_identity(question) in exposure.excluded_item_ids),
             (
@@ -700,7 +795,7 @@ class AssessmentService:
                 question.difficulty != request.difficulty,
             ),
             (QuestionRejectionCode.UNKNOWN_SOURCE, bool(set(question.source_ids) - allowed_source_ids)),
-            (QuestionRejectionCode.OFF_TOPIC, not mentions_target(question.stem, target)),
+            (QuestionRejectionCode.OFF_TOPIC, not mentions_target(question_text, target)),
             (
                 QuestionRejectionCode.DUPLICATE_STEM,
                 AssessmentService._normalize_stem(question.stem) in normalized_stems,
@@ -712,7 +807,7 @@ class AssessmentService:
         self,
         indexed_candidates: Sequence[tuple[int, GeneratedQuestion]],
         *,
-        request: GenerateQuestionsRequest,
+        context: AssessmentTaskContext,
         catalog: EvidenceExcerptCatalog,
         accepted_questions: Sequence[GeneratedQuestion],
         trace: AssessmentTrace,
@@ -723,12 +818,13 @@ class AssessmentService:
 
         if not indexed_candidates:
             return [], []
+        request = context.request
         candidates = [question for _, question in indexed_candidates]
 
         def verify_gate() -> tuple[EvidenceVerificationVerdict, ...]:
             try:
                 with trace.stage(AssessmentStage.VERIFICATION, round_index=round_index, count=len(candidates)):
-                    verdicts = self._verifier.verify(request, candidates, catalog)
+                    verdicts = self._verifier.verify(context, candidates, catalog)
                     if len(verdicts) != len(candidates) or any(
                         verdict.question_index != index for index, verdict in enumerate(verdicts)
                     ):
@@ -745,7 +841,7 @@ class AssessmentService:
         def critique_gate() -> tuple[ItemCritique, ...]:
             try:
                 with trace.stage(AssessmentStage.CRITIQUE, round_index=round_index, count=len(candidates)):
-                    critiques = self._critic.critique_batch(request, candidates, accepted_questions)
+                    critiques = self._critic.critique_batch(context, candidates, accepted_questions)
                     if len(critiques) != len(candidates) or any(
                         critique.question_index != index for index, critique in enumerate(critiques)
                     ):
@@ -769,7 +865,16 @@ class AssessmentService:
                 except Exception as exc:
                     failures.append(exc)
             if failures:
-                raise failures[0]
+                # Both gates are required. A recoverable failure in one must
+                # not conceal a permanent configuration fault in the other.
+                raise next(
+                    (
+                        failure
+                        for failure in failures
+                        if failure.failure_kind is AssessmentFailureKind.PROVIDER_PERMANENT_FAILURE
+                    ),
+                    failures[0],
+                )
             verdicts, critiques = results
 
         accepted: list[tuple[int, GeneratedQuestion]] = []
@@ -794,9 +899,13 @@ class AssessmentService:
                 verified_question = question
 
             critique_codes = self._critique_rejection_codes(question, critique)
-            objective = request.teaching_requirement.objectives[slot_index] if request.teaching_requirement else None
+            objective = request.objective_for_slot(slot_index)
             if objective is not None and critique.cognitive_operation != objective.operation:
-                critique_codes = (*critique_codes, QuestionRejectionCode.LOW_PEDAGOGICAL_VALUE)
+                critique_codes = (*critique_codes, QuestionRejectionCode.COGNITIVE_OPERATION_MISMATCH)
+                detail_parts.append(
+                    f"槽位 {objective.slot_id} 要求 {objective.operation.value}；"
+                    f"实际为 {critique.cognitive_operation.value}。教学目标：{objective.objective}"
+                )
             if critique_codes:
                 rejection_codes.extend(critique_codes)
                 detail_parts.append(
@@ -827,6 +936,7 @@ class AssessmentService:
                         cognitive_operation=critique.cognitive_operation,
                         learning_objective=critique.learning_objective,
                         objective_kind=objective.kind if objective else None,
+                        task_fingerprint=request.task_fingerprint(slot_index),
                         supports=tuple(
                             VerifiedExcerptSupport(
                                 source_id=catalog.source_id_for(support.excerpt_id),
@@ -843,17 +953,18 @@ class AssessmentService:
         self,
         pending: dict[int, QuestionRejection],
         *,
-        request: GenerateQuestionsRequest,
+        context: AssessmentTaskContext,
         sources: Sequence[EvidenceSource],
         catalog: EvidenceExcerptCatalog,
         accepted_questions: Sequence[GeneratedQuestion],
         normalized_stems: set[str],
-        target: AssessmentTarget,
         trace: AssessmentTrace,
         round_index: int,
         review_certificates: dict[int, ItemReviewCertificate] | None = None,
         exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
     ) -> tuple[list[tuple[int, GeneratedQuestion]], dict[int, QuestionRejection]]:
+        request = context.request
+        target = context.target
         repair_slots = tuple(
             QuestionRepairSlot(
                 slot_id=question_slot_id(request.target_kc_id, slot_index),
@@ -863,7 +974,7 @@ class AssessmentService:
             for slot_index, rejection in sorted(pending.items())
         )
         repair_request = QuestionRepairRequest(
-            request=request,
+            context=context,
             evidence=tuple(sources),
             slots=repair_slots,
             accepted_questions=tuple(accepted_questions),
@@ -961,7 +1072,7 @@ class AssessmentService:
         try:
             accepted, quality_rejected = self._apply_quality_verdicts(
                 candidates,
-                request=request,
+                context=context,
                 catalog=catalog,
                 accepted_questions=accepted_questions,
                 trace=trace,

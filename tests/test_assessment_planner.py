@@ -10,6 +10,7 @@ from ds_course_agent.teaching.learner_state import (
     LearnerWeakSpot,
 )
 from ds_course_agent.teaching.learning_events import build_concept_mentioned_event
+from ds_course_agent.teaching.practice import PracticeObservation, summarize_practice
 
 
 def _weak_spot(concept_id: str, *, resolved: bool = False) -> LearnerWeakSpot:
@@ -115,3 +116,106 @@ def test_session_planning_counts_existing_preparations_and_ignores_duplicate_men
 
     assert [plan.request.target_kc_id for plan in remaining] == ["svm"]
     assert exhausted == ()
+
+
+def test_recent_wrong_operation_changes_the_next_teaching_objective() -> None:
+    practice = summarize_practice(
+        [
+            (
+                1.0,
+                PracticeObservation(
+                    assessment_id="a1",
+                    question_id="q1",
+                    concept_id="pca",
+                    display_name="主成分分析",
+                    difficulty="basic",
+                    is_correct=False,
+                    response_time_ms=100,
+                    selected_option_id="A",
+                    correct_option_id="B",
+                    question_stem="为什么标准化会改变 PCA 的方向？",
+                    cognitive_operation="interpretation",
+                    objective_kind="concept_distinction",
+                ),
+            )
+        ]
+    )
+    state = LearnerStateSnapshot(student_id="s1", practice={"pca": practice})
+
+    request = AssessmentAssignmentPlanner().plan_for_concept("pca", state, count=2)
+
+    assert request.teaching_requirement is not None
+    assert "关系解释" in request.teaching_requirement.objectives[0].objective
+
+
+def test_same_score_with_different_errors_produces_different_bounded_tasks() -> None:
+    from ds_course_agent.assessment.evidence import resolve_target
+    from ds_course_agent.assessment.task_context import AssessmentTaskContext
+
+    def request_for(operation: str, stem: str):
+        observation = PracticeObservation(
+            assessment_id="assessment-private",
+            question_id="question-private",
+            concept_id="pca",
+            display_name="主成分分析",
+            difficulty="basic",
+            is_correct=False,
+            response_time_ms=100,
+            selected_option_id="A",
+            correct_option_id="B",
+            question_stem=stem,
+            selected_option_text="学生实际选择",
+            correct_option_text="经过审核的正确选项",
+            cognitive_operation=operation,
+        )
+        practice = summarize_practice([(1.0, observation)])
+        other = summarize_practice(
+            [
+                (
+                    1.0,
+                    observation.__class__(
+                        **{**observation.__dict__, "concept_id": "svm", "question_stem": "OTHER_KC_SECRET"}
+                    ),
+                )
+            ]
+        )
+        state = LearnerStateSnapshot(student_id="STUDENT_ID_SECRET", practice={"pca": practice, "svm": other})
+        return AssessmentAssignmentPlanner().plan_for_concept("pca", state, count=2)
+
+    distinction = request_for("interpretation", "为什么主成分之间相互正交？")
+    application = request_for("application", "两个特征尺度不同，如何选择 PCA 的预处理？")
+    assert distinction.difficulty == application.difficulty == Difficulty.BASIC
+    assert distinction.learner_evidence.recent_answered_count == application.learner_evidence.recent_answered_count
+    assert distinction.task_fingerprint(0) != application.task_fingerprint(0)
+    context = AssessmentTaskContext(distinction, resolve_target(distinction))
+    prompt = context.learner_text()
+    assert "为什么主成分之间相互正交" in prompt
+    assert "学生实际选择" in prompt and "经过审核的正确选项" in prompt
+    assert "OTHER_KC_SECRET" not in prompt and "STUDENT_ID_SECRET" not in prompt
+    assert "为什么主成分之间相互正交" not in context.target_text()
+
+
+def test_profile_projection_keeps_at_most_two_errors_and_does_not_invent_unknown_operations() -> None:
+    observations = [
+        (
+            float(index),
+            PracticeObservation(
+                assessment_id=f"a{index}",
+                question_id=f"q{index}",
+                concept_id="pca",
+                display_name="主成分分析",
+                difficulty="basic",
+                is_correct=False,
+                response_time_ms=100,
+                selected_option_id="A",
+                correct_option_id="B",
+                question_stem=f"第 {index} 次主成分分析错误记录？",
+            ),
+        )
+        for index in range(4)
+    ]
+    state = LearnerStateSnapshot(student_id="s", practice={"pca": summarize_practice(observations)})
+    request = AssessmentAssignmentPlanner().plan_for_concept("pca", state, count=2)
+    assert len(request.learner_evidence.recent_errors) == 2
+    assert all(error.cognitive_operation is None for error in request.learner_evidence.recent_errors)
+    assert request.learner_evidence.effective_answered_count == 4

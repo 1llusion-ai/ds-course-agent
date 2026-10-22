@@ -1,0 +1,272 @@
+{
+  "schema_version": "assessment-cognitive-tasks/1",
+  "annotation_method": "逐题编写的固定种子标注；依据实际求解所需操作标注，不由待测 critic 生成标签。每题附答案、解释与标注依据，供人工逐题复核。",
+  "review_status": "Codex 编写、待课程教师独立复核；不是已获专家一致认可的金标准。",
+  "scope": "校准单题认知操作分类。合成题不代表已通过教材证据门或完整教学质量门；所有 difficulty 固定为 basic，仅满足接口结构，不代表标注难度。",
+  "cases": [
+    {
+      "id": "cloud-recall-service-definition",
+      "course_id": "digital-literacy",
+      "target_kc_id": "dl_5_2_1_1",
+      "case_kind": "positive",
+      "expected_operation": "recall",
+      "misleading_operations": [],
+      "annotation_rationale": "只需识别平台即服务的标准定义与名称，无需比较关系、代入新实例或组合约束。",
+      "question": {
+        "stem": "在云服务分类中，提供应用开发与运行平台、由用户部署自己的应用程序的服务模式叫什么？",
+        "options": [
+          {"id": "A", "text": "基础设施即服务（IaaS）"},
+          {"id": "B", "text": "平台即服务（PaaS）"},
+          {"id": "C", "text": "软件即服务（SaaS）"},
+          {"id": "D", "text": "以上三种模式没有交付层次区别"}
+        ],
+        "correct_option_id": "B",
+        "explanation": "PaaS 提供开发与运行平台，用户在平台上部署应用；本题直接考查这一名称与定义的对应。",
+        "difficulty": "basic",
+        "source_ids": ["fixture-not-textbook-evidence"]
+      }
+    },
+    {
+      "id": "cloud-interpretation-responsibility",
+      "course_id": "digital-literacy",
+      "target_kc_id": "dl_5_2_1_1",
+      "case_kind": "positive",
+      "expected_operation": "interpretation",
+      "misleading_operations": [],
+      "annotation_rationale": "要求解释 IaaS 与 PaaS 的控制权和管理责任之间的关系，答案必须是有因果依据的比较判断，而不是模式名称。",
+      "question": {
+        "stem": "同样部署自己的应用，为什么使用 PaaS 的团队通常比使用 IaaS 的团队少承担操作系统维护工作，却也较难任意修改底层运行环境？",
+        "options": [
+          {"id": "A", "text": "PaaS 把底层平台管理交给服务商，因此同时减少了用户的维护责任和底层控制权"},
+          {"id": "B", "text": "PaaS 把底层平台管理交给用户，因此通过增加用户控制权减少了用户维护责任"},
+          {"id": "C", "text": "IaaS 把用户应用和操作系统都交给服务商，因此用户不需要管理任何软件"},
+          {"id": "D", "text": "IaaS 与 PaaS 交付相同的软件层次，因此两者的管理责任和控制范围没有区别"}
+        ],
+        "correct_option_id": "A",
+        "explanation": "交付层次上移意味着服务商承担更多平台管理，也意味着用户对底层环境的直接控制减少。",
+        "difficulty": "basic",
+        "source_ids": ["fixture-not-textbook-evidence"]
+      }
+    },
+    {
+      "id": "cloud-application-school-office",
+      "course_id": "digital-literacy",
+      "target_kc_id": "dl_5_2_1_1",
+      "case_kind": "positive",
+      "expected_operation": "application",
+      "misleading_operations": [],
+      "annotation_rationale": "需把服务交付层次规则用于学校购买协作文档的具体实例，从实际需求选择服务模式，不是给出通用定义再匹配名字。",
+      "question": {
+        "stem": "一所学校要让教师用浏览器共同编辑教案。学校希望购买现成的协作文档功能，没有自行开发应用的计划。下面哪种采购方式最直接满足需求？",
+        "options": [
+          {"id": "A", "text": "租用 IaaS 虚拟机，由学校安装并维护协作文档应用"},
+          {"id": "B", "text": "购买 PaaS 运行环境，由学校开发协作文档应用"},
+          {"id": "C", "text": "订阅 SaaS 协作文档产品，由教师直接使用其功能"},
+          {"id": "D", "text": "购买 PaaS 数据库服务，由教师直接将数据库当作文档编辑器"}
+        ],
+        "correct_option_id": "C",
+        "explanation": "学校需要现成应用功能，SaaS 与该交付需求匹配；IaaS 和 PaaS 仍需学校部署或开发应用。",
+        "difficulty": "basic",
+        "source_ids": ["fixture-not-textbook-evidence"]
+      }
+    },
+    {
+      "id": "cloud-analysis-two-workloads",
+      "course_id": "digital-literacy",
+      "target_kc_id": "dl_5_2_1_1",
+      "case_kind": "positive",
+      "expected_operation": "analysis",
+      "misleading_operations": [],
+      "annotation_rationale": "必须分别推导内核控制需求和现成办公需求对应的交付层次，再组合为同时满足两个约束的方案。只处理一个工作负载无法排除全部干扰项。",
+      "question": {
+        "stem": "一家机构同时迁移两类业务：研究程序必须由团队修改操作系统内核；行政办公只需现成的在线文档功能，且行政部门不能承担应用部署维护。仅考虑服务交付与控制边界，哪种组合同时满足两类业务约束？",
+        "options": [
+          {"id": "A", "text": "研究程序采用可管理客户操作系统的 IaaS；行政办公采用现成的 SaaS 文档产品"},
+          {"id": "B", "text": "研究程序采用隐藏操作系统的 PaaS；行政办公采用现成的 SaaS 文档产品"},
+          {"id": "C", "text": "研究程序采用可管理客户操作系统的 IaaS；行政办公在 IaaS 上自行部署文档软件"},
+          {"id": "D", "text": "研究程序采用隐藏操作系统的 PaaS；行政办公在 IaaS 上自行部署文档软件"}
+        ],
+        "correct_option_id": "A",
+        "explanation": "研究程序需要操作系统控制权，选择 IaaS；行政部门不能部署维护应用，选择现成 SaaS。另三项分别遗漏至少一个约束。",
+        "difficulty": "basic",
+        "source_ids": ["fixture-not-textbook-evidence"]
+      }
+    },
+    {
+      "id": "cloud-long-context-definition",
+      "course_id": "digital-literacy",
+      "target_kc_id": "dl_5_2_1_1",
+      "case_kind": "long_context_recall",
+      "expected_operation": "recall",
+      "misleading_operations": ["interpretation", "application"],
+      "annotation_rationale": "会议背景没有参与求解；真正的问题仍是资源交付定义与 IaaS 名称的直接匹配。情境长度不能把标签识别升级为应用。",
+      "question": {
+        "stem": "某校信息中心正在讨论云化建设。会上介绍了教师数量、机房面积、学期安排和未来三年的预算，还展示了国内外多个项目的建设照片。讨论尚未涉及具体采购方案，主持人先检查大家是否记住教材术语：云服务商提供虚拟机、存储和网络资源，用户管理操作系统及其上的应用，这种服务模式的名称是什么？",
+        "options": [
+          {"id": "A", "text": "软件即服务（SaaS）"},
+          {"id": "B", "text": "平台即服务（PaaS）"},
+          {"id": "C", "text": "基础设施即服务（IaaS）"},
+          {"id": "D", "text": "上述描述同时是三种模式的共同定义"}
+        ],
+        "correct_option_id": "C",
+        "explanation": "虚拟机、存储、网络资源由服务商提供，客户管理操作系统与应用，这是 IaaS 的定义；会议背景无关。",
+        "difficulty": "basic",
+        "source_ids": ["fixture-not-textbook-evidence"]
+      }
+    },
+    {
+      "id": "cloud-long-context-unused-constraints",
+      "course_id": "digital-literacy",
+      "target_kc_id": "dl_5_2_1_1",
+      "case_kind": "long_context_recall",
+      "expected_operation": "recall",
+      "misleading_operations": ["analysis"],
+      "annotation_rationale": "题面出现预算、人员、兼容性等多个条件，但末尾明确不要求进行方案选择。解答只需记忆 SaaS 的交付对象，不能因条件多而标为分析。",
+      "question": {
+        "stem": "一家企业的云计算调研报告列出了四个条件：年度预算不能增加，现有员工需要培训，旧系统有兼容性问题，分支机构分布在不同城市。报告还附有实施进度表和风险登记表。本题不要求权衡这些条件或制定迁移方案，只问教材分类术语：SaaS 的主要交付对象属于下面哪一层？",
+        "options": [
+          {"id": "A", "text": "供用户自行安装操作系统的计算资源层"},
+          {"id": "B", "text": "供用户自行部署应用的运行平台层"},
+          {"id": "C", "text": "供用户自行安装网络设备的物理设施层"},
+          {"id": "D", "text": "供用户直接使用业务功能的应用软件层"}
+        ],
+        "correct_option_id": "D",
+        "explanation": "SaaS 交付应用软件功能。报告中的多个条件无需参与答案推导。",
+        "difficulty": "basic",
+        "source_ids": ["fixture-not-textbook-evidence"]
+      }
+    },
+    {
+      "id": "pca-recall-first-component",
+      "course_id": "data-science-intro",
+      "target_kc_id": "pca",
+      "case_kind": "positive",
+      "expected_operation": "recall",
+      "misleading_operations": [],
+      "annotation_rationale": "只需回忆 PCA 第一主成分的定义性质，不包含新数据上的计算、机制比较或多条件权衡。",
+      "question": {
+        "stem": "在对已中心化数据进行 PCA 时，第一主成分方向按什么标准确定？",
+        "options": [
+          {"id": "A", "text": "使数据投影到该单位方向后的方差最大"},
+          {"id": "B", "text": "使数据投影到该单位方向后的均值最大"},
+          {"id": "C", "text": "使数据投影到该单位方向后的方差最小"},
+          {"id": "D", "text": "使数据投影到该单位方向后的均值最小"}
+        ],
+        "correct_option_id": "A",
+        "explanation": "PCA 第一主成分是使投影方差最大的单位方向；中心化并不把投影均值变成优化目标。",
+        "difficulty": "basic",
+        "source_ids": ["fixture-not-textbook-evidence"]
+      }
+    },
+    {
+      "id": "pca-interpretation-scale",
+      "course_id": "data-science-intro",
+      "target_kc_id": "pca",
+      "case_kind": "positive",
+      "expected_operation": "interpretation",
+      "misleading_operations": [],
+      "annotation_rationale": "要求解释计量单位、方差和 PCA 方向之间的机制关系，并比较中心化与标准化的作用，不是记住一个步骤名称。",
+      "question": {
+        "stem": "为什么同一组测量数据仅改变一个特征的计量单位，就可能改变只做中心化的 PCA 方向，而按各特征标准差进行标准化可以减弱这种影响？",
+        "options": [
+          {"id": "A", "text": "改变单位只改变特征均值，因此中心化后已消除单位对方差的所有影响"},
+          {"id": "B", "text": "改变单位会改变特征方差的相对大小，标准化使各特征在统一尺度上参与方差比较"},
+          {"id": "C", "text": "改变单位会改变样本类别标签，标准化通过恢复标签使主成分方向保持稳定"},
+          {"id": "D", "text": "改变单位会增加特征数量，标准化通过删除新增特征使主成分方向保持稳定"}
+        ],
+        "correct_option_id": "B",
+        "explanation": "中心化消除均值，不能消除量纲引起的方差尺度差异；标准化把各特征放在可比较的尺度上。",
+        "difficulty": "basic",
+        "source_ids": ["fixture-not-textbook-evidence"]
+      }
+    },
+    {
+      "id": "pca-application-explained-variance",
+      "course_id": "data-science-intro",
+      "target_kc_id": "pca",
+      "case_kind": "positive",
+      "expected_operation": "application",
+      "misleading_operations": [],
+      "annotation_rationale": "对新给定的特征值应用累计解释方差规则并计算最小维数。虽然有加法与比较，仍是单一规则的常规应用，不是多个独立条件的分析。",
+      "question": {
+        "stem": "某次 PCA 得到按降序排列的三个协方差矩阵特征值 6、3、1。若希望保留至少 85% 的总方差，最少应保留几个主成分？",
+        "options": [
+          {"id": "A", "text": "1 个，累计解释方差为 60%"},
+          {"id": "B", "text": "2 个，累计解释方差为 90%"},
+          {"id": "C", "text": "3 个，累计解释方差为 100%"},
+          {"id": "D", "text": "仅根据这三个特征值无法计算累计解释方差"}
+        ],
+        "correct_option_id": "B",
+        "explanation": "总方差为 10；第一主成分解释 60%，前两个解释 90%，故达到至少 85% 所需的最小数量为 2。",
+        "difficulty": "basic",
+        "source_ids": ["fixture-not-textbook-evidence"]
+      }
+    },
+    {
+      "id": "pca-analysis-scaling-and-retention",
+      "course_id": "data-science-intro",
+      "target_kc_id": "pca",
+      "case_kind": "positive",
+      "expected_operation": "analysis",
+      "misleading_operations": [],
+      "annotation_rationale": "需要先根据计量尺度约束选择预处理，再利用对应预处理的解释方差结果选择最小维数。只解决预处理或保留维数之一均不足以确定唯一方案。",
+      "question": {
+        "stem": "四个传感器特征分别以不同单位记录，任务要求不让单位尺度决定 PCA 中各特征的权重，并用最少维数保留至少 80% 的方差。仅中心化时，前两个主成分累计解释 96%；逐特征标准化后，四个主成分分别解释 50%、30%、15%、5%。哪个方案同时满足要求？",
+        "options": [
+          {"id": "A", "text": "仅中心化，保留前两个主成分"},
+          {"id": "B", "text": "逐特征标准化，保留第一个主成分"},
+          {"id": "C", "text": "逐特征标准化，保留前两个主成分"},
+          {"id": "D", "text": "逐特征标准化，保留前三个主成分"}
+        ],
+        "correct_option_id": "C",
+        "explanation": "尺度要求排除仅中心化；标准化后一个主成分仅解释 50%，两个恰好达到 80%，三个不满足最少维数要求。",
+        "difficulty": "basic",
+        "source_ids": ["fixture-not-textbook-evidence"]
+      }
+    },
+    {
+      "id": "pca-long-context-definition",
+      "course_id": "data-science-intro",
+      "target_kc_id": "pca",
+      "case_kind": "long_context_recall",
+      "expected_operation": "recall",
+      "misleading_operations": ["interpretation", "application"],
+      "annotation_rationale": "实验室背景没有提供需要处理的数据或新的规则应用任务。真正问题是根据线性组合、正交和保留方差的标准定义识别 PCA。",
+      "question": {
+        "stem": "一个实验室积累了多年的环境传感器记录，研究助理介绍了数据采集地点、设备更新过程、团队人员分工和报告排版要求。导师没有要求学生分析这些记录，而是先做术语检查：将原始变量线性组合为相互正交的新变量，并优先保留解释数据方差较多的方向，这种降维方法通常叫什么？",
+        "options": [
+          {"id": "A", "text": "K 均值聚类"},
+          {"id": "B", "text": "逻辑回归"},
+          {"id": "C", "text": "主成分分析（PCA）"},
+          {"id": "D", "text": "最近邻分类"}
+        ],
+        "correct_option_id": "C",
+        "explanation": "题目直接给出 PCA 的定义特征，只需把定义与方法名称对应起来，无需处理实验室的实际数据。",
+        "difficulty": "basic",
+        "source_ids": ["fixture-not-textbook-evidence"]
+      }
+    },
+    {
+      "id": "pca-long-context-unused-constraints",
+      "course_id": "data-science-intro",
+      "target_kc_id": "pca",
+      "case_kind": "long_context_recall",
+      "expected_operation": "recall",
+      "misleading_operations": ["analysis"],
+      "annotation_rationale": "虽然出现样本量、缺失值、量纲和计算资源等条件，但没有要求据此选择处理流程。只需记忆 PCA 主成分按解释方差排序这一性质。",
+      "question": {
+        "stem": "某课程项目有两千个样本、五十个特征和若干缺失值，各特征量纲不同，可用计算时间也有限。学生准备比较多种处理流程，并在报告中讨论数据清洗、模型评价和计算资源。此题暂不要求制定流程或进行权衡，只考查 PCA 的基本性质：主成分的通常排列顺序依据什么？",
+        "options": [
+          {"id": "A", "text": "各主成分解释方差的大小，从大到小"},
+          {"id": "B", "text": "各原始变量在数据表中的列号，从小到大"},
+          {"id": "C", "text": "各主成分投影均值的大小，从大到小"},
+          {"id": "D", "text": "各原始变量名称的长度，从短到长"}
+        ],
+        "correct_option_id": "A",
+        "explanation": "PCA 通常按解释方差从大到小排列主成分。题目前面的多个项目条件与这个性质的回忆无关。",
+        "difficulty": "basic",
+        "source_ids": ["fixture-not-textbook-evidence"]
+      }
+    }
+  ]
+}

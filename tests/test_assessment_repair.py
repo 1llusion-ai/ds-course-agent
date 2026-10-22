@@ -37,6 +37,7 @@ from tests.test_assessment_core import (
     _repair_batch_payload,
     _service_with_model,
     _StructuredModel,
+    _task,
     _Verifier,
 )
 
@@ -46,12 +47,12 @@ def test_generator_repair_prompt_projects_feedback_without_replaying_author_answ
     accepted = GeneratedQuestion.model_validate(_question_payload(1, Difficulty.BASIC))
     request = GenerateQuestionsRequest(target_kc_id="pca", count=2)
     repair_request = QuestionRepairRequest(
-        request=request,
+        context=_task(request),
         evidence=(EvidenceSource(id="S1", text=PCA_EVIDENCE),),
         slots=(
             QuestionRepairSlot(
-                slot_id=question_slot_id(request.target_kc_id, 3),
-                slot_index=3,
+                slot_id=question_slot_id(request.target_kc_id, 1),
+                slot_index=1,
                 rejection=QuestionRejection(
                     codes=(
                         QuestionRejectionCode.MULTIPLE_CORRECT_ANSWERS,
@@ -79,7 +80,7 @@ def test_generator_repair_prompt_projects_feedback_without_replaying_author_answ
     assert '"explanation"' not in prompt
     assert "source_ids 只能填写上方证据的编号" in prompt
     assert "S1" in prompt
-    assert question_slot_id(request.target_kc_id, 3) in prompt
+    assert question_slot_id(request.target_kc_id, 1) in prompt
 
 
 def test_runtime_repair_uses_the_large_model_after_small_batch_generation(monkeypatch) -> None:
@@ -89,7 +90,7 @@ def test_runtime_repair_uses_the_large_model_after_small_batch_generation(monkey
     source = EvidenceSource(id="S1", text=PCA_EVIDENCE)
     question = GeneratedQuestion.model_validate(_question_payload(0, Difficulty.BASIC))
     repair_request = QuestionRepairRequest(
-        request=request,
+        context=_task(request),
         evidence=(source,),
         slots=(
             QuestionRepairSlot(
@@ -117,7 +118,7 @@ def test_runtime_repair_uses_the_large_model_after_small_batch_generation(monkey
     monkeypatch.setattr(model_factory, "get_assessment_editor_model", lambda: large_model)
 
     generator = AssessmentGenerator()
-    generator.generate_candidates(request, [source])
+    generator.generate_candidates(_task(request), [source])
     revised = generator.revise_items(repair_request)
 
     assert revised.revisions[0].question == question
@@ -138,7 +139,7 @@ def test_advanced_or_formula_drafts_can_use_the_large_model(difficulty: Difficul
     generator = AssessmentGenerator(model=small_model, editor_model=large_model)
 
     generator.generate_candidates(
-        GenerateQuestionsRequest(target_kc_id="pca", count=1, difficulty=difficulty),
+        _task(GenerateQuestionsRequest(target_kc_id="pca", count=1, difficulty=difficulty)),
         [EvidenceSource(id="S1", text=source_text)],
     )
 

@@ -17,6 +17,7 @@ from tests.test_assessment_core import (
     _quiz_payload,
     _service_with_model,
     _StructuredModel,
+    _task,
 )
 from tests.test_reviewed_assessment_items import selected_item
 
@@ -267,7 +268,7 @@ def test_exposure_examples_stay_target_scoped_with_many_other_active_kcs(tmp_pat
             payload = _quiz_payload(1, Difficulty.BASIC)
             payload["questions"][0]["stem"] = f"{request.target_kc_id}课程题目考查什么性质？"
             quiz = GeneratedQuiz.model_validate({**payload, "sources": [{"id": "S1", "text": PCA_EVIDENCE}]})
-            self.messages = AssessmentGenerator._build_messages(request, quiz.sources, exposure=exposure)
+            self.messages = AssessmentGenerator._build_messages(_task(request), quiz.sources, exposure=exposure)
             return quiz
 
     generator = CapturingGenerator()
@@ -310,13 +311,13 @@ def test_exposure_examples_are_bounded_inside_real_author_and_editor_prompt_caps
     )
     request = GenerateQuestionsRequest(target_kc_id="pca", count=1)
     sources = [EvidenceSource(id="S1", text=PCA_EVIDENCE)]
-    plain = AssessmentGenerator._build_messages(request, sources)
-    bounded = AssessmentGenerator._build_messages(request, sources, exposure=exposure)
+    plain = AssessmentGenerator._build_messages(_task(request), sources)
+    bounded = AssessmentGenerator._build_messages(_task(request), sources, exposure=exposure)
     assert 0 < len(bounded[-1].content) - len(plain[-1].content) <= MAX_EXPOSURE_EXAMPLE_CHARS + 2
     assert len(exposure.excluded_item_ids) == 100
     assert sum(len(message.content) for message in bounded) <= MAX_AUTHOR_PROMPT_CHARS
     repair = QuestionRepairRequest(
-        request=request,
+        context=_task(request),
         evidence=tuple(sources),
         exposure=exposure,
         slots=(QuestionRepairSlot("pca:slot:0", 0, QuestionRejection((QuestionRejectionCode.RECENT_ITEM_EXPOSURE,))),),
@@ -329,7 +330,9 @@ def test_exposure_examples_are_bounded_inside_real_author_and_editor_prompt_caps
     generator = AssessmentGenerator(model=model, editor_model=model)
     with pytest.raises(AssessmentGenerationError, match="message construction"):
         generator.generate_candidates(
-            request, [EvidenceSource(id=f"S{index}", text="教材" * 12000) for index in range(3)], exposure=exposure
+            _task(request),
+            [EvidenceSource(id=f"S{index}", text="教材" * 12000) for index in range(3)],
+            exposure=exposure,
         )
     huge_slot = QuestionRepairSlot(
         "pca:slot:0",
@@ -338,6 +341,8 @@ def test_exposure_examples_are_bounded_inside_real_author_and_editor_prompt_caps
     )
     with pytest.raises(AssessmentGenerationError, match="message construction"):
         generator.revise_items(
-            QuestionRepairRequest(request=request, evidence=tuple(sources), slots=(huge_slot,), exposure=exposure)
+            QuestionRepairRequest(
+                context=_task(request), evidence=tuple(sources), slots=(huge_slot,), exposure=exposure
+            )
         )
     assert model.invoke_count == 0

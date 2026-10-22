@@ -77,6 +77,7 @@ class AssessmentTarget:
     chapter: str = ""
     section: str = ""
     components: tuple[AssessmentComponent, ...] = ()
+    learning_objectives: tuple[str, ...] = ()
 
     @property
     def requirements(self) -> tuple[AssessmentComponent, ...]:
@@ -117,6 +118,7 @@ def resolve_target(
                 concept.chapter,
                 concept.section,
                 concept.assessment_components,
+                tuple(point.objective for point in concept.learning_points),
             )
     raise InvalidAssessmentTarget("unknown course concept")
 

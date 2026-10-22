@@ -50,7 +50,7 @@ def _record() -> AssessmentRecord:
 def test_assessment_schema_is_idempotent_and_normalized(tmp_path) -> None:
     path = tmp_path / "assessment.db"
 
-    assert [item.version for item in migrate_assessment_database(path)] == [3, 4, 5, 6, 7]
+    assert [item.version for item in migrate_assessment_database(path)] == [3, 4, 5, 6, 7, 8]
     assert migrate_assessment_database(path) == ()
     assert plan_assessment_database(path).pending == ()
 
@@ -102,6 +102,27 @@ def test_legacy_payload_is_backfilled_once(tmp_path) -> None:
     migrate_assessment_database(path)
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM assessment_questions").fetchone()[0] == 1
+
+
+def test_task_certificate_migration_preserves_existing_bank_payloads(tmp_path) -> None:
+    from ds_course_agent.assessment.database import ASSESSMENT_MIGRATIONS
+    from ds_course_agent.shared.database import SQLiteMigrationRunner
+
+    path = tmp_path / "assessment.db"
+    SQLiteMigrationRunner(path).apply(tuple(item for item in ASSESSMENT_MIGRATIONS if item.version < 8))
+    original = '{"legacy_certificate":"preserve-exactly"}'
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO reviewed_assessment_items VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            ("data-science-intro", "pca", "old-resource", "basic", "", "recall", "item", "降维", original, 1.0, 1),
+        )
+    assert [item.version for item in migrate_assessment_database(path)] == [8]
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT payload_json,task_fingerprint,usable FROM reviewed_assessment_items"
+        ).fetchall() == [(original, "", 1)]
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert migrate_assessment_database(path) == ()
 
 
 def test_legacy_backfill_failure_rolls_back_table_rename_and_schema(tmp_path) -> None:
