@@ -14,13 +14,15 @@ from ds_course_agent.assessment.feedback import (
     is_assessment_failure_retryable,
 )
 from ds_course_agent.assessment.generator import AssessmentGenerationError
+from ds_course_agent.assessment.models import GenerateQuestionsRequest
 from ds_course_agent.assessment.preparation import (
     AssessmentPreparation,
+    PreparationOrigin,
     PreparationRepository,
     PreparationStatus,
 )
 from ds_course_agent.courses.resources import DEFAULT_COURSE_ID, CourseId
-from ds_course_agent.teaching.assessment_assignment import AssessmentAssignmentPlanner
+from ds_course_agent.teaching.assessment_assignment import AssessmentAssignmentPlanner, AssessmentPlanContext
 from ds_course_agent.teaching.learner_state import LearnerStateProvider, SQLiteProfileLearnerStateProvider
 from ds_course_agent.teaching.learning_event_repository import LearningEventRepository, SQLiteLearningEventRepository
 from ds_course_agent.teaching.learning_events import EventType
@@ -58,6 +60,63 @@ class SessionLearningLoop:
         """Atomically select and enqueue opportunities within this process."""
         with self._lock:
             self._schedule(student_id, session_id, course_id=course_id)
+
+    def enqueue_explicit(
+        self,
+        student_id: str,
+        session_id: str,
+        display_name: str,
+        request: GenerateQuestionsRequest,
+        *,
+        plan_context: AssessmentPlanContext | None = None,
+        course_id: CourseId | str = DEFAULT_COURSE_ID,
+    ) -> AssessmentPreparation:
+        """Queue an Agent-requested assessment without consuming auto-practice budget."""
+
+        with self._lock:
+            active_preparation = next(
+                (
+                    item
+                    for item in self._preparations.list_for_student(student_id, course_id=course_id)
+                    if item.request == request
+                    and item.status in {PreparationStatus.QUEUED, PreparationStatus.GENERATING}
+                    and item.origin is PreparationOrigin.EXPLICIT
+                ),
+                None,
+            )
+            if active_preparation is not None:
+                return active_preparation
+            active_assessment = self._assessments.active_assessment_for_target(
+                student_id, request.target_kc_id, course_id=course_id
+            )
+            if active_assessment is not None and active_assessment.request == request:
+                return AssessmentPreparation(
+                    id=active_assessment.id,
+                    student_id=student_id,
+                    session_id=session_id,
+                    display_name=active_assessment.quiz.title,
+                    request=active_assessment.request,
+                    source_event_ids=(),
+                    plan_context=plan_context,
+                    status=PreparationStatus.READY,
+                    assessment_id=active_assessment.id,
+                    updated_at=time.time(),
+                    course_id=CourseId(course_id),
+                    origin=PreparationOrigin.EXPLICIT,
+                )
+            job = self._preparations.enqueue(
+                student_id,
+                session_id,
+                display_name,
+                request,
+                (),
+                course_id=course_id,
+                plan_context=plan_context,
+                origin=PreparationOrigin.EXPLICIT,
+            )
+            if job.status is PreparationStatus.QUEUED:
+                self._submit(job)
+            return job
 
     def _schedule(self, student_id: str, session_id: str, *, course_id: CourseId | str) -> None:
         """Use only this student's session events to schedule canonical course KCs."""
@@ -222,7 +281,7 @@ class SessionLearningLoop:
                 retryable=(
                     generation_progress.retryable
                     if generation_progress is not None
-                    else is_assessment_failure_retryable(failure_kind)
+                    else getattr(exc, "retryable", is_assessment_failure_retryable(failure_kind))
                 ),
             )
 

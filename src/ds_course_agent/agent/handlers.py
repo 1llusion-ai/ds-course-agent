@@ -24,6 +24,7 @@ from ds_course_agent.agent.route_executor import (
     observe_stream_end,
 )
 from ds_course_agent.agent.routing import ExecutionMode, RouteExecutionResult, RouteIntent, RouteState
+from ds_course_agent.assessment.preparation import PreparationStatus
 from ds_course_agent.research.pipeline import WebResearchPipeline
 from ds_course_agent.runtime.model_stream import iter_text_chunks
 
@@ -116,7 +117,15 @@ class AssessmentAssignmentRouteHandler(BufferedRouteHandlerMixin):
             )
             registry = agent.tool_registry
             tool = registry.get("assign_assessment_tool").tool
-            summary = tool.invoke(
+            display_name = next(
+                (
+                    getattr(concept, "display_name", None) or getattr(concept, "name", None)
+                    for concept in route_state.matched_concepts
+                    if getattr(concept, "concept_id", None) == request.target_kc_id
+                ),
+                request.target_kc_id,
+            )
+            preparation = tool.enqueue(
                 AssessmentAssignmentInput(
                     student_id=route_state.student_id,
                     session_id=route_state.session_id,
@@ -127,6 +136,7 @@ class AssessmentAssignmentRouteHandler(BufferedRouteHandlerMixin):
                         course_id=str(course_id),
                     ),
                     course_id=course_id,
+                    display_name=display_name,
                 )
             )
         except Exception as exc:
@@ -143,7 +153,13 @@ class AssessmentAssignmentRouteHandler(BufferedRouteHandlerMixin):
             )
         return build_route_result(
             route_state,
-            f"已为你准备好《{summary.title}》，共 {summary.question_count} 题。请到“我的测验”开始作答。",
+            (
+                f"已为你准备好《{preparation.display_name}》，共 {preparation.request.count} 题。"
+                f"请到“我的测验”开始作答（任务 {preparation.id[:8]}）。"
+                if preparation.status is PreparationStatus.READY
+                else f"已开始准备《{preparation.display_name}》，共 {preparation.request.count} 题。"
+                f"完成后请到“我的测验”开始作答（任务 {preparation.id[:8]}）。"
+            ),
         )
 
 

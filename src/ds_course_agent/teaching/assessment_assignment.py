@@ -208,7 +208,7 @@ class AssessmentAssignmentPlanner:
             count=count,
             learner_evidence=self._learner_evidence(target_kc_id, learner_state),
             teaching_requirement=(
-                self._complementary_requirement(target_kc_id, difficulty, learner_state)
+                self.complementary_requirement(target_kc_id, difficulty, learner_state)
                 if count == SESSION_ASSESSMENT_QUESTION_COUNT
                 else None
             ),
@@ -259,7 +259,7 @@ class AssessmentAssignmentPlanner:
         )
 
     @staticmethod
-    def _complementary_requirement(
+    def complementary_requirement(
         target_kc_id: str, difficulty: Difficulty, learner_state: LearnerStateSnapshot | None = None
     ) -> ComplementaryQuestionRequirement:
         operation = CognitiveOperation.ANALYSIS if difficulty is Difficulty.ADVANCED else CognitiveOperation.APPLICATION

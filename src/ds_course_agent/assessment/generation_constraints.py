@@ -50,7 +50,7 @@ class BatchReviewCertificate(BaseModel):
         questions: Sequence[GeneratedQuestion],
         review_policy: str,
     ) -> BatchReviewCertificate:
-        requirement = json.dumps([request.task_fingerprint(index) for index in range(request.count)])
+        requirement = json.dumps([request.reuse_fingerprint(index) for index in range(request.count)])
         return cls(
             slot_item_ids=tuple(item_identity(question) for question in questions),
             target_kc_id=request.target_kc_id,

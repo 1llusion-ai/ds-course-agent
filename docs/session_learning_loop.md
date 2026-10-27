@@ -38,9 +38,15 @@ probability or measured learning gain.
 7. Subsequent teaching explanations and the next practice opportunity use that
    profile. Teaching guidance affects explanation generation, not retrieval queries.
 
-Explicit assessment requests use the same application owner. Requests for a KC
-with an active assessment return that existing immutable assessment. Allocation
-is serialized inside the application process; the durable preparation repository
+Explicit assessment requests use the same application owner, but the Agent path
+only enqueues a durable preparation and returns to the turn. The background
+worker later invokes the assignment tool and publishes the immutable assessment;
+the preparation state is visible through the existing preparations endpoint.
+Automatic and explicit preparations carry separate origins, so an explicit
+five-question request does not consume the automatic session opportunity budget.
+Requests for a KC with an active assessment return that existing immutable
+assessment when the worker reaches the application owner. Allocation is
+serialized inside the application process; the durable preparation repository
 also uses a SQLite transaction to prevent simultaneous queued/generating jobs
 for the same student/course/KC.
 
@@ -108,8 +114,11 @@ not trigger another reviewer call.
 
 ## Reviewed content and resource identity
 
-Normal successful assignment organically accumulates reviewed content; there is
-no offline bulk generation. Shared items carry stable content IDs, correct-answer
+Normal successful assignment organically accumulates reviewed content. The
+offline `scripts/assessment_inventory.py` and `scripts/assessment_bank.py`
+commands can prepare a reviewed bank, but only through the same generator,
+verifier, critic and `ReviewedItemRepository.accumulate()` contracts; they never
+write certificates directly. Shared items carry stable content IDs, correct-answer
 excerpt certificates, critic operation/objective, original evidence and a resource
 revision. Student assignments, IDs, attempts, answers and profile state stay separate.
 Selection requires matching course, target, graph/TOC digests, corpus/index revision,
@@ -125,14 +134,16 @@ characters within a 64,000-character full prompt limit; all forbidden identities
 remain enforced even when their examples are omitted.
 
 Review certificates additionally bind the concrete slot objective and recorded
-error focus through a task fingerprint. Counts and learner identity are excluded
-from this fingerprint so compatible tasks remain shareable. Different task
-certificates can coexist for the same content identity. The shared bank retains
-the fingerprint, not the learner's raw mistake records. This binds reuse to the
-task under which both gates accepted the item; it does not independently establish
-that an item remedies a particular misconception or measures learning gain.
+error focus through a task fingerprint. A separate reuse fingerprint binds
+shared content to the stable objective and operation without requiring the
+student's raw recent-error text; that error evidence still guides ranking and
+fresh repairs. Counts and learner identity are excluded from both fingerprints.
+Different task certificates can coexist for the same content identity. This
+binds reuse to the task under which both gates accepted the item; it does not
+independently establish that an item remedies a particular misconception or
+measures learning gain.
 Assessment database migration 8 preserves existing content while extending the
-certificate key and persisting the bounded learner projection on assignments.
+certificate payload and persisting the bounded learner projection on assignments.
 
 `benchmarks/assessment_task_harness.py` validates fixed cognitive cases offline by
 default. Its optional provider mode evaluates critic classification only; neither

@@ -17,7 +17,7 @@ from ds_course_agent.assessment.application import (
     AssessmentSubmissionError,
 )
 from ds_course_agent.assessment.feedback import AssessmentFailureKind, QuestionRejectionCode
-from ds_course_agent.assessment.preparation import PreparationStatus
+from ds_course_agent.assessment.preparation import PreparationOrigin, PreparationStatus
 from ds_course_agent.assessment.records import (
     AssessmentResult,
     AssessmentStatus,
@@ -47,6 +47,7 @@ class PreparationSummary(BaseModel):
     pending_slot_count: int = 0
     retryable: bool = False
     course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
+    origin: PreparationOrigin = PreparationOrigin.AUTOMATIC
 
 
 @router.get("/preparations", response_model=tuple[PreparationSummary, ...])

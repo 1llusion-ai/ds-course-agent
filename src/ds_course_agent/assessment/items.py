@@ -101,7 +101,9 @@ class ReviewedItemRepository:
         try:
             connection.execute("BEGIN IMMEDIATE")
             for index, (question, review) in enumerate(zip(quiz.questions, quiz.review_certificates, strict=True)):
-                if review.task_fingerprint != request.task_fingerprint(index):
+                if review.task_fingerprint != request.task_fingerprint(
+                    index
+                ) and review.reuse_fingerprint != request.reuse_fingerprint(index):
                     raise ValueError("review certificate is detached from the assigned task")
                 identity = item_identity(question)
                 rows = connection.execute(
@@ -194,7 +196,10 @@ class ReviewedItemRepository:
                     and item.resource_revision == revision
                     and item.target_kc_id == request.target_kc_id
                     and item.review.cognitive_operation in DIFFICULTY_RULES[request.difficulty].operations
-                    and item.review.task_fingerprint == request.task_fingerprint(index)
+                    and (
+                        item.review.reuse_fingerprint == request.reuse_fingerprint(index)
+                        or item.review.task_fingerprint == request.task_fingerprint(index)
+                    )
                     and (
                         objective is None
                         or (

@@ -306,6 +306,15 @@ class GenerateQuestionsRequest(BaseModel):
         }
         return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
+    def reuse_fingerprint(self, slot_index: int) -> str:
+        """Bind shared content to the stable task, excluding learner error text."""
+
+        objective = self.objective_for_slot(slot_index)
+        if objective is None:
+            return ""
+        payload = {"objective": objective.model_dump(mode="json", exclude={"slot_id"})}
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
 
 class QuestionOption(BaseModel):
     """One labelled answer option in a single-choice question."""
@@ -455,6 +464,20 @@ class QuizDraft(BaseModel):
         return _strip_nonblank_text(value, field_name="title")
 
 
+class AssessmentCandidatePool(BaseModel):
+    """Expanded model output used before deterministic service-side review."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    title: str = Field(strict=True, min_length=1, max_length=MAX_TITLE_LENGTH)
+    questions: list[GeneratedQuestion] = Field(min_length=1, max_length=MAX_QUESTIONS + 3)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _normalize_title(cls, value: object) -> str:
+        return _strip_nonblank_text(value, field_name="title")
+
+
 class VerifiedExcerptSupport(BaseModel):
     """Server-selected excerpt actually supporting the verified correct option."""
 
@@ -471,6 +494,7 @@ class ItemReviewCertificate(BaseModel):
     learning_objective: str
     objective_kind: TeachingObjectiveKind | None = None
     task_fingerprint: str = Field(default="", pattern=r"^(?:[a-f0-9]{64})?$")
+    reuse_fingerprint: str = Field(default="", pattern=r"^(?:[a-f0-9]{64})?$")
     supports: tuple[VerifiedExcerptSupport, ...] = Field(min_length=1)
 
 
@@ -512,6 +536,7 @@ class GeneratedQuiz(BaseModel):
 
 
 __all__ = [
+    "AssessmentCandidatePool",
     "AssessmentEvidenceSpan",
     "AssessmentQuestionType",
     "ComplementaryQuestionRequirement",

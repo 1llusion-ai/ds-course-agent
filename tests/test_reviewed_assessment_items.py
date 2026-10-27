@@ -124,7 +124,11 @@ def test_reuse_keeps_distinct_task_certificates_for_the_same_question(tmp_path):
     quiz = service.generate(first)
     assets.accumulate(first, quiz)
     assert assets.select(first, quiz.resource_revision)
-    assert not assets.select(second, quiz.resource_revision)
+    # Learner-specific error text changes the review provenance but does not
+    # invalidate a compatible shared item.  The planner can still use the
+    # current error to rank or generate a more targeted replacement.
+    selected = assets.select(second, quiz.resource_revision)
+    assert selected and selected[0].item.review.task_fingerprint != second.task_fingerprint(0)
     assets.accumulate(second, service.generate(second))
     assert assets.select(first, quiz.resource_revision)
     assert assets.select(second, quiz.resource_revision)

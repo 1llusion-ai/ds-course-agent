@@ -125,6 +125,17 @@ class AssessmentSlotFailureError(AssessmentGenerationError):
             self.failure_kind = next(iter(failure_kinds))
 
 
+class AssessmentStructuralFailureError(AssessmentSlotFailureError):
+    """A simplified production generation failed a deterministic content check.
+
+    The candidate pool has already had its one selection pass. Retrying the same
+    content failure would repeat a quality loop, so asynchronous preparation must
+    leave this job for an explicit new request instead of marking it retryable.
+    """
+
+    retryable = False
+
+
 class RetrievedEvidence(Protocol):
     """Minimal retrieval result shape required by the assessment service."""
 
@@ -177,6 +188,7 @@ class AssessmentService:
         context_max_chars: int | None = None,
         repair_rounds: int = MAX_REPAIR_ROUNDS,
         course_id: CourseId | str = DEFAULT_COURSE_ID,
+        strict_quality: bool = True,
     ) -> None:
         if isinstance(evidence_top_k, bool) or not isinstance(evidence_top_k, int):
             raise ValueError("evidence_top_k must be an integer")
@@ -197,6 +209,7 @@ class AssessmentService:
         self._evidence_top_k = evidence_top_k
         self._context_max_chars = self._resolve_context_max_chars(context_max_chars)
         self._repair_rounds = repair_rounds
+        self._strict_quality = strict_quality
 
     def generate(
         self,
@@ -238,6 +251,8 @@ class AssessmentService:
             if progress
             else BatchReviewState(required=len({selected.item.origin_batch for selected in reusable_items}) > 1)
         )
+        if not self._strict_quality:
+            batch_review = BatchReviewState(required=False)
         if progress is not None and progress.request != request:
             raise ValueError("assessment generation progress does not match the request")
         resource_revision = assessment_resource_revision(str(self._course_id))
@@ -296,8 +311,17 @@ class AssessmentService:
             normalized_stems: set[str] = set()
             try:
                 with trace.stage(AssessmentStage.GENERATION, count=request.count):
-                    draft = self._generator.generate_candidates(task_context, sources, exposure=exposure)
+                    draft = self._generator.generate_candidates(
+                        task_context,
+                        sources,
+                        exposure=exposure,
+                        candidate_count=self._candidate_pool_count(request.count) if not self._strict_quality else None,
+                    )
             except AssessmentOutputError:
+                if not self._strict_quality:
+                    # Structured output is an infrastructure boundary. Let the
+                    # preparation queue retry it without entering content repair.
+                    raise
                 pending = {
                     slot_index: QuestionRejection(
                         (QuestionRejectionCode.INVALID_STRUCTURED_OUTPUT,),
@@ -337,30 +361,33 @@ class AssessmentService:
                     normalized_stems=normalized_stems,
                     exposure=exposure,
                 )
-                try:
-                    quality_accepted, quality_rejected = self._apply_quality_verdicts(
-                        structurally_accepted,
-                        context=task_context,
-                        catalog=catalog,
-                        accepted_questions=(),
-                        trace=trace,
-                        round_index=0,
-                        review_certificates=review_certificates,
-                    )
-                except (AssessmentVerificationError, AssessmentCritiqueError) as exc:
-                    quality_accepted = []
-                    quality_rejected = [
-                        (
-                            slot_index,
-                            QuestionRejection(
-                                (QuestionRejectionCode.REVIEWER_UNAVAILABLE,),
-                                question,
-                                f"独立质量门不可用（{type(exc).__name__}）。",
-                                failure_kind=exc.failure_kind,
-                            ),
+                if self._strict_quality:
+                    try:
+                        quality_accepted, quality_rejected = self._apply_quality_verdicts(
+                            structurally_accepted,
+                            context=task_context,
+                            catalog=catalog,
+                            accepted_questions=(),
+                            trace=trace,
+                            round_index=0,
+                            review_certificates=review_certificates,
                         )
-                        for slot_index, question in structurally_accepted
-                    ]
+                    except (AssessmentVerificationError, AssessmentCritiqueError) as exc:
+                        quality_accepted = []
+                        quality_rejected = [
+                            (
+                                slot_index,
+                                QuestionRejection(
+                                    (QuestionRejectionCode.REVIEWER_UNAVAILABLE,),
+                                    question,
+                                    f"独立质量门不可用（{type(exc).__name__}）。",
+                                    failure_kind=exc.failure_kind,
+                                ),
+                            )
+                            for slot_index, question in structurally_accepted
+                        ]
+                else:
+                    quality_accepted, quality_rejected = structurally_accepted, []
                 for slot_index, question in quality_accepted:
                     accepted_by_slot[slot_index] = question
                     normalized_stems.add(self._normalize_stem(question.stem))
@@ -372,6 +399,13 @@ class AssessmentService:
                     }
                 )
                 self._log_acceptance(trace, 0, len(quality_accepted), pending)
+                if not self._strict_quality and pending:
+                    raise AssessmentStructuralFailureError(
+                        "assessment structural candidate check failed",
+                        slot_failures=tuple(
+                            self._slot_failure(index, rejection) for index, rejection in pending.items()
+                        ),
+                    )
         else:
             title = progress.title
             sources = list(progress.evidence)
@@ -409,7 +443,7 @@ class AssessmentService:
                 accepted_by_slot.pop(index)
                 review_certificates.pop(index, None)
 
-            if not pending and len(accepted_by_slot) == request.count:
+            if self._strict_quality and not pending and len(accepted_by_slot) == request.count:
                 pending.update(self._coverage_rejections(accepted_by_slot, review_certificates, target))
                 for index in pending:
                     accepted_by_slot.pop(index)
@@ -572,10 +606,10 @@ class AssessmentService:
 
         if len({item_identity(question) for question in questions}) != len(questions):
             raise AssessmentGenerationError("reviewed assessment contains duplicate content identities")
-        if len(review_certificates) != request.count:
+        if self._strict_quality and len(review_certificates) != request.count:
             raise AssessmentResourceChangedError("accepted progress lacks retained review certificates")
         supported_texts = [support.text for review in review_certificates.values() for support in review.supports]
-        if not has_target_coverage(supported_texts, target):
+        if self._strict_quality and not has_target_coverage(supported_texts, target):
             raise NoAssessmentEvidence("verified correct-answer excerpts do not cover every declared target member")
         if assessment_resource_revision(str(self._course_id)) != resource_revision:
             raise AssessmentResourceChangedError("assessment resources changed before publication")
@@ -584,7 +618,9 @@ class AssessmentService:
             questions=questions,
             sources=sources,
             resource_revision=resource_revision,
-            review_certificates=tuple(review_certificates[index] for index in range(request.count)),
+            review_certificates=(
+                tuple(review_certificates[index] for index in range(request.count)) if self._strict_quality else ()
+            ),
             repair_round=repair_round,
         )
 
@@ -615,7 +651,10 @@ class AssessmentService:
             if (
                 item.target_kc_id != request.target_kc_id
                 or item.question.difficulty != request.difficulty
-                or item.review.task_fingerprint != request.task_fingerprint(selected.slot_index)
+                or (
+                    item.review.reuse_fingerprint != request.reuse_fingerprint(selected.slot_index)
+                    and item.review.task_fingerprint != request.task_fingerprint(selected.slot_index)
+                )
                 or item.review.cognitive_operation not in DIFFICULTY_RULES[request.difficulty].operations
                 or (
                     objective is not None
@@ -654,7 +693,9 @@ class AssessmentService:
         if not questions:
             return None
         coverage_rejections = (
-            self._coverage_rejections(questions, reviews, target) if len(questions) == request.count else {}
+            self._coverage_rejections(questions, reviews, target)
+            if self._strict_quality and len(questions) == request.count
+            else {}
         )
         for slot in coverage_rejections:
             questions.pop(slot)
@@ -662,11 +703,15 @@ class AssessmentService:
         if not questions:
             return None
         supported = [support.text for review in reviews.values() for support in review.supports]
-        missing = [
-            member.component_id
-            for member in target.requirements
-            if not has_target_coverage(supported, AssessmentTarget(None, target.name, (), components=(member,)))
-        ]
+        missing = (
+            [
+                member.component_id
+                for member in target.requirements
+                if not has_target_coverage(supported, AssessmentTarget(None, target.name, (), components=(member,)))
+            ]
+            if self._strict_quality
+            else []
+        )
         pending = {
             index: QuestionRejection(
                 (QuestionRejectionCode.QUESTION_COUNT_SHORTFALL,),
@@ -941,6 +986,7 @@ class AssessmentService:
                         learning_objective=critique.learning_objective,
                         objective_kind=objective.kind if objective else None,
                         task_fingerprint=request.task_fingerprint(slot_index),
+                        reuse_fingerprint=request.reuse_fingerprint(slot_index),
                         supports=tuple(
                             VerifiedExcerptSupport(
                                 source_id=catalog.source_id_for(support.excerpt_id),
@@ -1214,6 +1260,13 @@ class AssessmentService:
             raise ValueError("context_max_chars must be a positive integer")
         return min(raw_value, MAX_SOURCE_TEXT_LENGTH)
 
+    @staticmethod
+    def _candidate_pool_count(question_count: int) -> int:
+        """Give the final editor a small choice set without multiplying calls."""
+
+        extra = 2 if question_count <= 2 else 3
+        return min(MAX_QUESTIONS, question_count + extra)
+
 
 _assessment_service: AssessmentService | None = None
 _assessment_services_by_course: dict[str, AssessmentService] = {}
@@ -1231,13 +1284,13 @@ def get_assessment_service(course_id: CourseId | str = DEFAULT_COURSE_ID) -> Ass
             with _assessment_service_lock:
                 service = _assessment_services_by_course.get(normalized_course_id)
                 if service is None:
-                    service = AssessmentService(course_id=normalized_course_id)
+                    service = AssessmentService(course_id=normalized_course_id, strict_quality=False)
                     _assessment_services_by_course[normalized_course_id] = service
         return service
     if _assessment_service is None:
         with _assessment_service_lock:
             if _assessment_service is None:
-                _assessment_service = AssessmentService(course_id=DEFAULT_COURSE_ID)
+                _assessment_service = AssessmentService(course_id=DEFAULT_COURSE_ID, strict_quality=False)
     return _assessment_service
 
 

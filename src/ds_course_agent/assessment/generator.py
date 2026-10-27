@@ -46,6 +46,8 @@ from ds_course_agent.assessment.formulas import analyze_formula_quality
 from ds_course_agent.assessment.generation_constraints import AssessmentExposureConstraint
 from ds_course_agent.assessment.models import (
     DIFFICULTY_RULES,
+    MAX_QUESTIONS,
+    AssessmentCandidatePool,
     Difficulty,
     EvidenceSource,
     FormulaQuality,
@@ -156,6 +158,7 @@ class AssessmentGenerator:
         sources: list[EvidenceSource],
         *,
         exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
+        candidate_count: int | None = None,
     ) -> QuizDraft:
         """Generate a structurally parsed candidate batch without hidden retries.
 
@@ -169,6 +172,8 @@ class AssessmentGenerator:
         if len({source.id for source in sources}) != len(sources):
             raise AssessmentGenerationError("evidence source ids must be unique")
 
+        if candidate_count is not None:
+            return self.generate_candidate_pool(context, sources, candidate_count=candidate_count, exposure=exposure)
         try:
             messages = self._build_messages(context, sources, exposure=exposure)
         except Exception as exc:
@@ -184,9 +189,58 @@ class AssessmentGenerator:
             raise AssessmentModelCallError(
                 "assessment model call failed", failure_kind=classify_provider_error(exc)
             ) from exc
-
         try:
             return self._coerce_draft(raw_output)
+        except AssessmentOutputError:
+            raise
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise AssessmentOutputError("assessment model returned invalid structured output") from exc
+
+    def generate_candidate_pool(
+        self,
+        context: AssessmentTaskContext,
+        sources: list[EvidenceSource],
+        *,
+        candidate_count: int,
+        exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
+    ) -> QuizDraft:
+        """Generate an expanded pool, then select and polish it in one second call.
+
+        The two calls have separate schemas so a provider cannot silently return a
+        short pool. No quality retry loop is added here; provider and structured
+        output failures retain the existing typed error classification.
+        """
+        if candidate_count < context.request.count or candidate_count > MAX_QUESTIONS + 3:
+            raise ValueError(f"candidate_count must be between requested count and {MAX_QUESTIONS + 3}")
+        if not sources:
+            raise AssessmentGenerationError("at least one evidence source is required")
+        from langchain_core.exceptions import OutputParserException
+
+        # Both pool calls use the configured large assessment model.
+        model = self._resolve_editor_model()
+        try:
+            first = self._structured_model(model, AssessmentCandidatePool).invoke(
+                self._build_pool_messages(context, sources, candidate_count=candidate_count, exposure=exposure)
+            )
+            pool = self._coerce_pool(first)
+            if len(pool.questions) < candidate_count:
+                raise AssessmentOutputError("assessment model returned a short candidate pool")
+            second = self._structured_model(model, QuizDraft).invoke(
+                self._build_selection_messages(context, sources, pool, exposure=exposure)
+            )
+        except (ValidationError, OutputParserException) as exc:
+            raise AssessmentOutputError("assessment model returned invalid structured output") from exc
+        except AssessmentGenerationError:
+            raise
+        except Exception as exc:
+            raise AssessmentModelCallError(
+                "assessment model call failed", failure_kind=classify_provider_error(exc)
+            ) from exc
+        try:
+            draft = self._coerce_draft(second)
+            if len(draft.questions) != context.request.count:
+                raise AssessmentOutputError("assessment selection returned the wrong question count")
+            return draft
         except AssessmentOutputError:
             raise
         except (TypeError, ValueError, ValidationError) as exc:
@@ -240,6 +294,46 @@ class AssessmentGenerator:
             if self._model is None:
                 raise AssessmentModelCallError("assessment model factory returned no model")
         return self._model
+
+    @staticmethod
+    def _coerce_pool(raw_output: Any) -> AssessmentCandidatePool:
+        if isinstance(raw_output, AssessmentCandidatePool):
+            return raw_output
+        if isinstance(raw_output, Mapping):
+            return AssessmentCandidatePool.model_validate(dict(raw_output))
+        raise TypeError("structured assessment output is not a candidate pool")
+
+    @staticmethod
+    def _build_pool_messages(
+        context: AssessmentTaskContext,
+        sources: list[EvidenceSource],
+        *,
+        candidate_count: int,
+        exposure: AssessmentExposureConstraint,
+    ) -> list[Any]:
+        messages = AssessmentGenerator._build_messages(
+            context, sources, exposure=exposure, question_count=candidate_count
+        )
+        messages[-1].content += "\n候选池仅供下一步统一选优，不代表最终交付题量。"
+        return messages
+
+    @staticmethod
+    def _build_selection_messages(
+        context: AssessmentTaskContext,
+        sources: list[EvidenceSource],
+        pool: AssessmentCandidatePool,
+        *,
+        exposure: AssessmentExposureConstraint,
+    ) -> list[Any]:
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        base = AssessmentGenerator._build_messages(context, sources, exposure=exposure)
+        prompt = (
+            f"从以下候选池中选出并润色恰好 {context.request.count} 道题，按 slot_index 顺序输出最终 QuizDraft。"
+            "可删除重复或质量较低候选，但不得改变教材事实；不得补充候选池和教材证据之外的结论。\n"
+            f"候选池：{json.dumps(pool.model_dump(mode='json'), ensure_ascii=False)}"
+        )
+        return [SystemMessage(content=base[0].content), HumanMessage(content=base[1].content + "\n" + prompt)]
 
     def _resolve_editor_model(self) -> Any:
         """Create the larger repair model lazily when item repair is needed."""
@@ -320,15 +414,17 @@ class AssessmentGenerator:
         sources: list[EvidenceSource],
         *,
         exposure: AssessmentExposureConstraint = AssessmentExposureConstraint(),
+        question_count: int | None = None,
     ) -> list[Any]:
         """Build the single model input from the exact bounded evidence sources."""
 
         from langchain_core.messages import HumanMessage, SystemMessage
 
         request = context.request
+        displayed_count = question_count if question_count is not None else request.count
         user_prompt = (
             f"目标知识点：{context.target_text()}\n"
-            f"题目数量：{request.count}\n"
+            f"题目数量：{displayed_count}\n"
             f"难度：{request.difficulty.value}\n\n"
             f"实际认知要求：{DIFFICULTY_RULES[request.difficulty].author_instruction}\n\n"
             "共享教学要求（questions 必须按 slot_index 顺序返回，每题遵守对应槽位任务）：\n"

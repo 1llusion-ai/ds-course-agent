@@ -31,6 +31,13 @@ class PreparationStatus(str, Enum):
     FAILED = "failed"
 
 
+class PreparationOrigin(str, Enum):
+    """Who requested a preparation and which opportunity budget applies."""
+
+    AUTOMATIC = "automatic"
+    EXPLICIT = "explicit"
+
+
 class AssessmentPreparation(BaseModel):
     """An immutable session/KC request and its current execution state."""
 
@@ -52,6 +59,7 @@ class AssessmentPreparation(BaseModel):
     retryable: bool = False
     updated_at: float
     course_id: CourseId = CourseId(DEFAULT_COURSE_ID)
+    origin: PreparationOrigin = PreparationOrigin.AUTOMATIC
 
     @property
     def accepted_slot_count(self) -> int:
@@ -111,10 +119,12 @@ class PreparationRepository:
         *,
         course_id: CourseId | str = DEFAULT_COURSE_ID,
         plan_context: AssessmentPlanContext | None = None,
+        origin: PreparationOrigin = PreparationOrigin.AUTOMATIC,
     ) -> AssessmentPreparation:
-        """Schedule at most one automatic assessment per student/session/KC."""
+        """Schedule one deduplicated preparation without running generation."""
 
         normalized_course_id = CourseId(course_id)
+        origin = PreparationOrigin(origin)
         identity = "\0".join(
             (
                 student_id,
@@ -122,6 +132,7 @@ class PreparationRepository:
                 session_id,
                 request.target_kc_id,
                 plan_context.opportunity_id if plan_context else "initial",
+                origin.value,
             )
         )
         job = AssessmentPreparation(
@@ -134,6 +145,7 @@ class PreparationRepository:
             updated_at=time.time(),
             course_id=normalized_course_id,
             plan_context=plan_context,
+            origin=origin,
         )
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -149,18 +161,25 @@ class PreparationRepository:
                     item
                     for item in existing
                     if item.request.target_kc_id == request.target_kc_id
+                    and item.request == request
+                    and item.origin is origin
                     and item.status in {PreparationStatus.QUEUED, PreparationStatus.GENERATING}
                 ),
                 None,
             )
             if active is not None:
                 return active
-            session_jobs = [item for item in existing if item.session_id == session_id]
-            if not any(item.id == job.id for item in session_jobs) and (
-                len(session_jobs) >= 9
-                or sum(item.request.target_kc_id == request.target_kc_id for item in session_jobs) >= 3
-            ):
-                raise ValueError("session practice opportunity budget exhausted")
+            if origin is PreparationOrigin.AUTOMATIC:
+                session_jobs = [
+                    item
+                    for item in existing
+                    if item.session_id == session_id and item.origin is PreparationOrigin.AUTOMATIC
+                ]
+                if not any(item.id == job.id for item in session_jobs) and (
+                    len(session_jobs) >= 9
+                    or sum(item.request.target_kc_id == request.target_kc_id for item in session_jobs) >= 3
+                ):
+                    raise ValueError("session practice opportunity budget exhausted")
             connection.execute(
                 "INSERT OR IGNORE INTO assessment_preparations (id, student_id, status, payload_json, course_id) VALUES (?, ?, ?, ?, ?)",
                 (job.id, student_id, job.status.value, job.model_dump_json(), str(normalized_course_id)),

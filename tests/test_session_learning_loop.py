@@ -31,7 +31,7 @@ from ds_course_agent.assessment.feedback import (
     QuestionSlotFailure,
 )
 from ds_course_agent.assessment.models import Difficulty, EvidenceSource, GeneratedQuiz, GenerateQuestionsRequest
-from ds_course_agent.assessment.preparation import PreparationRepository, PreparationStatus
+from ds_course_agent.assessment.preparation import PreparationOrigin, PreparationRepository, PreparationStatus
 from ds_course_agent.assessment.records import AnswerSubmission, AssessmentStatus
 from ds_course_agent.assessment.repository import AssessmentRepository
 from ds_course_agent.assessment.service import AssessmentSlotFailureError
@@ -198,6 +198,49 @@ def test_shared_turn_runner_persists_sqlite_and_schedules_practice(tmp_path, mon
     assert jobs[0].session_id == "session-1"
     assert jobs[0].request.target_kc_id == "pca"
     assert jobs[0].status is PreparationStatus.READY
+
+
+def test_explicit_preparation_is_queued_without_automatic_opportunity_budget(tmp_path) -> None:
+    assessment_path = tmp_path / "assessments.db"
+    service = AssessmentApplicationService(AssessmentRepository(assessment_path), FixtureGenerator())
+    preparations = PreparationRepository(assessment_path)
+    loop = SessionLearningLoop(preparations, service)
+    try:
+        request = GenerateQuestionsRequest(target_kc_id="pca", count=5, difficulty=Difficulty.BASIC)
+        job = loop.enqueue_explicit("student", "session", "PCA", request)
+        loop._futures[job.id].result(timeout=5)
+        job = preparations.get(job.id, "student")
+        assert job.origin is PreparationOrigin.EXPLICIT
+        assert job.status is PreparationStatus.READY
+        assert job.assessment_id is not None
+        assert preparations.list_for_student("student")[0].origin is PreparationOrigin.EXPLICIT
+    finally:
+        loop.close()
+
+
+def test_explicit_five_question_request_does_not_reuse_automatic_two_question_job(tmp_path) -> None:
+    assessment_path = tmp_path / "assessments.db"
+    service = AssessmentApplicationService(AssessmentRepository(assessment_path), FixtureGenerator())
+    preparations = PreparationRepository(assessment_path)
+    automatic = preparations.enqueue(
+        "student",
+        "session",
+        "PCA auto",
+        GenerateQuestionsRequest(target_kc_id="pca", count=2),
+        (),
+        origin=PreparationOrigin.AUTOMATIC,
+    )
+    loop = SessionLearningLoop(preparations, service)
+    try:
+        explicit = loop.enqueue_explicit(
+            "student", "session", "PCA explicit", GenerateQuestionsRequest(target_kc_id="pca", count=5)
+        )
+        assert explicit.id != automatic.id
+        assert explicit.origin is PreparationOrigin.EXPLICIT
+        loop._futures[explicit.id].result(timeout=5)
+        assert preparations.get(explicit.id, "student").status is PreparationStatus.READY
+    finally:
+        loop.close()
 
 
 def test_session_to_assessment_to_profile_to_next_teaching(tmp_path) -> None:

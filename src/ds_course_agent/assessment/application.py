@@ -251,6 +251,24 @@ class AssessmentApplicationService:
             )
         )
 
+    def active_assessment_for_target(
+        self, student_id: str, target_kc_id: str, *, course_id: CourseId | str = DEFAULT_COURSE_ID
+    ) -> AssessmentRecord | None:
+        """Return the immutable active assignment for one target, if present."""
+
+        return next(
+            (
+                record
+                for record in self._repository.list_for_student(
+                    student_id,
+                    (AssessmentStatus.READY, AssessmentStatus.IN_PROGRESS),
+                    course_id=course_id,
+                )
+                if record.request.target_kc_id == target_kc_id
+            ),
+            None,
+        )
+
     def list_assessments(
         self,
         student_id: str,
