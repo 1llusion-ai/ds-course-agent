@@ -3,7 +3,7 @@
   "course_id": "digital-literacy",
   "display_name": "数字素养与技能导论",
   "description": "数字素养基础、数字技能实践与安全责任",
-  "revision": "f884ac0e88b0cbedb6155d892f5dcd8965f46ccab4b0af4ae61c431ae56a99a7",
+  "revision": "0cafba3073250bad4b494ad58c218185ce202cc80a2f602face93dbdfc44e850",
   "status": "ready",
   "prompt_path": "",
   "knowledge_graph_path": "data/courses/digital-literacy/knowledge_graph.json",

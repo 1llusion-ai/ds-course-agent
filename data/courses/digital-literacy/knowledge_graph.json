@@ -6,7 +6,9 @@
       "canonical_id": "dl_1_1_1",
       "display_name": "通信的含义与演进",
       "aliases": [
-        "通信的含义与演进"
+        "通信的含义与演进",
+        "通信技术",
+        "通信方式"
       ],
       "related_concepts": [
         "dl_1_1_1_1",
@@ -153,7 +155,8 @@
       "canonical_id": "dl_1_1_6",
       "display_name": "数字鸿沟的成因与弥合",
       "aliases": [
-        "数字鸿沟的成因与弥合"
+        "数字鸿沟的成因与弥合",
+        "数字鸿沟"
       ],
       "related_concepts": [
         "dl_1_1_5",
@@ -183,7 +186,8 @@
       "canonical_id": "dl_1_2_1",
       "display_name": "数字素养概念演进",
       "aliases": [
-        "数字素养概念演进"
+        "数字素养概念演进",
+        "数字素养"
       ],
       "related_concepts": [
         "dl_1_2_1_1"
@@ -1100,7 +1104,8 @@
       "canonical_id": "dl_4_1_2",
       "display_name": "电子邮件收发与规范",
       "aliases": [
-        "电子邮件收发与规范"
+        "电子邮件收发与规范",
+        "电子邮件"
       ],
       "related_concepts": [
         "dl_4_1_1",
@@ -1396,7 +1401,8 @@
       "canonical_id": "dl_5_1_1",
       "display_name": "大数据特征与处理",
       "aliases": [
-        "大数据特征与处理"
+        "大数据特征与处理",
+        "大数据"
       ],
       "related_concepts": [
         "dl_5_1_1_1"
@@ -1452,7 +1458,8 @@
       "canonical_id": "dl_5_2_1",
       "display_name": "云计算服务与部署",
       "aliases": [
-        "云计算服务与部署"
+        "云计算服务与部署",
+        "云计算"
       ],
       "related_concepts": [
         "dl_5_2_1_1",
@@ -1509,7 +1516,8 @@
       "canonical_id": "dl_5_3_1",
       "display_name": "物联网体系结构",
       "aliases": [
-        "物联网体系结构"
+        "物联网体系结构",
+        "物联网"
       ],
       "related_concepts": [
         "dl_5_3_1_1",
@@ -1566,7 +1574,8 @@
       "canonical_id": "dl_5_4_1",
       "display_name": "人工智能概念与发展",
       "aliases": [
-        "人工智能概念与发展"
+        "人工智能概念与发展",
+        "人工智能"
       ],
       "related_concepts": [],
       "chapter": "第5章",
@@ -1715,7 +1724,8 @@
       "canonical_id": "dl_5_5_1",
       "display_name": "区块链分布式账本",
       "aliases": [
-        "区块链分布式账本"
+        "区块链分布式账本",
+        "区块链"
       ],
       "related_concepts": [
         "dl_5_5_1_1"
@@ -1773,7 +1783,8 @@
       "canonical_id": "dl_5_6_1",
       "display_name": "数字孪生建模机制",
       "aliases": [
-        "数字孪生建模机制"
+        "数字孪生建模机制",
+        "数字孪生"
       ],
       "related_concepts": [
         "dl_5_6_1_1"
@@ -1829,7 +1840,8 @@
       "canonical_id": "dl_5_7_1",
       "display_name": "RPA软件机器人机制",
       "aliases": [
-        "RPA软件机器人机制"
+        "RPA软件机器人机制",
+        "RPA"
       ],
       "related_concepts": [
         "dl_5_7_1_1"
@@ -2061,7 +2073,8 @@
       "canonical_id": "dl_5_9_1",
       "display_name": "增强现实技术",
       "aliases": [
-        "增强现实技术"
+        "增强现实技术",
+        "增强现实"
       ],
       "related_concepts": [
         "dl_5_9_1_1"
@@ -2090,7 +2103,8 @@
       "canonical_id": "dl_5_9_2",
       "display_name": "虚拟现实沉浸交互",
       "aliases": [
-        "虚拟现实沉浸交互"
+        "虚拟现实沉浸交互",
+        "虚拟现实"
       ],
       "related_concepts": [
         "dl_5_9_2_1"
@@ -2206,7 +2220,8 @@
       "canonical_id": "dl_6_1_3",
       "display_name": "计算机病毒与防护",
       "aliases": [
-        "计算机病毒与防护"
+        "计算机病毒与防护",
+        "计算机病毒"
       ],
       "related_concepts": [
         "dl_6_1_3_1"
@@ -2648,7 +2663,8 @@
       "canonical_id": "dl_7_2_2",
       "display_name": "数字版权伦理",
       "aliases": [
-        "数字版权伦理"
+        "数字版权伦理",
+        "数字版权"
       ],
       "related_concepts": [
         "dl_8_2_2"

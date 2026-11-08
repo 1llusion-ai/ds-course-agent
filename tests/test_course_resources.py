@@ -15,7 +15,7 @@ from ds_course_agent.courses import (
 COURSE_DIR = "data/courses"
 
 
-def test_declared_catalog_contains_the_two_supported_courses() -> None:
+def test_declared_catalog_contains_the_supported_courses() -> None:
     catalog = CourseCatalog.from_directory(COURSE_DIR)
 
     ready = catalog.require("data-science-intro")
@@ -24,9 +24,8 @@ def test_declared_catalog_contains_the_two_supported_courses() -> None:
     assert ready.is_ready
     assert ready.index_binding is not None
     assert ready.index_binding.collection_name == "course_c37b7b78"
-    assert {str(manifest.course_id) for manifest in catalog.list()} == {
-        "data-science-intro",
-        "digital-literacy",
+    assert {"data-science-intro", "digital-literacy", "ai-literacy"} <= {
+        str(manifest.course_id) for manifest in catalog.list()
     }
     assert digital_literacy.is_ready
     assert digital_literacy.display_name == "数字素养与技能导论"
@@ -86,6 +85,16 @@ def test_catalog_and_resolver_are_read_only_and_build_scoped_context() -> None:
         catalog.require("missing-course")
 
 
+def test_ready_courses_declare_distinct_index_bindings() -> None:
+    catalog = CourseCatalog.from_directory(COURSE_DIR)
+    bindings = [manifest.index_binding for manifest in catalog.list() if manifest.is_ready]
+
+    assert all(binding is not None for binding in bindings)
+    assert len({binding.collection_name for binding in bindings}) == len(bindings)
+    assert len({binding.persist_directory for binding in bindings}) == len(bindings)
+    assert len({binding.manifest_path for binding in bindings}) == len(bindings)
+
+
 def test_contract_rejects_invalid_ids_revisions_and_unknown_fields() -> None:
     with pytest.raises(ValueError):
         CourseId("Data Science")
@@ -122,3 +131,20 @@ def test_catalog_rejects_duplicate_ids_and_malformed_json(tmp_path) -> None:
     (tmp_path / "b.json").write_text("{", encoding="utf-8")
     with pytest.raises(ValueError, match="invalid course manifest JSON"):
         CourseCatalog.from_directory(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("question", "concept_id"),
+    [
+        ("请讲解通信技术", "dl_1_1_1"),
+        ("请围绕区块链给我安排测验", "dl_5_5_1"),
+        ("云计算是什么", "dl_5_2_1"),
+        ("大数据有哪些特征", "dl_5_1_1"),
+    ],
+)
+def test_digital_course_maps_textbook_terms_to_its_own_assessment_targets(question, concept_id):
+    from ds_course_agent.teaching.knowledge_mapper import KnowledgeGraph, KnowledgeMapper
+
+    mapper = KnowledgeMapper(KnowledgeGraph("data/courses/digital-literacy/knowledge_graph.json"))
+
+    assert concept_id in {match.concept_id for match in mapper.match_question_rules(question)}

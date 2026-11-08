@@ -70,6 +70,42 @@ def test_load_manifest_uses_explicit_binding_identity(monkeypatch, tmp_path):
     assert manifest.collection_revision == binding.revision
 
 
+@pytest.mark.parametrize("stale_revision", [False, True])
+def test_index_readiness_checks_bound_collection_and_revision(tmp_path, stale_revision):
+    import chromadb
+
+    from ds_course_agent.retrieval.index_manifest import check_production_index_readiness
+    from ds_course_agent.shared.config.schema import Settings
+
+    persist = tmp_path / "course-index"
+    revision = "b" * 64
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(_manifest_payload(persist_directory=str(persist), collection_name="course-two", revision=revision)),
+        encoding="utf-8",
+    )
+    client = chromadb.PersistentClient(path=str(persist))
+    client.create_collection("course-two").add(
+        ids=["chunk"], embeddings=[[0.1, 0.2]], metadatas=[{"collection_revision": revision}]
+    )
+    client.close()
+    binding = CourseIndexBinding(
+        collection_name="course-two",
+        persist_directory=str(persist),
+        manifest_path=str(manifest_path),
+        revision="c" * 64 if stale_revision else revision,
+        embedding_model="course-embedding",
+    )
+
+    check = check_production_index_readiness(
+        Settings(COLLECTION_NAME="unused-default", CHROMA_PERSIST_DIR=str(tmp_path / "missing")), index_binding=binding
+    )
+
+    assert check.ok is not stale_revision
+    if stale_revision:
+        assert "revision" in check.detail
+
+
 def test_rag_service_passes_binding_to_vector_store_without_external_services(monkeypatch, tmp_path):
     persist = tmp_path / "course-index"
     binding = CourseIndexBinding(

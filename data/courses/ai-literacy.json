@@ -1,0 +1,47 @@
+{
+  "schema_version": "course-resources/1.0",
+  "course_id": "ai-literacy",
+  "display_name": "人工智能通识",
+  "description": "人工智能基础、大模型、提示工程、知识增强、智能体与具身智能",
+  "revision": "9b71c63e45d2fd9918f095fd66d7109d45ffd40e0b30f3691c54f7e59376e95d",
+  "status": "ready",
+  "prompt_path": "",
+  "knowledge_graph_path": "data/courses/ai-literacy/knowledge_graph.json",
+  "toc_path": "data/courses/ai-literacy/toc.json",
+  "schedule_path": "",
+  "resource_metadata": {
+    "source": {
+      "kind": "local_pdf",
+      "type": "local_pdf",
+      "path": "var/course_sources/ai-literacy/ai-literacy-course.pdf",
+      "sha256": "a300e44b20dbd1f61239126d3f90d737ac85d12387b586e3041fc32e27dd40e5",
+      "status": "verified",
+      "placeholder": false
+    },
+    "page_offset": 0,
+    "known_anomalies": [
+      "Word 导出包含仅页眉的重复页；合并本地 PDF 时排除，并保留原始导出与逐页映射。",
+      "书页 86 的正文溢出到第二张导出页；合并为一张加高 PDF 页，完整保留正文。",
+      "合并 PDF 仅含书页 1–264（8 章及附录 A–D）；source_page 与 book_page 一致，原始位置见 source_map.json。"
+    ],
+    "original_sources": [
+      {
+        "path": "var/course_sources/ai-literacy/chapters-1-4.docx",
+        "sha256": "d5b3f2e2f164164570087d3a700cdb26c6559ead161e0470e3580c1941e311a4"
+      },
+      {
+        "path": "var/course_sources/ai-literacy/chapters-5-8.docx",
+        "sha256": "3ddefef5152278cd15cf87c28088a0f61a2190a35220992898080d860e61dc0a"
+      }
+    ],
+    "source_map_path": "var/artifacts/ai-literacy-onboarding/source_map.json"
+  },
+  "index": {
+    "collection_name": "ai_literacy_a300e44b20dbd1f6_student_v1",
+    "persist_directory": "var/chroma_candidates/ai-literacy/sha256-a300e44b20dbd1f6/student-v1/chroma",
+    "manifest_path": "var/chroma_candidates/ai-literacy/sha256-a300e44b20dbd1f6/student-v1/production_manifest.json",
+    "revision": "fd8a7bcf024502246396e9f978a85f9b2b04c5d4ff26e790fd22b4f247203ffa",
+    "embedding_model": "Qwen/Qwen3-Embedding-8B",
+    "metadata_schema_version": "retrieval-provenance/1.0"
+  }
+}

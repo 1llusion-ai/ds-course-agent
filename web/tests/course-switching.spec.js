@@ -2,11 +2,11 @@ import { expect, test } from '@playwright/test'
 
 const DEFAULT_COURSE = 'data-science-intro'
 const SECOND_COURSE = 'digital-literacy'
-const FOURTH_COURSE = 'statistics'
+const THIRD_COURSE = 'ai-literacy'
 const courses = [
   { course_id: DEFAULT_COURSE, display_name: '数据科学导论', is_ready: true },
   { course_id: SECOND_COURSE, display_name: '数字素养', is_ready: true },
-  { course_id: FOURTH_COURSE, display_name: '统计学', is_ready: true }
+  { course_id: THIRD_COURSE, display_name: '人工智能通识', is_ready: true }
 ]
 
 function session(courseId) {
@@ -93,32 +93,41 @@ test('catalog additions appear automatically and ready courses can send', async 
   await page.route('**/api/chat/send/stream', route => {
     streamPayload = route.request().postDataJSON()
     return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({
-      type: 'final', message: { role: 'assistant', content: '统计学回答', timestamp: '2026-10-20T00:00:00Z' }
+      type: 'final', message: { role: 'assistant', content: '人工智能通识回答', timestamp: '2026-10-20T00:00:00Z' }
     })}\n\n` })
   })
 
   await page.goto('/chat')
   const selector = await openCourseSettings(page)
   await expect(selector.locator('option')).toHaveCount(3)
-  await selector.selectOption(FOURTH_COURSE)
+  await selector.selectOption(THIRD_COURSE)
   await expect(page.locator('textarea')).toBeEnabled()
-  await page.locator('textarea').fill('介绍统计推断')
+  await page.locator('textarea').fill('介绍检索增强生成')
   await page.getByRole('button', { name: '发送消息' }).click()
-  await expect(page.getByText('统计学回答', { exact: true })).toBeVisible()
-  expect(streamPayload).toMatchObject({ session_id: 'shared-session', course_id: FOURTH_COURSE, message: '介绍统计推断' })
+  await expect(page.getByText('人工智能通识回答', { exact: true })).toBeVisible()
+  expect(streamPayload).toMatchObject({ session_id: 'shared-session', course_id: THIRD_COURSE, message: '介绍检索增强生成' })
   await openCourseSettings(page)
   await page.reload()
-  await expect(selector).toHaveValue(FOURTH_COURSE)
+  await expect(selector).toHaveValue(THIRD_COURSE)
 })
 
-test('course map caches are isolated across the two course graphs', async ({ page }) => {
+test('course map caches are isolated across the three course graphs', async ({ page }) => {
   await mockCourses(page)
   const requestedCourses = []
   await page.route('**/api/knowledge-map?**', route => {
     const courseId = new URL(route.request().url()).searchParams.get('course_id')
     requestedCourses.push(courseId)
-    return route.fulfill({ json: courseId === SECOND_COURSE
+    return route.fulfill({ json: courseId === THIRD_COURSE
       ? {
+          course_name: '人工智能通识', version: '1',
+          chapters: [{ chapter: '第5章', title: '大模型知识增强技术' }],
+          nodes: [{
+            canonical_id: 'ai_rag', display_name: '检索增强生成', chapter: '第5章',
+            node_type: 'kc', aliases: ['RAG'], learning_state: 'unobserved', learning_points: []
+          }],
+          edges: []
+        }
+      : courseId === SECOND_COURSE ? {
           course_name: '数字素养', version: '1',
           chapters: [{ chapter: '第5章', title: '数字技术通识' }],
           nodes: [{
@@ -153,12 +162,20 @@ test('course map caches are isolated across the two course graphs', async ({ pag
   await page.goto('/chat')
   await expect(page).toHaveURL(/\/chat$/)
 
+  await switchCourse(page, THIRD_COURSE)
+  await page.getByRole('button', { name: /知识地图/ }).click()
+  await page.getByRole('button', { name: '打开知识目录' }).click()
+  await expect(page.getByRole('button', { name: '大模型知识增强技术' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '数字技术通识' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '数据科学基础' })).toHaveCount(0)
+  await page.goto('/chat')
+
   await switchCourse(page, DEFAULT_COURSE)
   await page.getByRole('button', { name: /知识地图/ }).click()
   await page.getByRole('button', { name: '打开知识目录' }).click()
   await expect(page.getByRole('button', { name: '数据科学基础' })).toBeVisible()
   await expect(page.getByRole('button', { name: '数字技术通识' })).toHaveCount(0)
-  expect(requestedCourses).toEqual([DEFAULT_COURSE, SECOND_COURSE, DEFAULT_COURSE])
+  expect(requestedCourses).toEqual([DEFAULT_COURSE, SECOND_COURSE, THIRD_COURSE, DEFAULT_COURSE])
 })
 
 test('map explanation keeps the selected course identity through new chat and SSE', async ({ page }) => {
@@ -193,7 +210,7 @@ test('alternating map explanation and practice actions use each course resource'
   const fixtures = {
     [DEFAULT_COURSE]: { name: '数据科学导论', chapter: '第1章', section: '1.1', concept: '数据思维' },
     [SECOND_COURSE]: { name: '数字素养与技能导论', chapter: '第7章', section: '7.1.2', concept: '数字命运共同体' },
-    [FOURTH_COURSE]: { name: '统计学', chapter: '第3章', section: '3.2', concept: '抽样分布' }
+    [THIRD_COURSE]: { name: '统计学', chapter: '第3章', section: '3.2', concept: '抽样分布' }
   }
   const payloads = []
   await page.route('**/api/knowledge-map?**', route => {
@@ -217,7 +234,7 @@ test('alternating map explanation and practice actions use each course resource'
   await page.goto('/chat')
   await expect(page.getByText('这门课程有哪些核心概念？', { exact: true })).toBeVisible()
   await expect(page.getByText('逻辑回归为什么能做分类？', { exact: true })).toHaveCount(0)
-  for (const [index, id] of [SECOND_COURSE, DEFAULT_COURSE, FOURTH_COURSE, SECOND_COURSE].entries()) {
+  for (const [index, id] of [SECOND_COURSE, DEFAULT_COURSE, THIRD_COURSE, SECOND_COURSE].entries()) {
     await switchCourse(page, id)
     await page.goto(`/knowledge-map?concept=same-concept-id&course_id=${id}`)
     const data = fixtures[id]

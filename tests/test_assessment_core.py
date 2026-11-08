@@ -730,9 +730,7 @@ def test_reviewer_recovery_does_not_consume_editor_retry_budget() -> None:
                 result = (ItemCritique.model_validate(rejected),)
             else:
                 result = (
-                    ItemCritique.model_validate(
-                        _critique_payload(0, GeneratedQuestion.model_validate(repaired))
-                    ),
+                    ItemCritique.model_validate(_critique_payload(0, GeneratedQuestion.model_validate(repaired))),
                 )
             self.calls.append((list(questions), list(accepted_questions)))
             return result

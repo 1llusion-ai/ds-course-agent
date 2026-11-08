@@ -1,0 +1,972 @@
+{
+  "schema_version": "course-toc/1.0",
+  "course_id": "ai-literacy",
+  "title": "人工智能通识",
+  "page_offset": 0,
+  "page_mapping": "book_page = physical_page; normalized local Word exports; original mapping in source_map.json",
+  "source": {
+    "kind": "local_pdf",
+    "type": "local_pdf",
+    "path": "var/course_sources/ai-literacy/ai-literacy-course.pdf",
+    "sha256": "a300e44b20dbd1f61239126d3f90d737ac85d12387b586e3041fc32e27dd40e5",
+    "status": "verified",
+    "placeholder": false
+  },
+  "known_anomalies": [
+    "Word 导出包含仅页眉的重复页；合并本地 PDF 时排除，并保留原始导出与逐页映射。",
+    "书页 86 的正文溢出到第二张导出页；合并为一张加高 PDF 页，完整保留正文。",
+    "合并 PDF 仅含书页 1–264（8 章及附录 A–D）；source_page 与 book_page 一致，原始位置见 source_map.json。"
+  ],
+  "toc": [
+    {
+      "kind": "chapter",
+      "number": 1,
+      "title": "人工智能概述",
+      "book_page_start": 1,
+      "physical_page_start": 1,
+      "children": [
+        {
+          "title": "1.1 人工智能基本概念",
+          "book_page_start": 1,
+          "children": [
+            {
+              "title": "1.1.1 人工智能的内涵",
+              "book_page_start": 1
+            },
+            {
+              "title": "1.1.2 智能评判标准",
+              "book_page_start": 4
+            },
+            {
+              "title": "1.1.3 人工智能思维的特征",
+              "book_page_start": 6
+            }
+          ]
+        },
+        {
+          "title": "1.2 多学科视角下的人工智能",
+          "book_page_start": 7,
+          "children": [
+            {
+              "title": "1.2.1 数学与人工智能",
+              "book_page_start": 7
+            },
+            {
+              "title": "1.2.2 物理学与人工智能",
+              "book_page_start": 8
+            },
+            {
+              "title": "1.2.3 人工智能与其他学科",
+              "book_page_start": 10
+            }
+          ]
+        },
+        {
+          "title": "1.3 人工智能伦理、安全与治理",
+          "book_page_start": 11,
+          "children": [
+            {
+              "title": "1.3.1 人工智能伦理",
+              "book_page_start": 11
+            },
+            {
+              "title": "1.3.2 人工智能安全",
+              "book_page_start": 13
+            },
+            {
+              "title": "1.3.3 我国人工智能治理",
+              "book_page_start": 14
+            },
+            {
+              "title": "1.3.4 全球人工智能治理",
+              "book_page_start": 17
+            }
+          ]
+        },
+        {
+          "title": "1.4 人工智能时代的个人发展",
+          "book_page_start": 18,
+          "children": [
+            {
+              "title": "1.4.1 数字素养能力框架",
+              "book_page_start": 18
+            },
+            {
+              "title": "1.4.2 “人工智能 +”与新兴职业",
+              "book_page_start": 20
+            },
+            {
+              "title": "1.4.3 人工智能时代的能力要求",
+              "book_page_start": 22
+            }
+          ]
+        },
+        {
+          "title": "1.5 实验项目",
+          "book_page_start": 23,
+          "children": [
+            {
+              "title": "项目 1 模拟图灵测试",
+              "book_page_start": 23
+            },
+            {
+              "title": "项目 2 大模型学习助手",
+              "book_page_start": 24
+            }
+          ]
+        },
+        {
+          "title": "习题与讨论",
+          "book_page_start": 25
+        }
+      ],
+      "book_page_end": 26,
+      "physical_page_end": 26
+    },
+    {
+      "kind": "chapter",
+      "number": 2,
+      "title": "人工智能技术基础",
+      "book_page_start": 27,
+      "physical_page_start": 27,
+      "children": [
+        {
+          "title": "2.1 人工智能主流技术学派",
+          "book_page_start": 27,
+          "children": [
+            {
+              "title": "2.1.1 符号主义",
+              "book_page_start": 28
+            },
+            {
+              "title": "2.1.2 联结主义",
+              "book_page_start": 30
+            },
+            {
+              "title": "2.1.3 行为主义",
+              "book_page_start": 31
+            },
+            {
+              "title": "2.1.4 技术学派的融合",
+              "book_page_start": 33
+            }
+          ]
+        },
+        {
+          "title": "2.2 数据：人工智能的基础要素",
+          "book_page_start": 33,
+          "children": [
+            {
+              "title": "2.2.1 数据驱动的人工智能",
+              "book_page_start": 33
+            },
+            {
+              "title": "2.2.2 数据类型与数据集",
+              "book_page_start": 34
+            },
+            {
+              "title": "2.2.3 数据标注",
+              "book_page_start": 36
+            },
+            {
+              "title": "2.2.4 数据质量",
+              "book_page_start": 36
+            }
+          ]
+        },
+        {
+          "title": "2.3 算力：人工智能的计算支撑",
+          "book_page_start": 37,
+          "children": [
+            {
+              "title": "2.3.1 算力的内涵与演进",
+              "book_page_start": 37
+            },
+            {
+              "title": "2.3.2 智能计算核心硬件",
+              "book_page_start": 38
+            },
+            {
+              "title": "2.3.3 算力基础设施",
+              "book_page_start": 41
+            },
+            {
+              "title": "2.3.4 算力与人工智能协同发展",
+              "book_page_start": 42
+            }
+          ]
+        },
+        {
+          "title": "2.4 算法：人工智能的核心引擎",
+          "book_page_start": 43,
+          "children": [
+            {
+              "title": "2.4.1 算法与模型",
+              "book_page_start": 43
+            },
+            {
+              "title": "2.4.2 机器学习",
+              "book_page_start": 45
+            },
+            {
+              "title": "2.4.3 深度学习",
+              "book_page_start": 48
+            },
+            {
+              "title": "2.4.4 学习范式的融合",
+              "book_page_start": 51
+            }
+          ]
+        },
+        {
+          "title": "2.5 实验项目",
+          "book_page_start": 52,
+          "children": [
+            {
+              "title": "项目 1 使用 K 近邻算法实现智能分类",
+              "book_page_start": 52
+            },
+            {
+              "title": "项目 2 神经网络的搭建与计算",
+              "book_page_start": 53
+            },
+            {
+              "title": "项目 3 强化学习小游戏开发",
+              "book_page_start": 55
+            }
+          ]
+        },
+        {
+          "title": "习题与讨论",
+          "book_page_start": 57
+        }
+      ],
+      "book_page_end": 58,
+      "physical_page_end": 58
+    },
+    {
+      "kind": "chapter",
+      "number": 3,
+      "title": "大模型技术原理",
+      "book_page_start": 59,
+      "physical_page_start": 59,
+      "children": [
+        {
+          "title": "3.1 生成式人工智能与大模型",
+          "book_page_start": 59,
+          "children": [
+            {
+              "title": "3.1.1 生成式人工智能",
+              "book_page_start": 59
+            },
+            {
+              "title": "3.1.2 大模型基本认知",
+              "book_page_start": 62
+            },
+            {
+              "title": "3.1.3 大模型参数理解",
+              "book_page_start": 65
+            },
+            {
+              "title": "3.1.4 大模型评测",
+              "book_page_start": 68
+            },
+            {
+              "title": "3.1.5 大模型发展面临的挑战",
+              "book_page_start": 69
+            }
+          ]
+        },
+        {
+          "title": "3.2 Transformer 架构基础",
+          "book_page_start": 71,
+          "children": [
+            {
+              "title": "3.2.1 Transformer 发展历程",
+              "book_page_start": 71
+            },
+            {
+              "title": "3.2.2 Transformer 基本架构",
+              "book_page_start": 72
+            },
+            {
+              "title": "3.2.3 注意力机制",
+              "book_page_start": 74
+            },
+            {
+              "title": "3.2.4 文本分词技术",
+              "book_page_start": 76
+            },
+            {
+              "title": "3.2.5 典型架构",
+              "book_page_start": 79
+            }
+          ]
+        },
+        {
+          "title": "3.3 大模型训练技术",
+          "book_page_start": 81,
+          "children": [
+            {
+              "title": "3.3.1 算法、数据与算力支撑",
+              "book_page_start": 81
+            },
+            {
+              "title": "3.3.2 大模型预训练",
+              "book_page_start": 82
+            },
+            {
+              "title": "3.3.3 大模型微调",
+              "book_page_start": 83
+            },
+            {
+              "title": "3.3.4 大模型对齐",
+              "book_page_start": 84
+            },
+            {
+              "title": "3.3.5 多模态对齐",
+              "book_page_start": 85
+            }
+          ]
+        },
+        {
+          "title": "3.4 大模型开发与社区",
+          "book_page_start": 86,
+          "children": [
+            {
+              "title": "3.4.1 大模型开发和调用",
+              "book_page_start": 86
+            },
+            {
+              "title": "3.4.2 国外主流大模型",
+              "book_page_start": 90
+            },
+            {
+              "title": "3.4.3 国产主流大模型",
+              "book_page_start": 92
+            },
+            {
+              "title": "3.4.4 开源开发社区",
+              "book_page_start": 95
+            }
+          ]
+        },
+        {
+          "title": "3.5 实验项目",
+          "book_page_start": 96,
+          "children": [
+            {
+              "title": "项目 1 本地部署大模型",
+              "book_page_start": 96
+            },
+            {
+              "title": "项目 2 基于 CLIP 的图文检索",
+              "book_page_start": 97
+            }
+          ]
+        },
+        {
+          "title": "习题与讨论",
+          "book_page_start": 99
+        }
+      ],
+      "book_page_end": 99,
+      "physical_page_end": 99
+    },
+    {
+      "kind": "chapter",
+      "number": 4,
+      "title": "提示工程与辅助编程",
+      "book_page_start": 100,
+      "physical_page_start": 100,
+      "children": [
+        {
+          "title": "4.1 提示工程基础",
+          "book_page_start": 100,
+          "children": [
+            {
+              "title": "4.1.1 提示工程概述",
+              "book_page_start": 100
+            },
+            {
+              "title": "4.1.2 提示词基本结构",
+              "book_page_start": 101
+            },
+            {
+              "title": "4.1.3 提示词常用方法",
+              "book_page_start": 101
+            },
+            {
+              "title": "4.1.4 提示词攻击与防护",
+              "book_page_start": 103
+            }
+          ]
+        },
+        {
+          "title": "4.2 思维链技术",
+          "book_page_start": 105,
+          "children": [
+            {
+              "title": "4.2.1 思维链基本原理",
+              "book_page_start": 105
+            },
+            {
+              "title": "4.2.2 零样本思维链与少样本思维链",
+              "book_page_start": 106
+            },
+            {
+              "title": "4.2.3 推理能力增强技术",
+              "book_page_start": 108
+            }
+          ]
+        },
+        {
+          "title": "4.3 人工智能辅助办公",
+          "book_page_start": 113,
+          "children": [
+            {
+              "title": "4.3.1 人工智能辅助文档处理",
+              "book_page_start": 113
+            },
+            {
+              "title": "4.3.2 人工智能辅助数据管理",
+              "book_page_start": 114
+            },
+            {
+              "title": "4.3.3 人工智能辅助绘图",
+              "book_page_start": 116
+            }
+          ]
+        },
+        {
+          "title": "4.4 人工智能辅助编程",
+          "book_page_start": 118,
+          "children": [
+            {
+              "title": "4.4.1 人工智能辅助编程概要",
+              "book_page_start": 118
+            },
+            {
+              "title": "4.4.2 氛围编程",
+              "book_page_start": 120
+            },
+            {
+              "title": "4.4.3 人工智能辅助编程边界与责任",
+              "book_page_start": 124
+            }
+          ]
+        },
+        {
+          "title": "4.5 实验项目",
+          "book_page_start": 126,
+          "children": [
+            {
+              "title": "项目 1 提示词设计与优化",
+              "book_page_start": 126
+            },
+            {
+              "title": "项目 2 基于提示词的零代码编程",
+              "book_page_start": 128
+            },
+            {
+              "title": "项目 3 基于 CodeGeeX 的人工智能辅助编程",
+              "book_page_start": 130
+            }
+          ]
+        },
+        {
+          "title": "习题与讨论",
+          "book_page_start": 133
+        }
+      ],
+      "book_page_end": 134,
+      "physical_page_end": 134
+    },
+    {
+      "kind": "chapter",
+      "number": 5,
+      "title": "大模型知识增强技术",
+      "book_page_start": 135,
+      "physical_page_start": 135,
+      "children": [
+        {
+          "title": "5.1 大模型知识增强",
+          "book_page_start": 135,
+          "children": [
+            {
+              "title": "5.1.1 知识增强的必要性",
+              "book_page_start": 135
+            },
+            {
+              "title": "5.1.2 检索增强生成",
+              "book_page_start": 136
+            },
+            {
+              "title": "5.1.3 RAG 的应用与发展",
+              "book_page_start": 139
+            }
+          ]
+        },
+        {
+          "title": "5.2 向量表示与语义检索",
+          "book_page_start": 142,
+          "children": [
+            {
+              "title": "5.2.1 文本向量化",
+              "book_page_start": 142
+            },
+            {
+              "title": "5.2.2 向量数据库",
+              "book_page_start": 144
+            },
+            {
+              "title": "5.2.3 语义检索技术",
+              "book_page_start": 144
+            },
+            {
+              "title": "5.2.4 上下文增强设计",
+              "book_page_start": 145
+            }
+          ]
+        },
+        {
+          "title": "5.3 RAG 系统架构与评估",
+          "book_page_start": 147,
+          "children": [
+            {
+              "title": "5.3.1 RAG 系统架构",
+              "book_page_start": 147
+            },
+            {
+              "title": "5.3.2 RAG 系统评估",
+              "book_page_start": 149
+            }
+          ]
+        },
+        {
+          "title": "5.4 LangChain 开发基础",
+          "book_page_start": 151,
+          "children": [
+            {
+              "title": "5.4.1 LangChain 框架介绍",
+              "book_page_start": 151
+            },
+            {
+              "title": "5.4.2 LangChain 快速入门",
+              "book_page_start": 152
+            }
+          ]
+        },
+        {
+          "title": "5.5 实验项目",
+          "book_page_start": 155,
+          "children": [
+            {
+              "title": "项目 1 快速构建 RAG 问答系统",
+              "book_page_start": 155
+            },
+            {
+              "title": "项目 2 RAG 系统的检索精度优化",
+              "book_page_start": 157
+            }
+          ]
+        },
+        {
+          "title": "习题与讨论",
+          "book_page_start": 158
+        }
+      ],
+      "book_page_end": 159,
+      "physical_page_end": 159
+    },
+    {
+      "kind": "chapter",
+      "number": 6,
+      "title": "智能体技术与应用",
+      "book_page_start": 160,
+      "physical_page_start": 160,
+      "children": [
+        {
+          "title": "6.1 智能体基础认知",
+          "book_page_start": 160,
+          "children": [
+            {
+              "title": "6.1.1 从大模型到智能体",
+              "book_page_start": 160
+            },
+            {
+              "title": "6.1.2 智能体的发展机遇和面临的挑战",
+              "book_page_start": 162
+            }
+          ]
+        },
+        {
+          "title": "6.2 智能体的基本结构",
+          "book_page_start": 164,
+          "children": [
+            {
+              "title": "6.2.1 大模型",
+              "book_page_start": 165
+            },
+            {
+              "title": "6.2.2 感知模块",
+              "book_page_start": 165
+            },
+            {
+              "title": "6.2.3 记忆模块",
+              "book_page_start": 166
+            },
+            {
+              "title": "6.2.4 工具模块",
+              "book_page_start": 167
+            },
+            {
+              "title": "6.2.5 任务规划模块",
+              "book_page_start": 169
+            }
+          ]
+        },
+        {
+          "title": "6.3 多智能体协作",
+          "book_page_start": 170,
+          "children": [
+            {
+              "title": "6.3.1 多智能体协作模式",
+              "book_page_start": 170
+            },
+            {
+              "title": "6.3.2 复杂任务分解",
+              "book_page_start": 173
+            },
+            {
+              "title": "6.3.3 多智能体协作挑战",
+              "book_page_start": 174
+            }
+          ]
+        },
+        {
+          "title": "6.4 智能体开发",
+          "book_page_start": 175,
+          "children": [
+            {
+              "title": "6.4.1 智能体开发框架",
+              "book_page_start": 175
+            },
+            {
+              "title": "6.4.2 扣子平台开发",
+              "book_page_start": 175
+            },
+            {
+              "title": "6.4.3 OpenClaw 平台开发",
+              "book_page_start": 176
+            }
+          ]
+        },
+        {
+          "title": "6.5 实验项目",
+          "book_page_start": 180,
+          "children": [
+            {
+              "title": "项目 1 基于扣子的翻译助手智能体开发",
+              "book_page_start": 180
+            },
+            {
+              "title": "项目 2 基于 OpenClaw 的文档管理智能体开发",
+              "book_page_start": 184
+            },
+            {
+              "title": "项目 3 待办助手智能体开发",
+              "book_page_start": 186
+            }
+          ]
+        },
+        {
+          "title": "习题与讨论",
+          "book_page_start": 188
+        }
+      ],
+      "book_page_end": 189,
+      "physical_page_end": 189
+    },
+    {
+      "kind": "chapter",
+      "number": 7,
+      "title": "具身智能与应用",
+      "book_page_start": 190,
+      "physical_page_start": 190,
+      "children": [
+        {
+          "title": "7.1 具身智能基础",
+          "book_page_start": 190,
+          "children": [
+            {
+              "title": "7.1.1 具身智能的内涵",
+              "book_page_start": 190
+            },
+            {
+              "title": "7.1.2 具身智能的发展历程",
+              "book_page_start": 191
+            },
+            {
+              "title": "7.1.3 感知、决策与行动",
+              "book_page_start": 192
+            },
+            {
+              "title": "7.1.4 具身智能面临的挑战与发展方向",
+              "book_page_start": 194
+            }
+          ]
+        },
+        {
+          "title": "7.2 智能机器人",
+          "book_page_start": 196,
+          "children": [
+            {
+              "title": "7.2.1 智能机器人概述",
+              "book_page_start": 196
+            },
+            {
+              "title": "7.2.2 我国智能机器人产业",
+              "book_page_start": 197
+            },
+            {
+              "title": "7.2.3 机器人技术与开发",
+              "book_page_start": 198
+            }
+          ]
+        },
+        {
+          "title": "7.3 自动驾驶技术",
+          "book_page_start": 202,
+          "children": [
+            {
+              "title": "7.3.1 自动驾驶概述",
+              "book_page_start": 202
+            },
+            {
+              "title": "7.3.2 我国自动驾驶产业",
+              "book_page_start": 204
+            },
+            {
+              "title": "7.3.3 自动驾驶技术与开发",
+              "book_page_start": 205
+            }
+          ]
+        },
+        {
+          "title": "7.4 无人机技术",
+          "book_page_start": 210,
+          "children": [
+            {
+              "title": "7.4.1 无人机概述",
+              "book_page_start": 210
+            },
+            {
+              "title": "7.4.2 我国无人机产业",
+              "book_page_start": 211
+            },
+            {
+              "title": "7.4.3 无人机技术与开发",
+              "book_page_start": 212
+            }
+          ]
+        },
+        {
+          "title": "7.5 实验项目",
+          "book_page_start": 215,
+          "children": [
+            {
+              "title": "项目 1 智能机器人认知（宇树科技）",
+              "book_page_start": 215
+            },
+            {
+              "title": "项目 2 自动驾驶认知（百度 Apollo）",
+              "book_page_start": 216
+            },
+            {
+              "title": "项目 3 无人机二次开发（大疆创新）",
+              "book_page_start": 218
+            }
+          ]
+        },
+        {
+          "title": "习题与讨论",
+          "book_page_start": 220
+        }
+      ],
+      "book_page_end": 221,
+      "physical_page_end": 221
+    },
+    {
+      "kind": "chapter",
+      "number": 8,
+      "title": "人工智能与世界交互",
+      "book_page_start": 222,
+      "physical_page_start": 222,
+      "children": [
+        {
+          "title": "8.1 视觉感知与人工智能图像理解",
+          "book_page_start": 222,
+          "children": [
+            {
+              "title": "8.1.1 计算机视觉基础",
+              "book_page_start": 222
+            },
+            {
+              "title": "8.1.2 计算机视觉数据集",
+              "book_page_start": 224
+            },
+            {
+              "title": "8.1.3 计算机视觉典型任务",
+              "book_page_start": 225
+            }
+          ]
+        },
+        {
+          "title": "8.2 语音感知与人工智能语音交互",
+          "book_page_start": 227,
+          "children": [
+            {
+              "title": "8.2.1 语音处理技术",
+              "book_page_start": 227
+            },
+            {
+              "title": "8.2.2 语音识别",
+              "book_page_start": 229
+            },
+            {
+              "title": "8.2.3 语音合成",
+              "book_page_start": 231
+            },
+            {
+              "title": "8.2.4 语音增强",
+              "book_page_start": 232
+            }
+          ]
+        },
+        {
+          "title": "8.3 虚实感知与人工智能数字世界",
+          "book_page_start": 233,
+          "children": [
+            {
+              "title": "8.3.1 扩展现实",
+              "book_page_start": 233
+            },
+            {
+              "title": "8.3.2 人工智能生成三维内容",
+              "book_page_start": 234
+            },
+            {
+              "title": "8.3.3 数字孪生",
+              "book_page_start": 235
+            },
+            {
+              "title": "8.3.4 数字人",
+              "book_page_start": 235
+            }
+          ]
+        },
+        {
+          "title": "8.4 人工智能与产业变革",
+          "book_page_start": 237,
+          "children": [
+            {
+              "title": "8.4.1 人工智能 + 教育",
+              "book_page_start": 237
+            },
+            {
+              "title": "8.4.2 人工智能 + 制造",
+              "book_page_start": 237
+            },
+            {
+              "title": "8.4.3 人工智能 + 医疗",
+              "book_page_start": 240
+            },
+            {
+              "title": "8.4.4 人工智能 + 农业",
+              "book_page_start": 241
+            },
+            {
+              "title": "8.4.5 人工智能 + 交通",
+              "book_page_start": 242
+            }
+          ]
+        },
+        {
+          "title": "8.5 人工智能与可持续发展",
+          "book_page_start": 244,
+          "children": [
+            {
+              "title": "8.5.1 人工智能 + 气候管理",
+              "book_page_start": 244
+            },
+            {
+              "title": "8.5.2 人工智能 + 清洁能源",
+              "book_page_start": 244
+            }
+          ]
+        },
+        {
+          "title": "8.6 实验项目",
+          "book_page_start": 245,
+          "children": [
+            {
+              "title": "项目 1 图像数据分析与可视化",
+              "book_page_start": 245
+            },
+            {
+              "title": "项目 2 音视频的人工智能数据标注",
+              "book_page_start": 247
+            },
+            {
+              "title": "项目 3 文本分词与词云",
+              "book_page_start": 248
+            }
+          ]
+        },
+        {
+          "title": "习题与讨论",
+          "book_page_start": 249
+        }
+      ],
+      "book_page_end": 250,
+      "physical_page_end": 250
+    },
+    {
+      "kind": "appendix",
+      "title": "附录A Python 编程基础",
+      "book_page_start": 251,
+      "physical_page_start": 251,
+      "children": [],
+      "book_page_end": 259,
+      "physical_page_end": 259
+    },
+    {
+      "kind": "appendix",
+      "title": "附录B 实验项目和电子资源列表",
+      "book_page_start": 260,
+      "physical_page_start": 260,
+      "children": [],
+      "book_page_end": 261,
+      "physical_page_end": 261
+    },
+    {
+      "kind": "appendix",
+      "title": "附录C 智慧课程和教学安排参考",
+      "book_page_start": 262,
+      "physical_page_start": 262,
+      "children": [],
+      "book_page_end": 262,
+      "physical_page_end": 262
+    },
+    {
+      "kind": "appendix",
+      "title": "附录D 数字化能力水平认证",
+      "book_page_start": 263,
+      "physical_page_start": 263,
+      "children": [],
+      "book_page_end": 264,
+      "physical_page_end": 264
+    }
+  ]
+}

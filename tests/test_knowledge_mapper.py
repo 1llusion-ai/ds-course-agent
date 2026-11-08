@@ -73,6 +73,43 @@ def test_match_question_rules_does_not_use_embeddings(monkeypatch):
     assert matches[0].method == "exact_alias"
 
 
+@pytest.mark.parametrize(
+    ("alias", "question"),
+    [
+        ("支持向量机", "支持向量机的核函数怎么选择？"),
+        ("过拟合", "过拟合怎么办？"),
+        ("交叉验证", "交叉验证怎么做？"),
+        ("梯度下降", "梯度下降怎么做？"),
+        ("决策树", "决策树怎么剪枝？"),
+        ("正则化", "正则化怎么做？"),
+    ],
+)
+def test_course_rules_preserve_scoped_alias_matches_without_default_concept_ids(monkeypatch, tmp_path, alias, question):
+    monkeypatch.setattr(KnowledgeGraph, "_precompute_embeddings", lambda self: None)
+    graph_path = tmp_path / "course-graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "concepts": [
+                    {
+                        "canonical_id": "course_specific_concept",
+                        "display_name": alias,
+                        "aliases": [],
+                        "chapter": "第1章",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    mapper = KnowledgeMapper(KnowledgeGraph(str(graph_path)))
+
+    matches = mapper.match_question_rules(question)
+
+    assert [match.concept_id for match in matches] == ["course_specific_concept"]
+    assert matches[0].method == "exact_alias"
+
+
 def run_regression_test():
     """运行回归测试"""
     test_cases = QUESTION_CASES

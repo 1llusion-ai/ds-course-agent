@@ -36,7 +36,8 @@ openai>=2.26.0,<3.0.0
 tiktoken>=0.7.0
 
 # --- Numerics ---
-numpy>=1.26,<3.0
+# Keep the wheel compatible with virtual CPUs that lack x86-64-v2 features.
+numpy==2.2.6
 
 # --- HTTP / parsing ---
 requests>=2.31.0

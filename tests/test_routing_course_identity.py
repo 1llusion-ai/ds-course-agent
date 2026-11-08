@@ -19,6 +19,26 @@ from ds_course_agent.agent.routing.semantic_router import LearningSemanticRouter
 from ds_course_agent.agent.service import AgentService
 from ds_course_agent.courses import CourseCatalog, CourseContext
 from ds_course_agent.shared.paths import PROJECT_ROOT
+from ds_course_agent.teaching.learner_state import LearnerStateSnapshot
+
+
+@pytest.mark.parametrize("course_id", ["data-science-intro", "digital-literacy", "ai-literacy"])
+def test_assessment_learner_state_load_uses_the_selected_course(course_id):
+    calls = []
+
+    class Provider:
+        def get_state(self, student_id, *, course_id="data-science-intro"):
+            calls.append((student_id, course_id))
+            return LearnerStateSnapshot(student_id=student_id, course_id=course_id)
+
+    agent = AgentService.__new__(AgentService)
+    agent.learner_state_provider = Provider()
+    context = _context(course_id)
+
+    state = agent._load_learner_state(context, "same-student")
+
+    assert calls == [("same-student", course_id)]
+    assert state.course_id == course_id
 
 
 class _CapturingModel:
@@ -56,7 +76,7 @@ def _assert_identity(model: _CapturingModel, context: QueryContext, name: str) -
         assert "数据科学" not in context.special_case_response
 
 
-@pytest.mark.parametrize("course_id", [None, "data-science-intro", "digital-literacy"])
+@pytest.mark.parametrize("course_id", [None, "data-science-intro", "digital-literacy", "ai-literacy"])
 def test_semantic_prompt_and_refusal_share_manifest_identity(course_id):
     model = _CapturingModel()
     router = QueryRouter(semantic_router=LearningSemanticRouter(model=model))
@@ -76,7 +96,7 @@ def test_shared_router_keeps_alternating_and_concurrent_course_identities_isolat
     contexts = [
         _context("data-science-intro", "聊聊第一个话题"),
         _context("digital-literacy", "聊聊第二个话题"),
-        _context("data-science-intro", "聊聊第三个话题"),
+        _context("ai-literacy", "聊聊第三个话题"),
     ]
 
     if concurrent:
@@ -86,7 +106,7 @@ def test_shared_router_keeps_alternating_and_concurrent_course_identities_isolat
         decisions = [router.route(context) for context in contexts]
 
     assert all(decision.intent is RouteIntent.REFUSAL for decision in decisions)
-    for context, name in zip(contexts, ["数据科学导论", "数字素养与技能导论", "数据科学导论"], strict=True):
+    for context, name in zip(contexts, ["数据科学导论", "数字素养与技能导论", "人工智能通识"], strict=True):
         _assert_identity(model, context, name)
 
 

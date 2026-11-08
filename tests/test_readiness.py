@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from ds_course_agent.api.main import app
@@ -101,3 +102,45 @@ def test_health_is_liveness_only_while_readyz_reports_readiness(monkeypatch) -> 
     assert ready.status_code == 503
     assert ready.json()["status"] == "not_ready"
     assert ready.json()["checks"]["retrieval_index"]["status"] == "error"
+
+
+def test_production_readiness_fails_if_a_non_default_course_index_is_missing(monkeypatch) -> None:
+    from ds_course_agent.api import readiness
+
+    monkeypatch.setattr(readiness.config, "APP_ENV", "production")
+    monkeypatch.setattr(readiness, "check_production_settings", lambda _: ())
+    monkeypatch.setattr(readiness, "check_python_execution_readiness", lambda: ReadinessCheck("python", True, "off"))
+    monkeypatch.setattr(readiness, "check_web_search_readiness", lambda: ReadinessCheck("search", True, "off"))
+    checked = []
+
+    def check_index(_settings, *, index_binding):
+        checked.append(index_binding)
+        ok = index_binding != readiness.course_catalog().require("ai-literacy").index_binding
+        return ReadinessCheck("retrieval_index", ok, "ready" if ok else "missing")
+
+    monkeypatch.setattr(readiness, "check_production_index_readiness", check_index)
+    report = readiness.build_readiness_report()
+
+    assert len(checked) == 3
+    assert not report.ok
+    assert report.as_dict()["checks"]["retrieval_index:data-science-intro"]["status"] == "ok"
+    assert report.as_dict()["checks"]["retrieval_index:ai-literacy"]["status"] == "error"
+
+
+@pytest.mark.parametrize("invalid_catalog", [False, True])
+def test_production_readiness_rejects_empty_or_invalid_catalog(monkeypatch, invalid_catalog) -> None:
+    from ds_course_agent.api import readiness
+    from ds_course_agent.courses import CourseCatalog
+
+    monkeypatch.setattr(readiness.config, "APP_ENV", "production")
+
+    def catalog():
+        if invalid_catalog:
+            raise ValueError("invalid course manifest")
+        return CourseCatalog(())
+
+    monkeypatch.setattr(readiness, "course_catalog", catalog)
+    report = readiness.build_readiness_report()
+
+    assert not report.ok
+    assert report.as_dict()["checks"]["course_catalog"]["status"] == "error"

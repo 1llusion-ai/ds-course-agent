@@ -12,6 +12,7 @@ from ds_course_agent.shared.paths import PROJECT_ROOT
 from ds_course_agent.shared.readiness import ReadinessCheck
 
 if TYPE_CHECKING:
+    from ds_course_agent.courses import CourseIndexBinding
     from ds_course_agent.shared.config.schema import Settings
 
 
@@ -103,12 +104,24 @@ def load_and_validate_manifest(
     return manifest
 
 
-def check_production_index_readiness(settings: Settings) -> ReadinessCheck:
+def check_production_index_readiness(
+    settings: Settings, *, index_binding: CourseIndexBinding | None = None
+) -> ReadinessCheck:
     """Verify manifest and Chroma collection identity using read-only operations."""
 
     try:
-        manifest = load_and_validate_manifest(settings)
-        persist_dir = Path(settings.CHROMA_PERSIST_DIR)
+        if index_binding is None:
+            manifest = load_and_validate_manifest(settings)
+        else:
+            manifest = load_and_validate_manifest(
+                settings,
+                manifest_path=index_binding.manifest_path,
+                persist_directory=index_binding.persist_directory,
+                collection_name=index_binding.collection_name,
+                embedding_model=index_binding.embedding_model,
+                revision=index_binding.revision,
+            )
+        persist_dir = (PROJECT_ROOT / manifest.persist_directory).resolve()
         if not persist_dir.is_dir():
             return ReadinessCheck("retrieval_index", False, "configured Chroma persist directory is missing")
 
@@ -116,7 +129,7 @@ def check_production_index_readiness(settings: Settings) -> ReadinessCheck:
 
         client = chromadb.PersistentClient(path=str(persist_dir))
         try:
-            collection = client.get_collection(settings.COLLECTION_NAME)
+            collection = client.get_collection(manifest.destination_collection)
             actual_count = collection.count()
             if actual_count != manifest.document_count:
                 return ReadinessCheck(

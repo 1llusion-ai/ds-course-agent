@@ -299,22 +299,21 @@ class AssessmentAssignmentPlanner:
         *,
         course: object | None = None,
     ) -> str:
+        nodes = tuple(node.canonical_id for node in get_knowledge_map(course).nodes if node.node_type is NodeType.KC)
+        available = set(nodes)
         for concept in matched_concepts:
             concept_id = str(getattr(concept, "concept_id", "") or "").strip()
-            if concept_id:
+            if concept_id in available:
                 return concept_id
         if learner_state is not None:
-            active = rank_active_weak_spots(learner_state)
-            if active:
-                return active[0].concept_id
-            if learner_state.pending_weak_spots:
-                return learner_state.pending_weak_spots[0].concept_id
-            recent = rank_recent_concepts(learner_state)
-            if recent:
-                return recent[0].concept_id
-        fallback = next(
-            (node.canonical_id for node in get_knowledge_map(course).nodes if node.node_type is NodeType.KC), None
-        )
+            for candidate in (
+                *rank_active_weak_spots(learner_state),
+                *learner_state.pending_weak_spots,
+                *rank_recent_concepts(learner_state),
+            ):
+                if candidate.concept_id in available:
+                    return candidate.concept_id
+        fallback = next(iter(nodes), None)
         if fallback is None:
             raise ValueError("course knowledge map contains no KC nodes")
         return fallback

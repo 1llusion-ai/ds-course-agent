@@ -361,7 +361,8 @@ class KnowledgeGraph:
         # 正则化相关
         rules.append((re.compile(r"正则化.*怎么|l1正则|l2正则|岭回归.*lasso", re.I), "regularization"))
 
-        return rules
+        # 正则只绑定当前图谱已有节点，避免默认课程 ID 使其它课程的别名匹配失效。
+        return [(pattern, cid) for pattern, cid in rules if cid in self.concepts]
 
     def _precompute_embeddings(self):
         """预计算/加载知识图谱中所有概念的 embedding"""

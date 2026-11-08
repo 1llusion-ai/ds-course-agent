@@ -432,7 +432,13 @@ class AgentService:
         from ds_course_agent.shared.query_trace import trace_span
 
         with trace_span("prepare.profile_load"):
-            learner_state = self._get_learner_state_provider().get_state(student_id)
+            course_context = context.course_context
+            scope = (
+                {"course_id": course_context.course_id}
+                if course_context is not None and course_context.course_id != "data-science-intro"
+                else {}
+            )
+            learner_state = self._get_learner_state_provider().get_state(student_id, **scope)
         context.learner_state_summary = learner_state.summary()
         return learner_state
 

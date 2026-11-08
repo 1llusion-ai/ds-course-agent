@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import pytest
+
 from ds_course_agent.assessment.models import Difficulty, TeachingObjectiveKind
 from ds_course_agent.teaching.assessment_assignment import AssessmentAssignmentPlanner
 from ds_course_agent.teaching.learner_state import (
@@ -11,6 +15,21 @@ from ds_course_agent.teaching.learner_state import (
 )
 from ds_course_agent.teaching.learning_events import build_concept_mentioned_event
 from ds_course_agent.teaching.practice import PracticeObservation, summarize_practice
+
+
+@pytest.mark.parametrize("course_id", ["digital-literacy", "ai-literacy"])
+def test_assignment_target_cannot_come_from_another_course(course_id):
+    from ds_course_agent.courses import CourseCatalog
+    from ds_course_agent.teaching.knowledge_map import NodeType, get_knowledge_map
+
+    course = CourseCatalog.from_directory("data/courses").require(course_id)
+    valid_ids = {n.canonical_id for n in get_knowledge_map(course).nodes if n.node_type is NodeType.KC}
+    learner = LearnerStateSnapshot(student_id="same-student", weak_spot_candidates=(_weak_spot("overfitting"),))
+
+    request = AssessmentAssignmentPlanner().plan([SimpleNamespace(concept_id="overfitting")], learner, course=course)
+
+    assert request.target_kc_id in valid_ids
+    assert request.target_kc_id != "overfitting"
 
 
 def _weak_spot(concept_id: str, *, resolved: bool = False) -> LearnerWeakSpot:
