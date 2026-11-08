@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"User {username!r} no longer exists; no password was changed.", file=sys.stderr)
         return 1
 
-    print(f"Password reset for user {updated['username']}.")
+    print(f"Password reset for user {updated.username}.")
     return 0
 
 

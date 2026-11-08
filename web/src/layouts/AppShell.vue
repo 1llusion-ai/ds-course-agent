@@ -42,13 +42,14 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import ChatSidebar from '../components/ChatSidebar.vue'
 import PanelResizeHandle from '../components/PanelResizeHandle.vue'
 import { useResizablePanel } from '../composables/useResizablePanel'
+import { useTheme } from '../composables/useTheme'
 import { useChatStore } from '../stores/chat'
 import { useCourseStore } from '../stores/course'
 import { useSessionStore } from '../stores/session'
@@ -60,7 +61,6 @@ const SIDEBAR_WIDTH_STORAGE_KEY = 'ds-course-agent.sidebarWidth'
 const SIDEBAR_MIN_WIDTH = 224
 const SIDEBAR_MAX_WIDTH = 380
 const SIDEBAR_COLLAPSE_THRESHOLD = SIDEBAR_MIN_WIDTH - 20
-const THEME_STORAGE_KEY = 'ds-course-agent.theme'
 
 const router = useRouter()
 const chatStore = useChatStore()
@@ -83,11 +83,10 @@ const {
   collapseThreshold: SIDEBAR_COLLAPSE_THRESHOLD,
   onCollapse: () => setSidebarCollapsed(true)
 })
-const theme = ref(readThemePreference())
+const { isDarkTheme, toggleTheme } = useTheme()
 const sessionBootstrapPending = ref(!sessionStore.loaded)
 let cancelKnowledgeMapPrefetch = () => {}
 let sessionBootstrapVersion = 0
-const isDarkTheme = computed(() => theme.value === 'dark')
 const updateViewport = () => { narrowViewport.value = window.innerWidth <= 760 }
 
 provide(APP_SHELL_CONTEXT_KEY, {
@@ -95,8 +94,6 @@ provide(APP_SHELL_CONTEXT_KEY, {
   sessionBootstrapPending,
   toggleTheme
 })
-
-watch(theme, applyThemePreference, { immediate: true })
 
 watch(() => courseStore.selectedCourseId, async () => {
   sessionBootstrapPending.value = true
@@ -125,11 +122,6 @@ function readSidebarCollapsedPreference() {
   return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true'
 }
 
-function readThemePreference() {
-  if (typeof window === 'undefined') return 'light'
-  return window.localStorage.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light'
-}
-
 function toggleSidebar() {
   setSidebarCollapsed(!sidebarCollapsed.value)
 }
@@ -149,21 +141,6 @@ async function handleNewChat() {
   chatStore.setActiveSession(null)
   chatStore.clearMessages()
   await router.replace('/chat')
-}
-
-function applyThemePreference(value) {
-  if (typeof document === 'undefined') return
-  document.documentElement.classList.toggle('theme-dark', value === 'dark')
-  document.body?.classList.toggle('theme-dark', value === 'dark')
-  document.getElementById('app')?.classList.toggle('theme-dark', value === 'dark')
-  document.documentElement.style.colorScheme = value === 'dark' ? 'dark' : 'light'
-}
-
-function toggleTheme() {
-  theme.value = isDarkTheme.value ? 'light' : 'dark'
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme.value)
-  }
 }
 
 onMounted(async () => {

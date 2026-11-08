@@ -11,6 +11,8 @@ from jose import JWTError, jwt
 
 import ds_course_agent.shared.config as config
 
+from .contracts import AuthOperationError, User
+
 logger = logging.getLogger(__name__)
 
 _ALGORITHM = "HS256"
@@ -40,6 +42,8 @@ def session_ttl_seconds() -> int:
 def hash_password(password: str) -> str:
     if not password:
         raise ValueError("password must not be empty")
+    if len(password.encode("utf-8")) > 72:
+        raise AuthOperationError("密码的 UTF-8 长度不能超过 72 字节", 422)
     hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
     return hashed.decode("utf-8")
 
@@ -53,13 +57,15 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def create_session_token(student_id: str, display_name: str) -> str:
+def create_session_token(user: User) -> str:
     now = datetime.now(timezone.utc)
     exp = now + timedelta(seconds=session_ttl_seconds())
     payload = {
-        "sub": student_id,
-        "student_id": student_id,
-        "display_name": display_name,
+        "sub": str(user.id),
+        "student_id": user.student_id,
+        "display_name": user.display_name,
+        "user_id": user.id,
+        "session_version": user.session_version,
         "iat": now,
         "exp": exp,
     }

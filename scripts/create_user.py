@@ -35,7 +35,7 @@ def main() -> None:
         student_id=args.student_id,
         display_name=args.display_name,
     )
-    print(f"Created/updated user {user['username']} for student_id={user['student_id']}")
+    print(f"Created/updated user {user.username} for student_id={user.student_id}")
 
 
 if __name__ == "__main__":

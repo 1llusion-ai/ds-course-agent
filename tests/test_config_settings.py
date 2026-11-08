@@ -235,24 +235,6 @@ def test_auth_settings_are_exported_and_paths_resolved():
     assert cors_allow_origins == settings.CORS_ALLOW_ORIGINS
 
 
-def test_registration_settings_support_invite_mode_and_optional_expiry():
-    from datetime import datetime, timezone
-
-    cfg = Settings(
-        APP_ENV="production",
-        AUTH_REGISTRATION_MODE="invite",
-        AUTH_INVITE_CODE="class-2026",
-        AUTH_INVITE_EXPIRES_AT="2026-10-01T23:59:59+08:00",
-        AUTH_MAX_USERS=60,
-    )
-    assert cfg.AUTH_REGISTRATION_MODE == "invite"
-    assert cfg.AUTH_INVITE_CODE == "class-2026"
-    assert cfg.AUTH_MAX_USERS == 60
-    assert cfg.AUTH_INVITE_EXPIRES_AT is not None
-    assert cfg.AUTH_INVITE_EXPIRES_AT.astimezone(timezone.utc).year == 2026
-    assert Settings(AUTH_INVITE_EXPIRES_AT="").AUTH_INVITE_EXPIRES_AT is None
-
-
 def test_api_request_quota_settings_are_exported():
     cfg = Settings(
         API_PER_STUDENT_REQUESTS_PER_WINDOW=600,

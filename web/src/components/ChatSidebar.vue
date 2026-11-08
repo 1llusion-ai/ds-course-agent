@@ -132,6 +132,10 @@
           <span class="utility-entry__title">学习画像</span>
         </span>
       </button>
+      <button v-if="authStore.canViewAdmin" type="button" class="utility-entry" title="管理台" @click="router.push('/admin')">
+        <span class="utility-entry__icon"><el-icon><Setting /></el-icon></span>
+        <span v-if="!props.collapsed" class="utility-entry__body"><span class="utility-entry__title">管理台</span></span>
+      </button>
     </nav>
 
     <el-scrollbar v-if="!props.collapsed" class="session-scroll">
@@ -294,6 +298,7 @@ import {
 
 import PanelToggleIcon from './PanelToggleIcon.vue'
 import { useChatStore } from '../stores/chat'
+import { useAuthStore } from '../stores/auth'
 import { useCourseStore } from '../stores/course'
 import { useProfileStore } from '../stores/profile'
 import { useSessionStore } from '../stores/session'
@@ -311,6 +316,7 @@ const route = useRoute()
 const router = useRouter()
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
+const authStore = useAuthStore()
 const courseStore = useCourseStore()
 const profileStore = useProfileStore()
 const searchQuery = ref('')

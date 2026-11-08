@@ -68,10 +68,6 @@ _SETTING_NAMES = [
     "AUTH_COOKIE_SECURE",
     "AUTH_DB_PATH",
     "CORS_ALLOW_ORIGINS",
-    "AUTH_REGISTRATION_MODE",
-    "AUTH_INVITE_CODE",
-    "AUTH_INVITE_EXPIRES_AT",
-    "AUTH_MAX_USERS",
     "API_PER_STUDENT_REQUESTS_PER_WINDOW",
     "API_REQUEST_QUOTA_WINDOW_SECONDS",
     "COLLECTION_NAME",
@@ -275,10 +271,6 @@ auth_secret_key = AUTH_SECRET_KEY
 auth_session_ttl_hours = AUTH_SESSION_TTL_HOURS
 auth_cookie_secure = AUTH_COOKIE_SECURE
 auth_db_path = AUTH_DB_PATH
-auth_registration_mode = AUTH_REGISTRATION_MODE
-auth_invite_code = AUTH_INVITE_CODE
-auth_invite_expires_at = AUTH_INVITE_EXPIRES_AT
-auth_max_users = AUTH_MAX_USERS
 api_per_student_requests_per_window = API_PER_STUDENT_REQUESTS_PER_WINDOW
 api_request_quota_window_seconds = API_REQUEST_QUOTA_WINDOW_SECONDS
 assessment_db_path = ASSESSMENT_DB_PATH
@@ -395,10 +387,6 @@ __all__ = [
     "auth_session_ttl_hours",
     "auth_cookie_secure",
     "auth_db_path",
-    "auth_registration_mode",
-    "auth_invite_code",
-    "auth_invite_expires_at",
-    "auth_max_users",
     "api_per_student_requests_per_window",
     "api_request_quota_window_seconds",
     "assessment_db_path",

@@ -82,6 +82,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { useAuthStore } from '../stores/auth'
+import { authenticatedRedirect } from '../utils/authRedirect'
 
 const route = useRoute()
 const router = useRouter()
@@ -109,7 +110,7 @@ async function handleLogin() {
 
   try {
     await authStore.login({ ...form })
-    await router.replace(getLoginRedirect(route.query.redirect))
+    await router.replace(authenticatedRedirect(route.query.redirect))
   } catch (error) {
     const status = error?.response?.status
     errorMessage.value = status === 401 || status === 403
@@ -133,11 +134,7 @@ function goToRegister() {
   router.push({ name: 'Register', query })
 }
 
-function getLoginRedirect(value) {
-  if (typeof value !== 'string') return '/chat'
-  const isInternalRoute = /^\/(chat|profile|knowledge-map|assessments)(?:[/?#]|$)/.test(value)
-  return isInternalRoute ? value : '/chat'
-}
+
 
 onMounted(() => {
   nextTick(() => usernameInputRef.value?.focus())

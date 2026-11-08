@@ -17,7 +17,9 @@ setup_logging(level=config.LOG_LEVEL)
 from ds_course_agent.agent.learning_loop import shutdown_session_learning_loop
 from ds_course_agent.assessment.repository import AssessmentRepository
 
+from .admin.router import router as admin_router
 from .auth import models as auth_models
+from .auth.contracts import AuthOperationError
 from .auth.router import router as auth_router
 from .readiness import build_readiness_report
 from .routers import assessments, chat, courses, knowledge_map, profile, sessions
@@ -56,8 +58,6 @@ if not _cors_origins:
         "http://localhost:5176",
     ]
 
-auth_models.init_db()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -66,6 +66,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.exception_handler(AuthOperationError)
+async def auth_operation_error(_request, exc: AuthOperationError):
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": exc.detail}, headers={"Cache-Control": "no-store"}
+    )
+
+
+app.include_router(admin_router)
 app.include_router(auth_router)
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 app.include_router(courses.router, prefix="/api/courses", tags=["courses"])

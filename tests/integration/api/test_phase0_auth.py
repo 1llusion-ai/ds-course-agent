@@ -13,7 +13,10 @@ def test_auth_register_creates_session_and_rejects_duplicate(monkeypatch, tmp_pa
     monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(db_path))
     monkeypatch.setattr("ds_course_agent.api.auth.service.config.AUTH_SECRET_KEY", "test-secret")
     monkeypatch.setattr("ds_course_agent.shared.config.APP_ENV", "test")
-    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_REGISTRATION_MODE", "open")
+    from ds_course_agent.api.auth.contracts import RegistrationMode
+    from ds_course_agent.api.auth.registration import import_legacy_policy
+
+    import_legacy_policy(mode=RegistrationMode.OPEN, code="", expires_at=None, max_users=0)
     models.init_db()
 
     with TestClient(app) as client:
@@ -22,17 +25,17 @@ def test_auth_register_creates_session_and_rejects_duplicate(monkeypatch, tmp_pa
             json={"username": "  new_user  ", "password": "correct-horse"},
         )
         assert created.status_code == 201
-        assert created.json() == {"student_id": "new_user", "display_name": "new_user"}
+        assert created.json() == {"student_id": "new_user", "display_name": "new_user", "role": "student"}
         assert "session" in created.cookies
 
         user = models.get_user_by_username("new_user")
         assert user is not None
-        assert user["password_hash"] != "correct-horse"
-        assert verify_password("correct-horse", str(user["password_hash"]))
+        assert user.password_hash != "correct-horse"
+        assert verify_password("correct-horse", str(user.password_hash))
 
         me = client.get("/api/auth/me")
         assert me.status_code == 200
-        assert me.json() == {"student_id": "new_user", "display_name": "new_user"}
+        assert me.json() == {"student_id": "new_user", "display_name": "new_user", "role": "student"}
 
         duplicate = client.post(
             "/api/auth/register",
@@ -62,10 +65,10 @@ def test_auth_register_requires_valid_unexpired_invite(monkeypatch, tmp_path):
     db_path = tmp_path / "auth.db"
     monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(db_path))
     monkeypatch.setattr("ds_course_agent.shared.config.APP_ENV", "production")
-    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_REGISTRATION_MODE", "invite")
-    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_INVITE_CODE", "class-2026")
-    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_INVITE_EXPIRES_AT", None)
-    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_MAX_USERS", 0)
+    from ds_course_agent.api.auth.contracts import RegistrationMode
+    from ds_course_agent.api.auth.registration import import_legacy_policy
+
+    import_legacy_policy(mode=RegistrationMode.INVITE, code="class-2026", expires_at=None, max_users=0)
     models.init_db()
 
     with TestClient(app) as client:
@@ -88,10 +91,12 @@ def test_auth_register_requires_valid_unexpired_invite(monkeypatch, tmp_path):
     assert "class-2026" not in wrong.text
     assert valid.status_code == 201
 
-    monkeypatch.setattr(
-        "ds_course_agent.shared.config.AUTH_INVITE_EXPIRES_AT",
-        datetime.now(timezone.utc) - timedelta(seconds=1),
-    )
+    from ds_course_agent.api.auth.database import connection
+
+    with connection(write=True) as conn:
+        conn.execute(
+            "UPDATE invitations SET expires_at=?", ((datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(),)
+        )
     with TestClient(app) as client:
         expired = client.post(
             "/api/auth/register",
@@ -105,7 +110,10 @@ def test_auth_register_fails_closed_for_open_mode_in_production(monkeypatch, tmp
 
     monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(tmp_path / "auth.db"))
     monkeypatch.setattr("ds_course_agent.shared.config.APP_ENV", "production")
-    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_REGISTRATION_MODE", "open")
+    from ds_course_agent.api.auth.contracts import RegistrationMode
+    from ds_course_agent.api.auth.registration import import_legacy_policy
+
+    import_legacy_policy(mode=RegistrationMode.OPEN, code="", expires_at=None, max_users=0)
     models.init_db()
 
     with TestClient(app) as client:
@@ -123,10 +131,10 @@ def test_auth_register_enforces_invite_user_cap(monkeypatch, tmp_path):
 
     monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(tmp_path / "auth.db"))
     monkeypatch.setattr("ds_course_agent.shared.config.APP_ENV", "production")
-    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_REGISTRATION_MODE", "invite")
-    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_INVITE_CODE", "class-2026")
-    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_INVITE_EXPIRES_AT", None)
-    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_MAX_USERS", 1)
+    from ds_course_agent.api.auth.contracts import RegistrationMode
+    from ds_course_agent.api.auth.registration import import_legacy_policy
+
+    import_legacy_policy(mode=RegistrationMode.INVITE, code="class-2026", expires_at=None, max_users=1)
     models.init_db()
 
     with TestClient(app) as client:
@@ -141,7 +149,7 @@ def test_auth_register_enforces_invite_user_cap(monkeypatch, tmp_path):
 
     assert first.status_code == 201
     assert second.status_code == 409
-    assert second.json()["detail"] == "本班级注册人数已达到上限，请联系管理员。"
+    assert second.json()["detail"] == "注册人数已达到上限，请联系管理员。"
 
 
 def test_admin_password_reset_updates_hash(monkeypatch, tmp_path):
@@ -160,8 +168,8 @@ def test_admin_password_reset_updates_hash(monkeypatch, tmp_path):
     updated = models.update_user_password(username="alice", password_hash=hash_password("new-password"))
 
     assert updated is not None
-    assert verify_password("new-password", str(updated["password_hash"]))
-    assert not verify_password("old-password", str(updated["password_hash"]))
+    assert verify_password("new-password", str(updated.password_hash))
+    assert not verify_password("old-password", str(updated.password_hash))
 
 
 def test_admin_password_reset_returns_none_for_unknown_user(monkeypatch, tmp_path):
@@ -208,7 +216,7 @@ def test_auth_change_password_requires_current_password_and_updates_login(monkey
             json={"current_password": "old-password", "new_password": "new-password"},
         )
         assert changed.status_code == 200
-        assert changed.json() == {"student_id": "alice", "display_name": "alice"}
+        assert changed.json() == {"student_id": "alice", "display_name": "alice", "role": "student"}
 
         old_login = client.post("/api/auth/login", json={"username": "alice", "password": "old-password"})
         new_login = client.post("/api/auth/login", json={"username": "alice", "password": "new-password"})
@@ -237,7 +245,7 @@ def test_auth_login_success_failure_and_me(monkeypatch, tmp_path):
 
         ok = client.post("/api/auth/login", json={"username": "alice", "password": "secret"})
         assert ok.status_code == 200
-        assert ok.json() == {"student_id": "student_a", "display_name": "Alice"}
+        assert ok.json() == {"student_id": "student_a", "display_name": "Alice", "role": "student"}
         assert "session" in ok.cookies
 
         me = client.get("/api/auth/me")

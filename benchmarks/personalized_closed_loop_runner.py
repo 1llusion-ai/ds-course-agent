@@ -95,7 +95,8 @@ def _new_clients(trajectory: Trajectory, client_factory: Any) -> dict[str, Any]:
     clients: dict[str, Any] = {}
     for actor in trajectory.actors:
         client = client_factory()
-        username = f"eval_{actor.actor_id}_{uuid.uuid4().hex[:8]}"
+        existing = models.get_user_by_student_id(actor.actor_id)
+        username = existing.username if existing else f"eval_{actor.actor_id}_{uuid.uuid4().hex[:8]}"
         models.create_or_update_user(
             username=username,
             password_hash=hash_password("eval-only-password"),

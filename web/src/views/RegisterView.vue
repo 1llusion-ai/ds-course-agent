@@ -15,10 +15,11 @@
       <el-card class="register-card" shadow="never">
         <div class="register-card__header">
           <h2 id="register-title">创建账号</h2>
-          <p>注册后即可开始课程学习</p>
+          <p>{{ policy?.registration_open === false ? '当前暂未开放新账号注册' : '注册后即可开始课程学习' }}</p>
         </div>
 
         <el-form
+          v-if="policy?.registration_open"
           ref="formRef"
           :model="form"
           :rules="rules"
@@ -63,7 +64,7 @@
             />
           </el-form-item>
 
-          <el-form-item label="班级邀请码" prop="inviteCode" for="register-invite-code" :show-message="false">
+          <el-form-item v-if="policy.invite_required" label="班级邀请码" prop="inviteCode" for="register-invite-code" :show-message="false">
             <el-input
               id="register-invite-code"
               v-model.trim="form.inviteCode"
@@ -94,6 +95,11 @@
           </el-button>
         </el-form>
 
+        <p v-if="policyLoading" role="status" class="registration-policy-note">正在加载注册设置…</p>
+        <el-alert v-else-if="policyError" :title="policyError" type="error" :closable="false" show-icon />
+        <el-button v-if="policyError" style="margin-top: 14px" @click="loadPolicy">重新加载</el-button>
+        <p v-if="policy?.registration_open === false" class="registration-policy-note">请联系管理员了解注册安排。已有账号可以正常登录。</p>
+
         <button type="button" class="register-login" @click="goToLogin">
           <span>已有账号？</span>
           <strong>返回登录</strong>
@@ -108,6 +114,8 @@ import { nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useAuthStore } from '../stores/auth'
+import { authenticatedRedirect } from '../utils/authRedirect'
+import { authApi } from '../api/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -116,6 +124,23 @@ const formRef = ref(null)
 const usernameInputRef = ref(null)
 const confirmPasswordInputRef = ref(null)
 const errorMessage = ref('')
+const policy = ref(null)
+const policyLoading = ref(true)
+const policyError = ref('')
+
+async function loadPolicy() {
+  policyLoading.value = true
+  policyError.value = ''
+  try {
+    policy.value = await authApi.registrationPolicy()
+    await nextTick()
+    usernameInputRef.value?.focus()
+  }
+  catch { policyError.value = '暂时无法加载注册设置，请重试。' }
+  finally { policyLoading.value = false }
+}
+
+onMounted(loadPolicy)
 
 const form = reactive({
   username: '',
@@ -144,7 +169,7 @@ const rules = {
 }
 
 async function handleRegister() {
-  if (authStore.loading) return
+  if (authStore.loading || !policy.value?.registration_open) return
   errorMessage.value = ''
 
   const validationMessage = getValidationMessage()
@@ -165,7 +190,7 @@ async function handleRegister() {
       password: form.password,
       invite_code: form.inviteCode.trim()
     })
-    await router.replace(getRegisterRedirect(route.query.redirect))
+    await router.replace(authenticatedRedirect(route.query.redirect))
   } catch (error) {
     const status = error?.response?.status
     const detail = String(error?.response?.data?.detail || '')
@@ -189,6 +214,7 @@ function getValidationMessage() {
   if (form.password.length < 8) return '密码至少需要 8 位字符。'
   if (!form.confirmPassword) return '请再次输入密码。'
   if (form.password !== form.confirmPassword) return '两次输入的密码不一致，请重新确认。'
+  if (policy.value?.invite_required && !form.inviteCode.trim()) return '请输入有效的班级邀请码。'
   return ''
 }
 
@@ -201,15 +227,8 @@ function goToLogin() {
   router.push({ name: 'Login', query })
 }
 
-function getRegisterRedirect(value) {
-  if (typeof value !== 'string') return '/chat'
-  const isInternalRoute = /^\/(chat|profile|knowledge-map|assessments)(?:[/?#]|$)/.test(value)
-  return isInternalRoute ? value : '/chat'
-}
 
-onMounted(() => {
-  nextTick(() => usernameInputRef.value?.focus())
-})
+
 </script>
 
 <style scoped>
@@ -476,4 +495,8 @@ onMounted(() => {
     padding: 24px 22px;
   }
 }
+</style>
+
+<style scoped>
+.registration-policy-note { margin: 20px 0; color: #787878; line-height: 1.8; font-size: 13px; }
 </style>

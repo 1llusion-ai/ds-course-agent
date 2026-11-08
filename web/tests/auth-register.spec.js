@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test'
 import { mockDefaultCourse } from './helpers/courses'
 
-test.beforeEach(async ({ page }) => { await mockDefaultCourse(page) })
+test.beforeEach(async ({ page }) => {
+  await mockDefaultCourse(page)
+  await page.route('**/api/auth/registration-policy', route => route.fulfill({ json: { mode: 'invite', registration_open: true, invite_required: true } }))
+})
 
 test('login registration entry opens the form and successful registration enters chat', async ({ page }) => {
   await page.route('**/api/auth/me', route => route.fulfill({
@@ -50,6 +53,7 @@ test('duplicate username shows a clear conflict message', async ({ page }) => {
   }))
 
   await page.goto('/register')
+  await page.locator('#register-invite-code').fill('class-2026')
   await page.locator('#register-username').fill('existing_user')
   await page.locator('#register-password').fill('correct-horse')
   await page.locator('#register-confirm-password').fill('correct-horse')

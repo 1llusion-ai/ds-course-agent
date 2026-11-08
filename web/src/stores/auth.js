@@ -13,6 +13,8 @@ export const useAuthStore = defineStore('auth', () => {
   const initialized = ref(false)
 
   const isAuthenticated = computed(() => Boolean(user.value))
+  const isAdmin = computed(() => user.value?.role === 'admin')
+  const canViewAdmin = computed(() => ['admin', 'observer'].includes(user.value?.role))
 
   function setUser(nextUser) {
     user.value = normalizeUser(nextUser)
@@ -97,6 +99,8 @@ export const useAuthStore = defineStore('auth', () => {
     loading,
     initialized,
     isAuthenticated,
+    isAdmin,
+    canViewAdmin,
     setUser,
     clearUser,
     fetchMe,

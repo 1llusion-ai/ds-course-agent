@@ -21,7 +21,7 @@ def test_reset_password_requires_username_confirmation(monkeypatch, tmp_path):
     assert reset_user_password.main(["alice"]) == 1
     user = models.get_user_by_username("alice")
     assert user is not None
-    assert verify_password("old-password", str(user["password_hash"]))
+    assert verify_password("old-password", str(user.password_hash))
 
 
 def test_reset_password_updates_hash_after_confirmation(monkeypatch, tmp_path):
@@ -33,5 +33,5 @@ def test_reset_password_updates_hash_after_confirmation(monkeypatch, tmp_path):
     assert reset_user_password.main(["alice"]) == 0
     user = models.get_user_by_username("alice")
     assert user is not None
-    assert verify_password("new-password", str(user["password_hash"]))
-    assert not verify_password("old-password", str(user["password_hash"]))
+    assert verify_password("new-password", str(user.password_hash))
+    assert not verify_password("old-password", str(user.password_hash))

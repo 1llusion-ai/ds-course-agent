@@ -6,11 +6,25 @@ import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import { useAuthStore } from '../stores/auth'
+import { authenticatedRedirect } from '../utils/authRedirect'
 
 const routes = [
   { path: '/', redirect: '/chat' },
   { path: '/login', name: 'Login', component: LoginView, meta: { public: true } },
   { path: '/register', name: 'Register', component: RegisterView, meta: { public: true } },
+  {
+    path: '/admin',
+    component: () => import('../layouts/AdminShell.vue'),
+    meta: { requiresAuth: true, management: true },
+    children: [
+      { path: '', name: 'AdminOverview', component: () => import('../views/admin/AdminOverviewView.vue') },
+      { path: 'users', name: 'AdminUsers', component: () => import('../views/admin/AdminUsersView.vue'), meta: { adminOnly: true } },
+      { path: 'users/:userId', name: 'AdminUser', component: () => import('../views/admin/AdminUserView.vue'), meta: { adminOnly: true } },
+      { path: 'registration', name: 'AdminRegistration', component: () => import('../views/admin/AdminRegistrationView.vue'), meta: { adminOnly: true } },
+      { path: 'statistics', name: 'AdminStatistics', component: () => import('../views/admin/AdminStatisticsView.vue') },
+      { path: 'audit', name: 'AdminAudit', component: () => import('../views/admin/AdminAuditView.vue'), meta: { adminOnly: true } }
+    ]
+  },
   {
     path: '/',
     component: AppShell,
@@ -33,7 +47,7 @@ const router = createRouter({ history: createWebHistory(), routes })
 router.beforeEach(async (to) => {
   const authStore = useAuthStore()
 
-  if (!authStore.initialized) {
+  if (!authStore.initialized || to.matched.some(record => record.meta.management)) {
     try {
       await authStore.fetchMe()
     } catch (error) {
@@ -46,10 +60,7 @@ router.beforeEach(async (to) => {
 
   if (isPublicRoute) {
     if ((to.path === '/login' || to.path === '/register') && authStore.isAuthenticated) {
-      const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : ''
-      const isInternalRedirect = redirect.startsWith('/') && !redirect.startsWith('//')
-        && !redirect.startsWith('/login') && !redirect.startsWith('/register')
-      return isInternalRedirect ? redirect : '/chat'
+      return authenticatedRedirect(to.query.redirect)
     }
     return true
   }
@@ -60,6 +71,9 @@ router.beforeEach(async (to) => {
       query: { redirect: to.fullPath }
     }
   }
+
+  if (to.matched.some(record => record.meta.management) && !authStore.canViewAdmin) return '/chat'
+  if (to.matched.some(record => record.meta.adminOnly) && !authStore.isAdmin) return '/admin'
 
   return true
 })

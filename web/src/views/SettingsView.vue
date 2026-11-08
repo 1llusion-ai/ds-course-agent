@@ -18,6 +18,16 @@
         </div>
       </section>
 
+      <section v-if="authStore.canViewAdmin" class="settings-group" aria-labelledby="management-settings-title">
+        <h2 id="management-settings-title">管理</h2>
+        <div class="settings-list">
+          <div class="settings-row">
+            <div class="settings-row__copy"><strong>管理工作区</strong><span>{{ authStore.isAdmin ? '管理账号、注册邀请和使用统计' : '查看课程使用统计' }}</span></div>
+            <router-link to="/admin" class="settings-row__action"><span>进入管理台</span><el-icon aria-hidden="true"><ArrowRight /></el-icon></router-link>
+          </div>
+        </div>
+      </section>
+
       <section class="settings-group" aria-labelledby="course-settings-title">
         <h2 id="course-settings-title">课程</h2>
         <div class="settings-list">
