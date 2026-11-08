@@ -18,8 +18,8 @@ def _create_model(model_name: str) -> Any:
 
     return ChatOpenAI(
         model=model_name,
-        api_key=config.API_KEY,
-        base_url=config.BASE_URL,
+        api_key=config.REMOTE_API_KEY,
+        base_url=config.REMOTE_BASE_URL,
         temperature=0.0,
         max_completion_tokens=config.CHAT_MAX_TOKENS,
         timeout=config.CHAT_TIMEOUT_SECONDS,

@@ -12,8 +12,8 @@ def _remote_chat_kwargs(*, model_name: str, temperature: float, max_tokens: int)
 
     return {
         "model": model_name or config.REMOTE_MODEL_NAME,
-        "api_key": config.API_KEY,
-        "base_url": config.BASE_URL,
+        "api_key": config.REMOTE_API_KEY,
+        "base_url": config.REMOTE_BASE_URL,
         "temperature": temperature,
         "max_completion_tokens": max_tokens,
         "timeout": config.ASSESSMENT_TIMEOUT_SECONDS,

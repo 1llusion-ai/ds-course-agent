@@ -30,8 +30,8 @@ def _remote_chat_kwargs(
 
     return {
         "model": model_name or config.REMOTE_MODEL_NAME,
-        "api_key": config.API_KEY,
-        "base_url": config.BASE_URL,
+        "api_key": config.REMOTE_API_KEY,
+        "base_url": config.REMOTE_BASE_URL,
         "temperature": temperature,
         "max_completion_tokens": max_tokens if max_tokens is not None else config.CHAT_MAX_TOKENS,
         "timeout": timeout_seconds if timeout_seconds is not None else config.CHAT_TIMEOUT_SECONDS,

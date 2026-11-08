@@ -245,8 +245,8 @@ def get_chat_model(llm_timeout: float | None = None, max_output_tokens: int | No
 
         return ChatOpenAI(
             model=config.REMOTE_MODEL_NAME,
-            api_key=config.API_KEY,
-            base_url=config.BASE_URL,
+            api_key=config.REMOTE_API_KEY,
+            base_url=config.REMOTE_BASE_URL,
             temperature=0.0,
             timeout=llm_timeout,
             max_retries=1,
@@ -267,9 +267,9 @@ def get_chat_model(llm_timeout: float | None = None, max_output_tokens: int | No
 def invoke_remote_direct(prompt: str, llm_timeout: float | None = None, max_output_tokens: int | None = None) -> str:
     if not config.USE_REMOTE_LLM:
         raise RuntimeError("--llm-provider direct requires USE_REMOTE_LLM=true")
-    url = config.BASE_URL.rstrip("/") + "/chat/completions"
+    url = config.REMOTE_BASE_URL.rstrip("/") + "/chat/completions"
     headers = {
-        "Authorization": f"Bearer {config.API_KEY}",
+        "Authorization": f"Bearer {config.REMOTE_API_KEY}",
         "Content-Type": "application/json",
     }
     payload: dict[str, Any] = {

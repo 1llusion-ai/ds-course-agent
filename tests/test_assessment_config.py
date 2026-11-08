@@ -111,8 +111,8 @@ def test_assessment_editor_factory_does_not_reuse_verifier_name(monkeypatch) -> 
     monkeypatch.setattr(config, "ASSESSMENT_VERIFIER_MODEL_NAME", "verifier-model")
     monkeypatch.setattr(config, "ASSESSMENT_MAX_TOKENS", 2048)
     monkeypatch.setattr(config, "ASSESSMENT_TIMEOUT_SECONDS", 23)
-    monkeypatch.setattr(config, "API_KEY", "test-key")
-    monkeypatch.setattr(config, "BASE_URL", "https://example.invalid/v1")
+    monkeypatch.setattr(config, "REMOTE_API_KEY", "test-key")
+    monkeypatch.setattr(config, "REMOTE_BASE_URL", "https://example.invalid/v1")
 
     assert model_factory.get_assessment_editor_model() is factory.return_value
     assert factory.call_args.kwargs["model"] == "editor-model"

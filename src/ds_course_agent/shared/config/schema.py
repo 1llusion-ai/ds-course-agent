@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     CHAT_BASE_URL: str = "http://localhost:11434"
     USE_REMOTE_LLM: bool = False
     REMOTE_MODEL_NAME: str = "Qwen/Qwen3-8B"
+    REMOTE_API_KEY: str = ""
+    REMOTE_BASE_URL: str = ""
     CHAT_MAX_TOKENS: int = 512
     CHAT_TIMEOUT_SECONDS: float = 45
     CHAT_MAX_RETRIES: int = 2
@@ -262,6 +264,8 @@ class Settings(BaseSettings):
     def _apply_derived_values(self) -> Settings:
         if self.COURSE_COLLECTION_NAME:
             self.COLLECTION_NAME = self.COURSE_COLLECTION_NAME
+        self.REMOTE_API_KEY = self.REMOTE_API_KEY or self.EMBEDDING_API_KEY
+        self.REMOTE_BASE_URL = self.REMOTE_BASE_URL or self.EMBEDDING_BASE_URL
         return self
 
 
