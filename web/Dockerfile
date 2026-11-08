@@ -15,6 +15,9 @@ RUN NODE_OPTIONS="--max-old-space-size=768" npm run build
 # 生产阶段
 FROM nginx:alpine
 
+ARG GIT_REVISION=unknown
+LABEL org.opencontainers.image.revision=$GIT_REVISION
+
 # 复制构建产物到nginx目录
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf

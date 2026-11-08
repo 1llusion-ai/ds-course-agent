@@ -84,5 +84,6 @@ var/cache/*
 var/course_sources/*
 var/chroma_candidates/*
 var/releases/*
+var/deployment/*
 var/*.sh
 !var/**/.gitkeep

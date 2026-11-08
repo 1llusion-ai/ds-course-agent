@@ -2,7 +2,7 @@
 
 This repository's supported production shape is a single-process Docker
 Compose deployment. The current Compose file publishes the frontend over HTTP
-on port 80 and the backend on port 8000 for local health checks. It does not
+on loopback port 8080 and the backend on loopback port 8000 for local health checks. It does not
 provision DNS, certificates, a public domain, or a remote reverse proxy.
 
 This document records the configuration steps for a later domain/TLS rollout.
@@ -58,9 +58,11 @@ APP_ENV=production
 AUTH_SECRET_KEY=<at-least-32-random-characters>
 AUTH_COOKIE_SECURE=true
 CORS_ALLOW_ORIGINS=https://dscourse.cn
-AUTH_REGISTRATION_MODE=invite
-AUTH_INVITE_CODE=<short-lived-class-invite>
 ```
+
+Registration settings and invitations now live in the authentication database.
+Before upgrading, follow the explicit legacy migration and administrator bootstrap
+in [the admin console runbook](admin_console.md); new databases start with registration closed.
 
 `CORS_ALLOW_ORIGINS` must contain the exact HTTPS origin, without a path or a
 wildcard. If the final hostname changes, update this value before the proxy
@@ -118,9 +120,13 @@ On the host, the deployment script should still use the local readiness URL:
 
 ```bash
 DEPLOY_BACKEND_URL=http://127.0.0.1:8000/readyz \
-DEPLOY_FRONTEND_URL=http://127.0.0.1/ \
-./deploy/update.sh
+DEPLOY_FRONTEND_URL=http://127.0.0.1:8080/ \
+./deploy/update.sh --apply
 ```
+
+Without `--apply`, the script only previews the deployment. It retains host-specific
+resource bindings from `var/deployment/compose.runtime.json` and records the active
+Git image tag in `var/deployment/.env`. See [the release record](admin_release_20261108.md).
 
 The external TLS health check is a separate post-cutover check. Do not change
 `deploy/update.sh` to require the public hostname unless the host's DNS and

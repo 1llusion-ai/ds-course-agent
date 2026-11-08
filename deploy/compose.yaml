@@ -1,10 +1,12 @@
 name: ds-course-agent
 services:
   backend:
-    image: ds-course-agent-backend:latest
+    image: ds-course-agent-backend:${DEPLOY_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: deploy/api.Dockerfile
+      args:
+        GIT_REVISION: ${DEPLOY_GIT_REVISION:-unknown}
     container_name: rag-backend
     restart: unless-stopped
     # Load model/embedding/RAG config from the repo-root .env at runtime.
@@ -54,10 +56,12 @@ services:
       start_period: 45s
 
   frontend:
-    image: ds-course-agent-frontend:latest
+    image: ds-course-agent-frontend:${DEPLOY_IMAGE_TAG:-latest}
     build:
       context: ../web
       dockerfile: Dockerfile
+      args:
+        GIT_REVISION: ${DEPLOY_GIT_REVISION:-unknown}
     container_name: rag-frontend
     restart: unless-stopped
     ports:

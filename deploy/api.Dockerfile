@@ -1,5 +1,8 @@
 FROM python:3.11-slim
 
+ARG GIT_REVISION=unknown
+LABEL org.opencontainers.image.revision=$GIT_REVISION
+
 # Optional Docker client used only when PYTHON_EXEC_BACKEND=docker and the
 # runtime container is given access to a Docker daemon/socket.
 COPY --from=docker:27-cli /usr/local/bin/docker /usr/local/bin/docker
