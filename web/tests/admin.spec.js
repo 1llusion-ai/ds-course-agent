@@ -37,12 +37,26 @@ const statistics = {
   coverage_note: '基于已保存记录统计',
   accounts: { total: 24, active: 23, disabled: 1, new_users: 4, roles: { student: 22, observer: 1, admin: 1 } },
   usage,
+  previous: {
+    start: '2026-09-07',
+    end: '2026-10-06',
+    active_users: 6,
+    new_users: 2,
+    questions: 30,
+    assessments_submitted: 5,
+    completion_rate: 0.5
+  },
   daily: [
     { date: '2026-11-04', new_users: 1, active_users: 3, questions: 15, submissions: 2 },
     { date: '2026-11-05', new_users: 3, active_users: 5, questions: 27, submissions: 4 }
   ],
   courses: [{ course_id: 'data-science-intro', display_name: '数据科学导论', ...usage }],
   sources: [{ name: '秋季一班', registered_users: 4, active_users: 3 }]
+}
+const signals = {
+  capacity: { max_users: 60, total_users: 55, remaining: 5 },
+  invitations: { total: 3, expiring: 2, exhausted: 1 },
+  answers: { days: 7, errors: 2, previous_errors: 1, completed: 30 }
 }
 const invitation = {
   id: 1,
@@ -65,6 +79,7 @@ async function mockAuth(page, role = 'admin') {
   await page.route('**/api/sessions?**', (route) => route.fulfill({ json: { sessions: [] } }))
   await page.route('**/api/profile/summary?**', (route) => route.fulfill({ json: {} }))
   await page.route('**/api/admin/statistics?**', (route) => route.fulfill({ json: statistics }))
+  await page.route('**/api/admin/signals**', (route) => route.fulfill({ json: signals }))
 }
 
 test('admin overview matches shared theme and remains usable on mobile', async ({ page }) => {
@@ -76,6 +91,11 @@ test('admin overview matches shared theme and remains usable on mobile', async (
   await expect(page.getByRole('link', { name: '注册与邀请码' })).toBeVisible()
   await expect(page.getByText('60.0%', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('23 / 1', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '待关注' })).toBeVisible()
+  await expect(page.getByText('2 个邀请码将在 7 天内过期。')).toBeVisible()
+  await expect(page.getByText('全站账号容量仅剩 5 个名额（已用 55/60）。')).toBeVisible()
+  await expect(page.getByText('较上一周期 ↑ 40%')).toBeVisible()
+  await expect(page.getByText('较上一周期 ↑ 10 个百分点')).toBeVisible()
   await page.screenshot({ path: '../var/artifacts/playwright/admin-overview-light.png', fullPage: true })
   await page.getByRole('button', { name: '切换深色模式' }).click()
   await expect(page.locator('html')).toHaveClass(/theme-dark/)

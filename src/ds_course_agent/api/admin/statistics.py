@@ -172,6 +172,16 @@ def build_statistics(start: date, end: date, course_id: str | None = None) -> di
         entry = sources.setdefault(source_key, {"name": name, "registered_users": 0, "active_users": 0})
         entry["registered_users"] += 1
         entry["active_users"] += int(user.student_id in active)
+    previous_end = start - timedelta(days=1)
+    previous_start = previous_end - (end - start)
+    previous_window = make_window(previous_start, previous_end)
+    previous_chat = read_chat_facts(
+        start=previous_window.start.isoformat(), end=previous_window.end.isoformat(), course_id=course_id
+    )
+    previous_assessments = read_assessment_facts(
+        start=previous_window.start.isoformat(), end=previous_window.end.isoformat(), course_id=course_id
+    )
+    previous_usage, _ = _usage(previous_chat, previous_assessments, previous_window)
     return {
         "start": start.isoformat(),
         "end": end.isoformat(),
@@ -186,9 +196,49 @@ def build_statistics(start: date, end: date, course_id: str | None = None) -> di
             "roles": {role: sum(u.role == role for u in users) for role in ("student", "observer", "admin")},
         },
         "usage": usage,
+        "previous": {
+            "start": previous_start.isoformat(),
+            "end": previous_end.isoformat(),
+            "new_users": sum(previous_window.includes(u.created_at) for u in users),
+            **{
+                key: previous_usage[key]
+                for key in ("active_users", "questions", "assessments_submitted", "completion_rate")
+            },
+        },
         "daily": daily,
         "courses": courses,
         "sources": list(sources.values()),
+    }
+
+
+def build_signals() -> dict:
+    """Administrator attention signals composed from persisted facts; never loads message content."""
+    now = datetime.now(timezone.utc)
+    policy = registration.get_policy()
+    total_users = len(models.all_users())
+    recent = StatisticsWindow(now - timedelta(days=7), now, now)
+    previous = StatisticsWindow(now - timedelta(days=14), now - timedelta(days=7), now)
+    messages = _deduplicate(read_chat_facts(start=previous.start.isoformat(), end=recent.end.isoformat()).messages)
+
+    def answers(window: StatisticsWindow, state: str) -> int:
+        return sum(
+            fact.role == "assistant" and fact.generation_status == state and window.includes(fact.created_at)
+            for fact in messages
+        )
+
+    return {
+        "capacity": {
+            "max_users": policy.max_users,
+            "total_users": total_users,
+            "remaining": max(0, policy.max_users - total_users) if policy.max_users else None,
+        },
+        "invitations": registration.invitation_summary(),
+        "answers": {
+            "days": 7,
+            "errors": answers(recent, "error"),
+            "previous_errors": answers(previous, "error"),
+            "completed": answers(recent, "completed"),
+        },
     }
 
 

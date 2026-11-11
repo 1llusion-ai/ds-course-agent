@@ -9,6 +9,7 @@
   --admin-accent: #278773;
   --admin-accent-soft: #edf7f3;
   --admin-danger: #ba4545;
+  --admin-warn: #b07d2b;
   display: flex;
   height: 100dvh;
   width: 100%;
@@ -26,6 +27,7 @@ html.theme-dark .admin-shell {
   --admin-accent: #69c7ad;
   --admin-accent-soft: #233e36;
   --admin-danger: #f28b82;
+  --admin-warn: #e0b568;
 }
 .admin-sidebar {
   width: 240px;
@@ -365,8 +367,48 @@ html.theme-dark .admin-brand__mark {
   color: var(--admin-muted);
   font-size: 11px;
 }
+.admin-metric__delta {
+  display: block;
+  margin-top: 3px;
+  color: var(--admin-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
 .admin-metric:first-child .admin-metric__value {
   color: var(--admin-accent);
+}
+.admin-signal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.admin-signal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.admin-signal__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--admin-warn);
+}
+.admin-signal--danger .admin-signal__dot {
+  background: var(--admin-danger);
+}
+.admin-signal__text {
+  flex: 1;
+  min-width: 0;
+}
+.admin-signal .admin-link {
+  flex-shrink: 0;
+  font-size: 12px;
+  white-space: nowrap;
 }
 .admin-two-columns {
   display: grid;

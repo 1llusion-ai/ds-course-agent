@@ -110,7 +110,10 @@
             </tbody>
           </table>
         </div>
-        <p v-if="!invitations.items.length" class="admin-empty">尚无邀请码，创建后即可发放给学生。</p>
+        <p v-if="!invitations.items.length" class="admin-empty">
+          尚无邀请码，创建后即可发放给学生。
+          <button class="admin-link" type="button" @click="openInvitation()">立即创建</button>
+        </p>
         <AdminPagination :page="page" :total="invitations.total" :loading="listLoading" @update:page="changePage" />
       </template>
     </section>

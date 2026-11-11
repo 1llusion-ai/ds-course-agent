@@ -76,6 +76,18 @@ def test_role_matrix_and_no_secret_projection(accounts):
     assert admin.get("/api/admin/statistics", params={"start": "2020-01-01", "end": "2026-01-01"}).status_code == 422
 
 
+def test_overview_signals_are_admin_only(accounts):
+    assert TestClient(app).get("/api/admin/signals").status_code == 401
+    student, observer = login("student"), login("observer")
+    for client in (student, observer):
+        assert client.get("/api/admin/signals").status_code == 403
+    admin = login()
+    payload = admin.get("/api/admin/signals").json()
+    assert set(payload) == {"capacity", "invitations", "answers"}
+    assert payload["capacity"] == {"max_users": 0, "total_users": 3, "remaining": None}
+    assert payload["invitations"] == {"total": 0, "expiring": 0, "exhausted": 0}
+
+
 def test_account_changes_revoke_old_sessions_and_protect_last_admin(accounts):
     root, student, _ = accounts
     admin = login()

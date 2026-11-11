@@ -5,11 +5,12 @@ from __future__ import annotations
 import ast
 import csv
 import io
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
-from ds_course_agent.api.admin.statistics import build_statistics, statistics_csv, user_usage
-from ds_course_agent.api.auth import models
+from ds_course_agent.api.admin.statistics import LOCAL_TZ, build_signals, build_statistics, statistics_csv, user_usage
+from ds_course_agent.api.auth import models, registration
+from ds_course_agent.api.auth.contracts import RegistrationMode, RegistrationPolicy
 from ds_course_agent.api.auth.database import connection
 from ds_course_agent.api.session_repository import MessageRecord, SessionRecord, SQLiteSessionRepository
 from ds_course_agent.assessment.records import AssessmentStatus, StoredAnswer
@@ -103,6 +104,126 @@ def test_statistics_deduplicate_across_courses_and_apply_local_days(monkeypatch,
     assert ["usage", "", "questions", "2"] in exported
     report["sources"] = [{"name": '=HYPERLINK("evil")', "registered_users": 1, "active_users": 0}]
     assert "'=HYPERLINK" in statistics_csv(report)
+
+
+def test_statistics_report_includes_previous_equal_length_window(monkeypatch, tmp_path):
+    import ds_course_agent.shared.config as config
+
+    monkeypatch.setattr(config, "AUTH_DB_PATH", str(tmp_path / "auth.db"))
+    monkeypatch.setattr(config, "APP_DB_PATH", str(tmp_path / "app.db"))
+    monkeypatch.setattr(config, "ASSESSMENT_DB_PATH", str(tmp_path / "assessments.db"))
+    models.create_or_update_user(username="alice", password_hash="unused", student_id="alice", display_name="Alice")
+    models.create_or_update_user(username="bob", password_hash="unused", student_id="bob", display_name="Bob")
+    now = datetime.now(timezone.utc)
+    # UTC noon of the previous Shanghai day stays inside that local day.
+    previous_day = now.astimezone(LOCAL_TZ).date() - timedelta(days=1)
+    previous_stamp = datetime.combine(previous_day, time(8, 0), tzinfo=timezone.utc)
+    with connection(write=True) as conn:
+        conn.execute("UPDATE users SET created_at=? WHERE username='bob'", (previous_stamp.isoformat(),))
+    chats = SQLiteSessionRepository()
+    chats.create_session(SessionRecord("current", "alice", "title", "user", now, now, course_id="course-a"))
+    chats.append_message(
+        MessageRecord(
+            "m1",
+            "current",
+            "alice",
+            0,
+            "user",
+            "BODY",
+            now,
+            turn_id="t1",
+            generation_status="completed",
+            course_id="course-a",
+        )
+    )
+    chats.create_session(
+        SessionRecord("before", "bob", "title", "user", previous_stamp, previous_stamp, course_id="course-a")
+    )
+    chats.append_message(
+        MessageRecord(
+            "m2",
+            "before",
+            "bob",
+            0,
+            "user",
+            "BODY",
+            previous_stamp,
+            turn_id="t2",
+            generation_status="completed",
+            course_id="course-a",
+        )
+    )
+    start = now.astimezone(LOCAL_TZ).date()
+    report = build_statistics(start, start)
+    assert report["previous"]["start"] == (start - timedelta(days=1)).isoformat()
+    assert report["previous"]["end"] == (start - timedelta(days=1)).isoformat()
+    assert report["previous"]["new_users"] == 1
+    assert report["previous"]["active_users"] == 1
+    assert report["previous"]["questions"] == 1
+    assert report["previous"]["assessments_submitted"] == 0
+    assert report["previous"]["completion_rate"] is None
+    assert report["accounts"]["new_users"] == 1  # alice registered inside the current window
+    assert report["usage"]["questions"] == 1
+    exported = list(csv.reader(io.StringIO(statistics_csv(report).lstrip("\ufeff"))))
+    assert not any(row[0] == "previous" for row in exported)
+
+
+def test_admin_signals_compare_recent_and_previous_activity(monkeypatch, tmp_path):
+    import ds_course_agent.shared.config as config
+
+    monkeypatch.setattr(config, "AUTH_DB_PATH", str(tmp_path / "auth.db"))
+    monkeypatch.setattr(config, "APP_DB_PATH", str(tmp_path / "app.db"))
+    monkeypatch.setattr(config, "ASSESSMENT_DB_PATH", str(tmp_path / "assessments.db"))
+    admin = models.create_or_update_user(
+        username="root", password_hash="unused", student_id="root", display_name="Root"
+    )
+    models.create_or_update_user(username="alice", password_hash="unused", student_id="alice", display_name="Alice")
+    models.bootstrap_admin("root")
+    registration.update_policy(actor_id=admin.id, policy=RegistrationPolicy(RegistrationMode.INVITE, 10))
+    now = datetime.now(timezone.utc)
+    stale = now - timedelta(days=10)
+    chats = SQLiteSessionRepository()
+    chats.create_session(SessionRecord("current", "alice", "title", "user", now, now, course_id="course-a"))
+    for index, (role, state) in enumerate((("user", "completed"), ("assistant", "error"))):
+        chats.append_message(
+            MessageRecord(
+                f"m1-{index}",
+                "current",
+                "alice",
+                index,
+                role,
+                "BODY",
+                now,
+                turn_id="t1",
+                generation_status=state,
+                course_id="course-a",
+            )
+        )
+    chats.create_session(SessionRecord("stale", "alice", "title", "user", stale, stale, course_id="course-a"))
+    chats.append_message(
+        MessageRecord(
+            "m3",
+            "stale",
+            "alice",
+            0,
+            "assistant",
+            "BODY",
+            stale,
+            turn_id="t2",
+            generation_status="error",
+            course_id="course-a",
+        )
+    )
+    registration.create_invitation(
+        actor_id=admin.id, name="soon", note="", expires_at=(now + timedelta(days=3)).isoformat(), max_uses=10
+    )
+    _, code = registration.create_invitation(actor_id=admin.id, name="used-up", note="", expires_at=None, max_uses=1)
+    registration.register_user(username="newcomer", password_hash="unused", invite_code=code)
+    signals = build_signals()
+    assert signals["capacity"] == {"max_users": 10, "total_users": 3, "remaining": 7}
+    assert signals["invitations"] == {"total": 2, "expiring": 1, "exhausted": 1}
+    assert signals["answers"] == {"days": 7, "errors": 1, "previous_errors": 1, "completed": 0}
+    assert "BODY" not in str(signals)
 
 
 def test_admin_aggregation_depends_on_public_owners_and_does_not_import_runtime():

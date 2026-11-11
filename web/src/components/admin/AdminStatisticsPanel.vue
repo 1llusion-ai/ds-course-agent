@@ -21,7 +21,7 @@
     <form class="admin-toolbar" @submit.prevent="applyFilters">
       <label class="admin-field">
         时间范围
-        <select v-model="period" class="admin-select" @change="changePeriod">
+        <select v-model="period" class="admin-select" @change="onPeriodChange">
           <option value="7">最近 7 天</option>
           <option value="30">最近 30 天</option>
           <option value="custom">自定义日期</option>
@@ -39,7 +39,7 @@
       </template>
       <label class="admin-field">
         课程
-        <select v-model="filters.course_id" class="admin-select">
+        <select v-model="filters.course_id" class="admin-select" @change="applyFilters">
           <option value="">全部课程</option>
           <option v-for="course in courses" :key="course.course_id" :value="course.course_id">
             {{ course.display_name }}
@@ -56,6 +56,26 @@
       课程列表加载失败，仍可查看全部课程统计。
       <button class="admin-link" type="button" @click="loadCourses">重试</button>
     </p>
+    <section
+      v-if="!detailed && isAdmin && signals"
+      class="admin-card admin-signals"
+      aria-labelledby="signals-title"
+    >
+      <div class="admin-card__header">
+        <div>
+          <h2 id="signals-title">待关注</h2>
+          <p>容量、邀请码与回答状态的自动提醒。</p>
+        </div>
+      </div>
+      <ul v-if="signalItems.length" class="admin-signal-list">
+        <li v-for="item in signalItems" :key="item.text" class="admin-signal" :class="`admin-signal--${item.tone}`">
+          <span class="admin-signal__dot" aria-hidden="true"></span>
+          <span class="admin-signal__text">{{ item.text }}</span>
+          <router-link v-if="item.to" :to="item.to" class="admin-link">去处理 →</router-link>
+        </li>
+      </ul>
+      <p v-else class="admin-note">容量、邀请码与回答状态均正常，暂无待关注事项。</p>
+    </section>
     <div v-if="loading" class="admin-loading" role="status">正在汇总数据…</div>
     <template v-else-if="data">
       <div class="admin-metrics">
@@ -63,6 +83,7 @@
           <span class="admin-metric__label">{{ metric.label }}</span>
           <strong class="admin-metric__value">{{ metric.value }}</strong>
           <span class="admin-metric__hint">{{ metric.hint }}</span>
+          <span v-if="metric.delta" class="admin-metric__delta">{{ metric.delta }}</span>
         </div>
       </div>
       <section class="admin-card" aria-labelledby="activity-trend-title">
@@ -199,10 +220,13 @@ import { Download } from '@element-plus/icons-vue'
 import { adminApi } from '../../api/admin'
 import { coursesApi } from '../../api/courses'
 import { useAdminResource } from '../../composables/useAdminResource'
+import { useAuthStore } from '../../stores/auth'
 import { dateInputValue, errorMessage, formatDate, formatNumber, formatPercent } from '../../utils/admin'
 import AdminActivityChart from './AdminActivityChart.vue'
 
-defineProps({ detailed: Boolean })
+const props = defineProps({ detailed: Boolean })
+const authStore = useAuthStore()
+const isAdmin = computed(() => authStore.isAdmin)
 const period = ref('30')
 const filters = reactive({ start: '', end: '', course_id: '' })
 const appliedFilters = ref({})
@@ -211,17 +235,77 @@ const exportError = ref('')
 const exporting = ref(false)
 const courses = ref([])
 const courseError = ref(false)
+const signals = ref(null)
 const { data, loading, error, load } = useAdminResource(() => adminApi.statistics(appliedFilters.value))
-const metrics = computed(() => [
-  { label: '活跃用户', value: formatNumber(data.value.usage.active_users), hint: '所选范围内的去重学习用户' },
-  { label: '新增账号', value: formatNumber(data.value.accounts.new_users), hint: '所选时间内的全站注册账号' },
-  { label: '提问次数', value: formatNumber(data.value.usage.questions), hint: '按独立提问轮次统计' },
-  {
-    label: '练习完成率',
-    value: formatPercent(data.value.usage.completion_rate),
-    hint: '所选期间发布的练习，截至当前的提交比例'
+const metrics = computed(() => {
+  const previous = data.value.previous || {}
+  const usage = data.value.usage
+  return [
+    {
+      label: '活跃用户',
+      value: formatNumber(usage.active_users),
+      hint: '所选范围内的去重学习用户',
+      delta: deltaLabel(usage.active_users, previous.active_users)
+    },
+    {
+      label: '新增账号',
+      value: formatNumber(data.value.accounts.new_users),
+      hint: '所选时间内的全站注册账号',
+      delta: deltaLabel(data.value.accounts.new_users, previous.new_users)
+    },
+    {
+      label: '提问次数',
+      value: formatNumber(usage.questions),
+      hint: '按独立提问轮次统计',
+      delta: deltaLabel(usage.questions, previous.questions)
+    },
+    {
+      label: '练习完成率',
+      value: formatPercent(usage.completion_rate),
+      hint: '所选期间发布的练习，截至当前的提交比例',
+      delta: rateDelta(usage.completion_rate, previous.completion_rate)
+    }
+  ]
+})
+const signalItems = computed(() => {
+  const payload = signals.value
+  if (!payload) return []
+  const items = []
+  const capacity = payload.capacity
+  if (capacity.remaining != null) {
+    if (capacity.remaining <= 0) {
+      items.push({
+        tone: 'danger',
+        text: `全站账号容量已用尽（${capacity.total_users}/${capacity.max_users}），新账号无法注册。`,
+        to: '/admin/registration'
+      })
+    } else if (capacity.remaining <= Math.max(5, Math.round(capacity.max_users * 0.1))) {
+      items.push({
+        tone: 'warn',
+        text: `全站账号容量仅剩 ${capacity.remaining} 个名额（已用 ${capacity.total_users}/${capacity.max_users}）。`,
+        to: '/admin/registration'
+      })
+    }
   }
-])
+  if (payload.invitations.exhausted) {
+    items.push({
+      tone: 'warn',
+      text: `${payload.invitations.exhausted} 个邀请码次数已用尽，需要时请提高上限或新建。`,
+      to: '/admin/registration'
+    })
+  }
+  if (payload.invitations.expiring) {
+    items.push({ tone: 'warn', text: `${payload.invitations.expiring} 个邀请码将在 7 天内过期。`, to: '/admin/registration' })
+  }
+  const answers = payload.answers
+  if (answers.errors >= 5 && answers.errors >= answers.previous_errors * 2) {
+    items.push({
+      tone: 'danger',
+      text: `近 7 天回答失败 ${answers.errors} 次${answers.previous_errors ? `，上一周期为 ${answers.previous_errors} 次` : ''}。`
+    })
+  }
+  return items
+})
 const accountRows = computed(() => [
   { label: '账号总数', value: data.value.accounts.total },
   { label: '正常 / 已停用', value: `${data.value.accounts.active} / ${data.value.accounts.disabled}` },
@@ -238,12 +322,29 @@ const usageRows = computed(() => [
   { label: '主动停止', value: formatNumber(data.value.usage.answers_stopped) },
   { label: '回答失败', value: formatNumber(data.value.usage.answers_error) }
 ])
+function deltaLabel(current, previous) {
+  if (previous == null || previous === 0) return ''
+  const change = ((current - previous) / previous) * 100
+  if (!change) return ''
+  const rounded = Math.abs(change) >= 10 ? Math.round(change) : Math.round(change * 10) / 10
+  return `较上一周期 ${change > 0 ? '↑' : '↓'} ${Math.abs(rounded)}%`
+}
+function rateDelta(current, previous) {
+  if (current == null || previous == null) return ''
+  const diff = (current - previous) * 100
+  if (!diff) return ''
+  return `较上一周期 ${diff > 0 ? '↑' : '↓'} ${Math.abs(Math.round(diff * 10) / 10)} 个百分点`
+}
 function changePeriod() {
   if (period.value === 'custom') return
   const end = new Date()
   const start = new Date(end.getTime() - (Number(period.value) - 1) * 86400000)
   filters.start = dateInputValue(start)
   filters.end = dateInputValue(end)
+}
+function onPeriodChange() {
+  changePeriod()
+  if (period.value !== 'custom') applyFilters()
 }
 function applyFilters() {
   filterError.value = ''
@@ -267,6 +368,13 @@ async function loadCourses() {
     courseError.value = true
   }
 }
+async function loadSignals() {
+  try {
+    signals.value = await adminApi.signals()
+  } catch {
+    signals.value = null
+  }
+}
 async function exportCsv() {
   exporting.value = true
   exportError.value = ''
@@ -288,5 +396,6 @@ onMounted(() => {
   changePeriod()
   applyFilters()
   loadCourses()
+  if (!props.detailed && authStore.isAdmin) loadSignals()
 })
 </script>

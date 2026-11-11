@@ -6,7 +6,7 @@ import hashlib
 import secrets
 import sqlite3
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import ds_course_agent.shared.config as config
 
@@ -127,6 +127,23 @@ def list_invitations(*, page: int = 1, page_size: int = 20) -> tuple[tuple[Invit
 def invitation_names() -> dict[int, str]:
     with connection() as conn:
         return {row["id"]: row["name"] for row in conn.execute("SELECT id,name FROM invitations")}
+
+
+def invitation_summary(*, expires_within_days: int = 7) -> dict[str, int]:
+    """Status counts across all invitations for the administrative overview signals."""
+    now = datetime.now(timezone.utc)
+    horizon = now + timedelta(days=expires_within_days)
+    with connection() as conn:
+        rows = conn.execute("SELECT * FROM invitations").fetchall()
+    invitations = [invitation_from_row(row) for row in rows]
+    return {
+        "total": len(invitations),
+        "expiring": sum(
+            item.enabled and item.expires_at is not None and now < parse_time(item.expires_at) <= horizon
+            for item in invitations
+        ),
+        "exhausted": sum(invitation_status(item) == "exhausted" for item in invitations),
+    }
 
 
 def edit_invitation(

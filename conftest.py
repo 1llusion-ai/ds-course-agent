@@ -1,16 +1,39 @@
 from __future__ import annotations
 
-import shutil
-import tempfile
 import inspect
 import os
+import shutil
+import sys
+import tempfile
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 
-
 os.environ.setdefault("KNOWLEDGE_MAPPER_DISABLE_ONLINE_EMBEDDINGS", "1")
+
+
+def _use_pysqlite3_when_system_sqlite_is_too_old() -> None:
+    """Let chromadb import on systems whose sqlite3 is older than 3.35.
+
+    The bundled interpreter may expose a system sqlite3 below chromadb's
+    minimum (3.35.0). When the optional ``pysqlite3`` dependency provides a
+    newer engine, alias it as ``sqlite3`` before chromadb is imported so test
+    collection succeeds; otherwise keep the standard library module.
+    """
+    try:
+        import sqlite3
+
+        import pysqlite3
+    except ImportError:  # pragma: no cover - environments with a new enough sqlite3
+        return
+    if sqlite3.sqlite_version_info >= (3, 35, 0):
+        return
+    sys.modules["sqlite3"] = pysqlite3
+    sys.modules["sqlite3.dbapi2"] = pysqlite3.dbapi2
+
+
+_use_pysqlite3_when_system_sqlite_is_too_old()
 
 
 def _patch_httpx_client_app_kwarg_for_starlette_testclient() -> None:

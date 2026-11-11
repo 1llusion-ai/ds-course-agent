@@ -28,7 +28,7 @@ from .schemas import (
     PasswordRequest,
     PolicyRequest,
 )
-from .statistics import LOCAL_TZ, build_statistics, project_user, statistics_csv, user_usage
+from .statistics import LOCAL_TZ, build_signals, build_statistics, project_user, statistics_csv, user_usage
 
 
 async def private_response(response: Response):
@@ -197,6 +197,11 @@ def validate_period(start: date | None, end: date | None, course_id: str | None)
     if course_id and course_id not in {str(c.course_id) for c in course_catalog().list()}:
         raise HTTPException(422, "未知课程")
     return start, end
+
+
+@router.get("/signals")
+async def signals(_actor: User = Depends(require_administrator)):
+    return build_signals()
 
 
 @router.get("/statistics")

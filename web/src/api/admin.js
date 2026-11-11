@@ -14,6 +14,7 @@ export const adminApi = {
   updateInvitation: (id, data) => client.patch(`/admin/invitations/${id}`, data),
   invitationUses: (id, params) => client.get(`/admin/invitations/${id}/uses`, { params }),
   audit: (params) => client.get('/admin/audit', { params }),
+  signals: () => client.get('/admin/signals'),
   statistics: (params) => client.get('/admin/statistics', { params }),
   exportStatistics: (params) => client.get('/admin/statistics/export', { params, responseType: 'blob' })
 }

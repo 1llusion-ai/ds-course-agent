@@ -75,15 +75,20 @@
                   </small>
                 </td>
                 <td>{{ formatDate(user.created_at) }}</td>
-                <td>{{ formatDate(user.last_login_at) }}</td>
-                <td>{{ formatDate(user.last_learning_at) }}</td>
+                <td><span :title="formatDate(user.last_login_at)">{{ formatRelativeTime(user.last_login_at) }}</span></td>
+                <td>
+                  <span :title="formatDate(user.last_learning_at)">{{ formatRelativeTime(user.last_learning_at) }}</span>
+                </td>
                 <td class="admin-numeric">{{ formatNumber(user.questions) }} / {{ formatNumber(user.submissions) }}</td>
                 <td><router-link :to="`/admin/users/${user.id}`" class="admin-link">查看详情</router-link></td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p v-if="!data.items.length" class="admin-empty">没有符合筛选条件的账号</p>
+        <p v-if="!data.items.length" class="admin-empty">
+          没有符合筛选条件的账号
+          <button type="button" class="admin-link" @click="resetFilters">重置筛选</button>
+        </p>
         <AdminPagination :page="page" :total="data.total" :loading="loading" @update:page="changePage" />
       </template>
     </div>
@@ -154,7 +159,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { adminApi } from '../../api/admin'
 import { useAdminResource } from '../../composables/useAdminResource'
-import { errorMessage, formatDate, formatNumber, roleLabels, roleDescription } from '../../utils/admin'
+import { errorMessage, formatDate, formatNumber, formatRelativeTime, roleLabels, roleDescription } from '../../utils/admin'
 import AdminPagination from '../../components/admin/AdminPagination.vue'
 
 const router = useRouter()
@@ -182,6 +187,10 @@ function search() {
 function changePage(value) {
   page.value = value
   load()
+}
+function resetFilters() {
+  Object.assign(filters, { q: '', role: '', status: '', created_from: '', created_to: '' })
+  search()
 }
 function clearCreate() {
   Object.assign(form, { username: '', display_name: '', role: 'student', password: '', confirmPassword: '' })
