@@ -57,7 +57,7 @@
       <button class="admin-link" type="button" @click="loadCourses">重试</button>
     </p>
     <section
-      v-if="!detailed && isAdmin && signals"
+      v-if="!detailed && isAdmin"
       class="admin-card admin-signals"
       aria-labelledby="signals-title"
     >
@@ -67,14 +67,19 @@
           <p>容量、邀请码与回答状态的自动提醒。</p>
         </div>
       </div>
-      <ul v-if="signalItems.length" class="admin-signal-list">
+      <p v-if="signalsLoading" class="admin-note" role="status">正在加载提醒…</p>
+      <p v-else-if="signalsError" class="admin-error" role="alert">
+        提醒加载失败，请重试。
+        <button class="admin-link" type="button" @click="loadSignals">重试</button>
+      </p>
+      <ul v-else-if="signalItems.length" class="admin-signal-list">
         <li v-for="item in signalItems" :key="item.text" class="admin-signal" :class="`admin-signal--${item.tone}`">
           <span class="admin-signal__dot" aria-hidden="true"></span>
           <span class="admin-signal__text">{{ item.text }}</span>
           <router-link v-if="item.to" :to="item.to" class="admin-link">去处理 →</router-link>
         </li>
       </ul>
-      <p v-else class="admin-note">容量、邀请码与回答状态均正常，暂无待关注事项。</p>
+      <p v-else-if="signals" class="admin-note">暂无待关注事项，回答状态仅反映已保存记录。</p>
     </section>
     <div v-if="loading" class="admin-loading" role="status">正在汇总数据…</div>
     <template v-else-if="data">
@@ -235,7 +240,12 @@ const exportError = ref('')
 const exporting = ref(false)
 const courses = ref([])
 const courseError = ref(false)
-const signals = ref(null)
+const {
+  data: signals,
+  loading: signalsLoading,
+  error: signalsError,
+  load: loadSignals
+} = useAdminResource(() => adminApi.signals())
 const { data, loading, error, load } = useAdminResource(() => adminApi.statistics(appliedFilters.value))
 const metrics = computed(() => {
   const previous = data.value.previous || {}
@@ -298,9 +308,9 @@ const signalItems = computed(() => {
     items.push({ tone: 'warn', text: `${payload.invitations.expiring} 个邀请码将在 7 天内过期。`, to: '/admin/registration' })
   }
   const answers = payload.answers
-  if (answers.errors >= 5 && answers.errors >= answers.previous_errors * 2) {
+  if (answers.errors >= 5) {
     items.push({
-      tone: 'danger',
+      tone: answers.errors >= answers.previous_errors * 2 ? 'danger' : 'warn',
       text: `近 7 天回答失败 ${answers.errors} 次${answers.previous_errors ? `，上一周期为 ${answers.previous_errors} 次` : ''}。`
     })
   }
@@ -366,13 +376,6 @@ async function loadCourses() {
     courses.value = (await coursesApi.list()).courses
   } catch {
     courseError.value = true
-  }
-}
-async function loadSignals() {
-  try {
-    signals.value = await adminApi.signals()
-  } catch {
-    signals.value = null
   }
 }
 async function exportCsv() {

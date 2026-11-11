@@ -111,6 +111,49 @@ test('admin overview matches shared theme and remains usable on mobile', async (
   expect(errors).toEqual([])
 })
 
+for (const previousErrors of [0, 100, 200]) {
+  test(`overview keeps failure reminders when previous errors are ${previousErrors}`, async ({ page }) => {
+    await mockAuth(page)
+    await page.route('**/api/admin/signals', (route) => route.fulfill({ json: {
+      capacity: { max_users: 0, total_users: 3, remaining: null },
+      invitations: { total: 0, expiring: 0, exhausted: 0 },
+      answers: { days: 7, errors: 100, previous_errors: previousErrors, completed: 0 }
+    } }))
+    await page.goto('/admin')
+    const panel = page.getByRole('region', { name: '待关注' })
+    await expect(panel).toContainText('近 7 天回答失败 100 次')
+    await expect(panel).not.toContainText('均正常')
+    await expect(panel.locator('.admin-signal')).toHaveClass(
+      previousErrors === 0 ? /admin-signal--danger/ : /admin-signal--warn/
+    )
+  })
+}
+
+test('overview shows signal loading errors and retries independently', async ({ page }) => {
+  await mockAuth(page)
+  let requests = 0
+  let finishRetry
+  const retryReady = new Promise((resolve) => { finishRetry = resolve })
+  await page.route('**/api/admin/signals', async (route) => {
+    requests++
+    if (requests === 1) return route.fulfill({ status: 503, json: { detail: 'temporary failure' } })
+    await retryReady
+    return route.fulfill({ json: signals })
+  })
+  await page.goto('/admin')
+  const panel = page.getByRole('region', { name: '待关注' })
+  await expect(panel.getByRole('alert')).toContainText('提醒加载失败')
+  await expect(page.getByText('23 / 1', { exact: true })).toBeVisible()
+  await expect(panel).not.toContainText('暂无待关注事项')
+  await panel.getByRole('button', { name: '重试' }).click()
+  await expect(panel.getByRole('status')).toContainText('正在加载提醒')
+  await expect(panel.getByRole('button', { name: '重试' })).toHaveCount(0)
+  finishRetry()
+  await expect(panel).toContainText('2 个邀请码将在 7 天内过期。')
+  await expect(panel.getByRole('alert')).toHaveCount(0)
+  expect(requests).toBe(2)
+})
+
 test('observer can view statistics but cannot enter account management', async ({ page }) => {
   await mockAuth(page, 'observer')
   let userRequests = 0
