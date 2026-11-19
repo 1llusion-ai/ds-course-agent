@@ -10,6 +10,7 @@ import bcrypt
 from jose import JWTError, jwt
 
 import ds_course_agent.shared.config as config
+from ds_course_agent.shared.config.production import production_auth_secret_is_valid
 
 from .contracts import AuthOperationError, User
 
@@ -27,6 +28,8 @@ class AuthTokenError(ValueError):
 def _secret_key() -> str:
     global _warned_empty_secret
     secret = str(getattr(config, "AUTH_SECRET_KEY", "") or "")
+    if str(getattr(config, "APP_ENV", "development")) == "production" and not production_auth_secret_is_valid(secret):
+        raise RuntimeError("AUTH_SECRET_KEY must be a strong secret in production")
     if secret:
         return secret
     if not _warned_empty_secret:

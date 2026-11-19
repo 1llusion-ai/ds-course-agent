@@ -21,7 +21,7 @@ from .admin.router import router as admin_router
 from .auth import models as auth_models
 from .auth.contracts import AuthOperationError
 from .auth.router import router as auth_router
-from .readiness import build_readiness_report
+from .readiness import build_readiness_report, validate_production_auth_startup
 from .routers import assessments, chat, courses, knowledge_map, profile, sessions
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("RAG Tutor Backend Service starting...")
+    validate_production_auth_startup()
     auth_models.init_db()
     AssessmentRepository().init_db()
     try:

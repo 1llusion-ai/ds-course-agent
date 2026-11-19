@@ -33,8 +33,8 @@ def test_container_healthcheck_remains_rollback_compatible() -> None:
     compose = (PROJECT_ROOT / "deploy" / "compose.yaml").read_text(encoding="utf-8")
     script = (PROJECT_ROOT / "deploy" / "update.sh").read_text(encoding="utf-8")
 
-    assert "http://127.0.0.1:8000/health" in compose
-    assert "http://127.0.0.1:8000/readyz" not in compose
+    assert "http://127.0.0.1:8000/api/readyz" in compose
+    assert "http://127.0.0.1:8000/health" not in compose
     assert 'BACKEND_URL="${DEPLOY_BACKEND_URL:-http://127.0.0.1:8000/readyz}"' in script
     assert 'BACKEND_LIVENESS_URL="${DEPLOY_BACKEND_LIVENESS_URL:-http://127.0.0.1:8000/health}"' in script
     assert 'wait_for_url "rollback backend" "$BACKEND_LIVENESS_URL"' in script

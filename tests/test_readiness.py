@@ -39,6 +39,27 @@ def test_production_settings_require_strong_secret_https_origins_and_secure_cook
     assert all(check.ok for check in passed)
 
 
+def test_production_auth_startup_fails_closed(monkeypatch) -> None:
+    from ds_course_agent.api import readiness
+
+    monkeypatch.setattr(readiness.config, "APP_ENV", "production")
+    monkeypatch.setattr(readiness.config, "AUTH_SECRET_KEY", "")
+    monkeypatch.setattr(readiness.config, "AUTH_COOKIE_SECURE", False)
+
+    with pytest.raises(RuntimeError, match="invalid production authentication configuration"):
+        readiness.validate_production_auth_startup()
+
+
+def test_production_auth_startup_accepts_valid_configuration(monkeypatch) -> None:
+    from ds_course_agent.api import readiness
+
+    monkeypatch.setattr(readiness.config, "APP_ENV", "production")
+    monkeypatch.setattr(readiness.config, "AUTH_SECRET_KEY", "a" * 64)
+    monkeypatch.setattr(readiness.config, "AUTH_COOKIE_SECURE", True)
+
+    readiness.validate_production_auth_startup()
+
+
 def test_python_and_web_readiness_fail_closed_on_enabled_configuration(monkeypatch) -> None:
     from ds_course_agent.tools import code_executor, web_search
 

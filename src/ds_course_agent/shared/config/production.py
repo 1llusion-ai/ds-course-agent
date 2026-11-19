@@ -10,6 +10,13 @@ from ds_course_agent.shared.readiness import ReadinessCheck
 _WEAK_SECRET_VALUES = {"", "change-me", "changeme", "secret", "test-secret", "your-secret-key"}
 
 
+def production_auth_secret_is_valid(secret: str) -> bool:
+    """Return whether a session-signing secret meets the production minimum."""
+
+    normalized = str(secret or "").strip()
+    return len(normalized) >= 32 and normalized.lower() not in _WEAK_SECRET_VALUES
+
+
 def _cors_origins(value: str) -> tuple[str, ...]:
     return tuple(origin.strip() for origin in str(value or "").split(",") if origin.strip())
 
@@ -27,8 +34,7 @@ def check_production_settings(settings: Settings) -> tuple[ReadinessCheck, ...]:
         )
 
     checks: list[ReadinessCheck] = []
-    secret = str(settings.AUTH_SECRET_KEY or "").strip()
-    secret_ok = len(secret) >= 32 and secret.lower() not in _WEAK_SECRET_VALUES
+    secret_ok = production_auth_secret_is_valid(settings.AUTH_SECRET_KEY)
     checks.append(
         ReadinessCheck(
             "auth_secret_key",
@@ -63,4 +69,23 @@ def check_production_settings(settings: Settings) -> tuple[ReadinessCheck, ...]:
     return tuple(checks)
 
 
-__all__ = ["check_production_settings"]
+def validate_production_auth_settings(settings: Settings) -> None:
+    """Fail startup when production authentication settings are unsafe."""
+
+    if settings.APP_ENV != "production":
+        return
+    failed = [
+        check
+        for check in check_production_settings(settings)
+        if check.name in {"auth_secret_key", "secure_cookie"} and not check.ok
+    ]
+    if failed:
+        details = ", ".join(check.detail for check in failed)
+        raise RuntimeError(f"invalid production authentication configuration: {details}")
+
+
+__all__ = [
+    "check_production_settings",
+    "production_auth_secret_is_valid",
+    "validate_production_auth_settings",
+]

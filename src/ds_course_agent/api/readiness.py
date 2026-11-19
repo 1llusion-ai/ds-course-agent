@@ -7,7 +7,7 @@ from dataclasses import replace
 import ds_course_agent.shared.config as config
 from ds_course_agent.api.course_context import course_catalog
 from ds_course_agent.retrieval.index_manifest import check_production_index_readiness
-from ds_course_agent.shared.config.production import check_production_settings
+from ds_course_agent.shared.config.production import check_production_settings, validate_production_auth_settings
 from ds_course_agent.shared.config.schema import Settings
 from ds_course_agent.shared.readiness import ReadinessCheck, ReadinessReport
 from ds_course_agent.tools.code_executor import check_python_execution_readiness
@@ -58,4 +58,10 @@ def build_readiness_report() -> ReadinessReport:
     return ReadinessReport(tuple(checks))
 
 
-__all__ = ["build_readiness_report"]
+def validate_production_auth_startup() -> None:
+    """Reject production startup when session authentication is unsafe."""
+
+    validate_production_auth_settings(_runtime_settings())
+
+
+__all__ = ["build_readiness_report", "validate_production_auth_startup"]
