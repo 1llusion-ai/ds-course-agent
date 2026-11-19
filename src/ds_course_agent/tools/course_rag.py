@@ -18,7 +18,7 @@ from langchain_core.documents import Document
 from langchain_core.tools import tool
 
 import ds_course_agent.shared.config as config
-from ds_course_agent.courses import CourseCatalog, CourseId
+from ds_course_agent.courses import CourseCatalog, CourseId, CourseResourceManifest
 from ds_course_agent.kb.toc_parser import SectionInfo, TOCParser
 from ds_course_agent.retrieval.term_resolution import CourseTermResolution
 from ds_course_agent.shared.paths import PROJECT_ROOT
@@ -34,6 +34,19 @@ from ds_course_agent.tools._shared import (
 )
 
 
+def _course_catalog() -> CourseCatalog:
+    return CourseCatalog.from_directory(PROJECT_ROOT / "data/courses")
+
+
+def _current_course_manifest() -> CourseResourceManifest:
+    return _course_catalog().require(get_current_course_id())
+
+
+def _current_course_identity() -> tuple[str, str]:
+    manifest = _current_course_manifest()
+    return str(manifest.course_id), manifest.revision
+
+
 @lru_cache(maxsize=32)
 def _cached_source_chapters(course_id: CourseId, revision: str, toc_path: Path) -> dict[str, SectionInfo]:
     """Cache chapter titles and page coordinates by the complete course binding."""
@@ -44,7 +57,7 @@ def _cached_source_chapters(course_id: CourseId, revision: str, toc_path: Path) 
 def _source_chapters(metadata: dict) -> dict[str, SectionInfo]:
     """Resolve the source's course before reading any chapter or page metadata."""
     course_id = metadata.get("course_id") or get_current_course_id()
-    course = CourseCatalog.from_directory(PROJECT_ROOT / "data/courses").get(course_id)
+    course = _course_catalog().get(course_id)
     if course is None or not course.toc_path:
         return {}
     try:
@@ -215,6 +228,7 @@ def build_extractive_rag_fallback(
     *,
     error: Exception | str | None = None,
     max_docs: int = 3,
+    course_name: str | None = None,
 ) -> str:
     """Build a grounded fallback answer when the answer LLM is unavailable.
 
@@ -228,6 +242,7 @@ def build_extractive_rag_fallback(
     usable_docs = [doc for doc in (documents or []) if getattr(doc, "page_content", None)]
     sources = build_sources_from_documents(usable_docs)
 
+    display_name = str(course_name or _current_course_manifest().display_name).strip()
     lines = [
         "已检索到课程资料，但生成式回答服务暂时不可用。",
         "先给你可核验的教材片段，便于继续学习：",
@@ -237,7 +252,7 @@ def build_extractive_rag_fallback(
     if not usable_docs:
         lines.extend(
             [
-                f"抱歉，在《{config.COURSE_NAME}》课程资料中暂时无法整理出可展示的片段。",
+                f"抱歉，在《{display_name}》课程资料中暂时无法整理出可展示的片段。",
                 "你可以稍后重试，或换一个更具体的关键词重新提问。",
             ]
         )
@@ -281,6 +296,8 @@ def build_term_correction_notice(term_resolution: CourseTermResolution | None) -
 def build_no_results_message(
     question: str = "",
     term_resolution: CourseTermResolution | None = None,
+    *,
+    course_name: str | None = None,
 ) -> str:
     """Return the standard no-results message for course RAG."""
 
@@ -295,8 +312,9 @@ def build_no_results_message(
         )
 
     _ = question
+    display_name = str(course_name or _current_course_manifest().display_name).strip()
     return (
-        f"抱歉，在《{config.COURSE_NAME}》课程资料中未找到与你问题直接相关的内容。\n"
+        f"抱歉，在《{display_name}》课程资料中未找到与你问题直接相关的内容。\n"
         "建议你：\n"
         "1. 换一个更具体的关键词重新提问\n"
         "2. 说明你想问的概念、章节或例子\n"
@@ -340,7 +358,8 @@ def _normalize_answer_cache_question(question: str) -> str:
 
 def _answer_cache_key(question: str, context: str) -> str:
     context_hash = hashlib.sha256(str(context or "").encode("utf-8")).hexdigest()
-    raw = f"{_normalize_answer_cache_question(question)}\n{context_hash}"
+    course_id, revision = _current_course_identity()
+    raw = f"{course_id}\n{revision}\n{_normalize_answer_cache_question(question)}\n{context_hash}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -428,7 +447,11 @@ def course_rag_tool(question: str) -> str:
 
         if not evidence.has_results:
             trace_step("tool.result", tool="course_rag_tool", status="no_results")
-            no_results_message = build_no_results_message(question, evidence.term_resolution)
+            no_results_message = build_no_results_message(
+                question,
+                evidence.term_resolution,
+                course_name=_current_course_manifest().display_name,
+            )
             _warn_large_tool_result("course_rag_tool", no_results_message, status="no_results")
             return no_results_message
 
@@ -457,6 +480,7 @@ def course_rag_tool(question: str) -> str:
                 answer_question,
                 list(evidence.documents),
                 error=answer_exc,
+                course_name=_current_course_manifest().display_name,
             )
             trace_step("tool.result", tool="course_rag_tool", status="degraded")
             _warn_large_tool_result("course_rag_tool", fallback, status="degraded")

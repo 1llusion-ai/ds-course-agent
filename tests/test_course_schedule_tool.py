@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from ds_course_agent.tools.course_schedule import _resolve_schedule_query
+from ds_course_agent.tools._shared import course_scope
+from ds_course_agent.tools.course_schedule import _load_course_schedule, _resolve_schedule_query, course_schedule_tool
 
 
 def _build_schedule(weeks_tuesday: str = "1-8", weeks_friday: str = "1-8"):
@@ -118,3 +119,21 @@ def test_semester_start_supports_slash_date_format():
     )
 
     assert "第7周 周二（04月14日）" in result
+
+
+def test_schedule_loader_uses_the_bound_course_manifest():
+    with course_scope("data-science-intro"):
+        data_science_schedule = _load_course_schedule()
+    with course_scope("digital-literacy"):
+        digital_literacy_schedule = _load_course_schedule()
+
+    assert data_science_schedule["course_name"] == "数据科学导论"
+    assert digital_literacy_schedule == {}
+
+
+def test_unconfigured_schedule_names_the_bound_course():
+    with course_scope("digital-literacy"):
+        result = course_schedule_tool.invoke("下节课是什么时候？")
+
+    assert "《数字素养与技能导论》课程安排信息暂未配置" in result
+    assert "数据科学导论" not in result

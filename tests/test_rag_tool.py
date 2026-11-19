@@ -107,6 +107,33 @@ class TestCourseRAGTool:
 
         assert "未找到" in result or "无" in result or "建议" in result
 
+    @pytest.mark.parametrize(
+        ("course_id", "display_name"),
+        [("ai-literacy", "人工智能通识"), ("digital-literacy", "数字素养与技能导论")],
+    )
+    def test_no_results_message_uses_bound_course_name(self, course_id, display_name):
+        from ds_course_agent.shared.query_trace import begin_query_trace, end_query_trace
+        from ds_course_agent.tools._shared import course_scope
+        from ds_course_agent.tools.course_rag import build_no_results_message
+
+        token = begin_query_trace({"entrypoint": "course_scope_test"})
+        with course_scope(course_id):
+            result = build_no_results_message("课程外问题")
+        end_query_trace(token)
+
+        assert display_name in result
+        assert "数据科学导论" not in result
+
+    def test_answer_cache_key_includes_bound_course_identity(self):
+        from ds_course_agent.tools._shared import course_scope
+
+        with course_scope("data-science-intro"):
+            data_science_key = course_rag_module._answer_cache_key("相同问题", "相同上下文")
+        with course_scope("ai-literacy"):
+            ai_literacy_key = course_rag_module._answer_cache_key("相同问题", "相同上下文")
+
+        assert data_science_key != ai_literacy_key
+
     @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_unknown_course_term_returns_no_sources_or_unrelated_answer(self, mock_get_service):
         mock_service = MagicMock()

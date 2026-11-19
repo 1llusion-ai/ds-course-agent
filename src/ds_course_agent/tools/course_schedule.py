@@ -8,27 +8,39 @@ from datetime import datetime, timedelta
 
 from langchain_core.tools import tool
 
-import ds_course_agent.shared.config as config
+from ds_course_agent.courses import CourseCatalog, CourseId
 from ds_course_agent.shared.paths import PROJECT_ROOT
-from ds_course_agent.tools._shared import _warn_large_tool_result
+from ds_course_agent.tools._shared import _warn_large_tool_result, get_current_course_id
 
-_SCHEDULE_CACHE: dict | None = None
+_SCHEDULE_CACHE: dict[tuple[str, str, str], dict] = {}
 _SCHEDULE_DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y年%m月%d日")
 _WEEKDAY_CN = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
 
 
-def _load_course_schedule() -> dict:
-    global _SCHEDULE_CACHE
-    if _SCHEDULE_CACHE is not None:
-        return _SCHEDULE_CACHE
+def _course_catalog() -> CourseCatalog:
+    return CourseCatalog.from_directory(PROJECT_ROOT / "data" / "courses")
 
-    path = PROJECT_ROOT / "data" / "course_schedule.json"
+
+def _load_course_schedule(course_id: CourseId | str | None = None) -> dict:
+    resolved_course_id = CourseId(course_id) if course_id is not None else get_current_course_id()
+    manifest = _course_catalog().require(resolved_course_id)
+    schedule_path = str(manifest.schedule_path or "").strip()
+    if not schedule_path:
+        return {}
+
+    cache_key = (str(manifest.course_id), manifest.revision, schedule_path)
+    cached = _SCHEDULE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    path = PROJECT_ROOT / schedule_path
     if path.exists():
         with path.open("r", encoding="utf-8") as handle:
-            _SCHEDULE_CACHE = json.load(handle)
+            schedule = json.load(handle)
     else:
-        _SCHEDULE_CACHE = {}
-    return _SCHEDULE_CACHE or {}
+        schedule = {}
+    _SCHEDULE_CACHE[cache_key] = schedule or {}
+    return _SCHEDULE_CACHE[cache_key]
 
 
 def _parse_schedule_date(value: str) -> datetime | None:
@@ -221,9 +233,16 @@ def _format_next_class(class_info: dict) -> str:
     )
 
 
-def _resolve_schedule_query(query: str, schedule: dict, now: datetime | None = None) -> str:
+def _resolve_schedule_query(
+    query: str,
+    schedule: dict,
+    now: datetime | None = None,
+    *,
+    course_name: str | None = None,
+) -> str:
+    display_name = str(course_name or schedule.get("course_name") or "当前课程").strip()
     if not schedule:
-        return "抱歉，课程安排信息暂未配置。"
+        return f"抱歉，《{display_name}》课程安排信息暂未配置。"
 
     semester_start = str(schedule.get("semester_start", "")).strip()
     total_weeks = int(schedule.get("total_weeks", 0) or 0)
@@ -249,7 +268,7 @@ def _resolve_schedule_query(query: str, schedule: dict, now: datetime | None = N
     q = re.sub(r"\s+", "", query.lower())
 
     if any(keyword in q for keyword in ["上几周", "多少周", "总周数", "到第几周"]):
-        return f"《{config.COURSE_NAME}》本学期共 {total_weeks} 周，从 {semester_start_display} 开始。"
+        return f"《{display_name}》本学期共 {total_weeks} 周，从 {semester_start_display} 开始。"
 
     for week in range(1, total_weeks + 1):
         if f"第{week}周" not in q:
@@ -336,7 +355,7 @@ def _resolve_schedule_query(query: str, schedule: dict, now: datetime | None = N
 
         return _format_next_class(upcoming[0])
 
-    lines = [f"《{config.COURSE_NAME}》课程安排（共 {total_weeks} 周）："]
+    lines = [f"《{display_name}》课程安排（共 {total_weeks} 周）："]
     for item in weekly_schedule:
         lines.append(
             f"- {item.get('day', '')} {item.get('period', '')}，教室：{item.get('room', '')}（{item.get('weeks', '')}）"
@@ -351,8 +370,10 @@ def course_schedule_tool(query: str) -> str:
 
     trace_step("tool.invoke", tool="course_schedule_tool", query=query)
     try:
-        schedule = _load_course_schedule()
-        result = _resolve_schedule_query(query, schedule)
+        course_id = get_current_course_id()
+        manifest = _course_catalog().require(course_id)
+        schedule = _load_course_schedule(course_id)
+        result = _resolve_schedule_query(query, schedule, course_name=manifest.display_name)
         trace_step("tool.result", tool="course_schedule_tool", result_preview=result[:40])
         _warn_large_tool_result("course_schedule_tool", result, status="ok")
         return result
