@@ -13,6 +13,8 @@ from fastapi.responses import StreamingResponse
 from ds_course_agent.api.stream_jobs import ActiveStreamJob
 
 _STREAM_JOB_POLL_SECONDS = 0.01
+_SSE_HEARTBEAT_SECONDS = 5.0
+_SSE_HEARTBEAT_FRAME = ": heartbeat\n\n"
 _SSE_SERIALIZATION_ERROR_CODE = "sse_serialization_error"
 _SSE_SERIALIZATION_ERROR_MESSAGE = "事件内容无法安全序列化"
 _MAX_SERIALIZATION_ERROR_PATH_LENGTH = 256
@@ -187,8 +189,37 @@ def streaming_response(events: AsyncIterator[Mapping[str, Any]]) -> StreamingRes
     """Wrap typed event payloads in the stable chat SSE response contract."""
 
     async def encoded_events() -> AsyncGenerator[str, None]:
-        async for event in events:
-            yield encode_sse(event)
+        iterator = events.__aiter__()
+        next_event = asyncio.create_task(anext(iterator))
+        heartbeat_task: asyncio.Task[None] | None = None
+        try:
+            while True:
+                heartbeat_task = asyncio.create_task(asyncio.sleep(_SSE_HEARTBEAT_SECONDS))
+                done, _ = await asyncio.wait(
+                    (next_event, heartbeat_task),
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if next_event in done:
+                    heartbeat_task.cancel()
+                    await asyncio.gather(heartbeat_task, return_exceptions=True)
+                    heartbeat_task = None
+                    try:
+                        event = next_event.result()
+                    except StopAsyncIteration:
+                        break
+                    yield encode_sse(event)
+                    next_event = asyncio.create_task(anext(iterator))
+                    continue
+
+                heartbeat_task = None
+                yield _SSE_HEARTBEAT_FRAME
+        finally:
+            next_event.cancel()
+            tasks: list[asyncio.Task[Any]] = [next_event]
+            if heartbeat_task is not None:
+                heartbeat_task.cancel()
+                tasks.append(heartbeat_task)
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     return StreamingResponse(
         encoded_events(),

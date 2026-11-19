@@ -198,6 +198,25 @@ def test_streaming_response_continues_after_sse_serialization_error():
     assert frames[1] == 'data: {"type": "delta", "delta": "still running"}\n\n'
 
 
+def test_streaming_response_emits_heartbeat_while_source_is_idle(monkeypatch):
+    import ds_course_agent.api.sse as sse
+
+    monkeypatch.setattr(sse, "_SSE_HEARTBEAT_SECONDS", 0.001)
+
+    async def events():
+        await asyncio.sleep(0.01)
+        yield {"type": "delta", "delta": "still running"}
+
+    async def collect_frames():
+        response = sse.streaming_response(events())
+        return [frame async for frame in response.body_iterator]
+
+    frames = asyncio.run(collect_frames())
+
+    assert any(frame == ": heartbeat\n\n" for frame in frames)
+    assert frames[-1] == 'data: {"type": "delta", "delta": "still running"}\n\n'
+
+
 def test_stream_records_blocked_web_search_turn_state(monkeypatch):
     def fake_stream_chat_with_history(message: str, session_id: str, student_id: str, web_search: bool = False):
         assert message == "今天厦门的天气怎么样？"
