@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
+from ds_course_agent.teaching.database import migrate_learner_memory_database
 from ds_course_agent.teaching.learning_event_repository import LearningEventRecord, SQLiteLearningEventRepository
 from ds_course_agent.teaching.learning_events import build_clarification_event, build_concept_mentioned_event
 from ds_course_agent.teaching.profile_snapshot_repository import SQLiteProfileSnapshotRepository
@@ -55,3 +57,57 @@ def test_profile_snapshot_is_student_scoped_and_changes_after_new_fact(tmp_path)
             ).fetchone()[0]
             == 0
         )
+
+
+def test_profile_snapshot_reads_legacy_practice_fields(tmp_path) -> None:
+    path = tmp_path / "app.db"
+    migrate_learner_memory_database(path)
+    payload = {
+        "student_id": "student-legacy",
+        "practice": {
+            "overfitting": {
+                "concept_id": "overfitting",
+                "display_name": "过拟合",
+                "answered_count": 1,
+                "correct_count": 0,
+                "assessment_count": 1,
+                "recent_correct_count": 0,
+                "recent_answered_count": 1,
+                "last_answered_at": 100.0,
+                "level": "needs_practice",
+                "last_incorrect_stem": "哪个模型发生了过拟合？",
+                "recent_attempts": [
+                    {
+                        "question_stem": "哪个模型发生了过拟合？",
+                        "is_correct": False,
+                        "selected_option_text": "模型 A",
+                        "correct_option_text": "模型 B",
+                        "assistance": "unknown",
+                    }
+                ],
+                "unassisted_answered_count": 0,
+                "unknown_assistance_count": 1,
+            }
+        },
+    }
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO learner_profile_snapshots "
+            "(student_id, course_id, version, computed_at, source_event_cursor, payload_json) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "student-legacy",
+                "data-science-intro",
+                1,
+                "2026-11-20T00:00:00+00:00",
+                "legacy-event",
+                json.dumps(payload),
+            ),
+        )
+
+    snapshot = SQLiteProfileSnapshotRepository(path).get_latest("student-legacy")
+
+    assert snapshot is not None
+    attempt = snapshot.profile.practice["overfitting"].recent_attempts[0]
+    assert attempt.selected_option_text == "模型 A"
+    assert not hasattr(attempt, "assistance")

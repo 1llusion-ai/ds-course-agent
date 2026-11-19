@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from enum import Enum
 from typing import Any
 
@@ -75,16 +75,18 @@ class ConceptPractice:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ConceptPractice:
-        """Restore a persisted summary with its finite readiness state."""
+        """Restore a persisted summary while tolerating removed snapshot fields."""
 
-        recent_attempts = tuple(PracticeAttempt(**item) for item in data.get("recent_attempts", ()))
-        return cls(
-            **{
-                **data,
-                "level": PracticeLevel(data["level"]),
-                "recent_attempts": recent_attempts,
-            }
+        attempt_fields = {item.name for item in fields(PracticeAttempt)}
+        recent_attempts = tuple(
+            PracticeAttempt(**{key: value for key, value in item.items() if key in attempt_fields})
+            for item in data.get("recent_attempts", ())
         )
+        practice_fields = {item.name for item in fields(cls)}
+        payload = {key: value for key, value in data.items() if key in practice_fields}
+        payload["level"] = PracticeLevel(data["level"])
+        payload["recent_attempts"] = recent_attempts
+        return cls(**payload)
 
 
 def summarize_practice(observations: list[tuple[float, PracticeObservation]]) -> ConceptPractice:
