@@ -10,7 +10,7 @@
         @click.stop="handleBrandClick"
       >
         <img
-          :src="props.collapsed ? '/icon/thought_mark.png' : '/icon/thought_logo.png'"
+          :src="appPath(props.collapsed ? 'icon/thought_mark.png' : 'icon/thought_logo.png')"
           alt=""
           class="brand-icon"
           :class="props.collapsed ? 'brand-icon--mark' : 'brand-icon--logo'"
@@ -285,6 +285,7 @@
 </template>
 
 <script setup>
+import { appPath } from '../utils/appPaths'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

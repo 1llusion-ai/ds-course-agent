@@ -2,8 +2,8 @@
   <div class="admin-shell">
     <aside class="admin-sidebar" aria-label="管理导航">
       <router-link to="/admin" class="admin-brand" aria-label="管理台首页">
-        <img class="admin-brand__logo" src="/icon/thought_logo.png" alt="数字力" />
-        <img class="admin-brand__mark" src="/icon/thought_mark.png" alt="数字力" />
+        <img class="admin-brand__logo" :src="appPath('icon/thought_logo.png')" alt="数字力" />
+        <img class="admin-brand__mark" :src="appPath('icon/thought_mark.png')" alt="数字力" />
       </router-link>
       <div class="admin-sidebar__label">管理工作区</div>
       <nav class="admin-nav">
@@ -49,6 +49,7 @@
 </template>
 
 <script setup>
+import { appPath } from '../utils/appPaths'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Back, DataAnalysis, Histogram, Moon, Sunny, Tickets, User, Document } from '@element-plus/icons-vue'

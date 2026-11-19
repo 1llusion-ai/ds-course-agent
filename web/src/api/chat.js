@@ -1,18 +1,6 @@
+import { appPath, redirectToLogin } from '../utils/appPaths'
 import client from './client'
 
-function redirectToLogin() {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  window.dispatchEvent(new CustomEvent('auth:unauthorized'))
-  const { pathname, search, hash } = window.location
-  if (pathname === '/login') {
-    return
-  }
-  const redirect = `${pathname}${search}${hash}`
-  window.location.assign(`/login?redirect=${encodeURIComponent(redirect)}`)
-}
 
 function dispatchSseFrame(target, frame) {
   const dataLines = frame
@@ -57,7 +45,8 @@ function createFetchSseStream(url, { method = 'GET', data, params } = {}) {
       }
 
       const query = new URLSearchParams(params || {}).toString()
-      const requestUrl = query ? `${url}?${query}` : url
+      const endpoint = appPath(url)
+      const requestUrl = query ? `${endpoint}?${query}` : endpoint
       const response = await fetch(requestUrl, request)
 
       if (!response.ok) {

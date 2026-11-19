@@ -1,27 +1,13 @@
+import { appPath, redirectToLogin } from '../utils/appPaths'
 import axios from 'axios'
 
 const client = axios.create({
-  baseURL: '/api',
+  baseURL: appPath('api'),
   timeout: 120000,  // 增加到120秒，首次请求需要加载embedding
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' }
 })
 
-function redirectToLogin() {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  window.dispatchEvent(new CustomEvent('auth:unauthorized'))
-
-  const { pathname, search, hash } = window.location
-  if (pathname === '/login') {
-    return
-  }
-
-  const redirect = `${pathname}${search}${hash}`
-  window.location.assign(`/login?redirect=${encodeURIComponent(redirect)}`)
-}
 
 client.interceptors.request.use(
   (config) => {

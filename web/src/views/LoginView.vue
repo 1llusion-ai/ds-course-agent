@@ -3,7 +3,7 @@
     <section class="login-panel" aria-labelledby="login-title">
       <div class="login-copy">
         <div class="login-brand">
-          <img src="/icon/thought_mark.png" alt="" />
+          <img :src="appPath('icon/thought_mark.png')" alt="" />
           <strong>“数字力”导学智能体</strong>
         </div>
         <h1>
@@ -77,6 +77,7 @@
 </template>
 
 <script setup>
+import { appPath } from '../utils/appPaths'
 import { nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
