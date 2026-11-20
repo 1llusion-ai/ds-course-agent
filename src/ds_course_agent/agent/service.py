@@ -563,7 +563,13 @@ class AgentService:
 
             if not result.has_results:
                 trace_step("tool.result", tool="course_rag_tool", status="no_results")
-                yield from iter_text_chunks(build_no_results_message(question, result.term_resolution))
+                yield from iter_text_chunks(
+                    build_no_results_message(
+                        question,
+                        result.term_resolution,
+                        course_name=route_state.context.course_name,
+                    )
+                )
                 return
 
             correction_notice = build_term_correction_notice(result.term_resolution)
@@ -600,6 +606,7 @@ class AgentService:
                     answer_question,
                     result.documents,
                     error=answer_exc,
+                    course_name=route_state.context.course_name,
                 )
                 if yielded:
                     yield "\n\n"

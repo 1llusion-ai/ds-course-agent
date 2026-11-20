@@ -84,12 +84,13 @@ class TestCourseRAGTool:
     def test_tool_returns_error_message_on_exception(self, mock_get_service):
         """测试异常情况下返回错误消息"""
         mock_service = MagicMock()
-        mock_service.retrieve.side_effect = Exception("测试异常")
+        mock_service.retrieve.side_effect = RuntimeError("internal endpoint /v1/chat/completions unavailable")
         mock_get_service.return_value = mock_service
 
         result = course_rag_tool.invoke("测试问题")
 
-        assert "错误" in result or "异常" in result or "error" in result.lower()
+        assert result == "课程资料暂时不可用，请稍后重试。"
+        assert "/v1/chat/completions" not in result
 
     @patch("ds_course_agent.tools.course_rag.get_rag_service")
     def test_tool_returns_no_results_message(self, mock_get_service):
@@ -281,6 +282,52 @@ class TestCourseRAGTool:
             and event["data"]["mode"] == "sync"
             for event in trace["events"]
         )
+
+    def test_extractive_fallback_survives_unavailable_course_catalog(self, monkeypatch):
+        monkeypatch.setattr(
+            course_rag_module,
+            "_course_catalog",
+            lambda: (_ for _ in ()).throw(OSError("catalog unavailable")),
+        )
+
+        result = course_rag_module.build_extractive_rag_fallback(
+            "问题",
+            [Document(page_content="教材片段", metadata={"source": "course.pdf"})],
+        )
+
+        assert "教材片段" in result
+        assert "catalog unavailable" not in result
+
+    @patch("ds_course_agent.tools.course_rag.get_rag_service")
+    def test_answer_survives_cache_identity_failure(self, mock_get_service, monkeypatch):
+        mock_service = MagicMock()
+        mock_service.retrieve.return_value = SimpleNamespace(
+            has_results=True,
+            formatted_context="context",
+            retrieval_query="问题",
+            term_resolution=None,
+            documents=[Document(page_content="教材片段", metadata={"book_page": 1})],
+        )
+        mock_service.answer_with_context.return_value = SimpleNamespace(answer="生成成功")
+        mock_get_service.return_value = mock_service
+        monkeypatch.setattr(
+            course_rag_module,
+            "_current_course_identity",
+            lambda: (_ for _ in ()).throw(OSError("catalog unavailable")),
+        )
+
+        assert course_rag_tool.invoke("问题") == "生成成功"
+        mock_service.answer_with_context.assert_called_once()
+
+    def test_cache_identity_does_not_swallow_programming_errors(self, monkeypatch):
+        monkeypatch.setattr(
+            course_rag_module,
+            "_current_course_identity",
+            lambda: (_ for _ in ()).throw(RuntimeError("programming error")),
+        )
+
+        with pytest.raises(RuntimeError, match="programming error"):
+            course_rag_module._current_course_identity_or_none()
 
     def test_source_uses_outline_number_when_chapter_metadata_drifts(self):
         """metadata 章字段错位时，来源展示应按 section_no 纠偏。"""

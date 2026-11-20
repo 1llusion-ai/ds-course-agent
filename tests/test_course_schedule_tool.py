@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import ds_course_agent.tools.course_schedule as course_schedule_module
 from ds_course_agent.tools._shared import course_scope
 from ds_course_agent.tools.course_schedule import _load_course_schedule, _resolve_schedule_query, course_schedule_tool
 
@@ -137,3 +138,19 @@ def test_unconfigured_schedule_names_the_bound_course():
 
     assert "《数字素养与技能导论》课程安排信息暂未配置" in result
     assert "数据科学导论" not in result
+
+
+def test_schedule_errors_do_not_expose_internal_paths(monkeypatch):
+    monkeypatch.setattr(
+        course_schedule_module,
+        "_course_catalog",
+        lambda: (_ for _ in ()).throw(
+            FileNotFoundError("course catalogue directory does not exist: /app/data/courses")
+        ),
+    )
+
+    with course_scope("data-science-intro"):
+        result = course_schedule_tool.invoke("下节课是什么时候？")
+
+    assert result == "课程安排暂时不可用，请稍后重试。"
+    assert "/app/data/courses" not in result

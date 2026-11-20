@@ -47,6 +47,25 @@ def _current_course_identity() -> tuple[str, str]:
     return str(manifest.course_id), manifest.revision
 
 
+def _current_course_identity_or_none() -> tuple[str, str] | None:
+    """Return the bound course identity when the catalogue is readable."""
+
+    try:
+        return _current_course_identity()
+    except (OSError, TypeError, ValueError) as exc:
+        _trace_answer_cache("rag.answer.cache_unavailable", error_type=type(exc).__name__)
+        return None
+
+
+def _current_course_display_name() -> str:
+    """Resolve a safe display label without making degraded responses fail."""
+
+    try:
+        return _current_course_manifest().display_name
+    except (OSError, TypeError, ValueError):
+        return "本课程"
+
+
 @lru_cache(maxsize=32)
 def _cached_source_chapters(course_id: CourseId, revision: str, toc_path: Path) -> dict[str, SectionInfo]:
     """Cache chapter titles and page coordinates by the complete course binding."""
@@ -57,7 +76,10 @@ def _cached_source_chapters(course_id: CourseId, revision: str, toc_path: Path) 
 def _source_chapters(metadata: dict) -> dict[str, SectionInfo]:
     """Resolve the source's course before reading any chapter or page metadata."""
     course_id = metadata.get("course_id") or get_current_course_id()
-    course = _course_catalog().get(course_id)
+    try:
+        course = _course_catalog().get(course_id)
+    except (OSError, TypeError, ValueError):
+        return {}
     if course is None or not course.toc_path:
         return {}
     try:
@@ -242,7 +264,7 @@ def build_extractive_rag_fallback(
     usable_docs = [doc for doc in (documents or []) if getattr(doc, "page_content", None)]
     sources = build_sources_from_documents(usable_docs)
 
-    display_name = str(course_name or _current_course_manifest().display_name).strip()
+    display_name = str(course_name or _current_course_display_name()).strip()
     lines = [
         "已检索到课程资料，但生成式回答服务暂时不可用。",
         "先给你可核验的教材片段，便于继续学习：",
@@ -312,7 +334,7 @@ def build_no_results_message(
         )
 
     _ = question
-    display_name = str(course_name or _current_course_manifest().display_name).strip()
+    display_name = str(course_name or _current_course_display_name()).strip()
     return (
         f"抱歉，在《{display_name}》课程资料中未找到与你问题直接相关的内容。\n"
         "建议你：\n"
@@ -356,9 +378,14 @@ def _normalize_answer_cache_question(question: str) -> str:
     return re.sub(r"\s+", "", str(question or "").lower())
 
 
-def _answer_cache_key(question: str, context: str) -> str:
+def _answer_cache_key(
+    question: str,
+    context: str,
+    *,
+    course_identity: tuple[str, str] | None = None,
+) -> str:
     context_hash = hashlib.sha256(str(context or "").encode("utf-8")).hexdigest()
-    course_id, revision = _current_course_identity()
+    course_id, revision = course_identity or _current_course_identity()
     raw = f"{course_id}\n{revision}\n{_normalize_answer_cache_question(question)}\n{context_hash}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -372,13 +399,22 @@ def _trace_answer_cache(stage: str, **data) -> None:
         pass
 
 
-def _get_cached_answer(question: str, context: str) -> str | None:
+def _get_cached_answer(
+    question: str,
+    context: str,
+    *,
+    course_identity: tuple[str, str] | None = None,
+) -> str | None:
     maxsize = _answer_cache_size()
     ttl = _answer_cache_ttl_seconds()
     if not _answer_cache_enabled() or maxsize <= 0 or ttl <= 0:
         return None
 
-    key = _answer_cache_key(question, context)
+    if course_identity is None:
+        course_identity = _current_course_identity_or_none()
+    if course_identity is None:
+        return None
+    key = _answer_cache_key(question, context, course_identity=course_identity)
     now = time.monotonic()
     with _ANSWER_CACHE_LOCK:
         cached = _ANSWER_CACHE.get(key)
@@ -395,13 +431,23 @@ def _get_cached_answer(question: str, context: str) -> str | None:
         return answer
 
 
-def _store_cached_answer(question: str, context: str, answer: str) -> None:
+def _store_cached_answer(
+    question: str,
+    context: str,
+    answer: str,
+    *,
+    course_identity: tuple[str, str] | None = None,
+) -> None:
     maxsize = _answer_cache_size()
     ttl = _answer_cache_ttl_seconds()
     if not _answer_cache_enabled() or maxsize <= 0 or ttl <= 0 or not str(answer or "").strip():
         return
 
-    key = _answer_cache_key(question, context)
+    if course_identity is None:
+        course_identity = _current_course_identity_or_none()
+    if course_identity is None:
+        return
+    key = _answer_cache_key(question, context, course_identity=course_identity)
     with _ANSWER_CACHE_LOCK:
         _ANSWER_CACHE[key] = (time.monotonic(), str(answer))
         _ANSWER_CACHE.move_to_end(key)
@@ -447,17 +493,26 @@ def course_rag_tool(question: str) -> str:
 
         if not evidence.has_results:
             trace_step("tool.result", tool="course_rag_tool", status="no_results")
-            no_results_message = build_no_results_message(
-                question,
-                evidence.term_resolution,
-                course_name=_current_course_manifest().display_name,
-            )
+            no_results_message = build_no_results_message(question, evidence.term_resolution)
             _warn_large_tool_result("course_rag_tool", no_results_message, status="no_results")
             return no_results_message
 
         correction_notice = build_term_correction_notice(evidence.term_resolution)
         answer_question = evidence.retrieval_query
-        cached_answer = _get_cached_answer(answer_question, evidence.context)
+        cache_identity = (
+            _current_course_identity_or_none()
+            if _answer_cache_enabled() and _answer_cache_size() > 0 and _answer_cache_ttl_seconds() > 0
+            else None
+        )
+        cached_answer = (
+            _get_cached_answer(
+                answer_question,
+                evidence.context,
+                course_identity=cache_identity,
+            )
+            if cache_identity is not None
+            else None
+        )
         if cached_answer is not None:
             trace_step("tool.result", tool="course_rag_tool", status="cache_hit")
             _warn_large_tool_result("course_rag_tool", cached_answer, status="cache_hit")
@@ -472,7 +527,13 @@ def course_rag_tool(question: str) -> str:
                 )
             trace_step("tool.result", tool="course_rag_tool", status="ok")
             _warn_large_tool_result("course_rag_tool", answer_result.answer, status="ok")
-            _store_cached_answer(answer_question, evidence.context, answer_result.answer)
+            if cache_identity is not None:
+                _store_cached_answer(
+                    answer_question,
+                    evidence.context,
+                    answer_result.answer,
+                    course_identity=cache_identity,
+                )
             return f"{correction_notice}{answer_result.answer}"
         except Exception as answer_exc:
             trace_answer_degraded(answer_exc, mode="sync")
@@ -480,14 +541,14 @@ def course_rag_tool(question: str) -> str:
                 answer_question,
                 list(evidence.documents),
                 error=answer_exc,
-                course_name=_current_course_manifest().display_name,
+                course_name=_current_course_display_name(),
             )
             trace_step("tool.result", tool="course_rag_tool", status="degraded")
             _warn_large_tool_result("course_rag_tool", fallback, status="degraded")
             return f"{correction_notice}{fallback}"
     except Exception as exc:
         trace_error("tool.invoke", exc, tool="course_rag_tool")
-        return f"检索过程中发生错误：{exc}。请稍后重试。"
+        return "课程资料暂时不可用，请稍后重试。"
 
 
 __all__ = [

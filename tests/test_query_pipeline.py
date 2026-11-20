@@ -934,7 +934,9 @@ def test_grounded_rag_stream_distinguishes_attempt_from_evidence_use(monkeypatch
         session_id="session-rag-empty",
         student_id="student-1",
         chat_history=[],
+        course_context=CourseContext("ai-literacy"),
     )
+    context.course_resources = QueryRouter.resolve_course(context.course_context)
     state = RouteState(
         student_id="student-1",
         session_id="session-rag-empty",
@@ -962,7 +964,7 @@ def test_grounded_rag_stream_distinguishes_attempt_from_evidence_use(monkeypatch
                 term_resolution=None,
             )
 
-    monkeypatch.setattr("ds_course_agent.tools.course_rag.get_rag_service", lambda: EmptyRagService())
+    monkeypatch.setattr("ds_course_agent.tools.course_rag.get_rag_service", lambda *_args: EmptyRagService())
 
     events = list(service._iter_grounded_rag_response(state))
 
@@ -972,7 +974,58 @@ def test_grounded_rag_stream_distinguishes_attempt_from_evidence_use(monkeypatch
     assert retrieval_event.used_retrieval is False
     assert retrieval_event.sources == ()
     assert retrieval_event.message == "未找到可用课程来源"
-    assert "未找到" in "".join(str(event) for event in events[1:])
+    content = "".join(str(event) for event in events[1:])
+    assert "未找到" in content
+    assert "《人工智能通识》" in content
+
+
+def test_grounded_rag_stream_fallback_uses_bound_course_name(monkeypatch):
+    from ds_course_agent.agent.routing import RouteState
+    from ds_course_agent.agent.service import AgentService
+
+    service = object.__new__(AgentService)
+    context = QueryContext(
+        original_query="什么是机器学习？",
+        normalized_query="什么是机器学习？",
+        session_id="session-rag-fallback-course",
+        student_id="student-1",
+        chat_history=[],
+        course_context=CourseContext("ai-literacy"),
+    )
+    context.course_resources = QueryRouter.resolve_course(context.course_context)
+    state = RouteState(
+        student_id="student-1",
+        session_id="session-rag-fallback-course",
+        history=None,
+        chat_history=[],
+        context=context,
+        decision=RouteDecision(
+            family=RouteFamily.LEARNING,
+            intent=RouteIntent.CONCEPT_QA,
+            execution_mode=ExecutionMode.GROUNDED_GENERATION,
+            confidence=0.8,
+            retrieval_policy=RetrievalPolicy.REQUIRED,
+        ),
+    )
+
+    class FailingAnswerService:
+        def retrieve(self, question, *, term_resolution_query=None):
+            return SimpleNamespace(
+                documents=[],
+                formatted_context="人工智能教材片段",
+                has_results=True,
+                retrieval_query=question,
+                term_resolution=None,
+            )
+
+        def stream_answer_with_context(self, *_args, **_kwargs):
+            raise RuntimeError("answer unavailable")
+
+    monkeypatch.setattr("ds_course_agent.tools.course_rag.get_rag_service", lambda *_args: FailingAnswerService())
+
+    content = "".join(str(event) for event in service._iter_grounded_rag_response(state))
+
+    assert "《人工智能通识》" in content
 
 
 def test_grounded_retrieval_failure_emits_degraded_result(monkeypatch):

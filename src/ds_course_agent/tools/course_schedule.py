@@ -379,7 +379,7 @@ def course_schedule_tool(query: str) -> str:
         return result
     except Exception as exc:
         trace_error("tool.invoke", exc, tool="course_schedule_tool")
-        return f"查询课程安排时出错：{exc}。请稍后重试。"
+        return "课程安排暂时不可用，请稍后重试。"
 
 
 __all__ = [

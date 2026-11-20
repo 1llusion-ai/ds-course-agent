@@ -42,13 +42,15 @@ services:
       - AUTH_DB_PATH=/app/var/auth.db
     networks:
       - rag-network
+    # Keep container health as liveness. The deployment script checks /readyz
+    # separately so an optional course resource cannot block the frontend.
     healthcheck:
       test:
         [
           "CMD",
           "python",
           "-c",
-          "import urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8000/api/readyz', timeout=5); raise SystemExit(0 if response.status == 200 else 1)",
+          "import urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5); raise SystemExit(0 if response.status == 200 else 1)",
         ]
       interval: 30s
       timeout: 10s
