@@ -2,7 +2,7 @@
   <section class="admin-page">
     <header class="admin-page__header">
       <div>
-        <h1>注册与注册码</h1>
+        <h1>注册管理</h1>
         <p class="admin-page__description">按班级或用途创建和管理注册码。</p>
       </div>
       <button type="button" class="admin-button admin-button--primary" @click="openInvitation()">

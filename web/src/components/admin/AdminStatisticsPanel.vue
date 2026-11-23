@@ -186,10 +186,6 @@
           <p v-if="!data.sources.length" class="admin-empty">所选范围暂无注册来源记录</p>
         </section>
       </template>
-      <p class="admin-note">
-        活跃指至少提问或提交练习一次；同一用户在全站去重。练习完成率按同批次已发布练习计算，回答状态仅覆盖已保存记录。
-      </p>
-      <p class="admin-note">{{ data.coverage_note }} · 截至 {{ formatDate(data.as_of) }}</p>
     </template>
     <section
       v-if="!detailed && (signalsLoading || signalsError || signalItems.length)"
@@ -219,7 +215,7 @@ import { Download } from '@element-plus/icons-vue'
 import { adminApi } from '../../api/admin'
 import { coursesApi } from '../../api/courses'
 import { useAdminResource } from '../../composables/useAdminResource'
-import { dateInputValue, errorMessage, formatDate, formatNumber, formatPercent } from '../../utils/admin'
+import { dateInputValue, errorMessage, formatNumber, formatPercent } from '../../utils/admin'
 import AdminActivityChart from './AdminActivityChart.vue'
 
 const props = defineProps({ detailed: Boolean })

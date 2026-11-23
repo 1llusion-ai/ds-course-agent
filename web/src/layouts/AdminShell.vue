@@ -65,7 +65,7 @@ const displayName = computed(() => authStore.user?.display_name || authStore.use
 const navigation = [
   { path: '/admin', label: '数据概览', icon: DataAnalysis },
   { path: '/admin/users', label: '账号管理', icon: User },
-  { path: '/admin/registration', label: '注册与注册码', icon: Tickets },
+  { path: '/admin/registration', label: '注册管理', icon: Tickets },
   { path: '/admin/statistics', label: '统计分析', icon: Histogram },
   { path: '/admin/audit', label: '操作记录', icon: Document }
 ]
