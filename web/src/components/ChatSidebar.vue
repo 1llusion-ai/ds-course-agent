@@ -132,7 +132,7 @@
           <span class="utility-entry__title">学习画像</span>
         </span>
       </button>
-      <button v-if="authStore.canViewAdmin" type="button" class="utility-entry" title="管理台" @click="router.push('/admin')">
+      <button v-if="authStore.isAdmin" type="button" class="utility-entry" title="管理台" @click="router.push('/admin')">
         <span class="utility-entry__icon"><el-icon><Setting /></el-icon></span>
         <span v-if="!props.collapsed" class="utility-entry__body"><span class="utility-entry__title">管理台</span></span>
       </button>

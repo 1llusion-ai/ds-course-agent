@@ -15,7 +15,7 @@ from ds_course_agent.api.auth.contracts import (
     Role,
     User,
 )
-from ds_course_agent.api.auth.deps import require_administrator, require_statistics_reader
+from ds_course_agent.api.auth.deps import require_administrator
 from ds_course_agent.api.auth.service import hash_password
 from ds_course_agent.api.course_context import course_catalog
 
@@ -206,7 +206,7 @@ async def statistics(
     start: date | None = None,
     end: date | None = None,
     course_id: str | None = None,
-    _actor: User = Depends(require_statistics_reader),
+    _actor: User = Depends(require_administrator),
 ):
     start, end = validate_period(start, end, course_id)
     return build_statistics(start, end, course_id)
@@ -217,7 +217,7 @@ async def export_statistics(
     start: date | None = None,
     end: date | None = None,
     course_id: str | None = None,
-    _actor: User = Depends(require_statistics_reader),
+    _actor: User = Depends(require_administrator),
 ):
     start, end = validate_period(start, end, course_id)
     return Response(

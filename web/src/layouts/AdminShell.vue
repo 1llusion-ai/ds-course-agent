@@ -62,17 +62,13 @@ const route = useRoute()
 const authStore = useAuthStore()
 const { isDarkTheme, toggleTheme } = useTheme()
 const displayName = computed(() => authStore.user?.display_name || authStore.user?.student_id || '管理账号')
-const navigation = computed(() => [
+const navigation = [
   { path: '/admin', label: '数据概览', icon: DataAnalysis },
-  ...(authStore.isAdmin
-    ? [
-        { path: '/admin/users', label: '账号管理', icon: User },
-        { path: '/admin/registration', label: '注册与注册码', icon: Tickets }
-      ]
-    : []),
+  { path: '/admin/users', label: '账号管理', icon: User },
+  { path: '/admin/registration', label: '注册与注册码', icon: Tickets },
   { path: '/admin/statistics', label: '统计分析', icon: Histogram },
-  ...(authStore.isAdmin ? [{ path: '/admin/audit', label: '操作记录', icon: Document }] : [])
-])
+  { path: '/admin/audit', label: '操作记录', icon: Document }
+]
 function isActive(path) {
   return path === '/admin' ? route.path === path : route.path.startsWith(path)
 }

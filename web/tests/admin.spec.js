@@ -35,7 +35,7 @@ const statistics = {
   timezone: 'Asia/Shanghai',
   as_of: '2026-11-05T02:00:00Z',
   coverage_note: '基于已保存记录统计',
-  accounts: { total: 24, active: 23, disabled: 1, new_users: 4, roles: { student: 22, observer: 1, admin: 1 } },
+  accounts: { total: 24, active: 23, disabled: 1, new_users: 4, roles: { student: 23, admin: 1 } },
   usage,
   previous: {
     start: '2026-09-07',
@@ -150,20 +150,16 @@ test('overview shows signal loading errors and retries independently', async ({ 
   expect(requests).toBe(2)
 })
 
-test('observer can view statistics but cannot enter account management', async ({ page }) => {
-  await mockAuth(page, 'observer')
-  let userRequests = 0
-  await page.route('**/api/admin/users**', (route) => {
-    userRequests++
-    return route.fulfill({ json: { items: [] } })
-  })
-  await page.goto('/admin/users')
-  await expect(page).toHaveURL(/\/admin$/)
-  await expect(page.getByRole('link', { name: '账号管理' })).toHaveCount(0)
-  await expect(page.getByRole('link', { name: '注册与注册码' })).toHaveCount(0)
-  await page.getByRole('link', { name: '统计分析', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '统计分析' })).toBeVisible()
-  expect(userRequests).toBe(0)
+test('overview hides the reminder section when there is nothing to act on', async ({ page }) => {
+  await mockAuth(page)
+  await page.route('**/api/admin/signals', (route) =>
+    route.fulfill({ json: { ...signals, invitations: { total: 0, expiring: 0 } } })
+  )
+  const response = page.waitForResponse('**/api/admin/signals')
+  await page.goto('/admin')
+  await response
+  await expect(page.getByRole('heading', { name: '提问趋势' })).toBeVisible()
+  await expect(page.getByRole('region', { name: '待关注' })).toHaveCount(0)
 })
 
 test('student cannot enter management pages or see the entry', async ({ page }) => {
@@ -204,10 +200,11 @@ test('account filters, pagination and permission changes send explicit payloads'
   await page.screenshot({ path: '../var/artifacts/playwright/admin-users.png', fullPage: true })
   await page.getByRole('link', { name: '查看详情' }).click()
   await expect(page.getByRole('heading', { name: 'Alice', exact: true })).toBeVisible()
-  await page.getByLabel('账号角色').selectOption('observer')
+  await expect(page.getByLabel('账号角色').locator('option')).toHaveText(['学生', '管理员'])
+  await page.getByLabel('账号角色').selectOption('admin')
   await page.getByRole('button', { name: '保存修改' }).click()
   await page.getByRole('button', { name: '确认', exact: true }).click()
-  await expect.poll(() => patch).toEqual({ display_name: 'Alice', role: 'observer' })
+  await expect.poll(() => patch).toEqual({ display_name: 'Alice', role: 'admin' })
   await expect(page.getByText('账号信息已更新。')).toBeVisible()
 })
 
@@ -247,18 +244,9 @@ test('password mismatch prevents user creation and reset request', async ({ page
 test('registration codes are visible and copyable after creation or recovery', async ({ page, context }) => {
   await mockAuth(page)
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
-  let policy = { mode: 'invite' }
   let codes = [invitation]
-  let policyWrite
   let inviteWrite
   let recoveryWrite
-  await page.route('**/api/admin/registration-policy', (route) => {
-    if (route.request().method() === 'PUT') {
-      policyWrite = route.request().postDataJSON()
-      policy = { ...policy, ...policyWrite }
-    }
-    return route.fulfill({ json: policy })
-  })
   await page.route('**/api/admin/invitations?**', (route) =>
     route.fulfill({ json: { items: codes, total: codes.length, page: 1, page_size: 20 } })
   )
@@ -287,11 +275,7 @@ test('registration codes are visible and copyable after creation or recovery', a
   await page.goto('/admin/registration')
   await expect(page.getByRole('heading', { name: '注册码', exact: true })).toBeVisible()
   await page.screenshot({ path: '../var/artifacts/playwright/admin-registration.png', fullPage: true })
-  await expect(page.getByLabel('全站账号容量')).toHaveCount(0)
-  await page.getByLabel('注册方式').selectOption('closed')
-  await page.getByRole('button', { name: '保存注册设置', exact: true }).click()
-  await page.getByRole('button', { name: '确认保存', exact: true }).click()
-  await expect.poll(() => policyWrite).toEqual({ mode: 'closed' })
+  await expect(page.getByRole('heading', { name: '注册设置' })).toHaveCount(0)
   await page.getByRole('button', { name: '创建注册码', exact: true }).click()
   const editor = page.getByRole('dialog', { name: '创建注册码', exact: true })
   await editor.getByLabel('名称', { exact: true }).fill('二班')
@@ -330,9 +314,6 @@ test('account and registration code lists confirm deletion and refresh their row
     users = []
     return route.fulfill({ status: 204 })
   })
-  await page.route('**/api/admin/registration-policy', (route) =>
-    route.fulfill({ json: { mode: 'invite' } })
-  )
   await page.route('**/api/admin/invitations?**', (route) =>
     route.fulfill({ json: { items: invitations, total: invitations.length, page: 1, page_size: 20 } })
   )
@@ -470,7 +451,7 @@ test('audit shows human readable actions and before-after details', async ({ pag
   await expect(page.getByText('修改账号', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '查看变更' }).click()
   await expect(page.locator('.admin-audit-changes')).toContainText('学生')
-  await expect(page.locator('.admin-audit-changes')).toContainText('统计查看者')
+  await expect(page.locator('.admin-audit-changes')).toContainText('原统计查看者')
 })
 
 for (const destination of ['/admin', '/admin/users?role=student']) {

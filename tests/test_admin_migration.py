@@ -85,6 +85,36 @@ def test_existing_invitation_remains_usable_and_can_restore_display_code(monkeyp
     assert restored.id == invitation.id and restored.code == code and restored.used_count == 2
 
 
+def test_observer_migrates_to_student_and_cannot_be_reassigned(monkeypatch, tmp_path):
+    import ds_course_agent.shared.config as config
+
+    path = tmp_path / "auth.db"
+    monkeypatch.setattr(config, "AUTH_DB_PATH", str(path))
+    SQLiteMigrationRunner(path).apply(AUTH_MIGRATIONS[:6])
+    with closing(sqlite3.connect(path)) as conn, conn:
+        conn.execute(
+            """INSERT INTO users(username,password_hash,student_id,display_name,role,session_version)
+               VALUES('reader','oldhash','student-1','Reader','observer',4),
+                     ('manager','adminhash','student-2','Manager','admin',2)"""
+        )
+
+    models.init_db()
+    models.init_db()
+    reader = models.get_user_by_username("reader")
+    assert reader.role == Role.STUDENT and reader.session_version == 5
+    assert reader.student_id == "student-1" and reader.password_hash == "oldhash"
+    manager = models.get_user_by_username("manager")
+    assert manager.role == Role.ADMIN and manager.session_version == 2
+    with closing(sqlite3.connect(path)) as conn, conn:
+        with pytest.raises(sqlite3.IntegrityError, match="unsupported account role"):
+            conn.execute("UPDATE users SET role='observer' WHERE username='reader'")
+        with pytest.raises(sqlite3.IntegrityError, match="unsupported account role"):
+            conn.execute(
+                """INSERT INTO users(username,password_hash,student_id,display_name,role)
+                   VALUES('another','hash','student-3','Another','observer')"""
+            )
+
+
 def test_admin_command_defaults_to_no_mutation_and_can_read_explicit_legacy_env(monkeypatch, tmp_path):
     import ds_course_agent.shared.config as config
 

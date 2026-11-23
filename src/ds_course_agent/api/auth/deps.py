@@ -53,9 +53,3 @@ async def require_administrator(user: User = Depends(get_current_user)) -> User:
     if user.role != Role.ADMIN:
         raise HTTPException(403, "需要管理员权限")
     return user
-
-
-async def require_statistics_reader(user: User = Depends(get_current_user)) -> User:
-    if user.role not in {Role.ADMIN, Role.OBSERVER}:
-        raise HTTPException(403, "需要统计查看权限")
-    return user

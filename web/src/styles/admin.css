@@ -380,6 +380,17 @@ html.theme-dark .admin-brand__mark {
 .admin-metric:first-child .admin-metric__value {
   color: var(--admin-accent);
 }
+.admin-signals {
+  display: grid;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--admin-border);
+}
+.admin-signals h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
 .admin-signal-list {
   list-style: none;
   margin: 0;

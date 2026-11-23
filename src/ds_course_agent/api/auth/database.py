@@ -82,6 +82,20 @@ AUTH_MIGRATIONS = (
         ),
     ),
     Migration(6, "remove_registration_capacity", ("ALTER TABLE registration_policy DROP COLUMN max_users",)),
+    Migration(
+        7,
+        "restrict_account_roles",
+        (
+            """UPDATE users SET role='student', session_version=session_version+1,
+               updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE role='observer'""",
+            """CREATE TRIGGER users_require_role_on_insert BEFORE INSERT ON users
+               WHEN NEW.role NOT IN ('student','admin')
+               BEGIN SELECT RAISE(ABORT, 'unsupported account role'); END""",
+            """CREATE TRIGGER users_require_role_on_update BEFORE UPDATE OF role ON users
+               WHEN NEW.role NOT IN ('student','admin')
+               BEGIN SELECT RAISE(ABORT, 'unsupported account role'); END""",
+        ),
+    ),
 )
 
 

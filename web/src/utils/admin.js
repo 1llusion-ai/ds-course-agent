@@ -1,6 +1,6 @@
 import { ElMessageBox } from 'element-plus'
 
-export const roleLabels = { student: '学生', observer: '统计查看者', admin: '管理员' }
+export const roleLabels = { student: '学生', admin: '管理员' }
 export const inviteStatusLabels = { active: '可用', disabled: '已停用', expired: '已过期' }
 
 export function formatDate(value, options = {}) {
@@ -64,8 +64,7 @@ export function dateInputValue(date = new Date()) {
 
 export const roleDescription = {
   student: '使用课程问答与练习，查看自己的学习记录。',
-  observer: '在学生权限基础上，查看和导出全站及各课程的汇总统计。',
-  admin: '管理账号、角色、注册设置和注册码，查看个人使用汇总与操作记录。'
+  admin: '管理账号、角色和注册码，查看个人使用汇总与操作记录。'
 }
 export const registrationSourceLabels = {
   legacy: '历史账号 · 来源未知',

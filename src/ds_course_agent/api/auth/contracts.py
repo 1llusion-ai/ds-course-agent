@@ -10,7 +10,6 @@ INVITATION_CODE_MAX_LENGTH = 256
 
 class Role(str, Enum):
     STUDENT = "student"
-    OBSERVER = "observer"
     ADMIN = "admin"
 
 

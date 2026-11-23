@@ -133,7 +133,7 @@ python scripts/create_user.py alice 'secret-password' student_001 'Alice'
 
 然后访问 <http://127.0.0.1:5185>。
 
-管理端入口为 `/admin`，支持账号与角色、注册码、注册设置和使用统计。新安装默认关闭注册；
+管理端入口为 `/admin`，支持账号与角色、注册码和使用统计。新安装默认关闭注册；
 管理员初始化及旧注册码迁移见 [管理台说明](docs/admin_console.md)。
 
 ## 常用命令

@@ -35,10 +35,7 @@ def accounts(monkeypatch, tmp_path):
     student = models.create_managed_user(
         actor_id=root.id, username="student", display_name="学生", password_hash=password, role=Role.STUDENT
     )
-    observer = models.create_managed_user(
-        actor_id=root.id, username="observer", display_name="观察者", password_hash=password, role=Role.OBSERVER
-    )
-    return root, student, observer
+    return root, student
 
 
 def login(name="root"):
@@ -51,24 +48,22 @@ def login(name="root"):
 def test_role_matrix_and_no_secret_projection(accounts):
     assert TestClient(app).get("/api/admin/users").status_code == 401
     student = login("student")
-    observer = login("observer")
     admin = login()
-    for client in (student, observer):
-        for path in ("users", "registration-policy", "invitations", "audit"):
-            assert client.get("/api/admin/" + path).status_code == 403
-        for path in ("users/1", "invitations/1"):
-            assert client.delete("/api/admin/" + path).status_code == 403
-        assert (
-            client.post(
-                "/api/admin/users",
-                json={"username": "bad", "display_name": "bad", "password": "test-password", "role": "admin"},
-            ).status_code
-            == 403
-        )
+    for path in ("users", "registration-policy", "invitations", "audit"):
+        assert student.get("/api/admin/" + path).status_code == 403
+    for path in ("users/1", "invitations/1"):
+        assert student.delete("/api/admin/" + path).status_code == 403
+    assert (
+        student.post(
+            "/api/admin/users",
+            json={"username": "bad", "display_name": "bad", "password": "test-password", "role": "admin"},
+        ).status_code
+        == 403
+    )
     assert student.get("/api/admin/statistics").status_code == 403
     assert student.get("/api/admin/statistics/export").status_code == 403
-    assert observer.get("/api/admin/statistics").status_code == 200
-    assert observer.get("/api/admin/statistics/export").status_code == 200
+    assert admin.get("/api/admin/statistics").status_code == 200
+    assert admin.get("/api/admin/statistics/export").status_code == 200
     response = admin.get("/api/admin/users", params={"q": "student"})
     assert response.status_code == 200
     assert response.json()["total"] == 1
@@ -80,9 +75,7 @@ def test_role_matrix_and_no_secret_projection(accounts):
 
 def test_overview_signals_are_admin_only(accounts):
     assert TestClient(app).get("/api/admin/signals").status_code == 401
-    student, observer = login("student"), login("observer")
-    for client in (student, observer):
-        assert client.get("/api/admin/signals").status_code == 403
+    assert login("student").get("/api/admin/signals").status_code == 403
     admin = login()
     payload = admin.get("/api/admin/signals").json()
     assert set(payload) == {"invitations", "answers"}
@@ -90,7 +83,7 @@ def test_overview_signals_are_admin_only(accounts):
 
 
 def test_account_changes_revoke_old_sessions_and_protect_last_admin(accounts):
-    root, student, _ = accounts
+    root, student = accounts
     admin = login()
     user = login("student")
     assert admin.patch(f"/api/admin/users/{root.id}", json={"role": "student"}).status_code == 409
@@ -102,7 +95,8 @@ def test_account_changes_revoke_old_sessions_and_protect_last_admin(accounts):
     assert admin.patch(f"/api/admin/users/{student.id}", json={"status": "active"}).status_code == 200
     assert user.get("/api/auth/me").status_code == 401
     user = login("student")
-    assert admin.patch(f"/api/admin/users/{student.id}", json={"role": "observer"}).status_code == 200
+    assert admin.patch(f"/api/admin/users/{student.id}", json={"role": "observer"}).status_code == 422
+    assert admin.patch(f"/api/admin/users/{student.id}", json={"role": "admin"}).status_code == 200
     assert user.get("/api/admin/statistics").status_code == 401
     user = login("student")
     assert user.get("/api/admin/statistics").status_code == 200
@@ -209,7 +203,7 @@ def test_invitation_lifecycle_and_atomic_failed_registration(accounts):
 
 
 def test_delete_account_and_invitation_preserves_history(accounts):
-    root, _, _ = accounts
+    root, _ = accounts
     admin = login()
     assert admin.delete(f"/api/admin/users/{root.id}").status_code == 409
     assert admin.put("/api/admin/registration-policy", json={"mode": "invite"}).status_code == 200
@@ -253,7 +247,7 @@ def test_delete_account_and_invitation_preserves_history(accounts):
 
 
 def test_parallel_registration_has_no_site_limit(accounts):
-    root, _, _ = accounts
+    root, _ = accounts
     registration.update_registration_mode(actor_id=root.id, mode=RegistrationMode.INVITE)
     invitation, code = registration.create_invitation(actor_id=root.id, name="parallel", note="", expires_at=None)
     assert len(code) == 32
@@ -281,7 +275,7 @@ def test_origin_check_rejects_foreign_cookie_write(accounts):
 
 
 def test_admin_failure_rolls_back_if_audit_write_fails(accounts, monkeypatch):
-    root, student, _ = accounts
+    root, student = accounts
 
     def fail(*args, **kwargs):
         raise RuntimeError("disk full")

@@ -9,7 +9,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from ds_course_agent.api.auth import models, registration
-from ds_course_agent.api.auth.contracts import User
+from ds_course_agent.api.auth.contracts import Role, User
 from ds_course_agent.api.course_context import course_catalog
 from ds_course_agent.api.session_statistics import ChatFact, ChatFacts, read_chat_facts
 from ds_course_agent.assessment.statistics import AssessmentFact, read_assessment_facts
@@ -193,7 +193,7 @@ def build_statistics(start: date, end: date, course_id: str | None = None) -> di
             "active": sum(u.status == "active" for u in users),
             "disabled": sum(u.status == "disabled" for u in users),
             "new_users": sum(window.includes(u.created_at) for u in users),
-            "roles": {role: sum(u.role == role for u in users) for role in ("student", "observer", "admin")},
+            "roles": {role.value: sum(u.role == role for u in users) for role in Role},
         },
         "usage": usage,
         "previous": {

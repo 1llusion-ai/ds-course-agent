@@ -3,43 +3,17 @@
     <header class="admin-page__header">
       <div>
         <h1>注册与注册码</h1>
-        <p class="admin-page__description">控制注册入口，按班级或用途发放邀请。</p>
+        <p class="admin-page__description">按班级或用途创建和管理注册码。</p>
       </div>
       <button type="button" class="admin-button admin-button--primary" @click="openInvitation()">
         <el-icon aria-hidden="true"><Plus /></el-icon>
         创建注册码
       </button>
     </header>
-    <p v-if="policyError || listError || actionError" class="admin-error" role="alert">
-      {{ policyError || listError || actionError }}
-      <button v-if="policyError || listError" class="admin-link" type="button" @click="reload">重新加载</button>
+    <p v-if="listError || actionError" class="admin-error" role="alert">
+      {{ listError || actionError }}
+      <button v-if="listError" class="admin-link" type="button" @click="loadInvitations">重新加载</button>
     </p>
-    <section class="admin-card" aria-labelledby="registration-policy-title">
-      <div class="admin-card__header">
-        <div>
-          <h2 id="registration-policy-title">注册设置</h2>
-          <p>关闭注册只影响新账号，已有账号可以正常登录。</p>
-        </div>
-      </div>
-      <p v-if="policyLoading" class="admin-loading">正在加载注册设置…</p>
-      <form v-else-if="policy" class="admin-form" @submit.prevent="savePolicy">
-        <div class="admin-form-grid">
-          <label class="admin-field">
-            注册方式
-            <select v-model="policyForm.mode" class="admin-select">
-              <option v-if="policy.mode === 'open'" value="open" disabled>当前为开发环境开放注册</option>
-              <option value="invite">凭注册码注册</option>
-              <option value="closed">关闭注册</option>
-            </select>
-          </label>
-        </div>
-        <div class="admin-actions">
-          <button class="admin-button" type="submit" :disabled="savingPolicy || policyForm.mode === 'open'">
-            {{ savingPolicy ? '保存中…' : '保存注册设置' }}
-          </button>
-        </div>
-      </form>
-    </section>
     <section class="admin-card" aria-labelledby="invitations-title">
       <div class="admin-card__header">
         <div>
@@ -212,7 +186,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { adminApi } from '../../api/admin'
@@ -222,19 +196,11 @@ import AdminPagination from '../../components/admin/AdminPagination.vue'
 
 const page = ref(1)
 const {
-  data: policy,
-  loading: policyLoading,
-  error: policyError,
-  load: loadPolicy
-} = useAdminResource(adminApi.registrationPolicy)
-const {
   data: invitations,
   loading: listLoading,
   error: listError,
   load: loadInvitations
 } = useAdminResource(() => adminApi.invitations({ page: page.value, page_size: 20 }))
-const policyForm = reactive({ mode: 'invite' })
-const savingPolicy = ref(false)
 const actionError = ref('')
 const changingId = ref(null)
 const editorVisible = ref(false)
@@ -254,38 +220,9 @@ const {
 } = useAdminResource(() =>
   adminApi.invitationUses(selectedInvitation.value.id, { page: usesPage.value, page_size: 20 })
 )
-watch(policy, (value) => {
-  if (value) policyForm.mode = value.mode
-})
-function reload() {
-  loadPolicy()
-  loadInvitations()
-}
 function changePage(value) {
   page.value = value
   loadInvitations()
-}
-async function savePolicy() {
-  actionError.value = ''
-  try {
-    await ElMessageBox.confirm(
-      `将注册方式设为「${policyForm.mode === 'closed' ? '关闭注册' : '凭注册码注册'}」？`,
-      '保存注册设置',
-      { confirmButtonText: '确认保存', cancelButtonText: '取消', type: 'warning' }
-    )
-  } catch {
-    return
-  }
-  savingPolicy.value = true
-  try {
-    await adminApi.updateRegistrationPolicy({ ...policyForm })
-    ElMessage.success('注册设置已更新。')
-    await loadPolicy()
-  } catch (cause) {
-    actionError.value = errorMessage(cause)
-  } finally {
-    savingPolicy.value = false
-  }
 }
 function shanghaiLocalInput(value) {
   if (!value) return ''
@@ -394,5 +331,5 @@ function changeUsesPage(value) {
   usesPage.value = value
   loadUses()
 }
-onMounted(reload)
+onMounted(loadInvitations)
 </script>

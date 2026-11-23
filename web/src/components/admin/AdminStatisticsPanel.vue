@@ -56,31 +56,6 @@
       课程列表加载失败，仍可查看全部课程统计。
       <button class="admin-link" type="button" @click="loadCourses">重试</button>
     </p>
-    <section
-      v-if="!detailed && isAdmin"
-      class="admin-card admin-signals"
-      aria-labelledby="signals-title"
-    >
-      <div class="admin-card__header">
-        <div>
-          <h2 id="signals-title">待关注</h2>
-          <p>注册码到期与回答失败提醒。</p>
-        </div>
-      </div>
-      <p v-if="signalsLoading" class="admin-note" role="status">正在加载提醒…</p>
-      <p v-else-if="signalsError" class="admin-error" role="alert">
-        提醒加载失败，请重试。
-        <button class="admin-link" type="button" @click="loadSignals">重试</button>
-      </p>
-      <ul v-else-if="signalItems.length" class="admin-signal-list">
-        <li v-for="item in signalItems" :key="item.text" class="admin-signal" :class="`admin-signal--${item.tone}`">
-          <span class="admin-signal__dot" aria-hidden="true"></span>
-          <span class="admin-signal__text">{{ item.text }}</span>
-          <router-link v-if="item.to" :to="item.to" class="admin-link">去处理 →</router-link>
-        </li>
-      </ul>
-      <p v-else-if="signals" class="admin-note">暂无待关注事项，回答状态仅反映已保存记录。</p>
-    </section>
     <div v-if="loading" class="admin-loading" role="status">正在汇总数据…</div>
     <template v-else-if="data">
       <div class="admin-metrics">
@@ -216,6 +191,25 @@
       </p>
       <p class="admin-note">{{ data.coverage_note }} · 截至 {{ formatDate(data.as_of) }}</p>
     </template>
+    <section
+      v-if="!detailed && (signalsLoading || signalsError || signalItems.length)"
+      class="admin-signals"
+      aria-labelledby="signals-title"
+    >
+      <h2 id="signals-title">待关注</h2>
+      <p v-if="signalsLoading" class="admin-note" role="status">正在加载提醒…</p>
+      <p v-else-if="signalsError" class="admin-error" role="alert">
+        提醒加载失败，请重试。
+        <button class="admin-link" type="button" @click="loadSignals">重试</button>
+      </p>
+      <ul v-else-if="signalItems.length" class="admin-signal-list">
+        <li v-for="item in signalItems" :key="item.text" class="admin-signal" :class="`admin-signal--${item.tone}`">
+          <span class="admin-signal__dot" aria-hidden="true"></span>
+          <span class="admin-signal__text">{{ item.text }}</span>
+          <router-link v-if="item.to" :to="item.to" class="admin-link">去处理 →</router-link>
+        </li>
+      </ul>
+    </section>
   </section>
 </template>
 
@@ -225,13 +219,10 @@ import { Download } from '@element-plus/icons-vue'
 import { adminApi } from '../../api/admin'
 import { coursesApi } from '../../api/courses'
 import { useAdminResource } from '../../composables/useAdminResource'
-import { useAuthStore } from '../../stores/auth'
 import { dateInputValue, errorMessage, formatDate, formatNumber, formatPercent } from '../../utils/admin'
 import AdminActivityChart from './AdminActivityChart.vue'
 
 const props = defineProps({ detailed: Boolean })
-const authStore = useAuthStore()
-const isAdmin = computed(() => authStore.isAdmin)
 const period = ref('30')
 const filters = reactive({ start: '', end: '', course_id: '' })
 const appliedFilters = ref({})
@@ -297,7 +288,6 @@ const accountRows = computed(() => [
   { label: '账号总数', value: data.value.accounts.total },
   { label: '正常 / 已停用', value: `${data.value.accounts.active} / ${data.value.accounts.disabled}` },
   { label: '学生', value: data.value.accounts.roles.student },
-  { label: '统计查看者', value: data.value.accounts.roles.observer },
   { label: '管理员', value: data.value.accounts.roles.admin }
 ])
 const usageRows = computed(() => [
@@ -376,6 +366,6 @@ onMounted(() => {
   changePeriod()
   applyFilters()
   loadCourses()
-  if (!props.detailed && authStore.isAdmin) loadSignals()
+  if (!props.detailed) loadSignals()
 })
 </script>

@@ -18,7 +18,7 @@
         </div>
       </section>
 
-      <section v-if="authStore.canViewAdmin" class="settings-group" aria-labelledby="management-settings-title">
+      <section v-if="authStore.isAdmin" class="settings-group" aria-labelledby="management-settings-title">
         <h2 id="management-settings-title">管理</h2>
         <div class="settings-list">
           <div class="settings-row">

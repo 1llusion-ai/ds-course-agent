@@ -241,7 +241,7 @@ async function perform(operation, message, afterSuccess = load) {
         throw cause
       }
       if (!authStore.isAdmin) {
-        await router.replace(authStore.canViewAdmin ? '/admin' : '/chat')
+        await router.replace('/chat')
         return
       }
     }

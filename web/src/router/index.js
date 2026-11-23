@@ -18,11 +18,11 @@ const routes = [
     meta: { requiresAuth: true, management: true },
     children: [
       { path: '', name: 'AdminOverview', component: () => import('../views/admin/AdminOverviewView.vue') },
-      { path: 'users', name: 'AdminUsers', component: () => import('../views/admin/AdminUsersView.vue'), meta: { adminOnly: true } },
-      { path: 'users/:userId', name: 'AdminUser', component: () => import('../views/admin/AdminUserView.vue'), meta: { adminOnly: true } },
-      { path: 'registration', name: 'AdminRegistration', component: () => import('../views/admin/AdminRegistrationView.vue'), meta: { adminOnly: true } },
+      { path: 'users', name: 'AdminUsers', component: () => import('../views/admin/AdminUsersView.vue') },
+      { path: 'users/:userId', name: 'AdminUser', component: () => import('../views/admin/AdminUserView.vue') },
+      { path: 'registration', name: 'AdminRegistration', component: () => import('../views/admin/AdminRegistrationView.vue') },
       { path: 'statistics', name: 'AdminStatistics', component: () => import('../views/admin/AdminStatisticsView.vue') },
-      { path: 'audit', name: 'AdminAudit', component: () => import('../views/admin/AdminAuditView.vue'), meta: { adminOnly: true } }
+      { path: 'audit', name: 'AdminAudit', component: () => import('../views/admin/AdminAuditView.vue') }
     ]
   },
   {
@@ -72,8 +72,7 @@ router.beforeEach(async (to) => {
     }
   }
 
-  if (to.matched.some(record => record.meta.management) && !authStore.canViewAdmin) return '/chat'
-  if (to.matched.some(record => record.meta.adminOnly) && !authStore.isAdmin) return '/admin'
+  if (to.matched.some(record => record.meta.management) && !authStore.isAdmin) return '/chat'
 
   return true
 })

@@ -139,7 +139,7 @@ const changeRows = computed(() => {
 })
 function fieldValue(key, value) {
   if (value == null) return key === 'expires_at' && value === null ? '长期有效' : '—'
-  if (key === 'role') return roleLabels[value] || value
+  if (key === 'role') return value === 'observer' ? '原统计查看者' : roleLabels[value] || value
   if (key === 'status') return { ...inviteStatusLabels, active: '正常', disabled: '已停用' }[value] || value
   if (key === 'mode') return { invite: '凭注册码注册', closed: '关闭注册', open: '开放注册' }[value] || value
   if (key === 'max_users' || key === 'max_uses') return value === 0 ? '不限' : String(value)
