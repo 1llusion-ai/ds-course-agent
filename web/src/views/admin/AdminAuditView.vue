@@ -3,7 +3,7 @@
     <header class="admin-page__header">
       <div>
         <h1>操作记录</h1>
-        <p class="admin-page__description">追溯账号、权限、注册设置和邀请码的管理变更。</p>
+        <p class="admin-page__description">追溯账号、权限、注册设置和注册码的管理变更。</p>
       </div>
     </header>
     <form class="admin-toolbar" @submit.prevent="search">
@@ -101,8 +101,8 @@ const actionLabels = {
   'account.update': '修改账号',
   'account.password_reset': '重置密码',
   'account.revoke_sessions': '撤销登录',
-  'invitation.create': '创建邀请码',
-  'invitation.update': '修改邀请码',
+  'invitation.create': '创建注册码',
+  'invitation.update': '修改注册码',
   'registration.update': '修改注册设置',
   'registration.import_legacy': '迁移注册配置',
   'account.provision': '本地创建或更新账号',
@@ -122,7 +122,7 @@ const fieldLabels = {
   enabled: '启用',
   used_count: '已使用次数',
   created_at: '创建时间',
-  code_hint: '邀请码标识'
+  code_hint: '注册码标识'
 }
 const changeRows = computed(() => {
   if (!selectedEntry.value) return []
@@ -139,7 +139,7 @@ function fieldValue(key, value) {
   if (value == null) return key === 'expires_at' && value === null ? '长期有效' : '—'
   if (key === 'role') return roleLabels[value] || value
   if (key === 'status') return { ...inviteStatusLabels, active: '正常', disabled: '已停用' }[value] || value
-  if (key === 'mode') return { invite: '邀请注册', closed: '关闭注册', open: '开放注册' }[value] || value
+  if (key === 'mode') return { invite: '凭注册码注册', closed: '关闭注册', open: '开放注册' }[value] || value
   if (key === 'max_users' || key === 'max_uses') return value === 0 ? '不限' : String(value)
   if (key === 'created_at' || key === 'expires_at') return formatDate(value)
   if (typeof value === 'boolean') return value ? '是' : '否'

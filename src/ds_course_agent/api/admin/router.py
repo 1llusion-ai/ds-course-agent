@@ -147,7 +147,7 @@ async def create_invitation(data: InvitationRequest, actor: User = Depends(requi
         name=data.name,
         note=data.note,
         expires_at=data.expires_at.isoformat() if data.expires_at else None,
-        max_uses=data.max_uses,
+        code=data.code,
     )
     return {"invitation": _invitation(invitation), "code": code}
 

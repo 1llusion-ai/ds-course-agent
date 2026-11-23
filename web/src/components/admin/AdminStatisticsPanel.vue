@@ -64,7 +64,7 @@
       <div class="admin-card__header">
         <div>
           <h2 id="signals-title">待关注</h2>
-          <p>容量、邀请码与回答状态的自动提醒。</p>
+          <p>容量、注册码与回答状态的自动提醒。</p>
         </div>
       </div>
       <p v-if="signalsLoading" class="admin-note" role="status">正在加载提醒…</p>
@@ -187,7 +187,7 @@
           <div class="admin-card__header">
             <div>
               <h2 id="source-statistics-title">注册来源</h2>
-              <p>按邀请码或注册方式查看新增账号及后续活跃情况</p>
+              <p>按注册码或注册方式查看新增账号及后续活跃情况</p>
             </div>
           </div>
           <div class="admin-table-wrap">
@@ -297,15 +297,8 @@ const signalItems = computed(() => {
       })
     }
   }
-  if (payload.invitations.exhausted) {
-    items.push({
-      tone: 'warn',
-      text: `${payload.invitations.exhausted} 个邀请码次数已用尽，需要时请提高上限或新建。`,
-      to: '/admin/registration'
-    })
-  }
   if (payload.invitations.expiring) {
-    items.push({ tone: 'warn', text: `${payload.invitations.expiring} 个邀请码将在 7 天内过期。`, to: '/admin/registration' })
+    items.push({ tone: 'warn', text: `${payload.invitations.expiring} 个注册码将在 7 天内过期。`, to: '/admin/registration' })
   }
   const answers = payload.answers
   if (answers.errors >= 5) {

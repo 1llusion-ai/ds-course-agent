@@ -93,7 +93,7 @@ test('invalid invite code shows a clear message', async ({ page }) => {
   await page.route('**/api/auth/register', route => route.fulfill({
     status: 403,
     contentType: 'application/json',
-    json: { detail: '需要有效的班级邀请码才能注册。' }
+    json: { detail: '需要有效的注册码才能注册。' }
   }))
 
   await page.goto('/register')
@@ -103,7 +103,7 @@ test('invalid invite code shows a clear message', async ({ page }) => {
   await page.locator('#register-invite-code').fill('wrong-code')
   await page.getByRole('button', { name: '注册' }).click()
 
-  await expect(page.getByText('请输入有效的班级邀请码，请向老师获取。')).toBeVisible()
+  await expect(page.getByText('请输入有效的注册码，请向老师获取。')).toBeVisible()
   await expect(page).toHaveURL(/\/register$/)
 })
 

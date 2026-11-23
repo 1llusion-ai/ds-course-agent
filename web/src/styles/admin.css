@@ -513,16 +513,14 @@ html.theme-dark .admin-brand__mark {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
-.admin-code {
-  padding: 18px;
-  margin: 18px 0;
+.admin-invitation-code {
+  display: block;
+  max-width: 32ch;
+  margin-top: 4px;
   color: var(--admin-accent);
-  background: var(--admin-accent-soft);
-  border-radius: 8px;
   overflow-wrap: anywhere;
+  white-space: break-spaces;
   font-family: ui-monospace, monospace;
-  font-size: 18px;
-  letter-spacing: 0.06em;
   user-select: all;
 }
 .admin-chart {

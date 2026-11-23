@@ -64,12 +64,12 @@
             />
           </el-form-item>
 
-          <el-form-item v-if="policy.invite_required" label="班级邀请码" prop="inviteCode" for="register-invite-code" :show-message="false">
+          <el-form-item v-if="policy.invite_required" label="注册码" prop="inviteCode" for="register-invite-code" :show-message="false">
             <el-input
               id="register-invite-code"
               v-model.trim="form.inviteCode"
               autocomplete="off"
-              placeholder="如需邀请码，请输入老师提供的代码"
+              placeholder="请输入老师提供的注册码"
               size="large"
             />
           </el-form-item>
@@ -200,7 +200,7 @@ async function handleRegister() {
         ? '本班级注册人数已达到上限，请联系管理员。'
         : '该用户名已被使用，请换一个试试。'
       : status === 403
-        ? '请输入有效的班级邀请码，请向老师获取。'
+        ? '请输入有效的注册码，请向老师获取。'
         : status === 503
           ? '当前暂未开放注册，请联系管理员。'
           : status === 422
@@ -215,7 +215,7 @@ function getValidationMessage() {
   if (form.password.length < 8) return '密码至少需要 8 位字符。'
   if (!form.confirmPassword) return '请再次输入密码。'
   if (form.password !== form.confirmPassword) return '两次输入的密码不一致，请重新确认。'
-  if (policy.value?.invite_required && !form.inviteCode.trim()) return '请输入有效的班级邀请码。'
+  if (policy.value?.invite_required && !form.inviteCode.trim()) return '请输入有效的注册码。'
   return ''
 }
 

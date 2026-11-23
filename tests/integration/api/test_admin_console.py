@@ -85,7 +85,7 @@ def test_overview_signals_are_admin_only(accounts):
     payload = admin.get("/api/admin/signals").json()
     assert set(payload) == {"capacity", "invitations", "answers"}
     assert payload["capacity"] == {"max_users": 0, "total_users": 3, "remaining": None}
-    assert payload["invitations"] == {"total": 0, "expiring": 0, "exhausted": 0}
+    assert payload["invitations"] == {"total": 0, "expiring": 0}
 
 
 def test_account_changes_revoke_old_sessions_and_protect_last_admin(accounts):
@@ -132,15 +132,20 @@ def test_self_password_change_keeps_current_browser_only(accounts):
 
 def test_invitation_lifecycle_and_atomic_failed_registration(accounts):
     admin = login()
-    assert admin.put("/api/admin/registration-policy", json={"mode": "invite", "max_users": 5}).status_code == 200
-    response = admin.post("/api/admin/invitations", json={"name": "一班", "note": "2026", "max_uses": 1})
+    assert admin.put("/api/admin/registration-policy", json={"mode": "invite", "max_users": 6}).status_code == 200
+    code = "数据科学-A1"
+    response = admin.post("/api/admin/invitations", json={"name": "一班", "note": "2026", "code": f" {code} "})
     assert response.status_code == 201
-    code = response.json()["code"]
+    assert response.json()["code"] == code
     invitation_id = response.json()["invitation"]["id"]
-    assert code not in admin.get("/api/admin/invitations").text
+    duplicate_code = admin.post("/api/admin/invitations", json={"name": "二班", "code": code})
+    assert duplicate_code.status_code == 409 and duplicate_code.json()["detail"] == "该注册码已存在"
+    assert response.json()["invitation"]["code"] == code
+    assert admin.get("/api/admin/invitations").json()["items"][0]["code"] == code
     assert code not in admin.get("/api/admin/audit").text
     client = TestClient(app)
-    assert client.get("/api/auth/registration-policy").json()["invite_required"] is True
+    policy = client.get("/api/auth/registration-policy").json()
+    assert policy == {"mode": "invite", "registration_open": True, "invite_required": True}
     duplicate = client.post(
         "/api/auth/register", json={"username": "student", "password": "test-password", "invite_code": code}
     )
@@ -157,16 +162,13 @@ def test_invitation_lifecycle_and_atomic_failed_registration(accounts):
     assert created.status_code == 201 and created.json()["role"] == "student"
     used = admin.get(f"/api/admin/invitations/{invitation_id}/uses").json()
     assert used["total"] == 1 and used["items"][0]["username"] == "new"
-    assert (
-        client.post(
-            "/api/auth/register", json={"username": "next", "password": "test-password", "invite_code": code}
-        ).status_code
-        == 403
+    second = client.post(
+        "/api/auth/register", json={"username": "second", "password": "test-password", "invite_code": code}
     )
-    assert (
-        admin.patch(f"/api/admin/invitations/{invitation_id}", json={"max_uses": 2, "enabled": False}).status_code
-        == 200
-    )
+    assert second.status_code == 201 and second.json()["role"] == "student"
+    assert admin.get("/api/admin/invitations").json()["items"][0]["used_count"] == 2
+    assert admin.patch(f"/api/admin/invitations/{invitation_id}", json={"enabled": False}).status_code == 200
+    assert code not in admin.get("/api/admin/audit").text
     assert client.get("/api/auth/me").status_code == 200
     assert (
         client.post(
@@ -205,13 +207,12 @@ def test_invitation_lifecycle_and_atomic_failed_registration(accounts):
     )
 
 
-@pytest.mark.parametrize("invitation_limit,account_limit", [(1, 0), (0, 4)])
-def test_parallel_registration_never_exceeds_limit(accounts, invitation_limit, account_limit):
+@pytest.mark.parametrize("account_limit,expected_registrations", [(0, 8), (4, 1)])
+def test_parallel_registration_only_applies_site_limit(accounts, account_limit, expected_registrations):
     root, _, _ = accounts
     registration.update_policy(actor_id=root.id, policy=RegistrationPolicy(RegistrationMode.INVITE, account_limit))
-    invitation, code = registration.create_invitation(
-        actor_id=root.id, name="parallel", note="", expires_at=None, max_uses=invitation_limit
-    )
+    invitation, code = registration.create_invitation(actor_id=root.id, name="parallel", note="", expires_at=None)
+    assert len(code) == 32
     password = hash_password("test-password")
 
     def register(index):
@@ -222,9 +223,9 @@ def test_parallel_registration_never_exceeds_limit(accounts, invitation_limit, a
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(register, range(8)))
-    assert sum(result is not None for result in results) == 1
-    assert registration.list_uses(invitation.id)[1] == 1
-    assert registration.list_invitations()[0][0].used_count == 1
+    assert sum(result is not None for result in results) == expected_registrations
+    assert registration.list_uses(invitation.id)[1] == expected_registrations
+    assert registration.list_invitations()[0][0].used_count == expected_registrations
 
 
 def test_origin_check_rejects_foreign_cookie_write(accounts):

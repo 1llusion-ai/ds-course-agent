@@ -215,13 +215,13 @@ def test_admin_signals_compare_recent_and_previous_activity(monkeypatch, tmp_pat
         )
     )
     registration.create_invitation(
-        actor_id=admin.id, name="soon", note="", expires_at=(now + timedelta(days=3)).isoformat(), max_uses=10
+        actor_id=admin.id, name="soon", note="", expires_at=(now + timedelta(days=3)).isoformat()
     )
-    _, code = registration.create_invitation(actor_id=admin.id, name="used-up", note="", expires_at=None, max_uses=1)
+    _, code = registration.create_invitation(actor_id=admin.id, name="used", note="", expires_at=None)
     registration.register_user(username="newcomer", password_hash="unused", invite_code=code)
     signals = build_signals()
     assert signals["capacity"] == {"max_users": 10, "total_users": 3, "remaining": 7}
-    assert signals["invitations"] == {"total": 2, "expiring": 1, "exhausted": 1}
+    assert signals["invitations"] == {"total": 2, "expiring": 1}
     assert signals["answers"] == {"days": 7, "errors": 1, "previous_errors": 1, "completed": 0}
     assert "BODY" not in str(signals)
 

@@ -54,7 +54,7 @@ class InvitationRequest(AdminRequest):
     name: str = Field(min_length=1, max_length=128)
     note: str = Field(default="", max_length=1000)
     expires_at: datetime | None = None
-    max_uses: int = Field(default=0, ge=0, le=100000000)
+    code: str = ""
 
     @field_validator("name")
     @classmethod
@@ -76,8 +76,8 @@ class InvitationRequest(AdminRequest):
 class EditInvitationRequest(AdminRequest):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     note: str | None = Field(default=None, max_length=1000)
+    code: str | None = None
     expires_at: datetime | None = None
-    max_uses: int | None = Field(default=None, ge=0, le=100000000)
     enabled: bool | None = None
 
     @field_validator("name")

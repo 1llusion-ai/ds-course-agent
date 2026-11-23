@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 import ds_course_agent.shared.config as config
 
 from . import registration
-from .contracts import Role, User
+from .contracts import INVITATION_CODE_MAX_LENGTH, Role, User
 from .deps import check_request_origin, get_current_user
 from .service import (
     authenticate,
@@ -31,7 +31,7 @@ class RegisterRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     username: str = Field(min_length=1, max_length=128)
     password: str = Field(min_length=8, max_length=256)
-    invite_code: str = Field(default="", max_length=256)
+    invite_code: str = Field(default="", max_length=INVITATION_CODE_MAX_LENGTH)
 
     @field_validator("username", "invite_code")
     @classmethod

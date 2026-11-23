@@ -55,16 +55,15 @@ const statistics = {
 }
 const signals = {
   capacity: { max_users: 60, total_users: 55, remaining: 5 },
-  invitations: { total: 3, expiring: 2, exhausted: 1 },
+  invitations: { total: 3, expiring: 2 },
   answers: { days: 7, errors: 2, previous_errors: 1, completed: 30 }
 }
 const invitation = {
   id: 1,
   name: '秋季一班',
   note: '班级注册',
-  code_hint: 'abcd…1234',
+  code: null,
   expires_at: null,
-  max_uses: 60,
   used_count: 12,
   enabled: true,
   status: 'active',
@@ -88,11 +87,11 @@ test('admin overview matches shared theme and remains usable on mobile', async (
   page.on('pageerror', (error) => errors.push(error.message))
   await page.goto('/admin')
   await expect(page.getByRole('heading', { name: '数据概览' })).toBeVisible()
-  await expect(page.getByRole('link', { name: '注册与邀请码' })).toBeVisible()
+  await expect(page.getByRole('link', { name: '注册与注册码' })).toBeVisible()
   await expect(page.getByText('60.0%', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('23 / 1', { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '待关注' })).toBeVisible()
-  await expect(page.getByText('2 个邀请码将在 7 天内过期。')).toBeVisible()
+  await expect(page.getByText('2 个注册码将在 7 天内过期。')).toBeVisible()
   await expect(page.getByText('全站账号容量仅剩 5 个名额（已用 55/60）。')).toBeVisible()
   await expect(page.getByText('较上一周期 ↑ 40%')).toBeVisible()
   await expect(page.getByText('较上一周期 ↑ 10 个百分点')).toBeVisible()
@@ -116,7 +115,7 @@ for (const previousErrors of [0, 100, 200]) {
     await mockAuth(page)
     await page.route('**/api/admin/signals', (route) => route.fulfill({ json: {
       capacity: { max_users: 0, total_users: 3, remaining: null },
-      invitations: { total: 0, expiring: 0, exhausted: 0 },
+      invitations: { total: 0, expiring: 0 },
       answers: { days: 7, errors: 100, previous_errors: previousErrors, completed: 0 }
     } }))
     await page.goto('/admin')
@@ -149,7 +148,7 @@ test('overview shows signal loading errors and retries independently', async ({ 
   await expect(panel.getByRole('status')).toContainText('正在加载提醒')
   await expect(panel.getByRole('button', { name: '重试' })).toHaveCount(0)
   finishRetry()
-  await expect(panel).toContainText('2 个邀请码将在 7 天内过期。')
+  await expect(panel).toContainText('2 个注册码将在 7 天内过期。')
   await expect(panel.getByRole('alert')).toHaveCount(0)
   expect(requests).toBe(2)
 })
@@ -164,7 +163,7 @@ test('observer can view statistics but cannot enter account management', async (
   await page.goto('/admin/users')
   await expect(page).toHaveURL(/\/admin$/)
   await expect(page.getByRole('link', { name: '账号管理' })).toHaveCount(0)
-  await expect(page.getByRole('link', { name: '注册与邀请码' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: '注册与注册码' })).toHaveCount(0)
   await page.getByRole('link', { name: '统计分析', exact: true }).click()
   await expect(page.getByRole('heading', { name: '统计分析' })).toBeVisible()
   expect(userRequests).toBe(0)
@@ -248,11 +247,14 @@ test('password mismatch prevents user creation and reset request', async ({ page
   expect(writes).toBe(0)
 })
 
-test('invitation is shown once, policy is editable and usage is linked to accounts', async ({ page }) => {
+test('registration codes are visible and copyable after creation or recovery', async ({ page, context }) => {
   await mockAuth(page)
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   let policy = { mode: 'invite', max_users: 60, total_users: 12, remaining_capacity: 48 }
+  let codes = [invitation]
   let policyWrite
   let inviteWrite
+  let recoveryWrite
   await page.route('**/api/admin/registration-policy', (route) => {
     if (route.request().method() === 'PUT') {
       policyWrite = route.request().postDataJSON()
@@ -261,11 +263,19 @@ test('invitation is shown once, policy is editable and usage is linked to accoun
     return route.fulfill({ json: policy })
   })
   await page.route('**/api/admin/invitations?**', (route) =>
-    route.fulfill({ json: { items: [invitation], total: 1, page: 1, page_size: 20 } })
+    route.fulfill({ json: { items: codes, total: codes.length, page: 1, page_size: 20 } })
   )
   await page.route('**/api/admin/invitations', (route) => {
     inviteWrite = route.request().postDataJSON()
-    return route.fulfill({ json: { invitation, code: 'one-time-secret-code' } })
+    const created = { ...invitation, ...inviteWrite, id: 2, used_count: 0 }
+    codes = [created, ...codes]
+    return route.fulfill({ json: { invitation: created, code: created.code } })
+  })
+  await page.route('**/api/admin/invitations/1', (route) => {
+    recoveryWrite = route.request().postDataJSON()
+    const restored = { ...invitation, ...recoveryWrite }
+    codes = codes.map((item) => (item.id === restored.id ? restored : item))
+    return route.fulfill({ json: restored })
   })
   await page.route('**/api/admin/invitations/1/uses?**', (route) =>
     route.fulfill({
@@ -278,21 +288,34 @@ test('invitation is shown once, policy is editable and usage is linked to accoun
     })
   )
   await page.goto('/admin/registration')
-  await expect(page.getByRole('heading', { name: '邀请码', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '注册码', exact: true })).toBeVisible()
   await page.screenshot({ path: '../var/artifacts/playwright/admin-registration.png', fullPage: true })
   await page.getByLabel('注册方式').selectOption('closed')
   await page.getByRole('button', { name: '保存注册设置', exact: true }).click()
   await page.getByRole('button', { name: '确认保存', exact: true }).click()
   await expect.poll(() => policyWrite).toEqual({ mode: 'closed', max_users: 60 })
-  await page.getByRole('button', { name: '创建邀请码', exact: true }).click()
-  await page.getByLabel('名称', { exact: true }).fill('二班')
-  await page.getByLabel('使用次数上限').fill('30')
-  await page.getByRole('button', { name: '生成邀请码' }).click()
-  await expect.poll(() => inviteWrite).toEqual({ name: '二班', note: '', expires_at: null, max_uses: 30 })
-  await expect(page.getByTestId('created-invitation-code')).toHaveText('one-time-secret-code')
-  await page.getByRole('button', { name: '已保存，关闭' }).click()
-  await expect(page.getByText('one-time-secret-code')).toHaveCount(0)
-  await page.getByRole('button', { name: '使用记录', exact: true }).click()
+  await page.getByRole('button', { name: '创建注册码', exact: true }).click()
+  const editor = page.getByRole('dialog', { name: '创建注册码', exact: true })
+  await editor.getByLabel('名称', { exact: true }).fill('二班')
+  await editor.getByLabel('注册码（选填）').fill('DS-Class-2')
+  await editor.getByRole('button', { name: '创建注册码', exact: true }).click()
+  await expect.poll(() => inviteWrite).toEqual({ name: '二班', note: '', expires_at: null, code: 'DS-Class-2' })
+  await expect(editor).toBeHidden()
+  await page.reload()
+  const newCode = page.getByRole('row', { name: /二班/ })
+  await expect(newCode.getByText('DS-Class-2')).toBeVisible()
+  await newCode.getByRole('button', { name: '复制注册码' }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('DS-Class-2')
+
+  const oldCode = page.getByRole('row', { name: /秋季一班/ })
+  await expect(oldCode.getByText('旧码待补录')).toBeVisible()
+  await oldCode.getByRole('button', { name: '编辑', exact: true }).click()
+  const editDialog = page.getByRole('dialog', { name: '编辑注册码', exact: true })
+  await editDialog.getByLabel('补录原注册码（选填）').fill('DS-Class-1')
+  await editDialog.getByRole('button', { name: '保存修改' }).click()
+  await expect.poll(() => recoveryWrite?.code).toBe('DS-Class-1')
+  await expect(oldCode.getByText('DS-Class-1')).toBeVisible()
+  await oldCode.getByRole('button', { name: '使用记录', exact: true }).click()
   await expect(page.getByRole('link', { name: 'Alice', exact: true })).toHaveAttribute('href', '/admin/users/2')
 })
 

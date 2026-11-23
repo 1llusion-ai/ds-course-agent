@@ -54,6 +54,21 @@ AUTH_MIGRATIONS = (
             "CREATE INDEX idx_admin_audit_created ON admin_audit(created_at)",
         ),
     ),
+    Migration(
+        3,
+        "remove_invitation_usage_limits",
+        ("ALTER TABLE invitations DROP COLUMN max_uses",),
+    ),
+    Migration(
+        4,
+        "store_displayable_invitation_codes",
+        (
+            "ALTER TABLE invitations ADD COLUMN code TEXT",
+            "ALTER TABLE invitations DROP COLUMN code_hint",
+            """UPDATE invitations SET name='迁移的原注册码'
+               WHERE name='迁移的原邀请码' AND note='历史注册来源未知'""",
+        ),
+    ),
 )
 
 

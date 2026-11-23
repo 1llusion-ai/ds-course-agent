@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+INVITATION_CODE_MAX_LENGTH = 256
+
 
 class Role(str, Enum):
     STUDENT = "student"
@@ -60,9 +62,8 @@ class Invitation:
     id: int
     name: str
     note: str
-    code_hint: str
+    code: str | None = field(repr=False)
     expires_at: str | None
-    max_uses: int
     used_count: int
     enabled: bool
     created_at: str

@@ -67,7 +67,7 @@ const navigation = computed(() => [
   ...(authStore.isAdmin
     ? [
         { path: '/admin/users', label: '账号管理', icon: User },
-        { path: '/admin/registration', label: '注册与邀请码', icon: Tickets }
+        { path: '/admin/registration', label: '注册与注册码', icon: Tickets }
       ]
     : []),
   { path: '/admin/statistics', label: '统计分析', icon: Histogram },

@@ -11,7 +11,15 @@ from datetime import datetime, timedelta, timezone
 import ds_course_agent.shared.config as config
 
 from .audit import record_audit
-from .contracts import AuthOperationError, Invitation, InvitationUse, RegistrationMode, RegistrationPolicy, User
+from .contracts import (
+    INVITATION_CODE_MAX_LENGTH,
+    AuthOperationError,
+    Invitation,
+    InvitationUse,
+    RegistrationMode,
+    RegistrationPolicy,
+    User,
+)
 from .database import connection, now_iso
 from .models import insert_user, require_admin
 
@@ -31,13 +39,15 @@ def invitation_from_row(row: sqlite3.Row) -> Invitation:
     )
 
 
+def invitation_audit_snapshot(invitation: Invitation) -> dict[str, object]:
+    return {key: value for key, value in asdict(invitation).items() if key != "code"}
+
+
 def invitation_status(invitation: Invitation) -> str:
     if not invitation.enabled:
         return "disabled"
     if invitation.expires_at and parse_time(invitation.expires_at) <= datetime.now(timezone.utc):
         return "expired"
-    if invitation.max_uses and invitation.used_count >= invitation.max_uses:
-        return "exhausted"
     return "active"
 
 
@@ -75,43 +85,48 @@ def update_policy(*, actor_id: int, policy: RegistrationPolicy) -> RegistrationP
 
 
 def create_invitation(
-    *, actor_id: int, name: str, note: str, expires_at: str | None, max_uses: int
+    *, actor_id: int, name: str, note: str, expires_at: str | None, code: str = ""
 ) -> tuple[Invitation, str]:
-    code = secrets.token_urlsafe(24)
+    code = code.strip() or secrets.token_urlsafe(24)
+    if len(code) > INVITATION_CODE_MAX_LENGTH or not code.isprintable():
+        raise AuthOperationError(f"注册码须为单行可见字符，最多 {INVITATION_CODE_MAX_LENGTH} 个字符", 422)
     with connection(write=True) as conn:
         actor = require_admin(conn, actor_id)
-        invitation = insert_invitation(conn, code=code, name=name, note=note, expires_at=expires_at, max_uses=max_uses)
+        invitation = insert_invitation(conn, code=code, name=name, note=note, expires_at=expires_at)
         record_audit(
-            conn, actor=actor.username, action="invitation.create", target=str(invitation.id), after=asdict(invitation)
+            conn,
+            actor=actor.username,
+            action="invitation.create",
+            target=str(invitation.id),
+            after=invitation_audit_snapshot(invitation),
         )
     return invitation, code
 
 
 def insert_invitation(
-    conn: sqlite3.Connection, *, code: str, name: str, note: str, expires_at: str | None, max_uses: int
+    conn: sqlite3.Connection, *, code: str, name: str, note: str, expires_at: str | None
 ) -> Invitation:
-    if max_uses < 0:
-        raise AuthOperationError("使用次数不能小于零", 422)
     cursor = conn.execute(
-        """INSERT INTO invitations(name,note,code_digest,code_hint,expires_at,max_uses,created_at)
-           VALUES(?,?,?,?,?,?,?)""",
+        """INSERT INTO invitations(name,note,code_digest,code,expires_at,created_at)
+           VALUES(?,?,?,?,?,?) ON CONFLICT(code_digest) DO NOTHING""",
         (
             name,
             note,
             code_digest(code),
-            "••••" + code[-4:] if len(code) >= 12 else "••••",
+            code,
             expires_at,
-            max_uses,
             now_iso(),
         ),
     )
+    if cursor.rowcount == 0:
+        raise AuthOperationError("该注册码已存在")
     return require_invitation(conn, int(cursor.lastrowid))
 
 
 def require_invitation(conn: sqlite3.Connection, invitation_id: int) -> Invitation:
     row = conn.execute("SELECT * FROM invitations WHERE id=?", (invitation_id,)).fetchone()
     if row is None:
-        raise AuthOperationError("邀请码不存在", 404)
+        raise AuthOperationError("注册码不存在", 404)
     return invitation_from_row(row)
 
 
@@ -142,7 +157,6 @@ def invitation_summary(*, expires_within_days: int = 7) -> dict[str, int]:
             item.enabled and item.expires_at is not None and now < parse_time(item.expires_at) <= horizon
             for item in invitations
         ),
-        "exhausted": sum(invitation_status(item) == "exhausted" for item in invitations),
     }
 
 
@@ -152,25 +166,30 @@ def edit_invitation(
     invitation_id: int,
     name: str | None = None,
     note: str | None = None,
+    code: str | None = None,
     expires_at: str | None = None,
     change_expiry: bool = False,
-    max_uses: int | None = None,
     enabled: bool | None = None,
 ) -> Invitation:
+    code = (code or "").strip()
     with connection(write=True) as conn:
         actor = require_admin(conn, actor_id)
         before = require_invitation(conn, invitation_id)
-        maximum = before.max_uses if max_uses is None else max_uses
-        if maximum < 0 or (maximum and maximum < before.used_count):
-            raise AuthOperationError("次数上限不能小于已使用次数", 422)
+        if (
+            code
+            and not conn.execute(
+                "SELECT 1 FROM invitations WHERE id=? AND code_digest=?", (invitation_id, code_digest(code))
+            ).fetchone()
+        ):
+            raise AuthOperationError("输入的注册码与原码不一致", 422)
         conn.execute(
-            "UPDATE invitations SET name=?,note=?,expires_at=?,max_uses=?,enabled=? WHERE id=?",
+            "UPDATE invitations SET name=?,note=?,expires_at=?,enabled=?,code=COALESCE(?,code) WHERE id=?",
             (
                 before.name if name is None else name,
                 before.note if note is None else note,
                 expires_at if change_expiry else before.expires_at,
-                maximum,
                 before.enabled if enabled is None else enabled,
+                code or None,
                 invitation_id,
             ),
         )
@@ -180,8 +199,8 @@ def edit_invitation(
             actor=actor.username,
             action="invitation.update",
             target=str(invitation_id),
-            before=asdict(before),
-            after=asdict(after),
+            before=invitation_audit_snapshot(before),
+            after=invitation_audit_snapshot(after),
         )
         return after
 
@@ -202,7 +221,7 @@ def list_uses(invitation_id: int, *, page: int = 1, page_size: int = 20) -> tupl
 
 
 def register_user(*, username: str, password_hash: str, invite_code: str) -> User:
-    """Create account and consume invitation under one serialized transaction."""
+    """Create an account and record invitation use in one serialized transaction."""
     with connection(write=True) as conn:
         row = conn.execute("SELECT * FROM registration_policy WHERE id=1").fetchone()
         policy = RegistrationPolicy(RegistrationMode(row["mode"]), row["max_users"])
@@ -213,7 +232,7 @@ def register_user(*, username: str, password_hash: str, invite_code: str) -> Use
             row = conn.execute("SELECT * FROM invitations WHERE code_digest=?", (code_digest(invite_code),)).fetchone()
             invitation = invitation_from_row(row) if row else None
             if invitation is None or invitation_status(invitation) != "active":
-                raise AuthOperationError("需要有效的邀请码才能注册。", 403)
+                raise AuthOperationError("需要有效的注册码才能注册。", 403)
         if policy.max_users and conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] >= policy.max_users:
             raise AuthOperationError("注册人数已达到上限，请联系管理员。")
         user = insert_user(
@@ -245,9 +264,7 @@ def import_legacy_policy(*, mode: RegistrationMode, code: str, expires_at: str |
         if current["legacy_imported"] or conn.execute("SELECT COUNT(*) FROM invitations").fetchone()[0]:
             raise AuthOperationError("注册策略已经初始化，不能再次导入旧配置")
         if mode == RegistrationMode.INVITE and code:
-            insert_invitation(
-                conn, code=code, name="迁移的原邀请码", note="历史注册来源未知", expires_at=expires_at, max_uses=0
-            )
+            insert_invitation(conn, code=code, name="迁移的原注册码", note="历史注册来源未知", expires_at=expires_at)
         conn.execute(
             "UPDATE registration_policy SET mode=?,max_users=?,legacy_imported=1 WHERE id=1", (mode.value, max_users)
         )
