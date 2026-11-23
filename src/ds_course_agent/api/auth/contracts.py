@@ -68,7 +68,6 @@ class InvitationUse:
     username: str
     display_name: str
     registered_at: str
-    account_deleted: bool
 
 
 @dataclass(frozen=True)

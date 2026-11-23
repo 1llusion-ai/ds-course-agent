@@ -216,7 +216,7 @@ def test_delete_account_and_invitation_preserves_history(accounts):
     history = admin.get(f"{invitation_path}/uses").json()
     user_id = history["items"][0]["user_id"]
     user_path = f"/api/admin/users/{user_id}"
-    assert history["items"][0]["account_deleted"] is False
+    assert history["total"] == 1
 
     assert admin.delete(user_path).status_code == 204
     assert admin.get(user_path).status_code == 404
@@ -224,9 +224,14 @@ def test_delete_account_and_invitation_preserves_history(accounts):
     assert student.get("/api/auth/me").status_code == 401
     assert student.post("/api/auth/login", json={"username": "first", "password": "test-password"}).status_code == 401
     assert admin.get("/api/admin/users", params={"q": "first"}).json()["total"] == 0
-    assert admin.get(f"{invitation_path}/uses").json()["items"][0]["account_deleted"] is True
+    visible = admin.get(f"{invitation_path}/uses").json()
+    assert visible["items"] == [] and visible["total"] == 0
+    assert admin.get("/api/admin/invitations").json()["items"][0]["used_count"] == 0
     assert student.post("/api/auth/register", json=registration_data).status_code == 409
     assert student.post("/api/auth/register", json={**registration_data, "username": "second"}).status_code == 201
+    visible = admin.get(f"{invitation_path}/uses", params={"page_size": 1}).json()
+    assert visible["total"] == 1 and [item["username"] for item in visible["items"]] == ["second"]
+    assert admin.get("/api/admin/invitations").json()["items"][0]["used_count"] == 1
 
     assert admin.delete(invitation_path).status_code == 204
     assert admin.get("/api/admin/invitations").json()["total"] == 0

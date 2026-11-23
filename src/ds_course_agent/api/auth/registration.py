@@ -22,6 +22,13 @@ from .contracts import (
 from .database import connection, now_iso
 from .models import insert_user, require_admin
 
+_CURRENT_USES = "FROM invitation_uses r JOIN current_users u ON r.user_id=u.id"
+_INVITATION_SELECT = f"""
+    SELECT i.id,i.name,i.note,i.code,i.expires_at,i.enabled,i.created_at,
+           (SELECT COUNT(*) {_CURRENT_USES} WHERE r.invitation_id=i.id) AS used_count
+    FROM invitations i
+"""
+
 
 def parse_time(value: str) -> datetime:
     result = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -123,7 +130,7 @@ def insert_invitation(
 
 
 def require_invitation(conn: sqlite3.Connection, invitation_id: int) -> Invitation:
-    row = conn.execute("SELECT * FROM invitations WHERE id=? AND deleted_at IS NULL", (invitation_id,)).fetchone()
+    row = conn.execute(f"{_INVITATION_SELECT} WHERE i.id=? AND i.deleted_at IS NULL", (invitation_id,)).fetchone()
     if row is None:
         raise AuthOperationError("注册码不存在", 404)
     return invitation_from_row(row)
@@ -133,7 +140,7 @@ def list_invitations(*, page: int = 1, page_size: int = 20) -> tuple[tuple[Invit
     with connection() as conn:
         count = conn.execute("SELECT COUNT(*) FROM invitations WHERE deleted_at IS NULL").fetchone()[0]
         rows = conn.execute(
-            "SELECT * FROM invitations WHERE deleted_at IS NULL ORDER BY id DESC LIMIT ? OFFSET ?",
+            f"{_INVITATION_SELECT} WHERE i.deleted_at IS NULL ORDER BY i.id DESC LIMIT ? OFFSET ?",
             (page_size, (page - 1) * page_size),
         ).fetchall()
     return tuple(invitation_from_row(row) for row in rows), count
@@ -149,7 +156,7 @@ def invitation_summary(*, expires_within_days: int = 7) -> dict[str, int]:
     now = datetime.now(timezone.utc)
     horizon = now + timedelta(days=expires_within_days)
     with connection() as conn:
-        rows = conn.execute("SELECT * FROM invitations WHERE deleted_at IS NULL").fetchall()
+        rows = conn.execute(f"{_INVITATION_SELECT} WHERE i.deleted_at IS NULL").fetchall()
     invitations = [invitation_from_row(row) for row in rows]
     return {
         "total": len(invitations),
@@ -222,19 +229,15 @@ def delete_invitation(*, actor_id: int, invitation_id: int) -> None:
 
 def list_uses(invitation_id: int, *, page: int = 1, page_size: int = 20) -> tuple[tuple[InvitationUse, ...], int]:
     with connection() as conn:
-        require_invitation(conn, invitation_id)
-        count = conn.execute("SELECT COUNT(*) FROM invitation_uses WHERE invitation_id=?", (invitation_id,)).fetchone()[
-            0
-        ]
+        conn.execute("BEGIN")
+        invitation = require_invitation(conn, invitation_id)
         rows = conn.execute(
-            """SELECT u.id AS user_id,u.username,u.display_name,r.registered_at,
-                      d.user_id IS NOT NULL AS account_deleted
-               FROM invitation_uses r JOIN users u ON r.user_id=u.id
-               LEFT JOIN deleted_accounts d ON d.user_id=u.id WHERE r.invitation_id=?
-               ORDER BY r.registered_at DESC LIMIT ? OFFSET ?""",
+            f"""SELECT u.id AS user_id,u.username,u.display_name,r.registered_at
+                {_CURRENT_USES} WHERE r.invitation_id=?
+                ORDER BY r.registered_at DESC,u.id DESC LIMIT ? OFFSET ?""",
             (invitation_id, page_size, (page - 1) * page_size),
         ).fetchall()
-    return tuple(InvitationUse(**{**dict(row), "account_deleted": bool(row["account_deleted"])}) for row in rows), count
+    return tuple(InvitationUse(**dict(row)) for row in rows), invitation.used_count
 
 
 def register_user(*, username: str, password_hash: str, invite_code: str) -> User:
@@ -246,7 +249,7 @@ def register_user(*, username: str, password_hash: str, invite_code: str) -> Use
         invitation = None
         if mode == RegistrationMode.INVITE:
             row = conn.execute(
-                "SELECT * FROM invitations WHERE code_digest=? AND deleted_at IS NULL", (code_digest(invite_code),)
+                f"{_INVITATION_SELECT} WHERE i.code_digest=? AND i.deleted_at IS NULL", (code_digest(invite_code),)
             ).fetchone()
             invitation = invitation_from_row(row) if row else None
             if invitation is None or invitation_status(invitation) != "active":

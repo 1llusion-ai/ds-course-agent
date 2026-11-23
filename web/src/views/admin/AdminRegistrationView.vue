@@ -167,8 +167,7 @@
             <tbody>
               <tr v-for="usage in uses.items" :key="usage.user_id">
                 <td>
-                  <span v-if="usage.account_deleted">{{ usage.display_name }}（已删除）</span>
-                  <router-link v-else class="admin-link" :to="`/admin/users/${usage.user_id}`" @click="usesVisible = false">
+                  <router-link class="admin-link" :to="`/admin/users/${usage.user_id}`" @click="usesVisible = false">
                     {{ usage.display_name }}
                   </router-link>
                   <small>{{ usage.username }}</small>
@@ -178,7 +177,7 @@
             </tbody>
           </table>
         </div>
-        <p v-if="!uses.items.length" class="admin-empty">该注册码尚未用于注册</p>
+        <p v-if="!uses.items.length" class="admin-empty">暂无使用记录</p>
         <AdminPagination :page="usesPage" :total="uses.total" :loading="usesLoading" @update:page="changeUsesPage" />
       </template>
     </el-dialog>
