@@ -56,6 +56,8 @@ def test_role_matrix_and_no_secret_projection(accounts):
     for client in (student, observer):
         for path in ("users", "registration-policy", "invitations", "audit"):
             assert client.get("/api/admin/" + path).status_code == 403
+        for path in ("users/1", "invitations/1"):
+            assert client.delete("/api/admin/" + path).status_code == 403
         assert (
             client.post(
                 "/api/admin/users",
@@ -205,6 +207,52 @@ def test_invitation_lifecycle_and_atomic_failed_registration(accounts):
         ).status_code
         == 503
     )
+
+
+def test_delete_account_and_invitation_preserves_history_and_releases_capacity(accounts):
+    root, _, _ = accounts
+    admin = login()
+    assert admin.delete(f"/api/admin/users/{root.id}").status_code == 409
+    assert admin.put("/api/admin/registration-policy", json={"mode": "invite", "max_users": 4}).status_code == 200
+    created = admin.post("/api/admin/invitations", json={"name": "历史来源", "code": "remove-this-code"})
+    invitation_id = created.json()["invitation"]["id"]
+    invitation_path = f"/api/admin/invitations/{invitation_id}"
+    student = TestClient(app)
+    registration_data = {"username": "first", "password": "test-password", "invite_code": "remove-this-code"}
+    assert student.post("/api/auth/register", json=registration_data).status_code == 201
+    history = admin.get(f"{invitation_path}/uses").json()
+    user_id = history["items"][0]["user_id"]
+    user_path = f"/api/admin/users/{user_id}"
+    assert history["items"][0]["account_deleted"] is False
+    assert admin.get("/api/admin/registration-policy").json()["remaining_capacity"] == 0
+
+    assert admin.delete(user_path).status_code == 204
+    assert admin.get(user_path).status_code == 404
+    assert admin.patch(user_path, json={"status": "active"}).status_code == 404
+    assert student.get("/api/auth/me").status_code == 401
+    assert student.post("/api/auth/login", json={"username": "first", "password": "test-password"}).status_code == 401
+    assert admin.get("/api/admin/users", params={"q": "first"}).json()["total"] == 0
+    assert admin.get("/api/admin/registration-policy").json()["remaining_capacity"] == 1
+    assert admin.get(f"{invitation_path}/uses").json()["items"][0]["account_deleted"] is True
+    assert student.post("/api/auth/register", json=registration_data).status_code == 409
+    assert student.post("/api/auth/register", json={**registration_data, "username": "second"}).status_code == 201
+
+    assert admin.delete(invitation_path).status_code == 204
+    assert admin.get("/api/admin/invitations").json()["total"] == 0
+    assert admin.patch(invitation_path, json={"enabled": True}).status_code == 404
+    assert student.post("/api/auth/register", json={**registration_data, "username": "third"}).status_code == 403
+    assert student.get("/api/auth/me").status_code == 200
+    registered = admin.get("/api/admin/users", params={"q": "second"}).json()["items"][0]
+    assert registered["invite_name"] == "历史来源"
+    with connection() as conn:
+        assert (
+            conn.execute("SELECT COUNT(*) FROM invitation_uses WHERE invitation_id=?", (invitation_id,)).fetchone()[0]
+            == 2
+        )
+        assert conn.execute("SELECT password_hash FROM users WHERE id=?", (user_id,)).fetchone()[0] == ""
+    audit = admin.get("/api/admin/audit").text
+    assert "account.delete" in audit and "invitation.delete" in audit
+    assert registration_data["invite_code"] not in audit
 
 
 @pytest.mark.parametrize("account_limit,expected_registrations", [(0, 8), (4, 1)])

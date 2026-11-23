@@ -318,6 +318,9 @@ html.theme-dark .admin-brand__mark {
 .admin-link:hover {
   text-decoration: underline;
 }
+.admin-link--danger {
+  color: var(--admin-danger);
+}
 .admin-link:disabled {
   opacity: 0.5;
   cursor: not-allowed;

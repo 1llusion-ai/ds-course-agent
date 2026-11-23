@@ -107,6 +107,11 @@ async def edit_user(user_id: int, data: EditUserRequest, actor: User = Depends(r
     return project_user(models.edit_user(actor_id=actor.id, user_id=user_id, **data.model_dump()))
 
 
+@router.delete("/users/{user_id}", status_code=204, response_class=Response, response_model=None)
+async def delete_user(user_id: int, actor: User = Depends(require_administrator)) -> None:
+    models.delete_user(actor_id=actor.id, user_id=user_id)
+
+
 @router.post("/users/{user_id}/reset-password")
 async def reset_password(user_id: int, data: PasswordRequest, actor: User = Depends(require_administrator)):
     models.revoke_sessions(actor_id=actor.id, user_id=user_id, password_hash=hash_password(data.password))
@@ -176,6 +181,11 @@ async def invitation_uses(
 ):
     items, total = registration.list_uses(invitation_id, page=page, page_size=page_size)
     return _page([asdict(item) for item in items], total, page, page_size)
+
+
+@router.delete("/invitations/{invitation_id}", status_code=204, response_class=Response, response_model=None)
+async def delete_invitation(invitation_id: int, actor: User = Depends(require_administrator)) -> None:
+    registration.delete_invitation(actor_id=actor.id, invitation_id=invitation_id)
 
 
 @router.get("/audit")

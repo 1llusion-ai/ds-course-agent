@@ -40,8 +40,8 @@
       </label>
       <button class="admin-button" type="submit" :disabled="loading">查询</button>
     </form>
-    <p v-if="error || filterError" class="admin-error" role="alert">
-      {{ error || filterError }}
+    <p v-if="error || filterError || actionError" class="admin-error" role="alert">
+      {{ error || filterError || actionError }}
       <button v-if="error" type="button" class="admin-link" @click="load">重试</button>
     </p>
     <div class="admin-card">
@@ -80,7 +80,20 @@
                   <span :title="formatDate(user.last_learning_at)">{{ formatRelativeTime(user.last_learning_at) }}</span>
                 </td>
                 <td class="admin-numeric">{{ formatNumber(user.questions) }} / {{ formatNumber(user.submissions) }}</td>
-                <td><router-link :to="`/admin/users/${user.id}`" class="admin-link">查看详情</router-link></td>
+                <td>
+                  <div class="admin-actions">
+                    <router-link :to="`/admin/users/${user.id}`" class="admin-link">查看详情</router-link>
+                    <button
+                      v-if="user.student_id !== authStore.user?.student_id"
+                      type="button"
+                      class="admin-link admin-link--danger"
+                      :disabled="deleting"
+                      @click="deleteUser(user)"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -159,13 +172,25 @@ import { Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { adminApi } from '../../api/admin'
 import { useAdminResource } from '../../composables/useAdminResource'
-import { errorMessage, formatDate, formatNumber, formatRelativeTime, roleLabels, roleDescription } from '../../utils/admin'
+import { useAuthStore } from '../../stores/auth'
+import {
+  confirmAccountDeletion,
+  errorMessage,
+  formatDate,
+  formatNumber,
+  formatRelativeTime,
+  roleLabels,
+  roleDescription
+} from '../../utils/admin'
 import AdminPagination from '../../components/admin/AdminPagination.vue'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const filters = reactive({ q: '', role: '', status: '', created_from: '', created_to: '' })
 const appliedFilters = ref({})
 const filterError = ref('')
+const actionError = ref('')
+const deleting = ref(false)
 const page = ref(1)
 const { data, loading, error, load } = useAdminResource(() =>
   adminApi.users({ ...appliedFilters.value, page: page.value, page_size: 20 })
@@ -176,6 +201,7 @@ const createError = ref('')
 const form = reactive({ username: '', display_name: '', role: 'student', password: '', confirmPassword: '' })
 function search() {
   filterError.value = ''
+  actionError.value = ''
   if (filters.created_from && filters.created_to && filters.created_from > filters.created_to) {
     filterError.value = '注册开始日期不能晚于结束日期。'
     return
@@ -199,6 +225,21 @@ function clearCreate() {
 function openCreate() {
   clearCreate()
   createVisible.value = true
+}
+async function deleteUser(user) {
+  if (!(await confirmAccountDeletion(user))) return
+  deleting.value = true
+  actionError.value = ''
+  try {
+    await adminApi.deleteUser(user.id)
+    ElMessage.success('账号已删除。')
+    if (data.value?.items.length === 1 && page.value > 1) page.value--
+    await load()
+  } catch (cause) {
+    actionError.value = errorMessage(cause)
+  } finally {
+    deleting.value = false
+  }
 }
 async function createUser() {
   if (saving.value) return

@@ -124,7 +124,7 @@ def insert_invitation(
 
 
 def require_invitation(conn: sqlite3.Connection, invitation_id: int) -> Invitation:
-    row = conn.execute("SELECT * FROM invitations WHERE id=?", (invitation_id,)).fetchone()
+    row = conn.execute("SELECT * FROM invitations WHERE id=? AND deleted_at IS NULL", (invitation_id,)).fetchone()
     if row is None:
         raise AuthOperationError("注册码不存在", 404)
     return invitation_from_row(row)
@@ -132,9 +132,10 @@ def require_invitation(conn: sqlite3.Connection, invitation_id: int) -> Invitati
 
 def list_invitations(*, page: int = 1, page_size: int = 20) -> tuple[tuple[Invitation, ...], int]:
     with connection() as conn:
-        count = conn.execute("SELECT COUNT(*) FROM invitations").fetchone()[0]
+        count = conn.execute("SELECT COUNT(*) FROM invitations WHERE deleted_at IS NULL").fetchone()[0]
         rows = conn.execute(
-            "SELECT * FROM invitations ORDER BY id DESC LIMIT ? OFFSET ?", (page_size, (page - 1) * page_size)
+            "SELECT * FROM invitations WHERE deleted_at IS NULL ORDER BY id DESC LIMIT ? OFFSET ?",
+            (page_size, (page - 1) * page_size),
         ).fetchall()
     return tuple(invitation_from_row(row) for row in rows), count
 
@@ -145,11 +146,11 @@ def invitation_names() -> dict[int, str]:
 
 
 def invitation_summary(*, expires_within_days: int = 7) -> dict[str, int]:
-    """Status counts across all invitations for the administrative overview signals."""
+    """Status counts for current invitations in the administrative overview."""
     now = datetime.now(timezone.utc)
     horizon = now + timedelta(days=expires_within_days)
     with connection() as conn:
-        rows = conn.execute("SELECT * FROM invitations").fetchall()
+        rows = conn.execute("SELECT * FROM invitations WHERE deleted_at IS NULL").fetchall()
     invitations = [invitation_from_row(row) for row in rows]
     return {
         "total": len(invitations),
@@ -205,6 +206,21 @@ def edit_invitation(
         return after
 
 
+def delete_invitation(*, actor_id: int, invitation_id: int) -> None:
+    """Remove the code from registration and management while retaining its usage history."""
+    with connection(write=True) as conn:
+        actor = require_admin(conn, actor_id)
+        invitation = require_invitation(conn, invitation_id)
+        conn.execute("UPDATE invitations SET enabled=0,code=NULL,deleted_at=? WHERE id=?", (now_iso(), invitation_id))
+        record_audit(
+            conn,
+            actor=actor.username,
+            action="invitation.delete",
+            target=str(invitation_id),
+            before=invitation_audit_snapshot(invitation),
+        )
+
+
 def list_uses(invitation_id: int, *, page: int = 1, page_size: int = 20) -> tuple[tuple[InvitationUse, ...], int]:
     with connection() as conn:
         require_invitation(conn, invitation_id)
@@ -212,12 +228,14 @@ def list_uses(invitation_id: int, *, page: int = 1, page_size: int = 20) -> tupl
             0
         ]
         rows = conn.execute(
-            """SELECT u.id AS user_id,u.username,u.display_name,r.registered_at
-               FROM invitation_uses r JOIN users u ON r.user_id=u.id WHERE r.invitation_id=?
+            """SELECT u.id AS user_id,u.username,u.display_name,r.registered_at,
+                      d.user_id IS NOT NULL AS account_deleted
+               FROM invitation_uses r JOIN users u ON r.user_id=u.id
+               LEFT JOIN deleted_accounts d ON d.user_id=u.id WHERE r.invitation_id=?
                ORDER BY r.registered_at DESC LIMIT ? OFFSET ?""",
             (invitation_id, page_size, (page - 1) * page_size),
         ).fetchall()
-    return tuple(InvitationUse(**dict(row)) for row in rows), count
+    return tuple(InvitationUse(**{**dict(row), "account_deleted": bool(row["account_deleted"])}) for row in rows), count
 
 
 def register_user(*, username: str, password_hash: str, invite_code: str) -> User:
@@ -229,11 +247,13 @@ def register_user(*, username: str, password_hash: str, invite_code: str) -> Use
             raise AuthOperationError("当前暂未开放注册，请联系管理员。", 503)
         invitation = None
         if policy.mode == RegistrationMode.INVITE:
-            row = conn.execute("SELECT * FROM invitations WHERE code_digest=?", (code_digest(invite_code),)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM invitations WHERE code_digest=? AND deleted_at IS NULL", (code_digest(invite_code),)
+            ).fetchone()
             invitation = invitation_from_row(row) if row else None
             if invitation is None or invitation_status(invitation) != "active":
                 raise AuthOperationError("需要有效的注册码才能注册。", 403)
-        if policy.max_users and conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] >= policy.max_users:
+        if policy.max_users and conn.execute("SELECT COUNT(*) FROM current_users").fetchone()[0] >= policy.max_users:
             raise AuthOperationError("注册人数已达到上限，请联系管理员。")
         user = insert_user(
             conn,

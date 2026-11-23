@@ -99,10 +99,12 @@ const { data, loading, error, load } = useAdminResource(() =>
 const actionLabels = {
   'account.create': '创建账号',
   'account.update': '修改账号',
+  'account.delete': '删除账号',
   'account.password_reset': '重置密码',
   'account.revoke_sessions': '撤销登录',
   'invitation.create': '创建注册码',
   'invitation.update': '修改注册码',
+  'invitation.delete': '删除注册码',
   'registration.update': '修改注册设置',
   'registration.import_legacy': '迁移注册配置',
   'account.provision': '本地创建或更新账号',

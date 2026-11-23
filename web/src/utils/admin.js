@@ -1,3 +1,5 @@
+import { ElMessageBox } from 'element-plus'
+
 export const roleLabels = { student: '学生', observer: '统计查看者', admin: '管理员' }
 export const inviteStatusLabels = { active: '可用', disabled: '已停用', expired: '已过期' }
 
@@ -70,4 +72,24 @@ export const registrationSourceLabels = {
   manual: '管理员创建',
   invite: '凭注册码注册',
   open: '开放注册'
+}
+export async function confirmAdminDeletion(message, title) {
+  try {
+    await ElMessageBox.confirm(message, title, {
+      confirmButtonText: '确认删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger'
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function confirmAccountDeletion(user) {
+  return confirmAdminDeletion(
+    `删除账号「${user.username}」？删除后无法在管理台恢复，账号将失去登录权限并释放一个注册名额。学习记录仍会保留。`,
+    '删除账号'
+  )
 }

@@ -27,13 +27,13 @@ def user_from_row(row: sqlite3.Row) -> User:
 
 def get_user_by_username(username: str) -> User | None:
     with connection() as conn:
-        row = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+        row = conn.execute("SELECT * FROM current_users WHERE username=?", (username,)).fetchone()
     return user_from_row(row) if row else None
 
 
 def get_user_by_student_id(student_id: str) -> User | None:
     with connection() as conn:
-        row = conn.execute("SELECT * FROM users WHERE student_id=?", (student_id,)).fetchone()
+        row = conn.execute("SELECT * FROM current_users WHERE student_id=?", (student_id,)).fetchone()
     return user_from_row(row) if row else None
 
 
@@ -43,7 +43,7 @@ def get_user(user_id: int) -> User:
 
 
 def require_user(conn: sqlite3.Connection, user_id: int) -> User:
-    row = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    row = conn.execute("SELECT * FROM current_users WHERE id=?", (user_id,)).fetchone()
     if row is None:
         raise AuthOperationError("账号不存在", 404)
     return user_from_row(row)
@@ -99,7 +99,7 @@ def create_or_update_user(*, username: str, password_hash: str, student_id: str,
                 conn, username=username, password_hash=password_hash, student_id=student_id, display_name=display_name
             )
         else:
-            user = user_from_row(row)
+            user = require_user(conn, row["id"])
             if user.student_id != student_id:
                 raise AuthOperationError("不能更改已有账号的学习身份")
             conn.execute(
@@ -116,7 +116,7 @@ def create_or_update_user(*, username: str, password_hash: str, student_id: str,
 def update_user_password(*, username: str, password_hash: str, expected_hash: str | None = None) -> User | None:
     """Replace password and revoke sessions, with compare-and-set for self service."""
     with connection(write=True) as conn:
-        row = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+        row = conn.execute("SELECT * FROM current_users WHERE username=?", (username,)).fetchone()
         if row is None:
             return None
         if expected_hash is not None and row["password_hash"] != expected_hash:
@@ -168,9 +168,9 @@ def list_users(
         values.append(created_to)
     where = " AND ".join(conditions)
     with connection() as conn:
-        count = conn.execute(f"SELECT COUNT(*) FROM users WHERE {where}", values).fetchone()[0]
+        count = conn.execute(f"SELECT COUNT(*) FROM current_users WHERE {where}", values).fetchone()[0]
         rows = conn.execute(
-            f"SELECT * FROM users WHERE {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM current_users WHERE {where} ORDER BY id DESC LIMIT ? OFFSET ?",
             (*values, page_size, (page - 1) * page_size),
         ).fetchall()
     return tuple(user_from_row(row) for row in rows), count
@@ -179,7 +179,7 @@ def list_users(
 def all_users() -> tuple[User, ...]:
     """Local aggregate analysis identities; credentials never enter response projections."""
     with connection() as conn:
-        return tuple(user_from_row(row) for row in conn.execute("SELECT * FROM users"))
+        return tuple(user_from_row(row) for row in conn.execute("SELECT * FROM current_users"))
 
 
 def create_managed_user(*, actor_id: int, username: str, password_hash: str, display_name: str, role: Role) -> User:
@@ -237,6 +237,34 @@ def edit_user(
         return require_user(conn, user_id)
 
 
+def delete_user(*, actor_id: int, user_id: int) -> None:
+    """Retire login credentials and reserve the identity used by learning records."""
+    with connection(write=True) as conn:
+        actor = require_admin(conn, actor_id)
+        user = require_user(conn, user_id)
+        if actor.id == user.id:
+            raise AuthOperationError("不能删除当前登录的管理员账号")
+        now = now_iso()
+        conn.execute(
+            """UPDATE users SET status='disabled',password_hash='',session_version=session_version+1,
+               updated_at=? WHERE id=?""",
+            (now, user_id),
+        )
+        conn.execute("INSERT INTO deleted_accounts(user_id,deleted_at) VALUES(?,?)", (user_id, now))
+        record_audit(
+            conn,
+            actor=actor.username,
+            action="account.delete",
+            target=user.username,
+            before={
+                "id": user.id,
+                "display_name": user.display_name,
+                "role": user.role.value,
+                "status": user.status.value,
+            },
+        )
+
+
 def revoke_sessions(*, actor_id: int, user_id: int, password_hash: str | None = None) -> None:
     with connection(write=True) as conn:
         actor = require_admin(conn, actor_id)
@@ -255,7 +283,7 @@ def revoke_sessions(*, actor_id: int, user_id: int, password_hash: str | None = 
 def bootstrap_admin(username: str) -> User:
     """Explicit local recovery/bootstrap command, with an audit entry."""
     with connection(write=True) as conn:
-        row = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+        row = conn.execute("SELECT * FROM current_users WHERE username=?", (username,)).fetchone()
         if row is None:
             raise AuthOperationError("账号不存在，请先创建账号", 404)
         user = user_from_row(row)

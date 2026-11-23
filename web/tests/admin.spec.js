@@ -319,6 +319,47 @@ test('registration codes are visible and copyable after creation or recovery', a
   await expect(page.getByRole('link', { name: 'Alice', exact: true })).toHaveAttribute('href', '/admin/users/2')
 })
 
+test('account and registration code lists confirm deletion and refresh their rows', async ({ page }) => {
+  await mockAuth(page)
+  let users = [baseUser]
+  let invitations = [invitation]
+  const requests = []
+  await page.route('**/api/admin/users?**', (route) =>
+    route.fulfill({ json: { items: users, total: users.length, page: 1, page_size: 20 } })
+  )
+  await page.route('**/api/admin/users/2', (route) => {
+    requests.push(route.request().method())
+    users = []
+    return route.fulfill({ status: 204 })
+  })
+  await page.route('**/api/admin/registration-policy', (route) =>
+    route.fulfill({ json: { mode: 'invite', max_users: 0, total_users: 1, remaining_capacity: null } })
+  )
+  await page.route('**/api/admin/invitations?**', (route) =>
+    route.fulfill({ json: { items: invitations, total: invitations.length, page: 1, page_size: 20 } })
+  )
+  await page.route('**/api/admin/invitations/1', (route) => {
+    requests.push(route.request().method())
+    invitations = []
+    return route.fulfill({ status: 204 })
+  })
+
+  await page.goto('/admin/users')
+  await page.getByRole('row', { name: /Alice/ }).getByRole('button', { name: '删除', exact: true }).click()
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+  await expect(page.getByRole('row', { name: /Alice/ })).toBeVisible()
+  expect(requests).toEqual([])
+  await page.getByRole('row', { name: /Alice/ }).getByRole('button', { name: '删除', exact: true }).click()
+  await page.getByRole('button', { name: '确认删除' }).click()
+  await expect(page.getByText('没有符合筛选条件的账号')).toBeVisible()
+
+  await page.goto('/admin/registration')
+  await page.getByRole('row', { name: /秋季一班/ }).getByRole('button', { name: '删除', exact: true }).click()
+  await page.getByRole('button', { name: '确认删除' }).click()
+  await expect(page.getByText('尚无注册码，创建后即可发放给学生。')).toBeVisible()
+  expect(requests).toEqual(['DELETE', 'DELETE'])
+})
+
 test('statistics validates dates and export uses the displayed filters', async ({ page }) => {
   await mockAuth(page)
   let query

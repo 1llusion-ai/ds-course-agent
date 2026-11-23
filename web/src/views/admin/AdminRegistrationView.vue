@@ -108,6 +108,14 @@
                     >
                       {{ invitation.enabled ? '停用' : '恢复' }}
                     </button>
+                    <button
+                      class="admin-link admin-link--danger"
+                      type="button"
+                      :disabled="changingId !== null"
+                      @click="deleteInvitation(invitation)"
+                    >
+                      删除
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -193,7 +201,8 @@
             <tbody>
               <tr v-for="usage in uses.items" :key="usage.user_id">
                 <td>
-                  <router-link class="admin-link" :to="`/admin/users/${usage.user_id}`" @click="usesVisible = false">
+                  <span v-if="usage.account_deleted">{{ usage.display_name }}（已删除）</span>
+                  <router-link v-else class="admin-link" :to="`/admin/users/${usage.user_id}`" @click="usesVisible = false">
                     {{ usage.display_name }}
                   </router-link>
                   <small>{{ usage.username }}</small>
@@ -216,7 +225,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { adminApi } from '../../api/admin'
 import { useAdminResource } from '../../composables/useAdminResource'
-import { errorMessage, formatDate, inviteStatusLabels } from '../../utils/admin'
+import { confirmAdminDeletion, errorMessage, formatDate, inviteStatusLabels } from '../../utils/admin'
 import AdminPagination from '../../components/admin/AdminPagination.vue'
 
 const page = ref(1)
@@ -348,6 +357,26 @@ async function toggleInvitation(invitation) {
   try {
     await adminApi.updateInvitation(invitation.id, { enabled: !invitation.enabled })
     ElMessage.success(`注册码已${verb}。`)
+    await loadInvitations()
+  } catch (cause) {
+    actionError.value = errorMessage(cause)
+  } finally {
+    changingId.value = null
+  }
+}
+async function deleteInvitation(invitation) {
+  if (
+    !(await confirmAdminDeletion(
+      `删除注册码「${invitation.name}」？删除后该码会失效，且无法在管理台恢复。使用过该码的账号仍可登录。`,
+      '删除注册码'
+    ))
+  ) return
+  changingId.value = invitation.id
+  actionError.value = ''
+  try {
+    await adminApi.deleteInvitation(invitation.id)
+    ElMessage.success('注册码已删除。')
+    if (invitations.value?.items.length === 1 && page.value > 1) page.value--
     await loadInvitations()
   } catch (cause) {
     actionError.value = errorMessage(cause)

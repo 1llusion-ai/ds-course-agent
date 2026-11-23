@@ -69,6 +69,18 @@ AUTH_MIGRATIONS = (
                WHERE name='迁移的原邀请码' AND note='历史注册来源未知'""",
         ),
     ),
+    Migration(
+        5,
+        "admin_account_and_invitation_deletion",
+        (
+            """CREATE TABLE deleted_accounts (
+               user_id INTEGER PRIMARY KEY REFERENCES users(id), deleted_at TEXT NOT NULL)""",
+            """CREATE VIEW current_users AS SELECT users.* FROM users
+               LEFT JOIN deleted_accounts ON deleted_accounts.user_id=users.id
+               WHERE deleted_accounts.user_id IS NULL""",
+            "ALTER TABLE invitations ADD COLUMN deleted_at TEXT",
+        ),
+    ),
 )
 
 

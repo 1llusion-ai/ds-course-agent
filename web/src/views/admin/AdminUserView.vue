@@ -118,6 +118,15 @@
           >
             {{ data.user.status === 'active' ? '停用账号' : '恢复账号' }}
           </button>
+          <button
+            v-if="data.user.student_id !== authStore.user?.student_id"
+            type="button"
+            class="admin-button admin-button--danger"
+            :disabled="saving"
+            @click="deleteUser"
+          >
+            删除账号
+          </button>
         </div>
       </section>
     </template>
@@ -167,6 +176,7 @@ import { adminApi } from '../../api/admin'
 import { useAuthStore } from '../../stores/auth'
 import { useAdminResource } from '../../composables/useAdminResource'
 import {
+  confirmAccountDeletion,
   errorMessage,
   formatDate,
   formatNumber,
@@ -213,7 +223,7 @@ async function confirmAction(message, title) {
     return false
   }
 }
-async function perform(operation, message) {
+async function perform(operation, message, afterSuccess = load) {
   if (saving.value) return
   saving.value = true
   actionError.value = ''
@@ -235,12 +245,17 @@ async function perform(operation, message) {
         return
       }
     }
-    await load()
+    await afterSuccess()
   } catch (cause) {
     actionError.value = errorMessage(cause)
   } finally {
     saving.value = false
   }
+}
+async function deleteUser() {
+  const user = data.value.user
+  if (!(await confirmAccountDeletion(user))) return
+  await perform(() => adminApi.deleteUser(user.id), '账号已删除。', () => router.replace('/admin/users'))
 }
 async function saveUser() {
   if (
