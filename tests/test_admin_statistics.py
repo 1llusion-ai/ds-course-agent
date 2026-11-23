@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ds_course_agent.api.admin.statistics import LOCAL_TZ, build_signals, build_statistics, statistics_csv, user_usage
 from ds_course_agent.api.auth import models, registration
-from ds_course_agent.api.auth.contracts import RegistrationMode, RegistrationPolicy
+from ds_course_agent.api.auth.contracts import RegistrationMode
 from ds_course_agent.api.auth.database import connection
 from ds_course_agent.api.session_repository import MessageRecord, SessionRecord, SQLiteSessionRepository
 from ds_course_agent.assessment.records import AssessmentStatus, StoredAnswer
@@ -179,7 +179,7 @@ def test_admin_signals_compare_recent_and_previous_activity(monkeypatch, tmp_pat
     )
     models.create_or_update_user(username="alice", password_hash="unused", student_id="alice", display_name="Alice")
     models.bootstrap_admin("root")
-    registration.update_policy(actor_id=admin.id, policy=RegistrationPolicy(RegistrationMode.INVITE, 10))
+    registration.update_registration_mode(actor_id=admin.id, mode=RegistrationMode.INVITE)
     now = datetime.now(timezone.utc)
     stale = now - timedelta(days=10)
     chats = SQLiteSessionRepository()
@@ -220,7 +220,6 @@ def test_admin_signals_compare_recent_and_previous_activity(monkeypatch, tmp_pat
     _, code = registration.create_invitation(actor_id=admin.id, name="used", note="", expires_at=None)
     registration.register_user(username="newcomer", password_hash="unused", invite_code=code)
     signals = build_signals()
-    assert signals["capacity"] == {"max_users": 10, "total_users": 3, "remaining": 7}
     assert signals["invitations"] == {"total": 2, "expiring": 1}
     assert signals["answers"] == {"days": 7, "errors": 1, "previous_errors": 1, "completed": 0}
     assert "BODY" not in str(signals)

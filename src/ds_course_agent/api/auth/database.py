@@ -81,6 +81,7 @@ AUTH_MIGRATIONS = (
             "ALTER TABLE invitations ADD COLUMN deleted_at TEXT",
         ),
     ),
+    Migration(6, "remove_registration_capacity", ("ALTER TABLE registration_policy DROP COLUMN max_users",)),
 )
 
 

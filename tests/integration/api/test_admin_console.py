@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ds_course_agent.api.auth import models, registration
-from ds_course_agent.api.auth.contracts import AuthOperationError, RegistrationMode, RegistrationPolicy, Role
+from ds_course_agent.api.auth.contracts import AuthOperationError, RegistrationMode, Role
 from ds_course_agent.api.auth.database import connection
 from ds_course_agent.api.auth.deps import get_current_student_id
 from ds_course_agent.api.auth.service import hash_password
@@ -85,8 +85,7 @@ def test_overview_signals_are_admin_only(accounts):
         assert client.get("/api/admin/signals").status_code == 403
     admin = login()
     payload = admin.get("/api/admin/signals").json()
-    assert set(payload) == {"capacity", "invitations", "answers"}
-    assert payload["capacity"] == {"max_users": 0, "total_users": 3, "remaining": None}
+    assert set(payload) == {"invitations", "answers"}
     assert payload["invitations"] == {"total": 0, "expiring": 0}
 
 
@@ -134,7 +133,7 @@ def test_self_password_change_keeps_current_browser_only(accounts):
 
 def test_invitation_lifecycle_and_atomic_failed_registration(accounts):
     admin = login()
-    assert admin.put("/api/admin/registration-policy", json={"mode": "invite", "max_users": 6}).status_code == 200
+    assert admin.put("/api/admin/registration-policy", json={"mode": "invite"}).status_code == 200
     code = "数据科学-A1"
     response = admin.post("/api/admin/invitations", json={"name": "一班", "note": "2026", "code": f" {code} "})
     assert response.status_code == 201
@@ -199,7 +198,7 @@ def test_invitation_lifecycle_and_atomic_failed_registration(accounts):
         ).status_code
         == 201
     )
-    assert admin.put("/api/admin/registration-policy", json={"mode": "closed", "max_users": 5}).status_code == 200
+    assert admin.put("/api/admin/registration-policy", json={"mode": "closed"}).status_code == 200
     assert client.get("/api/auth/registration-policy").json()["registration_open"] is False
     assert (
         client.post(
@@ -209,11 +208,11 @@ def test_invitation_lifecycle_and_atomic_failed_registration(accounts):
     )
 
 
-def test_delete_account_and_invitation_preserves_history_and_releases_capacity(accounts):
+def test_delete_account_and_invitation_preserves_history(accounts):
     root, _, _ = accounts
     admin = login()
     assert admin.delete(f"/api/admin/users/{root.id}").status_code == 409
-    assert admin.put("/api/admin/registration-policy", json={"mode": "invite", "max_users": 4}).status_code == 200
+    assert admin.put("/api/admin/registration-policy", json={"mode": "invite"}).status_code == 200
     created = admin.post("/api/admin/invitations", json={"name": "历史来源", "code": "remove-this-code"})
     invitation_id = created.json()["invitation"]["id"]
     invitation_path = f"/api/admin/invitations/{invitation_id}"
@@ -224,7 +223,6 @@ def test_delete_account_and_invitation_preserves_history_and_releases_capacity(a
     user_id = history["items"][0]["user_id"]
     user_path = f"/api/admin/users/{user_id}"
     assert history["items"][0]["account_deleted"] is False
-    assert admin.get("/api/admin/registration-policy").json()["remaining_capacity"] == 0
 
     assert admin.delete(user_path).status_code == 204
     assert admin.get(user_path).status_code == 404
@@ -232,7 +230,6 @@ def test_delete_account_and_invitation_preserves_history_and_releases_capacity(a
     assert student.get("/api/auth/me").status_code == 401
     assert student.post("/api/auth/login", json={"username": "first", "password": "test-password"}).status_code == 401
     assert admin.get("/api/admin/users", params={"q": "first"}).json()["total"] == 0
-    assert admin.get("/api/admin/registration-policy").json()["remaining_capacity"] == 1
     assert admin.get(f"{invitation_path}/uses").json()["items"][0]["account_deleted"] is True
     assert student.post("/api/auth/register", json=registration_data).status_code == 409
     assert student.post("/api/auth/register", json={**registration_data, "username": "second"}).status_code == 201
@@ -255,36 +252,32 @@ def test_delete_account_and_invitation_preserves_history_and_releases_capacity(a
     assert registration_data["invite_code"] not in audit
 
 
-@pytest.mark.parametrize("account_limit,expected_registrations", [(0, 8), (4, 1)])
-def test_parallel_registration_only_applies_site_limit(accounts, account_limit, expected_registrations):
+def test_parallel_registration_has_no_site_limit(accounts):
     root, _, _ = accounts
-    registration.update_policy(actor_id=root.id, policy=RegistrationPolicy(RegistrationMode.INVITE, account_limit))
+    registration.update_registration_mode(actor_id=root.id, mode=RegistrationMode.INVITE)
     invitation, code = registration.create_invitation(actor_id=root.id, name="parallel", note="", expires_at=None)
     assert len(code) == 32
     password = hash_password("test-password")
 
     def register(index):
-        try:
-            return registration.register_user(username=f"parallel-{index}", password_hash=password, invite_code=code)
-        except AuthOperationError:
-            return None
+        return registration.register_user(username=f"parallel-{index}", password_hash=password, invite_code=code)
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(register, range(8)))
-    assert sum(result is not None for result in results) == expected_registrations
-    assert registration.list_uses(invitation.id)[1] == expected_registrations
-    assert registration.list_invitations()[0][0].used_count == expected_registrations
+    assert len({result.id for result in results}) == 8
+    assert registration.list_uses(invitation.id)[1] == 8
+    assert registration.list_invitations()[0][0].used_count == 8
 
 
 def test_origin_check_rejects_foreign_cookie_write(accounts):
     admin = login()
     result = admin.put(
         "/api/admin/registration-policy",
-        json={"mode": "invite", "max_users": 0},
+        json={"mode": "invite"},
         headers={"Origin": "https://attacker.invalid"},
     )
     assert result.status_code == 403
-    assert registration.get_policy().mode == RegistrationMode.CLOSED
+    assert registration.get_registration_mode() == RegistrationMode.CLOSED
 
 
 def test_admin_failure_rolls_back_if_audit_write_fails(accounts, monkeypatch):

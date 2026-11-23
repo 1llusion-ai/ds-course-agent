@@ -54,7 +54,6 @@ def main(argv: list[str] | None = None) -> int:
                 mode=RegistrationMode(legacy.get("AUTH_REGISTRATION_MODE", "closed")),
                 code=legacy.get("AUTH_INVITE_CODE", "").strip(),
                 expires_at=legacy.get("AUTH_INVITE_EXPIRES_AT", "").strip() or None,
-                max_users=int(legacy.get("AUTH_MAX_USERS", "0")),
             )
             print("Legacy registration policy imported. Future changes belong to the admin console.")
     except (AuthOperationError, ValueError) as exc:

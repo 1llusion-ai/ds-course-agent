@@ -12,7 +12,6 @@ from ds_course_agent.api.auth.contracts import (
     AccountStatus,
     Invitation,
     RegistrationMode,
-    RegistrationPolicy,
     Role,
     User,
 )
@@ -44,16 +43,6 @@ def _page(items, total: int, page: int, page_size: int) -> dict:
 
 def _invitation(invitation: Invitation) -> dict:
     return {**asdict(invitation), "status": registration.invitation_status(invitation)}
-
-
-def _policy() -> dict:
-    policy = registration.get_policy()
-    total = len(models.all_users())
-    return {
-        **asdict(policy),
-        "total_users": total,
-        "remaining_capacity": max(0, policy.max_users - total) if policy.max_users else None,
-    }
 
 
 @router.get("/users")
@@ -126,15 +115,13 @@ async def revoke_sessions(user_id: int, actor: User = Depends(require_administra
 
 @router.get("/registration-policy")
 async def policy(_actor: User = Depends(require_administrator)):
-    return _policy()
+    return {"mode": registration.get_registration_mode()}
 
 
 @router.put("/registration-policy")
 async def update_policy(data: PolicyRequest, actor: User = Depends(require_administrator)):
-    registration.update_policy(
-        actor_id=actor.id, policy=RegistrationPolicy(RegistrationMode(data.mode), data.max_users)
-    )
-    return _policy()
+    mode = registration.update_registration_mode(actor_id=actor.id, mode=RegistrationMode(data.mode))
+    return {"mode": mode}
 
 
 @router.get("/invitations")

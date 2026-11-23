@@ -32,16 +32,8 @@
               <option value="closed">关闭注册</option>
             </select>
           </label>
-          <label class="admin-field">
-            全站账号容量
-            <input v-model.number="policyForm.max_users" class="admin-input" type="number" min="0" step="1" required />
-          </label>
         </div>
         <div class="admin-actions">
-          <p class="admin-note">
-            0 表示不限。当前 {{ policy.total_users }} 个账号，剩余
-            {{ policy.remaining_capacity == null ? '不限' : `${policy.remaining_capacity} 个名额` }}。
-          </p>
           <button class="admin-button" type="submit" :disabled="savingPolicy || policyForm.mode === 'open'">
             {{ savingPolicy ? '保存中…' : '保存注册设置' }}
           </button>
@@ -241,7 +233,7 @@ const {
   error: listError,
   load: loadInvitations
 } = useAdminResource(() => adminApi.invitations({ page: page.value, page_size: 20 }))
-const policyForm = reactive({ mode: 'invite', max_users: 0 })
+const policyForm = reactive({ mode: 'invite' })
 const savingPolicy = ref(false)
 const actionError = ref('')
 const changingId = ref(null)
@@ -263,7 +255,7 @@ const {
   adminApi.invitationUses(selectedInvitation.value.id, { page: usesPage.value, page_size: 20 })
 )
 watch(policy, (value) => {
-  if (value) Object.assign(policyForm, { mode: value.mode, max_users: value.max_users })
+  if (value) policyForm.mode = value.mode
 })
 function reload() {
   loadPolicy()
@@ -277,7 +269,7 @@ async function savePolicy() {
   actionError.value = ''
   try {
     await ElMessageBox.confirm(
-      `将注册方式设为「${policyForm.mode === 'closed' ? '关闭注册' : '凭注册码注册'}」，账号容量设为 ${policyForm.max_users || '不限'}。`,
+      `将注册方式设为「${policyForm.mode === 'closed' ? '关闭注册' : '凭注册码注册'}」？`,
       '保存注册设置',
       { confirmButtonText: '确认保存', cancelButtonText: '取消', type: 'warning' }
     )

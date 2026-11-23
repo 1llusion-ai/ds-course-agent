@@ -52,12 +52,6 @@ class User:
 
 
 @dataclass(frozen=True)
-class RegistrationPolicy:
-    mode: RegistrationMode
-    max_users: int
-
-
-@dataclass(frozen=True)
 class Invitation:
     id: int
     name: str

@@ -64,7 +64,7 @@
       <div class="admin-card__header">
         <div>
           <h2 id="signals-title">待关注</h2>
-          <p>容量、注册码与回答状态的自动提醒。</p>
+          <p>注册码到期与回答失败提醒。</p>
         </div>
       </div>
       <p v-if="signalsLoading" class="admin-note" role="status">正在加载提醒…</p>
@@ -281,22 +281,6 @@ const signalItems = computed(() => {
   const payload = signals.value
   if (!payload) return []
   const items = []
-  const capacity = payload.capacity
-  if (capacity.remaining != null) {
-    if (capacity.remaining <= 0) {
-      items.push({
-        tone: 'danger',
-        text: `全站账号容量已用尽（${capacity.total_users}/${capacity.max_users}），新账号无法注册。`,
-        to: '/admin/registration'
-      })
-    } else if (capacity.remaining <= Math.max(5, Math.round(capacity.max_users * 0.1))) {
-      items.push({
-        tone: 'warn',
-        text: `全站账号容量仅剩 ${capacity.remaining} 个名额（已用 ${capacity.total_users}/${capacity.max_users}）。`,
-        to: '/admin/registration'
-      })
-    }
-  }
   if (payload.invitations.expiring) {
     items.push({ tone: 'warn', text: `${payload.invitations.expiring} 个注册码将在 7 天内过期。`, to: '/admin/registration' })
   }

@@ -214,8 +214,6 @@ def build_statistics(start: date, end: date, course_id: str | None = None) -> di
 def build_signals() -> dict:
     """Administrator attention signals composed from persisted facts; never loads message content."""
     now = datetime.now(timezone.utc)
-    policy = registration.get_policy()
-    total_users = len(models.all_users())
     recent = StatisticsWindow(now - timedelta(days=7), now, now)
     previous = StatisticsWindow(now - timedelta(days=14), now - timedelta(days=7), now)
     messages = _deduplicate(read_chat_facts(start=previous.start.isoformat(), end=recent.end.isoformat()).messages)
@@ -227,11 +225,6 @@ def build_signals() -> dict:
         )
 
     return {
-        "capacity": {
-            "max_users": policy.max_users,
-            "total_users": total_users,
-            "remaining": max(0, policy.max_users - total_users) if policy.max_users else None,
-        },
         "invitations": registration.invitation_summary(),
         "answers": {
             "days": 7,

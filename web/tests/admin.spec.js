@@ -54,7 +54,6 @@ const statistics = {
   sources: [{ name: '秋季一班', registered_users: 4, active_users: 3 }]
 }
 const signals = {
-  capacity: { max_users: 60, total_users: 55, remaining: 5 },
   invitations: { total: 3, expiring: 2 },
   answers: { days: 7, errors: 2, previous_errors: 1, completed: 30 }
 }
@@ -92,7 +91,6 @@ test('admin overview matches shared theme and remains usable on mobile', async (
   await expect(page.getByText('23 / 1', { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '待关注' })).toBeVisible()
   await expect(page.getByText('2 个注册码将在 7 天内过期。')).toBeVisible()
-  await expect(page.getByText('全站账号容量仅剩 5 个名额（已用 55/60）。')).toBeVisible()
   await expect(page.getByText('较上一周期 ↑ 40%')).toBeVisible()
   await expect(page.getByText('较上一周期 ↑ 10 个百分点')).toBeVisible()
   await page.screenshot({ path: '../var/artifacts/playwright/admin-overview-light.png', fullPage: true })
@@ -114,7 +112,6 @@ for (const previousErrors of [0, 100, 200]) {
   test(`overview keeps failure reminders when previous errors are ${previousErrors}`, async ({ page }) => {
     await mockAuth(page)
     await page.route('**/api/admin/signals', (route) => route.fulfill({ json: {
-      capacity: { max_users: 0, total_users: 3, remaining: null },
       invitations: { total: 0, expiring: 0 },
       answers: { days: 7, errors: 100, previous_errors: previousErrors, completed: 0 }
     } }))
@@ -250,7 +247,7 @@ test('password mismatch prevents user creation and reset request', async ({ page
 test('registration codes are visible and copyable after creation or recovery', async ({ page, context }) => {
   await mockAuth(page)
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
-  let policy = { mode: 'invite', max_users: 60, total_users: 12, remaining_capacity: 48 }
+  let policy = { mode: 'invite' }
   let codes = [invitation]
   let policyWrite
   let inviteWrite
@@ -290,10 +287,11 @@ test('registration codes are visible and copyable after creation or recovery', a
   await page.goto('/admin/registration')
   await expect(page.getByRole('heading', { name: '注册码', exact: true })).toBeVisible()
   await page.screenshot({ path: '../var/artifacts/playwright/admin-registration.png', fullPage: true })
+  await expect(page.getByLabel('全站账号容量')).toHaveCount(0)
   await page.getByLabel('注册方式').selectOption('closed')
   await page.getByRole('button', { name: '保存注册设置', exact: true }).click()
   await page.getByRole('button', { name: '确认保存', exact: true }).click()
-  await expect.poll(() => policyWrite).toEqual({ mode: 'closed', max_users: 60 })
+  await expect.poll(() => policyWrite).toEqual({ mode: 'closed' })
   await page.getByRole('button', { name: '创建注册码', exact: true }).click()
   const editor = page.getByRole('dialog', { name: '创建注册码', exact: true })
   await editor.getByLabel('名称', { exact: true }).fill('二班')
@@ -333,7 +331,7 @@ test('account and registration code lists confirm deletion and refresh their row
     return route.fulfill({ status: 204 })
   })
   await page.route('**/api/admin/registration-policy', (route) =>
-    route.fulfill({ json: { mode: 'invite', max_users: 0, total_users: 1, remaining_capacity: null } })
+    route.fulfill({ json: { mode: 'invite' } })
   )
   await page.route('**/api/admin/invitations?**', (route) =>
     route.fulfill({ json: { items: invitations, total: invitations.length, page: 1, page_size: 20 } })
@@ -346,6 +344,7 @@ test('account and registration code lists confirm deletion and refresh their row
 
   await page.goto('/admin/users')
   await page.getByRole('row', { name: /Alice/ }).getByRole('button', { name: '删除', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: '删除账号' })).not.toContainText('注册名额')
   await page.getByRole('button', { name: '取消', exact: true }).click()
   await expect(page.getByRole('row', { name: /Alice/ })).toBeVisible()
   expect(requests).toEqual([])

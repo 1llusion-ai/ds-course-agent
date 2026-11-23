@@ -194,11 +194,8 @@ async function handleRegister() {
     await router.replace(authenticatedRedirect(route.query.redirect))
   } catch (error) {
     const status = error?.response?.status
-    const detail = String(error?.response?.data?.detail || '')
     errorMessage.value = status === 409
-      ? detail.includes('注册人数')
-        ? '本班级注册人数已达到上限，请联系管理员。'
-        : '该用户名已被使用，请换一个试试。'
+      ? '该用户名已被使用，请换一个试试。'
       : status === 403
         ? '请输入有效的注册码，请向老师获取。'
         : status === 503

@@ -89,7 +89,7 @@ export async function confirmAdminDeletion(message, title) {
 
 export function confirmAccountDeletion(user) {
   return confirmAdminDeletion(
-    `删除账号「${user.username}」？删除后无法在管理台恢复，账号将失去登录权限并释放一个注册名额。学习记录仍会保留。`,
+    `删除账号「${user.username}」？删除后无法在管理台恢复，账号将失去登录权限。学习记录仍会保留。`,
     '删除账号'
   )
 }

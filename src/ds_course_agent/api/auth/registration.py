@@ -17,7 +17,6 @@ from .contracts import (
     Invitation,
     InvitationUse,
     RegistrationMode,
-    RegistrationPolicy,
     User,
 )
 from .database import connection, now_iso
@@ -51,37 +50,37 @@ def invitation_status(invitation: Invitation) -> str:
     return "active"
 
 
-def get_policy() -> RegistrationPolicy:
+def get_registration_mode() -> RegistrationMode:
     with connection() as conn:
-        row = conn.execute("SELECT * FROM registration_policy WHERE id=1").fetchone()
-        return RegistrationPolicy(RegistrationMode(row["mode"]), row["max_users"])
+        return registration_mode(conn)
 
 
-def registration_open(policy: RegistrationPolicy) -> bool:
-    return policy.mode == RegistrationMode.INVITE or (
-        policy.mode == RegistrationMode.OPEN and config.APP_ENV in {"development", "test"}
+def registration_mode(conn: sqlite3.Connection) -> RegistrationMode:
+    return RegistrationMode(conn.execute("SELECT mode FROM registration_policy WHERE id=1").fetchone()["mode"])
+
+
+def registration_open(mode: RegistrationMode) -> bool:
+    return mode == RegistrationMode.INVITE or (
+        mode == RegistrationMode.OPEN and config.APP_ENV in {"development", "test"}
     )
 
 
-def update_policy(*, actor_id: int, policy: RegistrationPolicy) -> RegistrationPolicy:
-    if policy.max_users < 0 or policy.mode not in {RegistrationMode.CLOSED, RegistrationMode.INVITE}:
-        raise AuthOperationError("注册模式或容量无效", 422)
+def update_registration_mode(*, actor_id: int, mode: RegistrationMode) -> RegistrationMode:
+    if mode not in {RegistrationMode.CLOSED, RegistrationMode.INVITE}:
+        raise AuthOperationError("注册模式无效", 422)
     with connection(write=True) as conn:
         actor = require_admin(conn, actor_id)
-        old = conn.execute("SELECT mode,max_users FROM registration_policy WHERE id=1").fetchone()
-        conn.execute(
-            "UPDATE registration_policy SET mode=?,max_users=?,legacy_imported=1 WHERE id=1",
-            (policy.mode.value, policy.max_users),
-        )
+        previous = registration_mode(conn)
+        conn.execute("UPDATE registration_policy SET mode=?,legacy_imported=1 WHERE id=1", (mode.value,))
         record_audit(
             conn,
             actor=actor.username,
             action="registration.update",
             target="registration",
-            before=dict(old),
-            after=asdict(policy),
+            before={"mode": previous.value},
+            after={"mode": mode.value},
         )
-    return policy
+    return mode
 
 
 def create_invitation(
@@ -241,20 +240,17 @@ def list_uses(invitation_id: int, *, page: int = 1, page_size: int = 20) -> tupl
 def register_user(*, username: str, password_hash: str, invite_code: str) -> User:
     """Create an account and record invitation use in one serialized transaction."""
     with connection(write=True) as conn:
-        row = conn.execute("SELECT * FROM registration_policy WHERE id=1").fetchone()
-        policy = RegistrationPolicy(RegistrationMode(row["mode"]), row["max_users"])
-        if not registration_open(policy):
+        mode = registration_mode(conn)
+        if not registration_open(mode):
             raise AuthOperationError("当前暂未开放注册，请联系管理员。", 503)
         invitation = None
-        if policy.mode == RegistrationMode.INVITE:
+        if mode == RegistrationMode.INVITE:
             row = conn.execute(
                 "SELECT * FROM invitations WHERE code_digest=? AND deleted_at IS NULL", (code_digest(invite_code),)
             ).fetchone()
             invitation = invitation_from_row(row) if row else None
             if invitation is None or invitation_status(invitation) != "active":
                 raise AuthOperationError("需要有效的注册码才能注册。", 403)
-        if policy.max_users and conn.execute("SELECT COUNT(*) FROM current_users").fetchone()[0] >= policy.max_users:
-            raise AuthOperationError("注册人数已达到上限，请联系管理员。")
         user = insert_user(
             conn,
             username=username,
@@ -273,10 +269,8 @@ def register_user(*, username: str, password_hash: str, invite_code: str) -> Use
         return user
 
 
-def import_legacy_policy(*, mode: RegistrationMode, code: str, expires_at: str | None, max_users: int) -> None:
+def import_legacy_policy(*, mode: RegistrationMode, code: str, expires_at: str | None) -> None:
     """One-shot explicit migration; never overwrite an already managed policy."""
-    if max_users < 0:
-        raise AuthOperationError("注册容量无效", 422)
     if expires_at:
         expires_at = parse_time(expires_at).astimezone(timezone.utc).isoformat()
     with connection(write=True) as conn:
@@ -285,13 +279,11 @@ def import_legacy_policy(*, mode: RegistrationMode, code: str, expires_at: str |
             raise AuthOperationError("注册策略已经初始化，不能再次导入旧配置")
         if mode == RegistrationMode.INVITE and code:
             insert_invitation(conn, code=code, name="迁移的原注册码", note="历史注册来源未知", expires_at=expires_at)
-        conn.execute(
-            "UPDATE registration_policy SET mode=?,max_users=?,legacy_imported=1 WHERE id=1", (mode.value, max_users)
-        )
+        conn.execute("UPDATE registration_policy SET mode=?,legacy_imported=1 WHERE id=1", (mode.value,))
         record_audit(
             conn,
             actor="local-cli",
             action="registration.import_legacy",
             target="registration",
-            after={"mode": mode.value, "max_users": max_users},
+            after={"mode": mode.value},
         )

@@ -1,5 +1,7 @@
 import asyncio
+import sqlite3
 import threading
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -50,7 +52,7 @@ def test_auth_register_creates_session_and_rejects_duplicate(monkeypatch, tmp_pa
     from ds_course_agent.api.auth.contracts import RegistrationMode
     from ds_course_agent.api.auth.registration import import_legacy_policy
 
-    import_legacy_policy(mode=RegistrationMode.OPEN, code="", expires_at=None, max_users=0)
+    import_legacy_policy(mode=RegistrationMode.OPEN, code="", expires_at=None)
     models.init_db()
 
     with TestClient(app) as client:
@@ -102,7 +104,7 @@ def test_auth_register_requires_valid_unexpired_invite(monkeypatch, tmp_path):
     from ds_course_agent.api.auth.contracts import RegistrationMode
     from ds_course_agent.api.auth.registration import import_legacy_policy
 
-    import_legacy_policy(mode=RegistrationMode.INVITE, code="class-2026", expires_at=None, max_users=0)
+    import_legacy_policy(mode=RegistrationMode.INVITE, code="class-2026", expires_at=None)
     models.init_db()
 
     with TestClient(app) as client:
@@ -147,7 +149,7 @@ def test_auth_register_fails_closed_for_open_mode_in_production(monkeypatch, tmp
     from ds_course_agent.api.auth.contracts import RegistrationMode
     from ds_course_agent.api.auth.registration import import_legacy_policy
 
-    import_legacy_policy(mode=RegistrationMode.OPEN, code="", expires_at=None, max_users=0)
+    import_legacy_policy(mode=RegistrationMode.OPEN, code="", expires_at=None)
     models.init_db()
 
     with TestClient(app) as client:
@@ -160,16 +162,21 @@ def test_auth_register_fails_closed_for_open_mode_in_production(monkeypatch, tmp
     assert response.json()["detail"] == "当前暂未开放注册，请联系管理员。"
 
 
-def test_auth_register_enforces_invite_user_cap(monkeypatch, tmp_path):
-    from ds_course_agent.api.auth import models
+def test_auth_register_ignores_cap_from_previous_schema(monkeypatch, tmp_path):
+    from ds_course_agent.api.auth.database import AUTH_MIGRATIONS
+    from ds_course_agent.api.auth.registration import code_digest
+    from ds_course_agent.shared.database import SQLiteMigrationRunner
 
-    monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(tmp_path / "auth.db"))
+    database = tmp_path / "auth.db"
+    monkeypatch.setattr("ds_course_agent.api.auth.models.config.AUTH_DB_PATH", str(database))
     monkeypatch.setattr("ds_course_agent.shared.config.APP_ENV", "production")
-    from ds_course_agent.api.auth.contracts import RegistrationMode
-    from ds_course_agent.api.auth.registration import import_legacy_policy
-
-    import_legacy_policy(mode=RegistrationMode.INVITE, code="class-2026", expires_at=None, max_users=1)
-    models.init_db()
+    SQLiteMigrationRunner(database).apply(AUTH_MIGRATIONS[:5])
+    with closing(sqlite3.connect(database)) as conn, conn:
+        conn.execute("UPDATE registration_policy SET mode='invite', max_users=1, legacy_imported=1")
+        conn.execute(
+            "INSERT INTO invitations(name,code,code_digest,created_at) VALUES(?,?,?,CURRENT_TIMESTAMP)",
+            ("班级注册码", "class-2026", code_digest("class-2026")),
+        )
 
     with TestClient(app) as client:
         first = client.post(
@@ -182,8 +189,9 @@ def test_auth_register_enforces_invite_user_cap(monkeypatch, tmp_path):
         )
 
     assert first.status_code == 201
-    assert second.status_code == 409
-    assert second.json()["detail"] == "注册人数已达到上限，请联系管理员。"
+    assert second.status_code == 201
+    with closing(sqlite3.connect(database)) as conn:
+        assert "max_users" not in {column[1] for column in conn.execute("PRAGMA table_info(registration_policy)")}
 
 
 def test_admin_password_reset_updates_hash(monkeypatch, tmp_path):

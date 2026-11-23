@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 import ds_course_agent.shared.config as config
 
 from . import registration
-from .contracts import INVITATION_CODE_MAX_LENGTH, Role, User
+from .contracts import INVITATION_CODE_MAX_LENGTH, RegistrationMode, Role, User
 from .deps import check_request_origin, get_current_user
 from .service import (
     authenticate,
@@ -72,12 +72,12 @@ def set_session(response: Response, user: User) -> None:
 
 @router.get("/registration-policy")
 async def public_registration_policy():
-    policy = registration.get_policy()
-    opened = registration.registration_open(policy)
+    mode = registration.get_registration_mode()
+    opened = registration.registration_open(mode)
     return {
-        "mode": policy.mode if opened else "closed",
+        "mode": mode if opened else RegistrationMode.CLOSED,
         "registration_open": opened,
-        "invite_required": opened and policy.mode == "invite",
+        "invite_required": opened and mode == RegistrationMode.INVITE,
     }
 
 

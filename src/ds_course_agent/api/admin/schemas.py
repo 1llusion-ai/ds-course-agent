@@ -47,7 +47,6 @@ class PasswordRequest(AdminRequest):
 
 class PolicyRequest(AdminRequest):
     mode: Literal["closed", "invite"]
-    max_users: int = Field(ge=0, le=100000000)
 
 
 class InvitationRequest(AdminRequest):

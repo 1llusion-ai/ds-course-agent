@@ -106,26 +106,3 @@ test('invalid invite code shows a clear message', async ({ page }) => {
   await expect(page.getByText('请输入有效的注册码，请向老师获取。')).toBeVisible()
   await expect(page).toHaveURL(/\/register$/)
 })
-
-test('registration capacity shows a clear message', async ({ page }) => {
-  await page.route('**/api/auth/me', route => route.fulfill({
-    status: 401,
-    contentType: 'application/json',
-    body: JSON.stringify({ detail: 'not authenticated' })
-  }))
-  await page.route('**/api/auth/register', route => route.fulfill({
-    status: 409,
-    contentType: 'application/json',
-    json: { detail: '本班级注册人数已达到上限，请联系管理员。' }
-  }))
-
-  await page.goto('/register')
-  await page.locator('#register-username').fill('new_user')
-  await page.locator('#register-password').fill('correct-horse')
-  await page.locator('#register-confirm-password').fill('correct-horse')
-  await page.locator('#register-invite-code').fill('class-2026')
-  await page.getByRole('button', { name: '注册' }).click()
-
-  await expect(page.getByText('本班级注册人数已达到上限，请联系管理员。')).toBeVisible()
-  await expect(page).toHaveURL(/\/register$/)
-})

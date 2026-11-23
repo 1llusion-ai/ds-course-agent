@@ -29,13 +29,13 @@ def test_existing_accounts_migrate_and_old_registration_imports_only_once(monkey
     assert user.student_id == "student-1" and user.password_hash == "oldhash"
     assert user.created_at == "2025-01-01T00:00:00+00:00"
     assert user.role == Role.STUDENT and user.registration_source == "legacy" and user.last_login_at is None
-    assert registration.get_policy().mode == RegistrationMode.CLOSED
-    registration.import_legacy_policy(mode=RegistrationMode.INVITE, code="old-invite", expires_at=None, max_users=60)
-    assert registration.get_policy().max_users == 60
+    assert registration.get_registration_mode() == RegistrationMode.CLOSED
+    registration.import_legacy_policy(mode=RegistrationMode.INVITE, code="old-invite", expires_at=None)
+    assert registration.get_registration_mode() == RegistrationMode.INVITE
     assert registration.list_invitations()[1] == 1
     assert models.get_user_by_username("old").invitation_id is None
     with pytest.raises(AuthOperationError):
-        registration.import_legacy_policy(mode=RegistrationMode.OPEN, code="", expires_at=None, max_users=0)
+        registration.import_legacy_policy(mode=RegistrationMode.OPEN, code="", expires_at=None)
     with sqlite3.connect(path) as conn:
         row = conn.execute("SELECT code_digest FROM invitations").fetchone()
         assert row[0] != "old-invite"
@@ -98,6 +98,6 @@ def test_admin_command_defaults_to_no_mutation_and_can_read_explicit_legacy_env(
     for key in ("AUTH_REGISTRATION_MODE", "AUTH_INVITE_CODE", "AUTH_MAX_USERS", "AUTH_INVITE_EXPIRES_AT"):
         monkeypatch.delenv(key, raising=False)
     assert admin.main(["import-registration", "--confirm", "import-registration"]) == 0
-    assert registration.get_policy().max_users == 17
+    assert registration.get_registration_mode() == RegistrationMode.INVITE
     assert registration.list_invitations()[1] == 1
     assert admin.main(["import-registration", "--confirm", "import-registration"]) == 1
