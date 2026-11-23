@@ -1,6 +1,7 @@
 import asyncio
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from ds_course_agent.api.main import app
@@ -85,12 +86,15 @@ def test_post_send_does_not_block_on_first_title_generation(monkeypatch):
     assert elapsed < 1.0
 
 
-def test_schedule_title_generation_sets_immediate_fallback(monkeypatch):
+@pytest.mark.parametrize("model_enabled", [True, False])
+def test_schedule_title_generation_sets_immediate_fallback(monkeypatch, model_enabled):
     from datetime import datetime, timezone
 
     import ds_course_agent.api.chat_sessions as chat_sessions
     from ds_course_agent.api.session_repository import SessionRecord
+    from ds_course_agent.shared import config
 
+    monkeypatch.setattr(config, "SESSION_TITLE_MODEL_ENABLED", model_enabled)
     chat_sessions.reset_title_generation_state()
     session_id = "title-immediate"
     question = "菲律宾的现任总统是谁"
@@ -122,5 +126,5 @@ def test_schedule_title_generation_sets_immediate_fallback(monkeypatch):
     assert session.title == build_fallback_session_title(question)
     assert session.title != DEFAULT_SESSION_TITLE
     assert session.title_source == "heuristic"
-    assert session.title_generation_pending is True
-    assert created_coroutines
+    assert session.title_generation_pending is model_enabled
+    assert bool(created_coroutines) is model_enabled

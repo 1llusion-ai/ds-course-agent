@@ -3,22 +3,29 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 
 import bcrypt
+from anyio import CapacityLimiter, WouldBlock, to_thread
 from jose import JWTError, jwt
 
 import ds_course_agent.shared.config as config
 from ds_course_agent.shared.config.production import production_auth_secret_is_valid
 
-from .contracts import AuthOperationError, User
+from . import models, registration
+from .contracts import AccountStatus, AuthOperationError, User
 
 logger = logging.getLogger(__name__)
 
 _ALGORITHM = "HS256"
 _DEV_SECRET = "dev-insecure-auth-secret-change-me"
 _warned_empty_secret = False
+_password_workers = CapacityLimiter(4)
+_password_requests = CapacityLimiter(64)
+_Args = ParamSpec("_Args")
+_Result = TypeVar("_Result")
 
 
 class AuthTokenError(ValueError):
@@ -58,6 +65,43 @@ def verify_password(password: str, password_hash: str) -> bool:
         return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
     except ValueError:
         return False
+
+
+async def run_password_work(operation: Callable[_Args, _Result], *args: _Args.args, **kwargs: _Args.kwargs) -> _Result:
+    """Bound queued password requests and keep bcrypt and auth writes off the API loop."""
+    try:
+        _password_requests.acquire_nowait()
+    except WouldBlock as exc:
+        raise AuthOperationError("认证请求较多，请稍后重试。", 429) from exc
+    try:
+        return await to_thread.run_sync(lambda: operation(*args, **kwargs), limiter=_password_workers)
+    finally:
+        _password_requests.release()
+
+
+def authenticate(username: str, password: str) -> User:
+    user = models.get_user_by_username(username)
+    if not user or user.status != AccountStatus.ACTIVE or not verify_password(password, user.password_hash):
+        raise AuthOperationError("用户名或密码错误", 401)
+    return models.record_login(user)
+
+
+def register_account(username: str, password: str, invite_code: str) -> User:
+    user = registration.register_user(username=username, password_hash=hash_password(password), invite_code=invite_code)
+    return models.record_login(user)
+
+
+def change_account_password(user: User, current_password: str, new_password: str) -> User:
+    if not verify_password(current_password, user.password_hash):
+        raise AuthOperationError("当前密码不正确", 403)
+    if current_password == new_password:
+        raise AuthOperationError("新密码不能与当前密码相同", 422)
+    updated = models.update_user_password(
+        username=user.username, password_hash=hash_password(new_password), expected_hash=user.password_hash
+    )
+    if updated is None:
+        raise AuthOperationError("用户不存在", 404)
+    return updated
 
 
 def create_session_token(user: User) -> str:

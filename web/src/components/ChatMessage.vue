@@ -146,6 +146,7 @@
           type="button"
           class="assistant-action-button assistant-action-button--continue"
           aria-label="继续生成"
+          :disabled="continueDisabled"
           @click="emit('continue', message)"
         >
           <svg class="assistant-action-button__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -175,7 +176,8 @@ const props = defineProps({
     type: Object,
     required: true
   },
-  canContinue: Boolean
+  canContinue: Boolean,
+  continueDisabled: Boolean
 })
 
 const emit = defineEmits(['open-sources', 'continue'])

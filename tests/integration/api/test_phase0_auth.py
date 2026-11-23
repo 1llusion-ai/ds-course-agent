@@ -1,8 +1,42 @@
+import asyncio
+import threading
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from fastapi.testclient import TestClient
 
 from ds_course_agent.api.main import app
+
+
+def test_login_password_verification_runs_off_the_api_event_loop(monkeypatch, tmp_path):
+    from ds_course_agent.api.auth import models
+
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_DB_PATH", str(tmp_path / "auth.db"))
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_SECRET_KEY", "test-secret")
+    monkeypatch.setattr("ds_course_agent.shared.config.AUTH_COOKIE_SECURE", False)
+    user = models.create_or_update_user(
+        username="student", password_hash="test-hash", student_id="student", display_name="Student"
+    )
+    verifier_threads = []
+
+    def verify(password, password_hash):
+        verifier_threads.append(threading.get_ident())
+        return (password, password_hash) == (b"correct-password", user.password_hash.encode())
+
+    monkeypatch.setattr("ds_course_agent.api.auth.service.bcrypt.checkpw", verify)
+
+    async def scenario():
+        event_loop_thread = threading.get_ident()
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/auth/login", json={"username": user.username, "password": "correct-password"}
+            )
+        assert response.status_code == 200
+        assert "session" in response.cookies
+        assert len(verifier_threads) == 1
+        assert verifier_threads[0] != event_loop_thread
+
+    asyncio.run(scenario())
 
 
 def test_auth_register_creates_session_and_rejects_duplicate(monkeypatch, tmp_path):

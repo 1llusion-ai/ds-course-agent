@@ -71,6 +71,7 @@ import { useAssessmentStore } from '../stores/assessment'
 import { useCourseStore } from '../stores/course'
 import { useSessionStore } from '../stores/session'
 import { assessmentStatusText, formatAssessmentTime } from '../utils/assessment'
+import { retryAfterDelayMs } from '../utils/retryAfter'
 
 // The overview request fans out to two API calls. Keep sustained preparation
 // polling below the production per-student request budget.
@@ -114,18 +115,6 @@ function shouldPoll() {
     && !document.hidden
 }
 
-function retryAfterDelayMs(requestError) {
-  if (requestError?.response?.status !== 429) return POLL_INTERVAL_MS
-
-  const headers = requestError.response.headers
-  const rawValue = typeof headers?.get === 'function'
-    ? headers.get('retry-after') ?? headers.get('Retry-After')
-    : headers?.['retry-after'] ?? headers?.['Retry-After'] ?? headers?.['Retry-after']
-  const seconds = Number.parseInt(String(rawValue ?? ''), 10)
-  if (!Number.isFinite(seconds)) return POLL_INTERVAL_MS
-  return Math.max(POLL_INTERVAL_MS, Math.ceil(seconds * 1000))
-}
-
 function schedulePolling(delayMs = POLL_INTERVAL_MS) {
   clearPolling()
   if (!shouldPoll()) return
@@ -139,7 +128,9 @@ async function load(silent = false) {
   try {
     await store.fetchOverview(activeTab.value === 'active' ? ['ready', 'in_progress'] : ['submitted'], silent)
   } catch (requestError) {
-    nextPollDelayMs = retryAfterDelayMs(requestError)
+    if (requestError?.response?.status === 429) {
+      nextPollDelayMs = Math.max(POLL_INTERVAL_MS, retryAfterDelayMs(requestError.response.headers) ?? 0)
+    }
     error.value = requestError.response?.data?.detail || '请稍后重试。'
   } finally {
     schedulePolling(nextPollDelayMs)

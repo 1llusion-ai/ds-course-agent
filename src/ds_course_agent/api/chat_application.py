@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from datetime import datetime
 from time import monotonic
 from typing import Any
@@ -107,8 +108,6 @@ class _GenerationAdmission:
     def release(self) -> None:
         """Return an active slot without requiring an event loop."""
 
-        # The lease is normally released from the same event loop that acquired it.
-        # Keep this synchronous so cancellation and generator finalization can share it.
         with self._lock:
             self._active = max(0, self._active - 1)
 
@@ -202,114 +201,61 @@ async def stream_message_events(
     data: ChatStreamRequest,
     student_id: str,
 ) -> AsyncGenerator[dict[str, Any], None]:
-    """Validate stream ownership before returning the lazy event generator."""
+    """Start a turn for the session owner and return its streaming events."""
 
     require_course(data.course_id, ready=True)
     chat_sessions.ensure_session_owner(data.session_id, student_id, data.course_id)
-    lease = await _generation_admission.acquire()
-    return _stream_message_events(data, student_id, lease)
-
-
-async def _stream_message_events(
-    data: ChatStreamRequest,
-    student_id: str,
-    lease: _GenerationLease,
-) -> AsyncGenerator[dict[str, Any], None]:
     session_id = data.session_id
-    operation_lock = chat_sessions.session_operation_lock(session_id, data.course_id)
-    operation_lock_acquired = False
-    await chat_sessions.acquire_threading_lock(operation_lock)
-    operation_lock_acquired = True
 
-    try:
-        yield {
-            "type": "progress",
-            "phase": "queued",
-            "message": "当前请求排队中，前面的请求完成后将自动开始。",
+    def event_source():
+        stream_kwargs: dict[str, Any] = {
+            "message": data.message,
+            "session_id": session_id,
+            "student_id": student_id,
         }
-        yield {
-            "type": "progress",
-            "phase": "generation",
-            "message": "正在生成...",
-        }
+        if data.course_id != DEFAULT_COURSE_ID:
+            stream_kwargs["course_id"] = data.course_id
+        if data.web_search:
+            stream_kwargs["web_search"] = True
+        return stream_chat_with_history(**stream_kwargs)
 
+    async with _stream_start_admission(session_id, data.course_id) as release:
         is_first_message = chat_sessions.message_count(session_id, data.course_id) == 0
         user_message = ChatMessage(role="user", content=data.message)
-        chat_sessions.append_message_locked(session_id, user_message, data.course_id)
-        chat_sessions.schedule_title_generation(
-            session_id,
-            data.message,
-            is_first_message=is_first_message,
-            course_id=data.course_id,
-        )
-
-        def event_source():
-            stream_kwargs: dict[str, Any] = {
-                "message": data.message,
-                "session_id": session_id,
-                "student_id": student_id,
-            }
-            if data.course_id != DEFAULT_COURSE_ID:
-                stream_kwargs["course_id"] = data.course_id
-            if data.web_search:
-                stream_kwargs["web_search"] = True
-            return stream_chat_with_history(**stream_kwargs)
-
-        job = chat_streaming.launch_stream_worker(
-            session_id=session_id,
-            student_id=student_id,
-            course_id=data.course_id,
-            operation_lock=operation_lock,
-            event_source=event_source,
-            message_timestamp=datetime.now(),
-            web_search=bool(data.web_search),
-        )
-        operation_lock_acquired = False
-        async for event in iter_stream_job_events(job, include_snapshot=False):
-            yield event
-    except (asyncio.CancelledError, GeneratorExit):
-        raise
-    finally:
-        if operation_lock_acquired:
-            operation_lock.release()
-        lease.release()
+        appended_user_item = chat_sessions.append_message_locked(session_id, user_message, data.course_id)
+        try:
+            chat_sessions.schedule_title_generation(
+                session_id,
+                data.message,
+                is_first_message=is_first_message,
+                course_id=data.course_id,
+            )
+            job = chat_streaming.launch_stream_worker(
+                session_id=session_id,
+                student_id=student_id,
+                course_id=data.course_id,
+                on_complete=release,
+                event_source=event_source,
+                message_timestamp=datetime.now(),
+                web_search=bool(data.web_search),
+            )
+        except Exception:
+            chat_sessions.remove_message_by_identity(session_id, appended_user_item, data.course_id)
+            raise
+    return _stream_events(job, generation_message="正在生成...")
 
 
 async def continue_message_events(
     data: ChatContinueRequest,
     student_id: str,
 ) -> AsyncGenerator[dict[str, Any], None]:
-    """Validate continuation ownership before returning the lazy event generator."""
+    """Start continuing a stopped answer and return its streaming events."""
 
     require_course(data.course_id, ready=True)
     chat_sessions.ensure_session_owner(data.session_id, student_id, data.course_id)
-    lease = await _generation_admission.acquire()
-    return _continue_message_events(data, student_id, lease)
-
-
-async def _continue_message_events(
-    data: ChatContinueRequest,
-    student_id: str,
-    lease: _GenerationLease,
-) -> AsyncGenerator[dict[str, Any], None]:
     session_id = data.session_id
-    operation_lock = chat_sessions.session_operation_lock(session_id, data.course_id)
-    operation_lock_acquired = False
-    await chat_sessions.acquire_threading_lock(operation_lock)
-    operation_lock_acquired = True
 
-    try:
-        yield {
-            "type": "progress",
-            "phase": "queued",
-            "message": "当前请求排队中，前面的请求完成后将自动开始。",
-        }
-        yield {
-            "type": "progress",
-            "phase": "generation",
-            "message": "正在继续生成...",
-        }
-
+    async with _stream_start_admission(session_id, data.course_id) as release:
         target_item = chat_sessions.find_stopped_assistant_turn(session_id, data.message_timestamp, data.course_id)
         base_message = chat_sessions.message_from_dict(target_item)
 
@@ -327,7 +273,7 @@ async def _continue_message_events(
             session_id=session_id,
             student_id=student_id,
             course_id=data.course_id,
-            operation_lock=operation_lock,
+            on_complete=release,
             event_source=event_source,
             message_timestamp=base_message.timestamp,
             web_search=base_message.web_search_requested,
@@ -336,15 +282,36 @@ async def _continue_message_events(
             replace_message_item=target_item,
             base_message=base_message,
         )
-        operation_lock_acquired = False
-        async for event in iter_stream_job_events(job, include_snapshot=False):
-            yield event
-    except (asyncio.CancelledError, GeneratorExit):
-        raise
-    finally:
-        if operation_lock_acquired:
-            operation_lock.release()
+    return _stream_events(job, generation_message="正在继续生成...")
+
+
+@asynccontextmanager
+async def _stream_start_admission(session_id: str, course_id: str) -> AsyncIterator[Callable[[], None]]:
+    """Transfer the session lock and generation slot when the worker starts."""
+
+    operation_lock = chat_sessions.session_operation_lock(session_id, course_id)
+    lease = await _generation_admission.acquire()
+
+    def release() -> None:
+        operation_lock.release()
         lease.release()
+
+    try:
+        await chat_sessions.acquire_threading_lock(operation_lock)
+        try:
+            yield release
+        except BaseException:
+            operation_lock.release()
+            raise
+    except BaseException:
+        lease.release()
+        raise
+
+
+async def _stream_events(job: ActiveStreamJob, *, generation_message: str) -> AsyncGenerator[dict[str, Any], None]:
+    yield {"type": "progress", "phase": "generation", "message": generation_message}
+    async for event in iter_stream_job_events(job, include_snapshot=False):
+        yield event
 
 
 def get_resume_job(session_id: str, student_id: str, course_id: str = "data-science-intro") -> ActiveStreamJob:

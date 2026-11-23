@@ -32,6 +32,7 @@ from ds_course_agent.api.title_generation import (
     looks_like_unprocessed_question_title,
 )
 from ds_course_agent.courses import CourseId
+from ds_course_agent.shared import config
 
 logger = logging.getLogger(__name__)
 _SESSION_LOCK_POLL_SECONDS = 0.01
@@ -484,6 +485,7 @@ def _apply_immediate_fallback_title(
     *,
     is_first_message: bool,
     course_id: str = DEFAULT_COURSE_ID,
+    model_pending: bool,
 ) -> None:
     """Give a new/default session a usable title before async LLM naming finishes.
 
@@ -509,16 +511,15 @@ def _apply_immediate_fallback_title(
         or title == DEFAULT_SESSION_TITLE
         or (is_first_message and looks_like_unprocessed_question_title(message, title))
     )
-    if not should_apply:
+    fallback = build_fallback_session_title(message) if should_apply else ""
+    if fallback and fallback != title:
+        session["title"] = fallback
+        session["title_source"] = "heuristic"
+        session["title_generation_pending"] = model_pending
+    elif not model_pending and session["title_generation_pending"]:
+        session["title_generation_pending"] = False
+    else:
         return
-
-    fallback = build_fallback_session_title(message)
-    if not fallback or fallback == title:
-        return
-
-    session["title"] = fallback
-    session["title_source"] = "heuristic"
-    session["title_generation_pending"] = True
     session["updated_at"] = datetime.now(timezone.utc).isoformat()
     _save_session_data(record, session)
 
@@ -537,7 +538,12 @@ def schedule_title_generation(
     ):
         return
 
-    _apply_immediate_fallback_title(session_id, message, is_first_message=is_first_message, course_id=course_id)
+    model_enabled = config.SESSION_TITLE_MODEL_ENABLED
+    _apply_immediate_fallback_title(
+        session_id, message, is_first_message=is_first_message, course_id=course_id, model_pending=model_enabled
+    )
+    if not model_enabled:
+        return
     _title_generation_pending.add((course_id, session_id))
 
     async def _bg_generate_title():

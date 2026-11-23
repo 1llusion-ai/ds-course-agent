@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     CHAT_MAX_RETRIES: int = 2
     CHAT_DISABLE_THINKING: bool = True
     CHAT_SYSTEM_SUFFIX: str = "/no_think"
+    SESSION_TITLE_MODEL_ENABLED: bool = True
 
     # Assessment generator, editor, and verifier may use different models while
     # sharing the same provider connection and bounded call budget.

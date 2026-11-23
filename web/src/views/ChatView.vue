@@ -63,10 +63,12 @@
               <h1>今天想解决什么学习问题？</h1>
               <p v-if="courseUnavailable" role="status">当前课程资源正在准备中，请先切换到其他课程。</p>
               <ChatInput
+                v-model="draft"
                 hero
-                :initial-text="mapQuestion"
                 :loading="chatStore.loading"
                 :disabled="courseUnavailable"
+                :send-disabled="creatingSession || generationCoolingDown"
+                :retry-notice="generationRetryNotice"
                 :web-search-enabled="webSearchEnabled"
                 :web-search-hint="webSearchHint"
                 class="empty-composer"
@@ -80,6 +82,7 @@
                   :key="prompt"
                   class="prompt-card"
                   type="button"
+                  :disabled="creatingSession || chatStore.loading || generationCoolingDown"
                   @click="handleStarterPrompt(prompt)"
                 >
                   {{ prompt }}
@@ -94,6 +97,7 @@
               :key="messageKey(message, index)"
               :message="message"
               :can-continue="canContinueMessage(message, index)"
+              :continue-disabled="chatStore.loading || generationCoolingDown"
               @open-sources="openSourcesPanel"
               @continue="handleContinueGeneration"
             />
@@ -103,9 +107,11 @@
 
         <div v-if="chatStore.messages.length > 0 && !showSessionLoading" class="input-area">
           <ChatInput
-            :initial-text="mapQuestion"
+            v-model="draft"
             :loading="chatStore.loading"
             :disabled="courseUnavailable"
+            :send-disabled="creatingSession || generationCoolingDown"
+            :retry-notice="generationRetryNotice"
             :web-search-enabled="webSearchEnabled"
             :web-search-hint="webSearchHint"
             @send="handleSend"
@@ -236,6 +242,7 @@ const headerRenameTitle = ref('')
 const headerRenameSaving = ref(false)
 const sessionBootstrapPending = appShell?.sessionBootstrapPending || ref(!sessionStore.loaded)
 const sessionLoading = ref(false)
+const creatingSession = ref(false)
 const isDarkTheme = appShell?.isDarkTheme || computed(() => false)
 const toggleTheme = appShell?.toggleTheme || (() => {})
 let sessionLoadToken = 0
@@ -246,6 +253,22 @@ const headerTitle = computed(() => sessionStore.currentSession?.title || '新对
 const courseUnavailable = computed(() => courseStore.currentCourse?.is_ready === false)
 const canRenameCurrentSession = computed(() => Boolean(sessionStore.currentSessionId && sessionStore.currentSession))
 const showSessionLoading = computed(() => sessionBootstrapPending.value || sessionLoading.value)
+const draft = computed({
+  get: () => chatStore.getDraft(sessionStore.currentSessionId) ?? mapQuestion.value,
+  set: text => chatStore.setDraft(sessionStore.currentSessionId, text)
+})
+const generationCoolingDown = computed(() => chatStore.generationRetryUntil > Date.now())
+const generationRetryNotice = computed(() => {
+  if (generationCoolingDown.value) {
+    const seconds = Math.ceil((chatStore.generationRetryUntil - Date.now()) / 1000)
+    return `当前请求较多，请等待约 ${seconds} 秒后重试。`
+  }
+  return chatStore.generationRetryUntil === 0 ? '当前可以重试。' : ''
+})
+
+watch(mapQuestion, (question, previousQuestion) => {
+  if (question && (!draft.value || draft.value === previousQuestion)) draft.value = question
+})
 const sessionLoadingText = computed(() => (
   sessionBootstrapPending.value ? '正在恢复会话，请稍候…' : '正在加载会话…'
 ))
@@ -357,55 +380,66 @@ async function loadSession(sessionId) {
 }
 
 async function handleSend(message, sendOptions = {}) {
-  if (courseUnavailable.value || showSessionLoading.value) return
+  if (courseUnavailable.value || showSessionLoading.value || creatingSession.value ||
+    chatStore.loading || generationCoolingDown.value) return
   const courseId = courseStore.selectedCourseId
   const useWebSearch = Boolean(sendOptions?.webSearch ?? webSearchEnabled.value)
-  const streamOptions = { onProgress: scrollToBottom, webSearch: useWebSearch, courseId }
   const currentSessionId = sessionStore.currentSessionId
+  const submittedDraft = draft.value
   let targetSessionId = currentSessionId
   let shouldRefreshTitle = false
-  let sendPromise = null
+  let accepted = false
   stickToBottom.value = true
   clearWebSearchTurnNotice()
 
-  if (!currentSessionId) {
-    const newSession = await sessionStore.createSession()
-    if (!newSession || courseId !== courseStore.selectedCourseId) return
-    targetSessionId = newSession.id
-    shouldRefreshTitle = true
-    chatStore.setActiveSession(newSession.id)
-    await router.push(`/chat/${newSession.id}`)
-    if (courseId !== courseStore.selectedCourseId) return
-    sendPromise = chatStore.sendMessage(newSession.id, message, streamOptions)
-  } else {
-    shouldRefreshTitle = sessionStore.shouldAutoTitle(currentSessionId)
-    chatStore.setActiveSession(currentSessionId)
-    sendPromise = chatStore.sendMessage(currentSessionId, message, streamOptions)
-  }
-
-  if (shouldRefreshTitle && targetSessionId) {
-    scheduleSessionTitleRefresh(targetSessionId, courseId)
-  }
-
   try {
-    const assistantMessage = await sendPromise
+    if (!currentSessionId) {
+      creatingSession.value = true
+      try {
+        const newSession = await sessionStore.createSession()
+        if (!newSession || courseId !== courseStore.selectedCourseId) return
+        targetSessionId = newSession.id
+        chatStore.setDraft(targetSessionId, chatStore.getDraft(currentSessionId) ?? submittedDraft)
+        chatStore.setDraft(currentSessionId, '')
+        chatStore.setActiveSession(targetSessionId)
+        await router.push(`/chat/${targetSessionId}`)
+        if (courseId !== courseStore.selectedCourseId) return
+      } finally {
+        creatingSession.value = false
+      }
+    }
+
+    shouldRefreshTitle = !currentSessionId || sessionStore.shouldAutoTitle(currentSessionId)
+    chatStore.setActiveSession(targetSessionId)
+    const assistantMessage = await chatStore.sendMessage(targetSessionId, message, {
+      onProgress: scrollToBottom,
+      webSearch: useWebSearch,
+      courseId,
+      onAccepted: () => {
+        accepted = true
+        if ((chatStore.getDraft(targetSessionId) ?? submittedDraft).trim() === message) {
+          chatStore.setDraft(targetSessionId, '')
+        }
+        if (shouldRefreshTitle) scheduleSessionTitleRefresh(targetSessionId, courseId)
+      }
+    })
     if (courseId !== courseStore.selectedCourseId) return
     updateWebSearchTurnNotice(assistantMessage)
   } catch (error) {
     if (courseId !== courseStore.selectedCourseId) return
-    if (error?.code !== 'REQUEST_CANCELLED') {
+    if (![401, 429].includes(error?.status) && error?.code !== 'REQUEST_CANCELLED') {
       console.error('发送消息失败:', error)
       ElMessage.error('发送失败，请稍后重试。')
     }
   } finally {
     if (courseId !== courseStore.selectedCourseId) return
-    if (shouldRefreshTitle && targetSessionId) {
-      await refreshSessionTitle(targetSessionId, courseId)
-    }
-    try {
-      await profileStore.fetchSummary()
-    } catch (error) {
-      console.warn('同步学习画像失败:', error)
+    if (accepted) {
+      if (shouldRefreshTitle) await refreshSessionTitle(targetSessionId, courseId)
+      try {
+        await profileStore.fetchSummary()
+      } catch (error) {
+        console.warn('同步学习画像失败:', error)
+      }
     }
     scrollToBottom(true)
   }
@@ -413,6 +447,7 @@ async function handleSend(message, sendOptions = {}) {
 
 function handleStarterPrompt(prompt) {
   if (chatStore.loading) return
+  draft.value = prompt
   setWebSearchEnabled(false)
   handleSend(prompt, { webSearch: false })
 }
@@ -428,13 +463,13 @@ function canContinueMessage(message, index) {
 
 async function handleContinueGeneration(message) {
   const sessionId = sessionStore.currentSessionId
-  if (!sessionId || chatStore.loading) return
+  if (!sessionId || chatStore.loading || generationCoolingDown.value) return
 
   stickToBottom.value = true
   try {
     await chatStore.continueMessage(sessionId, message, { onProgress: scrollToBottom })
   } catch (error) {
-    if (error?.code !== 'REQUEST_CANCELLED') {
+    if (![401, 429].includes(error?.status) && error?.code !== 'REQUEST_CANCELLED') {
       console.error('继续生成失败:', error)
       ElMessage.error('继续生成失败，请稍后重试。')
     }

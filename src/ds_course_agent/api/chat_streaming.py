@@ -216,7 +216,7 @@ def launch_stream_worker(
     session_id: str,
     student_id: str,
     course_id: str = "data-science-intro",
-    operation_lock: threading.Lock,
+    on_complete: Callable[[], None],
     event_source: StreamEventSource,
     message_timestamp: datetime,
     web_search: bool,
@@ -225,7 +225,7 @@ def launch_stream_worker(
     replace_message_item: dict[str, Any] | None = None,
     base_message: ChatMessage | None = None,
 ) -> ActiveStreamJob:
-    """Run one blocking agent stream independently from connected SSE clients."""
+    """Run one blocking agent stream and release its resources after closing the source."""
 
     stop_event = threading.Event()
     job = stream_job_registry.register(
@@ -492,13 +492,17 @@ def launch_stream_worker(
             except Exception:
                 logger.exception("Failed to close upstream chat stream")
             finally:
-                operation_lock.release()
+                on_complete()
 
-    threading.Thread(
-        target=worker,
-        name=f"chat-sse-{session_id[:16]}",
-        daemon=True,
-    ).start()
+    try:
+        threading.Thread(
+            target=worker,
+            name=f"chat-sse-{session_id[:16]}",
+            daemon=True,
+        ).start()
+    except Exception:
+        stream_job_registry.discard(session_id, job, course_id, student_id)
+        raise
     return job
 
 

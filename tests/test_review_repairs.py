@@ -324,7 +324,7 @@ def test_stream_worker_terminalizes_when_continuation_target_disappears(monkeypa
     job = chat_streaming.launch_stream_worker(
         session_id=session_id,
         student_id=student_id,
-        operation_lock=operation_lock,
+        on_complete=operation_lock.release,
         event_source=lambda: iter([{"type": "final", "content": "continued", "stream_id": "stream"}]),
         message_timestamp=datetime.now(),
         web_search=False,

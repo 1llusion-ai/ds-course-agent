@@ -1,4 +1,5 @@
 import { appPath, redirectToLogin } from '../utils/appPaths'
+import { retryAfterDelayMs } from '../utils/retryAfter'
 import client from './client'
 
 
@@ -20,6 +21,7 @@ function createFetchSseStream(url, { method = 'GET', data, params } = {}) {
   const controller = new AbortController()
   let closedByClient = false
   const stream = {
+    onopen: null,
     onmessage: null,
     onerror: null,
     close() {
@@ -53,13 +55,19 @@ function createFetchSseStream(url, { method = 'GET', data, params } = {}) {
         if (response.status === 401) {
           redirectToLogin()
         }
-        throw new Error(`stream request failed with status ${response.status}`)
+        const error = new Error(`stream request failed with status ${response.status}`)
+        error.status = response.status
+        if (response.status === 429) {
+          error.retryAfterMs = retryAfterDelayMs(response.headers)
+        }
+        throw error
       }
 
       if (!response.body) {
         throw new Error('stream response body is not readable')
       }
 
+      stream.onopen?.()
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''

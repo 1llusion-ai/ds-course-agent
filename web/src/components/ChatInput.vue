@@ -8,9 +8,9 @@
         :placeholder="placeholder"
         :disabled="disabled"
         @keydown.enter="handleEnterKey"
-        @input="handleInput"
         ref="textareaRef"
       />
+      <p v-if="retryNotice" class="composer-notice" role="status">{{ retryNotice }}</p>
       <div class="composer-toolbar" :class="{ 'composer-toolbar--hero': hero }">
         <div class="composer-toolbar-left">
           <button
@@ -37,7 +37,7 @@
           type="button"
           class="send-btn"
           :class="{ 'send-btn--stop': loading }"
-          :disabled="disabled || (!loading && !inputText.trim())"
+          :disabled="disabled || (!loading && (sendDisabled || !inputText.trim()))"
           :aria-label="loading ? '停止生成' : '发送消息'"
           :title="loading ? '停止生成' : '发送消息'"
           @click="handlePrimaryAction"
@@ -61,8 +61,9 @@ const props = defineProps({
   loading: Boolean,
   disabled: Boolean,
   hero: Boolean,
+  sendDisabled: Boolean,
+  retryNotice: { type: String, default: '' },
   webSearchEnabled: Boolean,
-  initialText: { type: String, default: '' },
   webSearchHint: {
     type: String,
     default: ''
@@ -70,18 +71,9 @@ const props = defineProps({
 })
 const emit = defineEmits(['send', 'toggle-web-search', 'cancel'])
 
-const inputText = ref('')
+const inputText = defineModel({ type: String, required: true })
 const textareaRef = ref(null)
-const initialTextApplied = ref('')
-const userEdited = ref(false)
-
-watch(() => props.initialText, value => {
-  if (!userEdited.value && (!inputText.value || inputText.value === initialTextApplied.value)) {
-    inputText.value = value
-    initialTextApplied.value = value
-    autoResize()
-  }
-}, { immediate: true })
+watch(inputText, autoResize, { immediate: true })
 const placeholder = computed(() => props.hero
   ? '问一个课程概念、公式推导或代码练习...'
   : '问一个课程概念、公式推导或代码问题...'
@@ -100,21 +92,10 @@ function autoResize() {
   })
 }
 
-function handleInput() {
-  userEdited.value = true
-  autoResize()
-}
-
 function handleSend() {
   const text = inputText.value.trim()
-  if (!text || props.loading || props.disabled) return
+  if (!text || props.loading || props.disabled || props.sendDisabled) return
   emit('send', text, { webSearch: props.webSearchEnabled })
-  inputText.value = ''
-  userEdited.value = false
-  initialTextApplied.value = ''
-  nextTick(() => {
-    if (textareaRef.value) textareaRef.value.style.height = 'auto'
-  })
 }
 
 function handleToggleWebSearch() {
@@ -336,6 +317,13 @@ function handleEnterKey(event) {
   color: #94a3b8;
   margin-top: 0;
   min-width: 0;
+}
+
+.composer-notice {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--el-text-color-regular, #475569);
 }
 
 

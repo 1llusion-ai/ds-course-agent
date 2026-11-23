@@ -1,7 +1,8 @@
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { chatApi } from '../api/chat'
+import { retryAfterDelayMs } from '../utils/retryAfter'
 import {
   buildErrorMessage,
   buildPendingMessage,
@@ -19,6 +20,7 @@ import { useCourseStore } from './course'
 const STREAM_LONG_WAIT_MS = 15_000
 const STREAM_IDLE_TIMEOUT_MS = 120_000
 const STREAM_RECONNECT_DELAY_MS = 1_000
+const GENERATION_RETRY_DELAY_MS = 1_000
 
 export const useChatStore = defineStore('chat', () => {
   const courseStore = useCourseStore()
@@ -26,10 +28,33 @@ export const useChatStore = defineStore('chat', () => {
   const activeSessionId = ref(null)
   const messagesBySession = ref({})
   const pendingCountsBySession = ref({})
+  const draftsBySession = reactive(new Map())
+  const generationRetryUntil = ref(null)
   const activeRequestsBySession = new Map()
   const historyRequestVersions = new Map()
   const reconnectTimersBySession = new Map()
   let stateVersion = 0
+  let generationRetryTimer
+
+  function clearGenerationBackoff() {
+    window.clearTimeout(generationRetryTimer)
+    generationRetryUntil.value = null
+  }
+
+  function applyGenerationBackoff(error) {
+    const delay = error.retryAfterMs ?? retryAfterDelayMs(error.response?.headers) ?? GENERATION_RETRY_DELAY_MS
+    const retryUntil = Date.now() + delay
+    if (delay === 0) {
+      generationRetryUntil.value ??= 0
+      return
+    }
+    if (retryUntil <= generationRetryUntil.value) return
+    window.clearTimeout(generationRetryTimer)
+    generationRetryUntil.value = retryUntil
+    generationRetryTimer = window.setTimeout(() => {
+      generationRetryUntil.value = 0
+    }, delay)
+  }
 
   const loading = computed(() => {
     const sessionId = activeSessionId.value
@@ -61,6 +86,14 @@ export const useChatStore = defineStore('chat', () => {
     setPendingCount(sessionId, (pendingCountsBySession.value[sessionId] || 0) + delta)
   }
 
+  function getDraft(sessionId) {
+    return draftsBySession.get(sessionId || null)
+  }
+
+  function setDraft(sessionId, draft) {
+    draftsBySession.set(sessionId || null, draft)
+  }
+
   function clearReconnectTimer(sessionId) {
     const timerId = reconnectTimersBySession.get(sessionId)
     if (timerId && typeof window !== 'undefined') {
@@ -69,15 +102,18 @@ export const useChatStore = defineStore('chat', () => {
     reconnectTimersBySession.delete(sessionId)
   }
 
-  function scheduleHistoryReconnect(sessionId, courseId = courseStore.selectedCourseId) {
+  function scheduleHistoryReconnect(sessionId, courseId, delay = STREAM_RECONNECT_DELAY_MS) {
     if (!sessionId || reconnectTimersBySession.has(sessionId) || typeof window === 'undefined') return
     const timerId = window.setTimeout(() => {
       reconnectTimersBySession.delete(sessionId)
+      const requestStateVersion = stateVersion
       fetchHistory(sessionId, courseId).catch(error => {
+        if (requestStateVersion !== stateVersion || error.response?.status === 401) return
         console.warn('恢复生成流失败:', error)
-        scheduleHistoryReconnect(sessionId, courseId)
+        const retryAfter = error.response?.status === 429 ? retryAfterDelayMs(error.response.headers) : null
+        scheduleHistoryReconnect(sessionId, courseId, retryAfter ?? STREAM_RECONNECT_DELAY_MS)
       })
-    }, STREAM_RECONNECT_DELAY_MS)
+    }, delay)
     reconnectTimersBySession.set(sessionId, timerId)
   }
 
@@ -239,12 +275,16 @@ export const useChatStore = defineStore('chat', () => {
         }
       }
 
-      const finishStopped = error => {
-        if (settled) return
+      const closeStream = () => {
         settled = true
         clearStreamTimers()
         clearActiveRequest(sessionId, requestId)
         source.close()
+      }
+
+      const finishStopped = error => {
+        if (settled) return
+        closeStream()
 
         if (requestStateVersion !== stateVersion) {
           reject(error)
@@ -263,10 +303,7 @@ export const useChatStore = defineStore('chat', () => {
 
       const finishWithError = (content, error, extra = {}) => {
         if (settled) return
-        settled = true
-        clearStreamTimers()
-        clearActiveRequest(sessionId, requestId)
-        source.close()
+        closeStream()
 
         if (requestStateVersion !== stateVersion) {
           reject(error)
@@ -334,6 +371,9 @@ export const useChatStore = defineStore('chat', () => {
         }
       })
       armStreamTimers()
+      source.onopen = () => {
+        if (requestStateVersion === stateVersion && !settled) options.onAccepted?.()
+      }
 
       source.onmessage = event => {
         if (requestStateVersion !== stateVersion || settled) return
@@ -367,10 +407,7 @@ export const useChatStore = defineStore('chat', () => {
         }
 
         if (payload.type === 'final') {
-          settled = true
-          clearStreamTimers()
-          clearActiveRequest(sessionId, requestId)
-          source.close()
+          closeStream()
 
           const nextMessage = {
             ...(payload.message || {}),
@@ -387,22 +424,12 @@ export const useChatStore = defineStore('chat', () => {
       source.onerror = error => {
         if (settled) return
 
-        if (requestStateVersion !== stateVersion) {
-          settled = true
-          clearStreamTimers()
-          clearActiveRequest(sessionId, requestId)
-          source.close()
-          reject(error || new Error('stream request invalidated'))
-          return
-        }
-
-        if (options.resuming) {
-          settled = true
-          clearStreamTimers()
-          clearActiveRequest(sessionId, requestId)
-          source.close()
-          scheduleHistoryReconnect(sessionId, courseId)
-          reject(error || new Error('resume stream connection interrupted'))
+        if (requestStateVersion !== stateVersion || options.resuming || [401, 429].includes(error?.status)) {
+          closeStream()
+          if (requestStateVersion === stateVersion && options.resuming && error?.status !== 401) {
+            scheduleHistoryReconnect(sessionId, courseId, error?.retryAfterMs ?? STREAM_RECONNECT_DELAY_MS)
+          }
+          reject(error || new Error('stream connection interrupted'))
           return
         }
 
@@ -480,6 +507,7 @@ export const useChatStore = defineStore('chat', () => {
       web_search: Boolean(options.webSearch)
     })
     if (requestStateVersion !== stateVersion) return null
+    options.onAccepted?.()
     const nextMessage = finalizeSessionMessage(sessionId, requestId, response.message)
     syncSessionAfterReply(sessionId, nextMessage)
     options.onProgress?.()
@@ -497,6 +525,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function sendMessage(sessionId, message, options = {}) {
+    clearGenerationBackoff()
     options = { ...options, courseId: options.courseId || courseStore.selectedCourseId }
     const requestStateVersion = stateVersion
     const requestId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -504,6 +533,7 @@ export const useChatStore = defineStore('chat', () => {
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
+      pendingRequestId: requestId,
       metadata: options.webSearch ? { web_search: true } : undefined
     }
     const optimisticMessages = [
@@ -523,7 +553,13 @@ export const useChatStore = defineStore('chat', () => {
       }
       return await sendMessageViaHttp(sessionId, message, requestId, options)
     } catch (error) {
-      if (requestStateVersion === stateVersion && getPendingMessage(sessionId, requestId)?.isLoading) {
+      if (requestStateVersion !== stateVersion) throw error
+      if (error?.status === 429) {
+        applyGenerationBackoff(error)
+        setSessionMessages(sessionId, (messagesBySession.value[sessionId] || []).filter(message => (
+          message.pendingRequestId !== requestId && message.requestId !== requestId
+        )))
+      } else if (error?.status !== 401 && getPendingMessage(sessionId, requestId)?.isLoading) {
         const timeoutMessage = error?.code === 'ECONNABORTED'
           ? '⚠️ 本次回答生成时间过长，请稍后重试。'
           : `⚠️ 发送失败：${error.message || '网络错误'}`
@@ -541,6 +577,7 @@ export const useChatStore = defineStore('chat', () => {
 
   async function continueMessage(sessionId, targetMessage, options = {}) {
     if (!sessionId || !targetMessage?.timestamp || isSessionPending(sessionId)) return null
+    clearGenerationBackoff()
     options = { ...options, courseId: options.courseId || courseStore.selectedCourseId }
 
     const requestStateVersion = stateVersion
@@ -555,6 +592,14 @@ export const useChatStore = defineStore('chat', () => {
         message_timestamp: targetMessage.timestamp
       })
       return await consumeStream(sessionId, requestId, source, options)
+    } catch (error) {
+      if (requestStateVersion === stateVersion && error?.status === 429) {
+        applyGenerationBackoff(error)
+        setSessionMessages(sessionId, (messagesBySession.value[sessionId] || []).map(message => (
+          message.requestId === requestId ? targetMessage : message
+        )))
+      }
+      throw error
     } finally {
       if (requestStateVersion === stateVersion) {
         updatePendingCount(sessionId, -1)
@@ -608,7 +653,7 @@ export const useChatStore = defineStore('chat', () => {
     return true
   }
 
-  function resetForUser() {
+  function resetForCourse() {
     stateVersion += 1
     for (const activeRequest of activeRequestsBySession.values()) {
       activeRequest.close?.()
@@ -618,20 +663,25 @@ export const useChatStore = defineStore('chat', () => {
       clearReconnectTimer(sessionId)
     }
     historyRequestVersions.clear()
+    draftsBySession.clear()
     messages.value = []
     activeSessionId.value = null
     messagesBySession.value = {}
     pendingCountsBySession.value = {}
   }
 
-  function resetForCourse() {
-    resetForUser()
+  function resetForUser() {
+    resetForCourse()
+    clearGenerationBackoff()
   }
 
   return {
     messages,
     loading,
+    generationRetryUntil,
     activeSessionId,
+    getDraft,
+    setDraft,
     isSessionPending,
     fetchHistory,
     sendMessage,
